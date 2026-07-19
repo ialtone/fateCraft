@@ -1,0 +1,23 @@
+# Fatecraft 后端运行时镜像。
+# 二进制由宿主机 `task backend:build` 交叉编译产出（docker/backend/bin/fatecraft），
+# 镜像本身不做编译，保持构建快、体积小。
+FROM alpine:3.22
+
+WORKDIR /app/backend
+
+RUN apk add --no-cache ca-certificates tzdata wget
+
+ENV GIN_MODE=release
+ENV TZ=Asia/Shanghai
+
+COPY ./bin/fatecraft ./fatecraft
+
+# 模板数据目录由 compose 挂载到 /app/backend/data（DATA_DIR=data）。
+RUN chmod +x ./fatecraft && mkdir -p data
+
+EXPOSE 8081
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:8081/api/health >/dev/null || exit 1
+
+CMD ["./fatecraft"]

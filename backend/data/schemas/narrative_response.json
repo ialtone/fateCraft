@@ -1,0 +1,144 @@
+{
+  "name": "narrative_response",
+  "description": "沉浸式文字冒险游戏的叙事回复",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "narrative": {
+        "type": "string",
+        "description": "剧情文本，支持 Markdown 格式，这是玩家看到的内容"
+      },
+      "state_update": {
+        "type": "object",
+        "description": "状态更新，键使用点号路径（如 profile.name），数组追加用 + 后缀（如 inventory.items+）"
+      },
+      "action": {
+        "type": "object",
+        "description": "可选的特殊动作（如 trigger_ending）",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["trigger_ending"]
+          },
+          "params": {
+            "type": "object"
+          }
+        }
+      },
+      "roll_request": {
+        "type": "object",
+        "description": "可选的判定请求（两阶段判定协议）。当需要进行随机判定时，填写此字段请求后端掷骰，不要在 narrative 中自行编造结果",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "判定类型，如：根骨判定、悟性判定、气运判定、潜行判定、炼丹判定等"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["combat", "exploration", "crafting", "social", "cultivation"],
+            "description": "判定大类：combat(战斗) / exploration(探索) / crafting(炼制) / social(社交) / cultivation(修炼)"
+          },
+          "relevant_attributes": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "相关属性名称列表，如：[\"悟性\", \"气运\"]"
+          },
+          "attribute_weights": {
+            "type": "object",
+            "description": "属性权重，键为属性名，值为权重（和应为1.0），如：{\"悟性\": 0.6, \"气运\": 0.4}"
+          },
+          "base_difficulty": {
+            "type": "integer",
+            "description": "基础成功率建议值（0-100），后端会根据情境和收益调整"
+          },
+          "sides": {
+            "type": "integer",
+            "description": "骰子面数，建议使用 D20(20) 或 D100(100)"
+          },
+          "description": {
+            "type": "string",
+            "description": "判定行为的简短描述"
+          },
+          "context": {
+            "type": "object",
+            "description": "情境信息。advantages/disadvantages/environment 只能从枚举词表中选取（词表在服务启动时由 roll_config.yaml 注入，此处静态值仅供阅读参考）",
+            "properties": {
+              "advantages": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["充分准备", "占据地形优势", "天时地利", "得到指点", "持有护体法宝", "持有相关古籍", "服用辅助丹药", "使用剑类武器", "空间感知敏锐", "雷符护身"]
+                },
+                "description": "有利因素（从枚举中选取，可多选）"
+              },
+              "disadvantages": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["业力缠身", "仓促行动", "受伤状态", "心有杂念", "疲惫不堪", "空间之力狂暴", "首次尝试", "体力不支"]
+                },
+                "description": "不利因素（从枚举中选取，可多选）"
+              },
+              "environment": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["夜晚", "大雨", "开阔地形", "狭窄空间", "迷雾"]
+                },
+                "description": "环境因素（从枚举中选取，可多选）"
+              },
+              "opponent": {
+                "type": "object",
+                "description": "对手信息（战斗类判定）",
+                "properties": {
+                  "realm_gap": {
+                    "type": "integer",
+                    "description": "对手比玩家高的境界数（对手低则为负数），每高一级成功率约降10%"
+                  },
+                  "statuses": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": ["对手受伤", "对手疲惫"]
+                    },
+                    "description": "对手状态（从枚举中选取，可多选）"
+                  },
+                  "element": {
+                    "type": "string",
+                    "enum": ["属性克制", "属性被克"],
+                    "description": "克制关系：玩家克制对手选属性克制，被对手克制选属性被克"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "stakes": {
+            "type": "object",
+            "description": "风险收益信息",
+            "properties": {
+              "reward_value": {
+                "type": "integer",
+                "description": "预期收益的灵石价值，用于平衡难度"
+              },
+              "risk_level": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "extreme"],
+                "description": "风险等级"
+              }
+            }
+          }
+        },
+        "required": ["type", "sides", "description"],
+        "additionalProperties": false
+      },
+      "notes": {
+        "type": "string",
+        "description": "可选的内部备注，玩家不可见"
+      }
+    },
+    "required": ["narrative", "state_update"],
+    "additionalProperties": false
+  }
+}

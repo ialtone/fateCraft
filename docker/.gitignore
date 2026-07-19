@@ -1,0 +1,8 @@
+backend.development.env.local
+backend.production.env.local
+backend/bin/*
+!backend/bin/.gitkeep
+frontend/dist/*
+!frontend/dist/.gitkeep
+backups/*
+!backups/.gitkeep

@@ -1,0 +1,9 @@
+{
+  "id": "demonic-cultivator",
+  "name": "魔道修士",
+  "description": "修炼魔功之人，不拘泥于正道束缚，以更激进的方式追求力量。",
+  "speaking_style": "桀骜不驯，不拘小节，言语间透露出狂放与野心。",
+  "constraints": "被正道视为异端，容易遭到围剿，修炼魔功可能反噬己身。",
+  "created_at": "2026-06-14T00:00:00Z",
+  "updated_at": "2026-06-14T00:00:00Z"
+}

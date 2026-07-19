@@ -1,0 +1,262 @@
+/* ===========================================================================
+   「墨与琥珀」—— 命运茶馆全局样式
+   暗色 = 夜茶馆：深墨棕底，灯笼琥珀光晕
+   亮色 = 宣纸：米色纸面，墨色文字，纸纹颗粒
+   字体使用系统默认；Naive UI 侧的同名配色见 src/theme/index.ts
+   =========================================================================== */
+
+/* ---- 主题变量 -------------------------------------------------------------- */
+:root,
+:root[data-theme='dark'] {
+  --bg: #15110d;
+  --bg-soft: #1b1611;
+  --bg-panel: #1e1812;
+  --bg-elevated: #282017;
+  --border: #3c3226;
+  --border-soft: #2e261c;
+  --text: #ede3d2;
+  --text-dim: #c5b6a0;
+  --text-faint: #8d7e69;
+  --accent: #d6a35c;
+  --accent-hover: #e4b671;
+  --accent-soft: rgba(214, 163, 92, 0.13);
+  --accent-glow: rgba(214, 163, 92, 0.22);
+  --danger: #cf6457;
+  --ok: #85ab79;
+  --radius: 6px;
+  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
+  --user-bubble: rgba(214, 163, 92, 0.08);
+  --font-ui: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+}
+
+:root[data-theme='light'] {
+  --bg: #f3ecdf;
+  --bg-soft: #ede4d3;
+  --bg-panel: #fbf6ea;
+  --bg-elevated: #f6efe1;
+  --border: #d9cbb2;
+  --border-soft: #e4d9c3;
+  --text: #33291d;
+  --text-dim: #5f5341;
+  --text-faint: #94866f;
+  --accent: #a8732a;
+  --accent-hover: #bd8636;
+  --accent-soft: rgba(168, 115, 42, 0.1);
+  --accent-glow: rgba(168, 115, 42, 0.14);
+  --danger: #ac4636;
+  --ok: #5e8a52;
+  --shadow-card: 0 2px 10px rgba(86, 64, 36, 0.1);
+  --user-bubble: rgba(168, 115, 42, 0.07);
+}
+
+/* ---- 基底 ------------------------------------------------------------------ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.7;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+
+/* 夜茶馆：顶部一团温暖的灯笼光晕；宣纸：细腻纸纹颗粒。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 45% at 50% -8%, var(--accent-glow), transparent 65%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+/* ---- 通用工具类（沿用既有约定） -------------------------------------------- */
+.muted {
+  color: var(--text-dim);
+}
+
+.faint {
+  color: var(--text-faint);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.spread {
+  justify-content: space-between;
+}
+
+.scroll {
+  overflow-y: auto;
+}
+
+.scroll::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- 页面骨架与标题装饰 ------------------------------------------------------ */
+/* 页面标题：大字 + 菱形饰符 + 细线 */
+.page-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 4px;
+}
+
+.page-title h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.page-title .ornament {
+  color: var(--accent);
+  font-size: 11px;
+  transform: translateY(-2px);
+}
+
+.page-sub {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  margin: 0 0 20px;
+  letter-spacing: 0.5px;
+}
+
+/* 分隔饰线：—— ◆ —— */
+.ornament-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+  margin: 4px 0 16px;
+}
+
+.ornament-rule::before,
+.ornament-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 30%, var(--border) 70%, transparent);
+}
+
+.ornament-rule span {
+  color: var(--accent);
+  font-size: 9px;
+}
+
+/* ---- 入场动画 ---------------------------------------------------------------- */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fade-up {
+  animation: fade-up 0.4s ease both;
+}
+
+/* ---- Markdown 渲染区域 -------------------------------------------------------- */
+.markdown p {
+  margin: 0 0 0.7em;
+}
+
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown code {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+.markdown em {
+  color: var(--text-dim);
+}
+
+.markdown blockquote {
+  margin: 0.6em 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--accent);
+  color: var(--text-dim);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 1.05em;
+  margin: 0.8em 0 0.4em;
+  letter-spacing: 1px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+
+.markdown hr {
+  border: none;
+  height: 1px;
+  background: var(--border-soft);
+  margin: 1em 0;
+}

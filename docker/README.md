@@ -1,0 +1,83 @@
+# Docker Workflow
+
+## 这台机器（不装 Docker）
+
+- 后端开发：`task backend:dev`
+- 后端测试：`task backend:test`
+- 前端开发：`task frontend:dev`
+- 前端类型检查：`task frontend:check`
+- 后端 Linux amd64 二进制：`task backend:build`（输出 `docker/backend/bin/fatecraft`）
+- 前端静态产物：`task frontend:build`（输出 `docker/frontend/dist`）
+
+本机直跑时的配置文件：`backend/.env`（参考 `backend/.env.example`）。
+
+## 有 Docker 的机器
+
+### 开发环境
+
+- 配置文件：`docker/backend.development.env`
+- 确保 `docker/backend/bin/fatecraft` 已由 `task backend:build` 生成
+- 启动后端 + PostgreSQL + 自动备份：`docker compose -f docker-compose.dev.yml up --build`
+- 前端开发仍在宿主机跑 `task frontend:dev`（Vite 把 `/api`、`/ws` 代理到 :8081）
+- 复用外部 PostgreSQL：改 `POSTGRES_HOST` 与 `DATABASE_URL` 后执行
+  `docker compose -f docker-compose.dev.yml up --build backend postgres-backup --no-deps`
+
+### 生产环境
+
+- 配置文件：`docker/backend.production.env`（**务必改 `POSTGRES_PASSWORD` 并同步 `DATABASE_URL`**）
+- 确保二进制与前端产物已生成：`task backend:build && task frontend:build`
+- 启动全部服务（含前端站点）：`docker compose -f docker-compose.prod.yml up --build -d`
+- 访问入口：前端 `http://<host>:8088`（nginx 同时反代 `/api` 与 `/ws`，无需直连 8081）
+
+## 数据与初始化
+
+- **数据库初始化（Docker 自动完成）**：权威建表脚本是 `backend/scripts/sql/init.sql`。
+  两个 compose 文件都将 `../backend/scripts/sql` 挂载到 `/docker-entrypoint-initdb.d`，
+  PostgreSQL 容器在**数据卷为空的首次启动**时会自动创建数据库与用户（来自 env 文件的
+  `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`）并执行 `init.sql` 建表；
+  数据卷已有数据时不会重复执行，安全。
+
+  ```bash
+  # 首次启动即完成初始化，无需手动建库建表
+  docker compose -f docker-compose.dev.yml up -d postgresql
+
+  # 如数据卷早于本机制创建（表尚未建立），可手动补执行一次建表脚本：
+  docker exec -i fatecraft-postgresql-1 psql -U fatecraft -d fatecraft < ../backend/scripts/sql/init.sql
+  # 或从宿主机 psql 客户端（开发环境端口 15433）：
+  psql -h localhost -p 15433 -U fatecraft -d fatecraft -f backend/scripts/sql/init.sql
+  ```
+
+  注：compose 已设置 `name: fatecraft`，容器名为 `fatecraft-postgresql-1`；
+  容器内的超级用户就是 `POSTGRES_USER` 指定的 `fatecraft`，没有 `postgres` 用户。
+
+- **模板数据**：角色卡/Persona/场景/Prompt/世界书存于仓库 `backend/data/` 的 JSON 文件，
+  compose 直接挂载该目录进后端容器（`/app/backend/data`），前端编辑会实时写回宿主机文件。
+- **复用外部 PostgreSQL** 时需手动初始化：由管理员创建数据库与用户后执行 `init.sql`：
+
+  ```bash
+  psql -h 你的数据库地址 -U 管理员用户 -c "CREATE DATABASE fatecraft WITH ENCODING='UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=template0;"
+  psql -h 你的数据库地址 -U 管理员用户 -c "CREATE USER fatecraft WITH PASSWORD '你的密码';"
+  psql -h 你的数据库地址 -U 管理员用户 -c "GRANT ALL PRIVILEGES ON DATABASE fatecraft TO fatecraft;"
+  psql -h 你的数据库地址 -U 管理员用户 -d fatecraft -c "GRANT ALL ON SCHEMA public TO fatecraft;"
+  psql -h 你的数据库地址 -U fatecraft -d fatecraft -f backend/scripts/sql/init.sql
+  ```
+
+- Postgres 18+ 的数据卷挂载到 `/var/lib/postgresql`（不要挂 `/var/lib/postgresql/data`）。
+- **端口映射**：PostgreSQL 映射到宿主机端口按环境区分——开发环境（`docker-compose.dev.yml`）用 `15433`，生产环境（`docker-compose.prod.yml`）用 `15432`（容器内均为 `5432`）。
+
+## 数据库备份
+
+- 由 `postgres-backup` sidecar 容器执行，宿主机无需装 cron；限制 `0.75 CPU`、`256MB` 内存
+- 默认东八区每天 `02:00` 触发 `pg_dump`，备份输出到宿主机 `docker/backups`，日志在 `docker/backups/backup.log`
+- 默认保留最近 `7` 天，可用 `BACKUP_RETENTION_DAYS` 覆盖；备份时间用 `BACKUP_CRON_SCHEDULE` 覆盖
+- 手动立即备份：
+  `docker compose -f docker-compose.prod.yml exec postgres-backup /usr/local/bin/postgres-backup-now`
+- 恢复示例：
+  `docker run --rm -e PGPASSWORD=你的密码 -v $(pwd)/backups:/backups postgres:18-alpine pg_restore --clean --if-exists --no-owner --host=你的数据库地址 --port=5432 --username=fatecraft --dbname=fatecraft /backups/你的备份文件.dump`
+
+## 其他
+
+- 后端镜像不做编译，只拷贝宿主机交叉编译的二进制（alpine + 健康检查 `GET /api/health`）
+- 前端镜像为 `nginx:1.27-alpine`，托管 SPA 并反代 API/WebSocket；WebSocket 反代已配置 `Upgrade` 头与 1h 读超时
+- LLM 的 Base URL / API Key / 模型可在前端「设置」页配置（写入 `llm_settings` 表），或在 env 文件里设 `LLM_API_KEY` 作为兜底
+- 敏感信息的本机覆盖写 `backend.development.env.local` / `backend.production.env.local`（git 已忽略；如使用需在 compose 的 `env_file` 中追加该文件）

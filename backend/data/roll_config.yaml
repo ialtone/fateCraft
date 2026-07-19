@@ -1,0 +1,179 @@
+# 天命判定系统配置
+
+# 判定类别规则
+categories:
+  combat:
+    name: 战斗判定
+    default_attributes: [根骨, 气运]
+    default_weights:
+      根骨: 0.6
+      气运: 0.4
+    base_success_rate: 50
+
+  exploration:
+    name: 探索判定
+    default_attributes: [悟性, 气运]
+    default_weights:
+      悟性: 0.5
+      气运: 0.5
+    base_success_rate: 60
+
+  crafting:
+    name: 炼制判定
+    default_attributes: [悟性, 慧根]
+    default_weights:
+      悟性: 0.7
+      慧根: 0.3
+    base_success_rate: 55
+
+  social:
+    name: 社交判定
+    default_attributes: [魅力, 气运]
+    default_weights:
+      魅力: 0.6
+      气运: 0.4
+    base_success_rate: 60
+
+  cultivation:
+    name: 修炼判定
+    default_attributes: [根骨, 悟性, 气运]
+    default_weights:
+      根骨: 0.4
+      悟性: 0.4
+      气运: 0.2
+    base_success_rate: 50
+
+# 情境修正规则
+# 注意：advantages/disadvantages/environment 的键即是模型可用的枚举词表，
+# 启动时会注入 narrative_response.json 的 enum 约束，模型只能从词表中选取；
+# 后端按键精确查表计分。新增词条 = 在这里加一行即可。
+context_modifiers:
+  # 通用修正
+  advantages:
+    持有相关古籍: 15
+    得到指点: 20
+    充分准备: 10
+    占据地形优势: 10
+    天时地利: 15
+    服用辅助丹药: 10
+    持有护体法宝: 15
+    雷符护身: 10
+    空间感知敏锐: 10
+    使用剑类武器: 0   # 纯条件标记（供"剑心"类天赋 conditions 匹配），本身不加成
+
+  disadvantages:
+    首次尝试: -5
+    疲惫不堪: -15
+    体力不支: -10
+    受伤状态: -20
+    仓促行动: -10
+    心有杂念: -5
+    业力缠身: -15
+    空间之力狂暴: -15
+
+  # 环境修正
+  environment:
+    夜晚: -5
+    大雨: -10
+    迷雾: -10
+    狭窄空间: -5
+    开阔地形: 5
+
+  # 对手修正（战斗类）
+  opponent:
+    境界差距_每级: -10  # 对手每高一个境界
+    对手受伤: 15
+    对手疲惫: 10
+    属性克制: 20
+    属性被克: -20
+
+# 收益平衡规则
+reward_balance:
+  caps:
+    - threshold: 1000
+      max_rate: 90
+      description: 小额收益
+    - threshold: 10000
+      max_rate: 75
+      description: 一般收益
+    - threshold: 100000
+      max_rate: 50
+      description: 重大收益
+    - threshold: 1000000
+      max_rate: 25
+      description: 逆天收益
+    - threshold: 10000000
+      max_rate: 10
+      description: 改命收益
+
+# 天赋特质匹配规则
+trait_patterns:
+  # 天赋匹配（从角色初始天赋中匹配）
+  talents:
+    - keywords: [野性, 直觉, 危机, 感知]
+      applies_to: [exploration, combat]
+      bonus: 20
+
+    - keywords: [剑心, 剑道, 剑意]
+      applies_to: [combat]
+      conditions: [使用剑类武器]
+      bonus: 15
+
+    - keywords: [慧根, 悟性, 通明]
+      applies_to: [crafting, cultivation]
+      bonus: 15
+
+    - keywords: [机缘, 福缘, 气运]
+      applies_to: [exploration]
+      bonus: 10
+
+  # 动态特质匹配（从当前状态中匹配）
+  traits:
+    - keywords: [重伤, 濒死]
+      applies_to: [all]
+      penalty: -20
+
+    - keywords: [突破在即, 顿悟]
+      applies_to: [cultivation]
+      bonus: 25
+
+    - keywords: [夜行者, 暗影]
+      applies_to: [social, exploration]
+      conditions: [夜晚]
+      bonus: 20
+
+# 历史调整规则
+history_adjustment:
+  consecutive_fails:
+    2: 5   # 连续失败2次，+5%
+    3: 10  # 连续失败3次，+10%
+    4: 15  # 连续失败4次，+15%
+
+  same_action_retry:
+    bonus: 5  # 同类行动失败后重试，+5%
+
+  lucky_streak_penalty:
+    threshold: 5  # 连续成功5次后
+    penalty: -5   # 高收益判定 -5%
+
+# 多级结果配置
+outcome_levels:
+  critical_success:
+    probability: 0.05  # 5%
+    min_threshold: 60  # 只有成功率>=60%时才可能大成功
+
+  success:
+    probability: null  # 根据计算的成功率
+
+  failure:
+    probability: null  # 自动计算
+
+  critical_failure:
+    probability: 0.05  # 5%
+    min_threshold: 20  # 只有失败率>=20%时才可能大失败
+
+# 难度模式调整
+difficulty_modes:
+  easy: 15      # 简单模式 +15%
+  normal: 0     # 普通模式 不调整
+  hard: -15     # 困难模式 -15%

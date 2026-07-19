@@ -1,0 +1,9 @@
+{
+  "id": "rogue-cultivator",
+  "name": "散修",
+  "description": "孤身闯荡修真界的独行者，无门无派，全凭自己摸索前行。",
+  "speaking_style": "谨慎务实，不喜浮夸，言语简洁直接。",
+  "constraints": "缺乏系统传承，修炼资源匮乏，常需以命相搏换取奇遇。",
+  "created_at": "2026-06-14T00:00:00Z",
+  "updated_at": "2026-06-14T00:00:00Z"
+}

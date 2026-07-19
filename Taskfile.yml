@@ -1,0 +1,45 @@
+version: '3'
+
+tasks:
+  backend:dev:
+    desc: 本机运行后端（开发模式）
+    dir: backend
+    env:
+      GIN_MODE: debug
+    cmds:
+      - go run ./cmd/server
+
+  backend:test:
+    desc: 运行后端全部测试
+    dir: backend
+    cmds:
+      - go vet ./...
+      - go test ./...
+
+  backend:build:
+    desc: 交叉编译 Linux amd64 后端二进制，供 Docker 镜像使用
+    dir: backend
+    env:
+      CGO_ENABLED: '0'
+      GOOS: linux
+      GOARCH: amd64
+    cmds:
+      - go build -ldflags "-s -w" -o ../docker/backend/bin/fatecraft ./cmd/server
+
+  frontend:dev:
+    desc: 本机运行前端 Vite 开发服务（代理 /api 与 /ws 到 :8081）
+    dir: frontend
+    cmds:
+      - npm run dev
+
+  frontend:check:
+    desc: 前端类型检查（vue-tsc）
+    dir: frontend
+    cmds:
+      - npx vue-tsc --noEmit
+
+  frontend:build:
+    desc: 构建前端产物到 docker/frontend/dist，供 nginx 镜像使用
+    dir: frontend
+    cmds:
+      - npm run build -- --outDir ../docker/frontend/dist --emptyOutDir

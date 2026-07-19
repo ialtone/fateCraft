@@ -1,0 +1,19 @@
+# Go
+/backend/server
+/backend/server.exe
+*.test
+
+# 环境变量
+.env
+# docker/README.md 约定的本机敏感覆盖文件（backend.*.env.local）
+docker/*.env.local
+
+# Node / Vite
+/frontend/node_modules
+/frontend/dist
+npm-debug.log*
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store

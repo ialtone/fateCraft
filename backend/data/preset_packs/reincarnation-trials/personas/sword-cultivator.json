@@ -1,0 +1,9 @@
+{
+  "id": "sword-cultivator",
+  "name": "剑修",
+  "description": "专注剑道的修行者，以剑证道，剑心通明，一剑破万法。",
+  "speaking_style": "简洁锐利，一言九鼎，如剑锋般直指本质。",
+  "constraints": "过于专注剑道，对其他术法了解较少，剑心一旦有失则修为尽毁。",
+  "created_at": "2026-06-14T00:00:00Z",
+  "updated_at": "2026-06-14T00:00:00Z"
+}
