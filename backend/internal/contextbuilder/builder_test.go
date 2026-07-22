@@ -1,6 +1,7 @@
 package contextbuilder
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -16,6 +17,32 @@ func (runeCounter) Count(s string) int { return utf8.RuneCountInString(s) }
 
 func newTestState() map[string]any {
 	return map[string]any{"profile": map[string]any{}}
+}
+
+func TestBuild_RuntimeDirectiveIsRequiredSystemSegment(t *testing.T) {
+	in := Input{
+		MaxContextTokens: 2000, ReservedResponseTokens: 256,
+		State: newTestState(), RuntimeDirective: "候选结局已被服务端拒绝，必须继续修行。",
+	}
+	result, err := Build(in, runeCounter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundSegment := false
+	foundMessage := false
+	for _, segment := range result.Segments {
+		if segment.Key == "runtime_directive" {
+			foundSegment = segment.Required && segment.Included
+		}
+	}
+	for _, message := range result.Messages {
+		if message.Role == storage.RoleSystem && strings.Contains(message.Content, "候选结局已被服务端拒绝") {
+			foundMessage = true
+		}
+	}
+	if !foundSegment || !foundMessage {
+		t.Fatalf("runtime directive missing: segment=%v message=%v", foundSegment, foundMessage)
+	}
 }
 
 // 必选段超预算时应返回 ErrRequiredOverflow 且不构造消息。

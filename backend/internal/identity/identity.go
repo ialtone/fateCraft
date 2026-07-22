@@ -1,30 +1,27 @@
-// Package identity 提供玩家身份抽象：把过去散落注入各构造函数的
-// playerID string 收敛成单方法接口 Provider。
-//
-// 当前为单用户模式，Static 固定返回一个开发期玩家 id；
-// 未来多用户化时只需替换 Provider 实现（如从请求上下文/JWT 解析），
-// 下游持有者（conversation.Service、api.Server、动作处理器等）无需改动。
+// Package identity 提供请求级玩家身份抽象。
 package identity
 
 import "context"
 
-// Provider 解析「当前玩家 id」。多用户化时改为从 ctx 中读取鉴权信息即可。
+// Provider 解析当前请求对应的玩家 id。
 type Provider interface {
 	// CurrentPlayerID 返回当前请求对应的玩家 id。
 	CurrentPlayerID(ctx context.Context) string
 }
 
-// Static 是单用户模式下的固定身份实现，始终返回同一个玩家 id。
-type Static struct {
-	playerID string
+type playerIDKey struct{}
+
+// WithPlayerID 把已认证的玩家 id 写入 context。后台任务必须保留该 context 的 values。
+func WithPlayerID(ctx context.Context, playerID string) context.Context {
+	return context.WithValue(ctx, playerIDKey{}, playerID)
 }
 
-// NewStatic 用固定玩家 id 构造 Static Provider（供组合根注入）。
-func NewStatic(playerID string) Static {
-	return Static{playerID: playerID}
-}
+// Context 从请求 context 读取身份。未经过认证中间件时返回空字符串。
+type Context struct{}
 
-// CurrentPlayerID 返回固定玩家 id，忽略 ctx。
-func (s Static) CurrentPlayerID(ctx context.Context) string {
-	return s.playerID
+func NewContext() Context { return Context{} }
+
+func (Context) CurrentPlayerID(ctx context.Context) string {
+	playerID, _ := ctx.Value(playerIDKey{}).(string)
+	return playerID
 }

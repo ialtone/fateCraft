@@ -1,0 +1,98 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import { authApi } from '@/api'
+import type { AuthConfig, AuthUser } from '@/types'
+
+const defaultConfig: AuthConfig = {
+  email_auth_enabled: false,
+  email_registration_enabled: false,
+  email_verification_enabled: false,
+  invitation_required: false,
+  verification_resend_seconds: 60,
+  linuxdo_enabled: false,
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<AuthUser | null>(null)
+  const config = ref<AuthConfig>({ ...defaultConfig })
+  const initialized = ref(false)
+  const loading = ref(false)
+  let initialization: Promise<void> | null = null
+
+  const authenticated = computed(() => user.value !== null)
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  async function initialize() {
+    if (initialized.value) return
+    if (initialization) return initialization
+    loading.value = true
+    initialization = Promise.allSettled([authApi.config(), authApi.me()])
+      .then(([configResult, userResult]) => {
+        if (configResult.status === 'fulfilled') config.value = configResult.value
+        if (userResult.status === 'fulfilled') user.value = userResult.value
+      })
+      .finally(() => {
+        initialized.value = true
+        loading.value = false
+        initialization = null
+      })
+    return initialization
+  }
+
+  async function login(email: string, password: string) {
+    user.value = await authApi.login({ email, password })
+  }
+
+  async function refreshConfig() {
+    config.value = await authApi.config()
+  }
+
+  async function sendRegistrationCode(email: string) {
+    await authApi.sendRegistrationCode(email)
+  }
+
+  async function register(
+    email: string,
+    password: string,
+    displayName: string,
+    verificationCode: string,
+    invitationCode: string,
+  ) {
+    user.value = await authApi.register({
+      email,
+      password,
+      display_name: displayName,
+      verification_code: verificationCode,
+      invitation_code: invitationCode,
+    })
+  }
+
+  async function logout() {
+    try {
+      await authApi.logout()
+    } finally {
+      user.value = null
+    }
+  }
+
+  function linuxDOLoginURL(returnTo = '/') {
+    const params = new URLSearchParams({ return_to: returnTo })
+    return `/api/auth/linuxdo/start?${params.toString()}`
+  }
+
+  return {
+    user,
+    config,
+    initialized,
+    loading,
+    authenticated,
+    isAdmin,
+    initialize,
+    refreshConfig,
+    login,
+    sendRegistrationCode,
+    register,
+    logout,
+    linuxDOLoginURL,
+  }
+})

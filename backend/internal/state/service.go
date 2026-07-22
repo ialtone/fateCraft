@@ -105,7 +105,7 @@ func (s *Service) Apply(ctx context.Context, convID uuid.UUID, patch map[string]
 	return after, skipped, nil
 }
 
-// Replace 用整份状态覆盖当前状态（用户手动编辑），并记录修订。
+// Replace 用整份状态覆盖当前状态（管理员维护），并记录修订。
 // 非法顶层键会被过滤掉，与 Apply 走同一套白名单校验。
 func (s *Service) Replace(ctx context.Context, convID uuid.UUID, newState map[string]any, source string) (map[string]any, error) {
 	// 过滤不在白名单内的顶层键。

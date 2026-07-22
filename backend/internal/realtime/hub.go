@@ -99,7 +99,8 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, convID uuid.UUID) er
 	defer h.unregister(convID, c)
 
 	go h.writePump(c)
-	h.readPump(convID, c)
+	// WebSocket request context 关闭后连接仍可继续生成，保留其中的认证身份值。
+	h.readPump(context.WithoutCancel(r.Context()), convID, c)
 	return nil
 }
 
@@ -162,7 +163,7 @@ func (h *Hub) writePump(c *conn) {
 	}
 }
 
-func (h *Hub) readPump(convID uuid.UUID, c *conn) {
+func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 	defer c.ws.Close()
 	// 死连接检测：初始读期限 + pong 刷新（配合 writePump 的周期 ping）。
 	_ = c.ws.SetReadDeadline(time.Now().Add(readWait))
@@ -187,7 +188,7 @@ func (h *Hub) readPump(convID uuid.UUID, c *conn) {
 				h.Broadcast(convID, Event{Type: TypeError, ConversationID: convID.String(), Error: "消息内容不能为空"})
 				continue
 			}
-			h.startGeneration(convID, func(ctx context.Context, emit EmitFunc) {
+			h.startGeneration(baseCtx, convID, func(ctx context.Context, emit EmitFunc) {
 				h.gen.Generate(ctx, convID, msg.Content, emit)
 			})
 		case TypeCancelGeneration:
@@ -197,8 +198,8 @@ func (h *Hub) readPump(convID uuid.UUID, c *conn) {
 }
 
 // startGeneration 启动一个可取消的生成任务，结果通过 Broadcast 推送给对话内所有连接。
-func (h *Hub) startGeneration(convID uuid.UUID, run func(context.Context, EmitFunc)) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (h *Hub) startGeneration(baseCtx context.Context, convID uuid.UUID, run func(context.Context, EmitFunc)) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(baseCtx))
 	task := &genTask{cancel: cancel, done: make(chan struct{})}
 	h.mu.Lock()
 	// 若已有任务在跑，先取消旧任务（对话锁会进一步保证互斥）。
@@ -247,6 +248,6 @@ func (h *Hub) Gen() Generator { return h.gen }
 
 // RunDetached 在后台运行一个生成任务（用于 REST 触发的 regenerate/continue），
 // 结果仍通过对话的 WebSocket 广播。
-func (h *Hub) RunDetached(convID uuid.UUID, run func(context.Context, EmitFunc)) {
-	h.startGeneration(convID, run)
+func (h *Hub) RunDetached(baseCtx context.Context, convID uuid.UUID, run func(context.Context, EmitFunc)) {
+	h.startGeneration(baseCtx, convID, run)
 }

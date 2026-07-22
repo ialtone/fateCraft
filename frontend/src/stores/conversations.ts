@@ -15,7 +15,6 @@ export interface EndingInfo {
 export const useConversationStore = defineStore('conversation', () => {
   const list = ref<Conversation[]>([])
   const current = ref<Conversation | null>(null)
-  const currentWorldBookIds = ref<string[]>([])
   const loading = ref(false)
   // 结局信息放在对话 store 而非 socket store：它是业务事件的结果，不是连接状态；
   // 且跟随 clearCurrent 一起清理，切换对话不会带上旧结局。
@@ -33,7 +32,6 @@ export const useConversationStore = defineStore('conversation', () => {
   async function load(id: string) {
     const data = await conversationsApi.get(id)
     current.value = data.conversation
-    currentWorldBookIds.value = data.world_book_ids || []
     return data.conversation
   }
 
@@ -87,7 +85,6 @@ export const useConversationStore = defineStore('conversation', () => {
   // 切换对话时清空当前缓存。
   function clearCurrent() {
     current.value = null
-    currentWorldBookIds.value = []
     // 同步清掉旧结局，避免切到新对话时弹出上一局的结局弹窗
     endingTriggered.value = null
   }
@@ -95,7 +92,6 @@ export const useConversationStore = defineStore('conversation', () => {
   return {
     list,
     current,
-    currentWorldBookIds,
     loading,
     endingTriggered,
     loadList,

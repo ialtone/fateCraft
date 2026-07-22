@@ -105,4 +105,21 @@ const stateStore = useStateStore()
   opacity: 0.7;
   line-height: 1.5;
 }
+
+@media (max-width: 768px) {
+  .state-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    border-right: 0;
+  }
+
+  .head {
+    padding: 12px 16px;
+  }
+
+  .body {
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+}
 </style>

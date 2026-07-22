@@ -1,7 +1,7 @@
 {
   "id": "reincarnation-trials",
   "name": "飞升试炼",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "基于《凡人修仙传》的修仙体验。通过境界突破和寿元管理，在有限的生命中追求飞升。三种飞升路径：正统渡劫、虚空裂缝、仙缘传送。寿元有限，知足与贪婪的抉择将决定你的命运。",
   "author": "ialtone",
   "icon": "⚡",
@@ -11,14 +11,72 @@
     "recommended_persona": "rogue-cultivator",
     "recommended_scenario": "heavenly-trial",
     "recommended_prompt": "ascension-trials",
-    "required_worldbooks": ["ascension-system"]
+    "required_worldbooks": ["ascension-system"],
+    "allowed_personas": [
+      "alchemy-master",
+      "demonic-cultivator",
+      "mortal-ascender",
+      "noble-scion",
+      "rogue-cultivator",
+      "sect-disciple",
+      "sword-cultivator"
+    ]
   },
-  "roll_system_config": {
-    "force_enabled": true,
-    "allow_user_override": false,
-    "default_difficulty": "normal",
-    "allowed_difficulties": ["easy", "normal", "hard"]
-  },
+  "reward_rules": [
+    {
+      "reward_key": "orthodox_ascension",
+      "ending_type": "good",
+      "ending_title": "渡劫飞升",
+      "conditions": {
+        "min_cultivation_rank": 5,
+        "required_successful_rolls": [
+          "筑基突破判定",
+          "结丹突破判定",
+          "元婴突破判定",
+          "化神突破判定",
+          "渡劫判定-第一波",
+          "渡劫判定-第二波",
+          "渡劫判定-第三波",
+          "渡劫判定-第四波",
+          "渡劫判定-第五波",
+          "渡劫判定-第六波",
+          "渡劫判定-第七波",
+          "渡劫判定-第八波",
+          "渡劫判定-第九波"
+        ]
+      },
+      "calculation": { "multiplier_bps": 30000 }
+    },
+    {
+      "reward_key": "void_ascension",
+      "ending_type": "good",
+      "ending_title": "破碎虚空",
+      "conditions": {
+        "min_cultivation_rank": 4,
+        "required_successful_rolls": [
+          "筑基突破判定",
+          "结丹突破判定",
+          "元婴突破判定",
+          "虚空裂缝穿越判定"
+        ]
+      },
+      "calculation": { "multiplier_bps": 20000 }
+    },
+    {
+      "reward_key": "affinity_ascension",
+      "ending_type": "good",
+      "ending_title": "仙缘飞升",
+      "conditions": {
+        "min_cultivation_rank": 3,
+        "required_successful_rolls": [
+          "筑基突破判定",
+          "结丹突破判定",
+          "仙缘获取判定"
+        ]
+      },
+      "calculation": { "multiplier_bps": 15000 }
+    }
+  ],
   "quick_start_guide": "选择天道试炼官作为叙事者，开启你的修仙之旅。从练气期开始，在有限的寿元中突破境界，最终选择适合的飞升路径：正统渡劫（最荣耀）、虚空裂缝（中等）、仙缘传送（最安全）。寿元将尽时，知足与贪婪的抉择将决定你的命运。",
   "features": [
     "修为境界突破系统",
@@ -30,5 +88,5 @@
   ],
   "dependencies": [],
   "created_at": "2026-06-14T00:00:00Z",
-  "updated_at": "2026-06-17T00:00:00Z"
+  "updated_at": "2026-07-22T00:00:00Z"
 }

@@ -2,7 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NIcon, useDialog } from 'naive-ui'
-import { ChevronBackOutline } from '@vicons/ionicons5'
+import {
+  ChatbubblesOutline,
+  ChevronBackOutline,
+  DocumentTextOutline,
+  StatsChartOutline,
+} from '@vicons/ionicons5'
 import StatePanel from '@/components/StatePanel.vue'
 import MessageTimeline from '@/components/MessageTimeline.vue'
 import ContextInspector from '@/components/ContextInspector.vue'
@@ -29,6 +34,7 @@ const settings = useSettingsStore()
 const account = useAccountStore()
 
 const showInspector = ref(true)
+const mobilePane = ref<'state' | 'chat' | 'context'>('chat')
 const convId = computed(() => route.params.id as string)
 const editable = computed(() => convStore.current?.status === 'active')
 
@@ -183,21 +189,36 @@ function endConversation() {
 <template>
   <div class="conv-page">
     <header class="bar row spread">
-      <div class="row" style="gap: 10px; min-width: 0">
-        <NButton quaternary size="small" @click="router.push('/')">
+      <div class="bar-main row">
+        <NButton
+          class="back-button"
+          quaternary
+          size="small"
+          aria-label="返回挑战列表"
+          @click="router.push('/')"
+        >
           <template #icon><NIcon :component="ChevronBackOutline" /></template>
-          列表
+          <span class="back-label">列表</span>
         </NButton>
         <span class="title">{{ convStore.current?.title || '加载中…' }}</span>
-        <ConversationStatusBadge v-if="convStore.current" :status="convStore.current.status" />
+        <ConversationStatusBadge
+          v-if="convStore.current"
+          class="conversation-status"
+          :status="convStore.current.status"
+        />
       </div>
-      <div class="row" style="gap: 6px">
-        <span class="faint sm mono">{{ settings.settings?.model }}</span>
-        <NButton quaternary size="small" @click="showInspector = !showInspector">
+      <div class="bar-actions row">
+        <span class="model-name faint sm mono">{{ settings.settings?.model }}</span>
+        <NButton
+          class="inspector-toggle"
+          quaternary
+          size="small"
+          @click="showInspector = !showInspector"
+        >
           {{ showInspector ? '隐藏检查器' : '显示检查器' }}
         </NButton>
         <NButton v-if="editable" quaternary size="small" type="error" @click="endConversation"
-          >结束对话</NButton
+          >结束</NButton
         >
         <ThemeToggle />
       </div>
@@ -209,13 +230,36 @@ function endConversation() {
 
     <!-- 错误提示统一由输入区（ActionInput）的可关闭警示条展示，页头不再重复挂一份 -->
 
-    <div class="three-pane" :class="{ 'no-inspector': !showInspector }">
-      <StatePanel :conv-id="convId" />
-      <div class="center">
+    <nav class="mobile-pane-tabs" aria-label="对话视图">
+      <button
+        type="button"
+        :class="{ active: mobilePane === 'state' }"
+        @click="mobilePane = 'state'"
+      >
+        <NIcon :component="StatsChartOutline" />
+        <span>状态</span>
+      </button>
+      <button type="button" :class="{ active: mobilePane === 'chat' }" @click="mobilePane = 'chat'">
+        <NIcon :component="ChatbubblesOutline" />
+        <span>叙事</span>
+      </button>
+      <button
+        type="button"
+        :class="{ active: mobilePane === 'context' }"
+        @click="mobilePane = 'context'"
+      >
+        <NIcon :component="DocumentTextOutline" />
+        <span>上下文</span>
+      </button>
+    </nav>
+
+    <div class="three-pane" :class="[{ 'no-inspector': !showInspector }, `mobile-${mobilePane}`]">
+      <StatePanel class="pane-state" :conv-id="convId" />
+      <div class="center pane-chat">
         <MessageTimeline :editable="editable" />
         <ActionInput :conv-id="convId" :disabled="!editable" />
       </div>
-      <ContextInspector v-if="showInspector" />
+      <ContextInspector class="pane-context" />
     </div>
   </div>
 </template>
@@ -223,8 +267,11 @@ function endConversation() {
 <style scoped>
 .conv-page {
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .bar {
@@ -233,6 +280,16 @@ function endConversation() {
   background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
   border-bottom: 1px solid var(--border-soft);
   flex-shrink: 0;
+}
+
+.bar-main {
+  min-width: 0;
+  gap: 10px;
+}
+
+.bar-actions {
+  flex-shrink: 0;
+  gap: 6px;
 }
 
 .title {
@@ -264,41 +321,142 @@ function endConversation() {
 .three-pane {
   flex: 1;
   display: grid;
-  grid-template-columns: 290px 1fr 330px;
+  grid-template-columns: 290px minmax(0, 1fr) 330px;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .three-pane.no-inspector {
-  grid-template-columns: 290px 1fr;
+  grid-template-columns: 290px minmax(0, 1fr);
+}
+
+.three-pane.no-inspector > .pane-context {
+  display: none;
 }
 
 .center {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mobile-pane-tabs {
+  display: none;
 }
 
 /* 移动端适配 */
 @media (max-width: 768px) {
   .bar {
-    padding: 8px 12px;
-    flex-wrap: wrap;
-    gap: 8px;
+    height: calc(52px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0
+      max(8px, env(safe-area-inset-left));
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .bar-main {
+    flex: 1;
+    gap: 5px;
+    overflow: hidden;
+  }
+
+  .bar-actions {
+    gap: 2px;
+  }
+
+  .model-name,
+  .inspector-toggle {
+    display: none;
   }
 
   .title {
+    flex: 1;
+    min-width: 0;
     font-size: 14px;
-    max-width: 150px;
+  }
+
+  .mobile-pane-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    min-height: 44px;
+    padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
+    background: var(--bg-soft);
+    border-bottom: 1px solid var(--border-soft);
+    flex-shrink: 0;
+  }
+
+  .mobile-pane-tabs button {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 8px;
+    border: 0;
+    color: var(--text-faint);
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .mobile-pane-tabs button::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    bottom: 0;
+    left: 12px;
+    height: 2px;
+    background: transparent;
+  }
+
+  .mobile-pane-tabs button.active {
+    color: var(--accent);
+  }
+
+  .mobile-pane-tabs button.active::after {
+    background: var(--accent);
+  }
+
+  .mobile-pane-tabs :deep(.n-icon) {
+    font-size: 16px;
   }
 
   .three-pane,
   .three-pane.no-inspector {
-    grid-template-columns: 1fr; /* 单栏布局 */
+    display: block;
   }
 
-  /* 移动端隐藏侧边栏 */
-  .three-pane > :first-child,
-  .three-pane > :last-child {
+  .three-pane > .pane-state,
+  .three-pane > .pane-chat,
+  .three-pane > .pane-context {
+    display: none;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .three-pane.mobile-state > .pane-state,
+  .three-pane.mobile-chat > .pane-chat,
+  .three-pane.mobile-context > .pane-context,
+  .three-pane.no-inspector.mobile-context > .pane-context {
+    display: flex;
+  }
+}
+
+@media (max-width: 480px) {
+  .conversation-status {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .back-label {
     display: none;
   }
 }

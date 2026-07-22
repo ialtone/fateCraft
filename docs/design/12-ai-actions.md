@@ -1,292 +1,204 @@
-# 12. AI 动作系统
+# 12. AI 输出、判定与动作系统
 
-## 概述
+## 设计目标
 
-AI 动作系统允许模型在输出中包含一个可选的 `action` 字段，用于触发特殊的系统级操作。当前支持的主要动作是 `trigger_ending`，允许 AI 根据剧情自然地结束对话。
+模型负责提出叙事、状态变化、判定请求和动作意图；后端负责解析、白名单、随机性、持久化和奖励。模型输出不能直接等同于已经执行的业务事实。
 
-## 设计动机
+当前使用结构化 JSON 信封而不是真正的上游 Tool Calling，原因是需要兼容多种 OpenAI 风格服务，并让流式叙事和状态更新使用一个稳定协议。
 
-在叙事类游戏中，某些剧情条件满足时应该自动触发结局，而不是让用户手动点击"结束对话"。例如：
+## 响应 Schema
 
-- 玩家连续三次拒绝茶馆的茶水
-- 说书人拍下醒木第三拍
-- 故事自然走向终章（晨光中茶馆消失）
+服务启动时读取 `data/schemas/narrative_response.json`。成功加载后使用 `response_format: json_schema` 请求严格 JSON，并把 `roll_config.yaml` 中的情境词表动态注入 enum。
 
-传统方案（Tool Calling）需要改造 LLM client 并且依赖模型的 function calling 能力。**方案 A-lite（伪 Tool Calling）** 通过在 JSON 输出中添加 `action` 字段，既保持了语义清晰度，又避免了复杂的实现。
+Schema 加载失败时服务会记录警告并退化为无 response_format 调用，但后端解析和白名单仍然生效。不能把上游声称支持 JSON Schema 当作业务授权。
 
-## 输出格式
-
-### 基本结构
+## 信封结构
 
 ```json
 {
-  "narrative": "剧情文本，支持 Markdown",
+  "narrative": "玩家可见剧情",
   "state_update": {
-    "profile.title": "新身份",
-    "location.name": "茶馆门外"
+    "profile.remaining_lifespan": 110,
+    "traits+": "顿悟"
   },
-  "action": {
-    "type": "trigger_ending",
-    "params": {
-      "ending_type": "good",
-      "title": "命运归处",
-      "summary": "你走出茶馆，回望时它已消失在晨光中。"
-    }
+  "roll_request": null,
+  "action": null,
+  "notes": "内部备注"
+}
+```
+
+字段：
+
+- `narrative`：玩家可见的 Markdown 叙事，必需。
+- `state_update`：状态补丁，必需但可为空对象。
+- `roll_request`：可选，要求后端执行一次天命判定。
+- `action`：可选，要求后端执行注册动作。
+- `notes`：可选内部说明，写入消息 metadata，不直接展示。
+
+## 容错解析
+
+后端按以下顺序解析：
+
+1. 去掉可能的 Markdown code fence。
+2. 尝试把全文解析为 Envelope。
+3. 尝试截取第一个 `{` 到最后一个 `}` 再解析。
+4. 仍失败时把原始文本作为 narrative，state_update 为空。
+
+解析降级只保证剧情可见，不会从自由文本中猜测状态或动作。流式模式从累积 JSON 中只提取 narrative 新增前缀，避免裸信封展示给玩家。
+
+`FlexInt` 和 `FlexStrings` 对部分上游非标准数字、字符串数组和对象形态做尽力解析。这是协议容错，不是旧数据库兼容层。
+
+## 状态补丁
+
+允许的顶层命名空间：
+
+```text
+profile attributes inventory relationships location world_flags
+cultivation ascension quests risks traits
+```
+
+嵌套对象使用点号路径，数组使用整体替换或 `+` 追加。`quests`、`risks`、`traits` 不能写任意嵌套字段。
+
+非法路径跳过，合法路径在状态事务内应用并写入修订。状态补丁不能修改账号奖励、对话所有者、挑战版本、Prompt 或系统判定设置。
+
+## 判定请求
+
+典型请求：
+
+```json
+{
+  "type": "筑基突破判定",
+  "category": "cultivation",
+  "relevant_attributes": ["根骨", "悟性", "气运"],
+  "attribute_weights": {"根骨": 0.5, "悟性": 0.3, "气运": 0.2},
+  "base_difficulty": 72,
+  "sides": 100,
+  "description": "突破到筑基期",
+  "context": {
+    "advantages": ["服用辅助丹药", "充分准备"],
+    "disadvantages": ["首次尝试"],
+    "environment": []
   },
-  "notes": "可选内部备注"
-}
-```
-
-### 字段说明
-
-- `action` (可选): 触发的动作对象
-  - `type` (string): 动作类型，目前支持 `trigger_ending`
-  - `params` (object): 动作参数，根据 type 不同而不同
-
-### 向后兼容
-
-`action` 字段完全可选。不包含 `action` 的输出会像之前一样正常处理：
-
-```json
-{
-  "narrative": "普通的剧情推进。",
-  "state_update": {},
-  "notes": ""
-}
-```
-
-## trigger_ending 动作
-
-### 参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `ending_type` | string | 是 | 结局类型：`good`（好结局）/ `bad`（坏结局）/ `neutral`（中立结局）/ `hidden`（隐藏结局） |
-| `title` | string | 是 | 结局标题，用于前端展示 |
-| `summary` | string | 是 | 结局摘要，简短描述这个结局的含义 |
-
-### 示例
-
-#### 好结局
-
-```json
-{
-  "narrative": "说书人微笑着合上折扇，醒木轻轻一拍。茶馆在晨光中渐渐隐去，你发现自己站在清晨的街头，手中握着一枚温润的玉佩。",
-  "state_update": {
-    "inventory.items+": "命运玉佩",
-    "world_flags.ending_reached": true
-  },
-  "action": {
-    "type": "trigger_ending",
-    "params": {
-      "ending_type": "good",
-      "title": "命运归处",
-      "summary": "你在命运茶馆中做出了正确的选择，带着祝福回到现实世界。"
-    }
+  "stakes": {
+    "reward_value": 50000,
+    "risk_level": "high"
   }
 }
 ```
 
-#### 坏结局
+category 支持 combat、exploration、crafting、social、cultivation。情境数组只能使用配置词表，后端精确查表，未知值不加分。
+
+## 成功率计算
+
+后端依次计算：
+
+1. `base_difficulty`，缺失时使用 category 默认成功率。
+2. 状态属性加成：属性 50 为中性，按 `(value - 50) * 0.4` 和权重合计。
+3. 初始天赋与动态 traits 加减成。
+4. 有利、不利、环境、对手境界与克制修正。
+5. 根据 `stakes.reward_value` 应用高收益成功率上限。
+6. 最近 10 条服务端流水产生的连败、重试或连胜调整。
+7. 管理员 easy/normal/hard 难度修正。
+8. 把最终成功率限制在 1%-99%，生成大成功、成功、失败、大失败区间。
+
+模型提供的是规则输入，不提供随机结果。掷骰与成功布尔值只由后端产生。
+
+## 两阶段流程
+
+### 第一阶段
+
+- 保存带判定请求的 narrative。
+- 应用该阶段真实发生的资源消耗，例如用掉丹药或雷符。
+- 读取服务端状态并计算、执行判定。
+- 将结果写入 `roll_history`、内部 system 消息和展示消息。
+
+### 第二阶段
+
+- 重新装配包含判定结果的上下文。
+- 再次调用模型完成结果叙事和状态后果。
+- 第二阶段再次提交 roll_request 时忽略，防止无限递归。
+- 第二阶段 action 可以进入正常动作分发。
+
+第一阶段和第二阶段使用不同 message ID，WebSocket 各自闭合 started/delta/finished 生命周期。
+
+## 动作注册表
+
+编排器持有 `map[string]ActionHandler`。未知动作类型忽略或记录，不允许通过反射执行任意函数。当前只注册 `trigger_ending`。
+
+动作结构：
 
 ```json
 {
-  "narrative": "醒木第三次落下，茶馆剧烈震动。你的视野逐渐模糊，意识陷入无尽的轮回……",
-  "state_update": {
-    "world_flags.trapped_in_cycle": true
-  },
-  "action": {
-    "type": "trigger_ending",
-    "params": {
-      "ending_type": "bad",
-      "title": "永恒轮回",
-      "summary": "你被困在了命运的循环中，再也无法回到现实。"
-    }
+  "type": "trigger_ending",
+  "params": {}
+}
+```
+
+## `trigger_ending`
+
+参数：
+
+| 字段 | 必需性 | 含义 |
+| --- | --- | --- |
+| `ending_type` | 必需 | good、bad、neutral |
+| `title` | 必需 | 结局标题；成功时必须匹配奖励规则 |
+| `summary` | 可选 | 前端结局展示摘要 |
+| `reward_key` | good 必需 | 只用于申请版本化奖励 |
+
+成功示例：
+
+```json
+{
+  "type": "trigger_ending",
+  "params": {
+    "ending_type": "good",
+    "reward_key": "void_ascension",
+    "title": "破碎虚空",
+    "summary": "你穿过虚空裂缝，成功超脱此界。"
   }
 }
 ```
 
-#### 中立结局
+neutral/bad 不能携带 reward_key。模型不能提交最终灵石、账号累计、成功次数或结算 ID。
 
-```json
-{
-  "narrative": "你第三次婉拒了说书人递来的茶杯。他叹息一声：「缘分未到，客官请回吧。」茶馆的门在你身后关闭，再也找不到入口。",
-  "state_update": {
-    "world_flags.left_peacefully": true
-  },
-  "action": {
-    "type": "trigger_ending",
-    "params": {
-      "ending_type": "neutral",
-      "title": "缘尽于此",
-      "summary": "你拒绝了命运茶馆的邀约，平安回到了日常生活。"
-    }
-  }
-}
-```
+## 结算执行
 
-## 系统行为
+动作 handler 使用 `Prepare` / `Commit` 两阶段协议。`Prepare` 在候选回复落库前从服务端读取并冻结：
 
-当 AI 输出包含 `action` 字段时，后端会：
+- 当前认证玩家。
+- 当前对话结构化状态中的角色、境界和灵石。
+- 当前对话用户消息数作为存活回合。
 
-1. **解析 action**：从 `Envelope` 中提取 `Action` 对象
-2. **执行动作**：
-   - 对于 `trigger_ending`：调用 `conversation.Service.End()` 将对话状态置为 `ended`
-3. **广播事件**：通过 WebSocket 发送 `ending_triggered` 事件给所有连接的客户端
-4. **正常完成**：动作执行不影响消息的保存和状态更新流程
+Challenge Service 先非锁定预校验对话、奖励规则、最低境界和精确 `roll_history`。候选被拒绝时，编排器发送 `generation_discarded` 删除前端流式占位，携带服务端原因重试一次；第二次仍无效则保存后端兜底叙事。通过后才保存模型叙事和状态，随后 `Commit` 使用冻结输入在事务锁内重做相同校验、计算奖励并广播 `ending_triggered`。
 
-### WebSocket 事件
+这个顺序保证同一回复的 `state_update` 不能给自己的结局补境界、物品或灵石。事务复核则负责处理预校验和提交之间的并发变化。
 
-```json
-{
-  "type": "ending_triggered",
-  "conversation_id": "uuid",
-  "ending_type": "good",
-  "ending_title": "命运归处",
-  "ending_summary": "你在命运茶馆中做出了正确的选择..."
-}
-```
+具体奖励规则和当前仍属于叙事约束的条件见 `14-ascension-trial-gameplay.md`。
 
-前端可以监听这个事件，展示结局卡片、播放特殊动画、禁用输入框等。
+## 安全要求
 
-## 世界书集成
+- Prompt 必须含 required 的 `settlement_security`，但 Prompt 不是唯一安全边界。
+- 玩家输入只能表达当前意图；不能建立过去事件、状态、物品、判定或奖励事实。
+- reward_key 必须来自对话固定版本，不能从当前挑战包新版本读取。
+- ending title 与 type 必须精确匹配规则。
+- 判定条件只查询当前 conversation 的服务端流水。
+- 成功路线使用精确且去重的判定类型集合，不接受前缀相似项或重复项代替。
+- 同一对话依靠行锁和唯一 challenge_run 防止重复结算。
+- state_update 和 summary 都不能直接成为账号记账指令。
+- 未知 action、字段或情境词条不能被当作已授权能力。
 
-在世界书中定义结局规则，AI 会根据这些规则判断何时触发结局：
+## 完整示例
 
-```json
-{
-  "title": "茶馆结局规则",
-  "content": "当以下情况发生时，故事走向终局：\n1. 玩家连续三次拒绝命运茶馆提供的茶水，说书人会叹息并送客离开（中立结局）。\n2. 说书人拍下醒木第三拍，因果线彻底改写，玩家的命运发生根本转折（好结局或坏结局，取决于玩家的选择）。\n3. 玩家主动提出离开茶馆且说书人认可时机已到（中立结局）。\n4. 茶馆在晨光中消失，玩家被自然送出（好结局）。\n触发结局时，使用 action 字段：{\"type\": \"trigger_ending\", \"params\": {\"ending_type\": \"good/bad/neutral/hidden\", \"title\": \"结局标题\", \"summary\": \"结局摘要\"}}",
-  "keywords": ["结局", "终章", "离开", "醒木三拍", "晨光"],
-  "priority": 150
-}
-```
+更多普通回复、状态更新、判定和结局信封见 `12-ai-actions-examples.md`。示例用于协议理解；题材规则以已发布挑战版本和 `14-ascension-trial-gameplay.md` 为准。
 
-## 实现细节
+## 未来动作
 
-### 数据结构
+可能增加 `request_choice`、`trigger_event` 或小游戏动作，但每种动作必须：
 
-**llm/types.go**
+1. 定义严格参数结构。
+2. 注册明确 handler。
+3. 从服务端读取身份和业务事实。
+4. 设计幂等、事务和重放保护。
+5. 增加 API/领域测试和文档。
 
-```go
-type Envelope struct {
-    Narrative   string         `json:"narrative"`
-    StateUpdate map[string]any `json:"state_update"`
-    Action      *Action        `json:"action,omitempty"`
-    Notes       string         `json:"notes"`
-}
-
-type Action struct {
-    Type   string         `json:"type"`
-    Params map[string]any `json:"params"`
-}
-```
-
-### 处理流程
-
-**realtime/generator.go**
-
-```go
-func (g *Generator) runGeneration(...) {
-    // ... 生成并解析 ...
-    env := llm.ParseEnvelope(raw)
-    
-    // ... 保存消息和应用状态 ...
-    
-    // 检测并处理动作
-    if env.Action != nil {
-        g.handleAction(ctx, convID, env.Action, emit)
-    }
-    
-    // ... 推送完成事件 ...
-}
-
-func (g *Generator) handleAction(ctx context.Context, convID uuid.UUID, action *llm.Action, emit EmitFunc) {
-    switch action.Type {
-    case "trigger_ending":
-        g.handleEndingAction(ctx, convID, action.Params, emit)
-    }
-}
-
-func (g *Generator) handleEndingAction(ctx context.Context, convID uuid.UUID, params map[string]any, emit EmitFunc) {
-    endingType := getStringParam(params, "ending_type", "neutral")
-    title := getStringParam(params, "title", "故事终章")
-    summary := getStringParam(params, "summary", "")
-    
-    g.convSvc.End(ctx, convID)
-    
-    emit(Event{
-        Type:           TypeEndingTriggered,
-        ConversationID: convID.String(),
-        EndingType:     endingType,
-        EndingTitle:    title,
-        EndingSummary:  summary,
-    })
-}
-```
-
-## 未来扩展
-
-动作系统设计为可扩展的，未来可以支持更多动作类型：
-
-### trigger_event
-
-触发特殊剧情事件：
-
-```json
-{
-  "action": {
-    "type": "trigger_event",
-    "params": {
-      "event_id": "merchant_arrives",
-      "description": "神秘商人出现在茶馆门口"
-    }
-  }
-}
-```
-
-### start_minigame
-
-启动内嵌小游戏：
-
-```json
-{
-  "action": {
-    "type": "start_minigame",
-    "params": {
-      "game_type": "dice_roll",
-      "stakes": "命运骰子"
-    }
-  }
-}
-```
-
-### request_choice
-
-要求玩家做出明确选择（带倒计时）：
-
-```json
-{
-  "action": {
-    "type": "request_choice",
-    "params": {
-      "question": "你要喝下这杯茶吗？",
-      "options": ["喝下", "拒绝", "观察"],
-      "timeout_seconds": 60
-    }
-  }
-}
-```
-
-## 与真 Tool Calling 的对比
-
-| 维度 | 方案 A-lite (action 字段) | 方案 A (真 Tool Calling) |
-|------|--------------------------|--------------------------|
-| 实现复杂度 | 低（5 行检测代码） | 高（改造 LLM client + 流式处理） |
-| 模型兼容性 | 好（任何能输出 JSON 的模型） | 差（需要支持 function calling） |
-| 语义清晰度 | 高 | 高 |
-| 可扩展性 | 高（随意添加新 action type） | 中（每个 action 需定义 tool schema） |
-| 调试友好度 | 高（action 在 JSON 输出里，可见） | 中（tool call 在单独字段） |
-| 向后兼容 | 完美（action 可选） | 差（需要模型理解 tools） |
-
-**结论**：对于当前需求（剧情驱动的自动结局），方案 A-lite 是最优选择。
+不得增加一个可以让模型指定任意数据库操作的通用 action。

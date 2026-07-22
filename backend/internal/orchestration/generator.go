@@ -8,12 +8,16 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
+	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/chat"
 	"github.com/ialtone/fatecraft/internal/conversation"
+	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/memory"
@@ -22,7 +26,6 @@ import (
 	"github.com/ialtone/fatecraft/internal/state"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/tokenizer"
-	"github.com/ialtone/fatecraft/internal/worldbook"
 )
 
 // Generator 编排一次完整的生成流程（doc 06 §请求流程）。
@@ -32,12 +35,9 @@ type Generator struct {
 	chatSvc        *chat.Service
 	stateSvc       *state.Service
 	memSvc         *memory.Service
-	worldSvc       *worldbook.Service
-	promptStore    PromptStore
-	charStore      CharacterStore
-	personaStore   PersonaStore
-	scenStore      ScenarioStore
+	challenge      *challenge.Service
 	settings       *storage.SettingsRepo
+	systemSettings *storage.SystemSettingsRepo
 	ctxRepo        *storage.ContextRepo
 	llmClient      *llm.Client
 	counter        tokenizer.Counter
@@ -45,23 +45,7 @@ type Generator struct {
 	roll           *roll.Service            // 判定服务；nil 表示判定系统不可用
 	actions        map[string]ActionHandler // AI 动作处理器注册表（按 action.type 分发）
 	responseSchema *llm.JSONSchema          // 结构化输出 Schema；nil 时不启用 response_format
-}
-
-// 模板存储的消费端小接口（只取所需的 Get）。
-type PromptStore interface {
-	Get(id string) (storage.PromptPreset, error)
-}
-
-type CharacterStore interface {
-	Get(id string) (storage.Character, error)
-}
-
-type PersonaStore interface {
-	Get(id string) (storage.Persona, error)
-}
-
-type ScenarioStore interface {
-	Get(id string) (storage.Scenario, error)
+	identity       identity.Provider
 }
 
 // GeneratorDeps 是构造 Generator 的依赖集合（具名字段，取代旧的 16 个位置参数）。
@@ -70,12 +54,9 @@ type GeneratorDeps struct {
 	Chat      *chat.Service
 	State     *state.Service
 	Memory    *memory.Service
-	World     *worldbook.Service
-	Prompts   PromptStore
-	Chars     CharacterStore
-	Personas  PersonaStore
-	Scenarios ScenarioStore
+	Challenge *challenge.Service
 	Settings  *storage.SettingsRepo
+	System    *storage.SystemSettingsRepo
 	CtxLogs   *storage.ContextRepo
 	LLM       *llm.Client
 	Counter   tokenizer.Counter
@@ -87,16 +68,18 @@ type GeneratorDeps struct {
 	Actions map[string]ActionHandler
 	// ResponseSchema 结构化输出 Schema，由组合根加载注入；nil 时降级为不启用 response_format。
 	ResponseSchema *llm.JSONSchema
+	// Identity 从生成 context 中解析当前用户，以读取其独立 LLM 设置。
+	Identity identity.Provider
 }
 
 // NewGenerator 构造生成编排器。Schema 不再由本包自行探测文件系统，改由组合根注入。
 func NewGenerator(d GeneratorDeps) *Generator {
 	return &Generator{
-		convSvc: d.Conv, chatSvc: d.Chat, stateSvc: d.State, memSvc: d.Memory, worldSvc: d.World,
-		promptStore: d.Prompts, charStore: d.Chars, personaStore: d.Personas, scenStore: d.Scenarios,
-		settings: d.Settings, ctxRepo: d.CtxLogs,
+		convSvc: d.Conv, chatSvc: d.Chat, stateSvc: d.State, memSvc: d.Memory, challenge: d.Challenge,
+		settings: d.Settings, systemSettings: d.System, ctxRepo: d.CtxLogs,
 		llmClient: d.LLM, counter: d.Counter, apiKeyEnv: d.APIKeyEnv,
 		roll: d.Roll, actions: d.Actions, responseSchema: d.ResponseSchema,
+		identity: d.Identity,
 	}
 }
 
@@ -104,7 +87,7 @@ func NewGenerator(d GeneratorDeps) *Generator {
 func (g *Generator) Generate(ctx context.Context, convID uuid.UUID, userContent string, emit realtime.EmitFunc) {
 	conv, err := g.convSvc.EnsureActive(ctx, convID)
 	if err != nil {
-		emit(errorEvent(convID, humanErr(err)))
+		emit(domainEvent(convID, err))
 		return
 	}
 	locked, err := g.convSvc.TryLock(ctx, convID)
@@ -113,7 +96,7 @@ func (g *Generator) Generate(ctx context.Context, convID uuid.UUID, userContent 
 		return
 	}
 	if !locked {
-		emit(errorEvent(convID, "当前对话正在生成中，请稍候"))
+		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
 	defer g.convSvc.Unlock(context.Background(), convID)
@@ -135,12 +118,16 @@ func (g *Generator) Generate(ctx context.Context, convID uuid.UUID, userContent 
 func (g *Generator) Regenerate(ctx context.Context, convID uuid.UUID, emit realtime.EmitFunc) {
 	conv, err := g.convSvc.EnsureActive(ctx, convID)
 	if err != nil {
-		emit(errorEvent(convID, humanErr(err)))
+		emit(domainEvent(convID, err))
 		return
 	}
 	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil || !locked {
-		emit(errorEvent(convID, "当前对话正在生成中，请稍候"))
+	if err != nil {
+		emit(errorEvent(convID, "加锁失败: "+err.Error()))
+		return
+	}
+	if !locked {
+		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
 	defer g.convSvc.Unlock(context.Background(), convID)
@@ -157,12 +144,16 @@ func (g *Generator) Regenerate(ctx context.Context, convID uuid.UUID, emit realt
 func (g *Generator) GenerateAfterEdit(ctx context.Context, convID uuid.UUID, emit realtime.EmitFunc) {
 	conv, err := g.convSvc.EnsureActive(ctx, convID)
 	if err != nil {
-		emit(errorEvent(convID, humanErr(err)))
+		emit(domainEvent(convID, err))
 		return
 	}
 	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil || !locked {
-		emit(errorEvent(convID, "当前对话正在生成中，请稍候"))
+	if err != nil {
+		emit(errorEvent(convID, "加锁失败: "+err.Error()))
+		return
+	}
+	if !locked {
+		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
 	defer g.convSvc.Unlock(context.Background(), convID)
@@ -175,19 +166,23 @@ func (g *Generator) GenerateAfterEdit(ctx context.Context, convID uuid.UUID, emi
 func (g *Generator) Continue(ctx context.Context, convID uuid.UUID, emit realtime.EmitFunc) {
 	conv, err := g.convSvc.EnsureActive(ctx, convID)
 	if err != nil {
-		emit(errorEvent(convID, humanErr(err)))
+		emit(domainEvent(convID, err))
 		return
 	}
 	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil || !locked {
-		emit(errorEvent(convID, "当前对话正在生成中，请稍候"))
+	if err != nil {
+		emit(errorEvent(convID, "加锁失败: "+err.Error()))
+		return
+	}
+	if !locked {
+		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
 	defer g.convSvc.Unlock(context.Background(), convID)
 
 	// ctx 已取消（如客户端立即点了取消）则不落任何消息。
 	if ctx.Err() != nil {
-		emit(errorEvent(convID, "生成已取消"))
+		emit(infoEvent(convID, "生成已取消"))
 		return
 	}
 
@@ -205,22 +200,51 @@ func (g *Generator) Continue(ctx context.Context, convID uuid.UUID, emit realtim
 	g.runGeneration(ctx, conv, &uChat.ID, emit)
 }
 
-// errorEvent 构造 error 事件，并同时记录一条服务端 error 日志——
-// 生成流程的错误此前只推给前端 WebSocket，服务端日志无痕迹，线上无法排障。
-func errorEvent(convID uuid.UUID, msg string) realtime.Event {
-	logging.Named("orchestration").Error("生成流程错误",
+// WebSocket 仍使用 error 事件向前端展示无法继续的原因；服务端日志级别由
+// 业务语义决定，不能把所有客户端 error 事件都当成系统 ERROR。
+func errorEvent(convID uuid.UUID, msg string, fields ...zap.Field) realtime.Event {
+	return loggedEvent(convID, msg, zapcore.ErrorLevel, "生成流程故障", fields...)
+}
+
+func warningEvent(convID uuid.UUID, msg string, fields ...zap.Field) realtime.Event {
+	return loggedEvent(convID, msg, zapcore.WarnLevel, "生成请求未通过", fields...)
+}
+
+func infoEvent(convID uuid.UUID, msg string, fields ...zap.Field) realtime.Event {
+	return loggedEvent(convID, msg, zapcore.InfoLevel, "生成流程未执行", fields...)
+}
+
+func loggedEvent(convID uuid.UUID, msg string, level zapcore.Level, logMessage string, fields ...zap.Field) realtime.Event {
+	return loggedEventWith(logging.Named("orchestration"), convID, msg, level, logMessage, fields...)
+}
+
+func loggedEventWith(log *zap.Logger, convID uuid.UUID, msg string, level zapcore.Level, logMessage string, fields ...zap.Field) realtime.Event {
+	base := []zap.Field{
 		zap.String("conversation_id", convID.String()),
 		zap.String("detail", msg),
-	)
+	}
+	log.Log(level, logMessage, append(base, fields...)...)
 	return realtime.Event{Type: realtime.TypeError, ConversationID: convID.String(), Error: msg}
+}
+
+func domainEvent(convID uuid.UUID, err error) realtime.Event {
+	msg := humanErr(err)
+	switch {
+	case errors.Is(err, conversation.ErrNotActive), errors.Is(err, storage.ErrNotFound):
+		return infoEvent(convID, msg, zap.Error(err))
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return infoEvent(convID, msg)
+	default:
+		return errorEvent(convID, msg, zap.Error(err))
+	}
 }
 
 // humanErr 把常见错误翻译为用户可读文案。
 func humanErr(err error) string {
-	switch err {
-	case conversation.ErrNotActive:
+	switch {
+	case errors.Is(err, conversation.ErrNotActive):
 		return "对话未处于 active 状态，无法生成"
-	case storage.ErrNotFound:
+	case errors.Is(err, storage.ErrNotFound):
 		return "对话不存在"
 	default:
 		return err.Error()

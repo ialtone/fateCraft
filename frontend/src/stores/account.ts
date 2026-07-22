@@ -30,6 +30,16 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  function reset() {
+    rewindCount.value = 0
+    totalRewindsEarned.value = 0
+    rewindsUsed.value = 0
+    totalSpiritStones.value = 0
+    successfulTrials.value = 0
+    failedTrials.value = 0
+    loaded.value = false
+  }
+
   return {
     rewindCount,
     totalRewindsEarned,
@@ -40,5 +50,6 @@ export const useAccountStore = defineStore('account', () => {
     loading,
     loaded,
     load,
+    reset,
   }
 })

@@ -11,7 +11,7 @@ import (
 // ErrNotFound 表示记录不存在。
 var ErrNotFound = errors.New("记录不存在")
 
-// ConversationRepo 负责对话及其世界书关联的持久化。
+// ConversationRepo 负责对话运行时数据的持久化。
 type ConversationRepo struct{ db *gorm.DB }
 
 func NewConversationRepo(db *gorm.DB) *ConversationRepo { return &ConversationRepo{db: db} }
@@ -88,41 +88,4 @@ func (r *ConversationRepo) IncrementRewindsUsed(ctx context.Context, id uuid.UUI
 	return r.db.WithContext(ctx).Model(&Conversation{}).
 		Where("id = ?", id).
 		Update("rewinds_used_this_trial", gorm.Expr("rewinds_used_this_trial + 1")).Error
-}
-
-// SetWorldBooks 覆盖对话选择的世界书模板集合（id 为模板文件 slug）。
-func (r *ConversationRepo) SetWorldBooks(ctx context.Context, convID uuid.UUID, bookIDs []string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("conversation_id = ?", convID).Delete(&ConversationWorldBook{}).Error; err != nil {
-			return err
-		}
-		for _, bid := range bookIDs {
-			if err := tx.Create(&ConversationWorldBook{ConversationID: convID, WorldBookID: bid}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func (r *ConversationRepo) AddWorldBook(ctx context.Context, convID uuid.UUID, bookID string) error {
-	link := ConversationWorldBook{ConversationID: convID, WorldBookID: bookID}
-	return r.db.WithContext(ctx).
-		Where("conversation_id = ? AND world_book_id = ?", convID, bookID).
-		FirstOrCreate(&link).Error
-}
-
-func (r *ConversationRepo) RemoveWorldBook(ctx context.Context, convID uuid.UUID, bookID string) error {
-	return r.db.WithContext(ctx).
-		Where("conversation_id = ? AND world_book_id = ?", convID, bookID).
-		Delete(&ConversationWorldBook{}).Error
-}
-
-// WorldBookIDs 返回对话绑定的世界书 id 列表。
-func (r *ConversationRepo) WorldBookIDs(ctx context.Context, convID uuid.UUID) ([]string, error) {
-	var ids []string
-	err := r.db.WithContext(ctx).Model(&ConversationWorldBook{}).
-		Where("conversation_id = ?", convID).
-		Pluck("world_book_id", &ids).Error
-	return ids, err
 }

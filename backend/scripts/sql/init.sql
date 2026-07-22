@@ -1,244 +1,360 @@
--- Fatecraft 数据库初始化脚本
--- 执行方式：
---   1. 先创建数据库和用户（见下方命令）
---   2. 连接到 fatecraft 数据库后执行本脚本
+-- Fatecraft PostgreSQL schema (fresh database only)
+-- 在空的 fatecraft 数据库中执行本文件；本项目不维护旧结构兼容迁移。
 
--- =============================================================================
--- 数据库创建命令（PostgreSQL 管理员执行）
--- =============================================================================
--- CREATE DATABASE fatecraft WITH ENCODING='UTF8' LC_COLLATE='zh_CN.UTF-8' LC_CTYPE='zh_CN.UTF-8' TEMPLATE=template0;
--- CREATE USER fatecraft WITH PASSWORD 'fatecraft-dev';
--- GRANT ALL PRIVILEGES ON DATABASE fatecraft TO fatecraft;
--- \c fatecraft
--- GRANT ALL ON SCHEMA public TO fatecraft;
+BEGIN;
 
--- =============================================================================
--- 表结构
--- =============================================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 对话表
-CREATE TABLE IF NOT EXISTS conversations (
+CREATE TABLE users (
     id UUID PRIMARY KEY,
-    player_id VARCHAR(64) NOT NULL,
+    email VARCHAR(320) UNIQUE,
+    password_hash TEXT,
+    display_name VARCHAR(128) NOT NULL,
+    avatar_url TEXT,
+    status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+    role VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_users_status ON users(status);
+CREATE INDEX idx_users_role ON users(role);
+
+CREATE TABLE auth_identities (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider VARCHAR(32) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    username VARCHAR(255),
+    provider_email VARCHAR(320),
+    trust_level INTEGER,
+    profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (provider, provider_user_id)
+);
+CREATE INDEX idx_auth_identities_user ON auth_identities(user_id);
+
+CREATE TABLE auth_sessions (
+    token_hash CHAR(64) PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX idx_auth_sessions_expires ON auth_sessions(expires_at);
+
+CREATE TABLE oauth_login_flows (
+    state_hash CHAR(64) PRIMARY KEY,
+    provider VARCHAR(32) NOT NULL,
+    code_verifier VARCHAR(128) NOT NULL,
+    return_to TEXT NOT NULL DEFAULT '/',
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_oauth_login_flows_expires ON oauth_login_flows(expires_at);
+
+CREATE TABLE auth_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    email_auth_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    email_registration_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    email_verification_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    invitation_required BOOLEAN NOT NULL DEFAULT FALSE,
+    smtp_host TEXT NOT NULL DEFAULT '',
+    smtp_port INTEGER NOT NULL DEFAULT 587 CHECK (smtp_port BETWEEN 1 AND 65535),
+    smtp_security VARCHAR(16) NOT NULL DEFAULT 'starttls' CHECK (smtp_security IN ('none', 'starttls', 'tls')),
+    smtp_username TEXT NOT NULL DEFAULT '',
+    smtp_password_encrypted TEXT NOT NULL DEFAULT '',
+    sender_email VARCHAR(320) NOT NULL DEFAULT '',
+    sender_name VARCHAR(128) NOT NULL DEFAULT 'Fatecraft',
+    verification_subject TEXT NOT NULL DEFAULT '【Fatecraft】邮箱验证码',
+    verification_template TEXT NOT NULL DEFAULT E'你的验证码是：{{code}}\n\n验证码将在 {{expires_minutes}} 分钟后失效。如非本人操作，请忽略此邮件。',
+    verification_code_ttl_minutes INTEGER NOT NULL DEFAULT 10 CHECK (verification_code_ttl_minutes BETWEEN 1 AND 60),
+    verification_resend_seconds INTEGER NOT NULL DEFAULT 60 CHECK (verification_resend_seconds BETWEEN 30 AND 3600),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO auth_settings (id) VALUES (1);
+
+CREATE TABLE email_verification_codes (
+    id UUID PRIMARY KEY,
+    email VARCHAR(320) NOT NULL,
+    purpose VARCHAR(32) NOT NULL CHECK (purpose IN ('registration')),
+    code_hash TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_email_verification_lookup ON email_verification_codes(email, purpose, created_at DESC);
+CREATE UNIQUE INDEX idx_email_verification_active ON email_verification_codes(email, purpose) WHERE consumed_at IS NULL;
+CREATE INDEX idx_email_verification_expires ON email_verification_codes(expires_at);
+
+CREATE TABLE invitation_codes (
+    id UUID PRIMARY KEY,
+    code_hash CHAR(64) NOT NULL UNIQUE,
+    code_hint VARCHAR(8) NOT NULL,
+    label VARCHAR(128) NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    max_uses INTEGER NOT NULL DEFAULT 1 CHECK (max_uses >= 0),
+    used_count INTEGER NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+    expires_at TIMESTAMPTZ,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_invitation_codes_status ON invitation_codes(enabled, expires_at);
+
+-- 挑战是运行时内容的聚合根。current_version_id 的外键在版本表创建后补上。
+CREATE TABLE challenge_packs (
+    id UUID PRIMARY KEY,
+    slug VARCHAR(128) NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    cover_url TEXT,
+    status VARCHAR(16) NOT NULL DEFAULT 'hidden' CHECK (status IN ('active', 'hidden', 'retired')),
+    current_version_id UUID,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE challenge_versions (
+    id UUID PRIMARY KEY,
+    challenge_pack_id UUID NOT NULL REFERENCES challenge_packs(id) ON DELETE RESTRICT,
+    version VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'retired')),
+    manifest JSONB NOT NULL,
+    content_hash CHAR(64) NOT NULL DEFAULT '',
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    published_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    published_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (challenge_pack_id, version),
+    UNIQUE (id, challenge_pack_id),
+    CONSTRAINT challenge_version_publish_state CHECK (
+        (status = 'draft' AND btrim(content_hash) = '' AND published_at IS NULL)
+        OR
+        (status IN ('published', 'retired') AND btrim(content_hash) ~ '^[0-9a-f]{64}$' AND published_at IS NOT NULL)
+    )
+);
+CREATE INDEX idx_challenge_versions_pack ON challenge_versions(challenge_pack_id, created_at DESC);
+
+ALTER TABLE challenge_packs
+    ADD CONSTRAINT fk_challenge_packs_current_version
+    FOREIGN KEY (current_version_id, id)
+    REFERENCES challenge_versions(id, challenge_pack_id) ON DELETE RESTRICT;
+
+CREATE TABLE challenge_assets (
+    id UUID PRIMARY KEY,
+    challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE CASCADE,
+    kind VARCHAR(16) NOT NULL CHECK (kind IN ('character', 'persona', 'scenario', 'prompt', 'worldbook')),
+    slug VARCHAR(128) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    content JSONB NOT NULL CHECK (jsonb_typeof(content) = 'object'),
+    sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (challenge_version_id, kind, slug),
+    UNIQUE (id, challenge_version_id)
+);
+CREATE INDEX idx_challenge_assets_version ON challenge_assets(challenge_version_id, kind, sort_order);
+
+CREATE TABLE challenge_reward_rules (
+    id UUID PRIMARY KEY,
+    challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE CASCADE,
+    reward_key VARCHAR(128) NOT NULL,
+    ending_type VARCHAR(16) NOT NULL CHECK (ending_type = 'good'),
+    ending_title VARCHAR(128) NOT NULL,
+    conditions JSONB NOT NULL CHECK (jsonb_typeof(conditions) = 'object'),
+    calculation JSONB NOT NULL CHECK (jsonb_typeof(calculation) = 'object'),
+    max_reward BIGINT CHECK (max_reward IS NULL OR max_reward >= 0),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (challenge_version_id, reward_key)
+);
+CREATE INDEX idx_challenge_reward_rules_version ON challenge_reward_rules(challenge_version_id);
+
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY,
+    player_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(256) NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'active',
-    is_processing BOOLEAN DEFAULT FALSE,
-    character_id VARCHAR(64),
-    persona_id VARCHAR(64),
-    scenario_id VARCHAR(64),
-    prompt_preset_id VARCHAR(64),
-    rewinds_used_this_trial INTEGER NOT NULL DEFAULT 0,
-    roll_system_enabled BOOLEAN,
-    roll_difficulty_mode VARCHAR(10),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    ended_at TIMESTAMP WITH TIME ZONE,
-    archived_at TIMESTAMP WITH TIME ZONE,
-    deleted_at TIMESTAMP WITH TIME ZONE
+    status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended', 'archived', 'deleted')),
+    is_processing BOOLEAN NOT NULL DEFAULT FALSE,
+    challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE RESTRICT,
+    challenge_hash CHAR(64) NOT NULL,
+    character_asset_id UUID,
+    persona_asset_id UUID,
+    scenario_asset_id UUID,
+    rewinds_used_this_trial INTEGER NOT NULL DEFAULT 0 CHECK (rewinds_used_this_trial >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMPTZ,
+    archived_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ,
+    UNIQUE (id, player_id, challenge_version_id),
+    CONSTRAINT fk_conversations_character_version
+        FOREIGN KEY (character_asset_id, challenge_version_id)
+        REFERENCES challenge_assets(id, challenge_version_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_conversations_persona_version
+        FOREIGN KEY (persona_asset_id, challenge_version_id)
+        REFERENCES challenge_assets(id, challenge_version_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_conversations_scenario_version
+        FOREIGN KEY (scenario_asset_id, challenge_version_id)
+        REFERENCES challenge_assets(id, challenge_version_id) ON DELETE RESTRICT
 );
+CREATE INDEX idx_conversations_player_id ON conversations(player_id);
+CREATE INDEX idx_conversations_status ON conversations(status);
+CREATE INDEX idx_conversations_player_updated ON conversations(player_id, updated_at DESC);
+CREATE INDEX idx_conversations_challenge_version ON conversations(challenge_version_id);
 
-COMMENT ON COLUMN conversations.rewinds_used_this_trial IS '本次轮回使用的天道回溯次数';
-COMMENT ON COLUMN conversations.roll_system_enabled IS '此对话是否启用判定系统（null=使用全局设置）';
-COMMENT ON COLUMN conversations.roll_difficulty_mode IS '此对话的判定难度模式（null=使用全局设置）';
-
-CREATE INDEX IF NOT EXISTS idx_conversations_player_id ON conversations(player_id);
-CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
-CREATE INDEX IF NOT EXISTS idx_conversations_player_updated ON conversations(player_id, updated_at DESC);
-
--- 对话世界书关联表
-CREATE TABLE IF NOT EXISTS conversation_world_books (
-    conversation_id UUID NOT NULL,
-    world_book_id VARCHAR(64) NOT NULL,
-    PRIMARY KEY (conversation_id, world_book_id),
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_conversation_world_books_conversation ON conversation_world_books(conversation_id);
-
--- 聊天消息表（内部消息，用于上下文）
-CREATE TABLE IF NOT EXISTS chat_messages (
+CREATE TABLE chat_messages (
     id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL,
-    role VARCHAR(16) NOT NULL,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role VARCHAR(16) NOT NULL CHECK (role IN ('system', 'user', 'assistant', 'tool', 'internal')),
     content TEXT NOT NULL,
-    hidden BOOLEAN DEFAULT FALSE,
+    hidden BOOLEAN NOT NULL DEFAULT FALSE,
     token_count INTEGER,
-    parent_message_id UUID,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    parent_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_chat_messages_conversation ON chat_messages(conversation_id, created_at);
 
-CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_role ON chat_messages(role);
-
--- 展示消息表（UI 消息）
-CREATE TABLE IF NOT EXISTS display_messages (
+CREATE TABLE display_messages (
     id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL,
-    chat_message_id UUID,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    chat_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
     type VARCHAR(16) NOT NULL,
     markdown TEXT NOT NULL,
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_display_messages_conversation ON display_messages(conversation_id, created_at);
+
+CREATE TABLE conversation_states (
+    conversation_id UUID PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    state JSONB NOT NULL DEFAULT '{}'::jsonb,
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_display_messages_conversation ON display_messages(conversation_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_display_messages_type ON display_messages(type);
-
--- 对话状态表
-CREATE TABLE IF NOT EXISTS conversation_states (
-    conversation_id UUID PRIMARY KEY,
-    state JSONB NOT NULL DEFAULT '{}',
-    schema_version INTEGER DEFAULT 1,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-
--- 状态变更历史表
-CREATE TABLE IF NOT EXISTS state_revisions (
+CREATE TABLE state_revisions (
     id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL,
-    source VARCHAR(16) NOT NULL,
-    related_message_id UUID,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    source VARCHAR(16) NOT NULL CHECK (source IN ('ai', 'system')),
+    related_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
     patch JSONB NOT NULL,
     before_state JSONB NOT NULL,
     after_state JSONB NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (related_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_state_revisions_conversation ON state_revisions(conversation_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_state_revisions_conversation ON state_revisions(conversation_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_state_revisions_source ON state_revisions(source);
-
--- 记忆摘要表
-CREATE TABLE IF NOT EXISTS memory_summaries (
+CREATE TABLE memory_summaries (
     id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     version INTEGER NOT NULL,
     content TEXT NOT NULL,
-    covered_until_message_id UUID,
+    covered_until_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
     token_count INTEGER,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (covered_until_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_memory_summaries_conversation ON memory_summaries(conversation_id, version DESC);
 
-CREATE INDEX IF NOT EXISTS idx_memory_summaries_conversation ON memory_summaries(conversation_id, version DESC);
-
--- 上下文构建日志表
-CREATE TABLE IF NOT EXISTS context_build_logs (
+CREATE TABLE context_build_logs (
     id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL,
-    trigger_message_id UUID,
-    model VARCHAR(64) NOT NULL,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    trigger_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
+    challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE RESTRICT,
+    challenge_hash CHAR(64) NOT NULL,
+    model VARCHAR(128) NOT NULL,
     max_context_tokens INTEGER NOT NULL,
     reserved_response_tokens INTEGER NOT NULL,
     used_prompt_tokens INTEGER NOT NULL,
     segments JSONB NOT NULL,
-    included_message_ids TEXT[] DEFAULT '{}',
-    activated_world_entry_ids TEXT[] DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (trigger_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL
+    included_message_ids TEXT[] NOT NULL DEFAULT '{}',
+    activated_world_entry_ids TEXT[] NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_context_build_logs_conversation ON context_build_logs(conversation_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_context_build_logs_conversation ON context_build_logs(conversation_id, created_at DESC);
-
--- LLM 设置表（单行配置）
-CREATE TABLE IF NOT EXISTS llm_settings (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    base_url VARCHAR(256) NOT NULL DEFAULT 'https://api.openai.com/v1',
+CREATE TABLE llm_settings (
+    player_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    base_url VARCHAR(512) NOT NULL DEFAULT 'https://api.openai.com/v1',
     api_key TEXT,
-    model VARCHAR(64) NOT NULL DEFAULT '',
+    model VARCHAR(128) NOT NULL DEFAULT '',
     max_context_tokens INTEGER NOT NULL DEFAULT 32000,
     max_response_tokens INTEGER NOT NULL DEFAULT 4096,
     temperature DOUBLE PRECISION NOT NULL DEFAULT 0.8,
     top_p DOUBLE PRECISION NOT NULL DEFAULT 0.95,
-    stream_enabled BOOLEAN DEFAULT TRUE,
-    roll_system_enabled BOOLEAN DEFAULT FALSE,
-    roll_difficulty_mode VARCHAR(10) DEFAULT 'normal',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT llm_settings_singleton CHECK (id = 1)
+    stream_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON COLUMN llm_settings.roll_system_enabled IS '是否启用天命判定系统';
-COMMENT ON COLUMN llm_settings.roll_difficulty_mode IS '判定难度模式：easy(简单+15%) / normal(普通) / hard(困难-15%)';
+CREATE TABLE system_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    roll_system_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    roll_difficulty_mode VARCHAR(10) NOT NULL DEFAULT 'normal' CHECK (roll_difficulty_mode IN ('easy', 'normal', 'hard')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO system_settings (id) VALUES (1);
 
--- 插入默认设置
-INSERT INTO llm_settings (id, base_url, model, max_context_tokens, max_response_tokens, temperature, top_p, stream_enabled, roll_system_enabled, roll_difficulty_mode)
-VALUES (1, 'https://api.openai.com/v1', '', 32000, 4096, 0.8, 0.95, TRUE, FALSE, 'normal')
-ON CONFLICT (id) DO NOTHING;
-
--- 账号表（天道回溯系统 + 灵石统计）
-CREATE TABLE IF NOT EXISTS accounts (
+CREATE TABLE accounts (
     id SERIAL PRIMARY KEY,
-    player_id VARCHAR(255) NOT NULL UNIQUE DEFAULT 'default_player',
-    rewind_count INTEGER NOT NULL DEFAULT 10,
-    total_rewinds_earned INTEGER NOT NULL DEFAULT 10,
-    rewinds_used INTEGER NOT NULL DEFAULT 0,
-    total_spirit_stones BIGINT NOT NULL DEFAULT 0,
-    successful_trials INTEGER NOT NULL DEFAULT 0,
-    failed_trials INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    player_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    rewind_count INTEGER NOT NULL DEFAULT 10 CHECK (rewind_count >= 0),
+    total_rewinds_earned INTEGER NOT NULL DEFAULT 10 CHECK (total_rewinds_earned >= 0),
+    rewinds_used INTEGER NOT NULL DEFAULT 0 CHECK (rewinds_used >= 0),
+    total_spirit_stones BIGINT NOT NULL DEFAULT 0 CHECK (total_spirit_stones >= 0),
+    successful_trials INTEGER NOT NULL DEFAULT 0 CHECK (successful_trials >= 0),
+    failed_trials INTEGER NOT NULL DEFAULT 0 CHECK (failed_trials >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE accounts IS '账号全局数据';
-COMMENT ON COLUMN accounts.rewind_count IS '当前可用的天道回溯次数';
-COMMENT ON COLUMN accounts.total_rewinds_earned IS '历史总获得的回溯次数';
-COMMENT ON COLUMN accounts.rewinds_used IS '已使用的回溯次数';
-COMMENT ON COLUMN accounts.total_spirit_stones IS '历史累计获得的灵石总数（破碎虚空带出）';
-COMMENT ON COLUMN accounts.successful_trials IS '成功轮回次数（破碎虚空）';
-COMMENT ON COLUMN accounts.failed_trials IS '失败轮回次数（道消身殒）';
-
--- 初始化默认账号
-INSERT INTO accounts (player_id, rewind_count, total_rewinds_earned, rewinds_used, total_spirit_stones, successful_trials, failed_trials)
-VALUES ('default_player', 10, 10, 0, 0, 0, 0)
-ON CONFLICT (player_id) DO NOTHING;
-
--- 轮回历史记录表
-CREATE TABLE IF NOT EXISTS trial_history (
+CREATE TABLE roll_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    player_id VARCHAR(255) NOT NULL,
-    conversation_id UUID NOT NULL,
-    ending_type VARCHAR(16) NOT NULL,
-    spirit_stones_earned BIGINT NOT NULL DEFAULT 0,
-    character_name VARCHAR(128),
-    cultivation_level VARCHAR(64),
-    survival_turns INTEGER,
-    ended_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-
-COMMENT ON TABLE trial_history IS '轮回历史记录';
-COMMENT ON COLUMN trial_history.ending_type IS '结局类型：good(破碎虚空) / bad(道消身殒)';
-COMMENT ON COLUMN trial_history.spirit_stones_earned IS '本次轮回带出的灵石数（失败为0）';
-COMMENT ON COLUMN trial_history.character_name IS '角色名';
-COMMENT ON COLUMN trial_history.cultivation_level IS '最终修为境界';
-COMMENT ON COLUMN trial_history.survival_turns IS '存活回合数';
-
-CREATE INDEX IF NOT EXISTS idx_trial_history_player ON trial_history(player_id, ended_at DESC);
-CREATE INDEX IF NOT EXISTS idx_trial_history_conversation ON trial_history(conversation_id);
-
--- 天命判定历史表（持久化连败补偿/连胜惩罚等历史调整所需的判定流水，重启不丢）
-CREATE TABLE IF NOT EXISTS roll_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    conversation_id UUID NOT NULL,
-    roll_type VARCHAR(64) NOT NULL,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    roll_type VARCHAR(128) NOT NULL CHECK (roll_type <> ''),
     success BOOLEAN NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_roll_history_conversation ON roll_history(conversation_id, created_at DESC);
+CREATE INDEX idx_roll_history_success_type ON roll_history(conversation_id, success, roll_type);
 
-COMMENT ON TABLE roll_history IS '天命判定流水，用于历史调整（连败补偿、同类重试、连胜惩罚）';
-COMMENT ON COLUMN roll_history.roll_type IS '判定类型（如破阵判定），用于同类重试匹配';
+CREATE TABLE challenge_runs (
+    id UUID PRIMARY KEY,
+    conversation_id UUID NOT NULL UNIQUE,
+    player_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE RESTRICT,
+    result VARCHAR(16) NOT NULL CHECK (result IN ('good', 'bad', 'neutral')),
+    reward_key VARCHAR(128),
+    reward_amount BIGINT NOT NULL DEFAULT 0 CHECK (reward_amount >= 0),
+    settlement_detail JSONB NOT NULL CHECK (jsonb_typeof(settlement_detail) = 'object'),
+    settled_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT fk_challenge_runs_conversation
+        FOREIGN KEY (conversation_id, player_id, challenge_version_id)
+        REFERENCES conversations(id, player_id, challenge_version_id) ON DELETE RESTRICT,
+    CONSTRAINT challenge_runs_reward_shape CHECK (
+        (result = 'good' AND reward_key IS NOT NULL)
+        OR
+        (result IN ('bad', 'neutral') AND reward_key IS NULL AND reward_amount = 0)
+    )
+);
+CREATE INDEX idx_challenge_runs_player ON challenge_runs(player_id, settled_at DESC);
+CREATE INDEX idx_challenge_runs_version ON challenge_runs(challenge_version_id);
 
-CREATE INDEX IF NOT EXISTS idx_roll_history_conversation ON roll_history(conversation_id, created_at DESC);
+COMMENT ON TABLE challenge_packs IS '稳定的挑战入口；运行时内容由 current_version_id 指向已发布快照';
+COMMENT ON TABLE challenge_versions IS '不可原地修改的挑战版本；草稿发布时计算 content_hash';
+COMMENT ON TABLE challenge_assets IS '挑战版本拥有的角色、Persona、场景、Prompt 与世界书 JSON';
+COMMENT ON TABLE challenge_reward_rules IS '由后端验证和计算的版本化奖励规则';
+COMMENT ON TABLE challenge_runs IS '每个挑战对话唯一的原子结算流水';
+COMMENT ON COLUMN conversations.challenge_hash IS '创建对话时固定的已发布内容哈希';
+COMMENT ON TABLE system_settings IS '管理员维护的平台全局判定设置';
+COMMENT ON TABLE auth_settings IS '管理员维护的邮箱认证策略、SMTP 与验证码模板；SMTP 密码仅保存应用层密文';
+COMMENT ON TABLE email_verification_codes IS '短期邮箱验证码，仅保存 bcrypt 摘要并限制尝试次数';
+COMMENT ON TABLE invitation_codes IS '管理员创建的邀请码，仅保存高熵邀请码的 SHA-256 摘要';
 
--- =============================================================================
--- 初始化完成
--- =============================================================================
+COMMIT;

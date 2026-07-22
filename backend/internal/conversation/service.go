@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/state"
@@ -25,10 +26,6 @@ type conversationRepo interface {
 	List(ctx context.Context, playerID string, statuses []string, search string) ([]storage.Conversation, error)
 	UpdateFields(ctx context.Context, id uuid.UUID, fields map[string]any) error
 	IncrementRewindsUsed(ctx context.Context, id uuid.UUID) error
-	SetWorldBooks(ctx context.Context, convID uuid.UUID, bookIDs []string) error
-	AddWorldBook(ctx context.Context, convID uuid.UUID, bookID string) error
-	RemoveWorldBook(ctx context.Context, convID uuid.UUID, bookID string) error
-	WorldBookIDs(ctx context.Context, convID uuid.UUID) ([]string, error)
 	TryLock(ctx context.Context, id uuid.UUID) (bool, error)
 	Unlock(ctx context.Context, id uuid.UUID) error
 }
@@ -45,33 +42,27 @@ type Service struct {
 	repo      conversationRepo
 	stateSvc  *state.Service
 	msgRepo   messageSeeder
-	charStore CharacterStore
+	challenge *challenge.Service
 	identity  identity.Provider
 }
 
-// CharacterStore 角色存储接口
-type CharacterStore interface {
-	Get(id string) (storage.Character, error)
+func NewService(repo conversationRepo, stateSvc *state.Service, msgRepo messageSeeder, challengeSvc *challenge.Service, ident identity.Provider) *Service {
+	return &Service{repo: repo, stateSvc: stateSvc, msgRepo: msgRepo, challenge: challengeSvc, identity: ident}
 }
 
-func NewService(repo conversationRepo, stateSvc *state.Service, msgRepo messageSeeder, charStore CharacterStore, ident identity.Provider) *Service {
-	return &Service{repo: repo, stateSvc: stateSvc, msgRepo: msgRepo, charStore: charStore, identity: ident}
-}
-
-// CreateInput 新建对话的入参（各模板 id 为文件 slug）。
+// CreateInput 只暴露挑战和该挑战允许的玩家 Persona。
 type CreateInput struct {
-	Title              string   `json:"title"`
-	CharacterID        *string  `json:"character_id"`
-	PersonaID          *string  `json:"persona_id"`
-	ScenarioID         *string  `json:"scenario_id"`
-	PromptPresetID     *string  `json:"prompt_preset_id"`
-	WorldBookIDs       []string `json:"world_book_ids"`
-	RollSystemEnabled  *bool    `json:"roll_system_enabled"`
-	RollDifficultyMode *string  `json:"roll_difficulty_mode"`
+	Title         string `json:"title"`
+	ChallengeSlug string `json:"challenge_slug"`
+	PersonaSlug   string `json:"persona_slug"`
 }
 
-// Create 新建对话：初始化独立状态、绑定世界书模板，并按角色卡开场白生成首条消息。
+// Create 新建对话并固定已发布挑战版本及其内容哈希。
 func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversation, error) {
+	selection, err := s.challenge.ResolveSelection(ctx, in.ChallengeSlug, in.PersonaSlug)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	title := in.Title
 	if title == "" {
@@ -82,14 +73,19 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversa
 		PlayerID:           s.identity.CurrentPlayerID(ctx),
 		Title:              title,
 		Status:             storage.StatusActive,
-		CharacterID:        in.CharacterID,
-		PersonaID:          in.PersonaID,
-		ScenarioID:         in.ScenarioID,
-		PromptPresetID:     in.PromptPresetID,
-		RollSystemEnabled:  in.RollSystemEnabled,
-		RollDifficultyMode: in.RollDifficultyMode,
+		ChallengeVersionID: selection.Version.ID,
+		ChallengeHash:      selection.Version.ContentHash,
 		CreatedAt:          now,
 		UpdatedAt:          now,
+	}
+	if selection.Character != nil {
+		conv.CharacterAssetID = &selection.Character.ID
+	}
+	if selection.Persona != nil {
+		conv.PersonaAssetID = &selection.Persona.ID
+	}
+	if selection.Scenario != nil {
+		conv.ScenarioAssetID = &selection.Scenario.ID
 	}
 	if err := s.repo.Create(ctx, conv); err != nil {
 		return nil, err
@@ -97,20 +93,15 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversa
 	if err := s.stateSvc.EnsureInit(ctx, conv.ID); err != nil {
 		return nil, err
 	}
-	if len(in.WorldBookIDs) > 0 {
-		if err := s.repo.SetWorldBooks(ctx, conv.ID, in.WorldBookIDs); err != nil {
-			return nil, err
-		}
-	}
-	// 角色卡开场白作为首条 assistant 消息。
+	// 挑战固定角色卡的开场白作为首条 assistant 消息。
 	// 如果是 __AUTO_GENERATE__ 标记，则插入一条触发消息让 AI 自动生成开场。
-	if in.CharacterID != nil {
-		if ch, err := s.charStore.Get(*in.CharacterID); err == nil && ch.FirstMessage != "" {
-			if ch.FirstMessage == "__AUTO_GENERATE__" {
-				// 插入一条隐藏的触发消息，让 AI 自动生成开场
+	if selection.Character != nil {
+		bundle, bundleErr := s.challenge.Bundle(ctx, conv)
+		if bundleErr == nil && bundle.Character != nil && bundle.Character.FirstMessage != "" {
+			if bundle.Character.FirstMessage == "__AUTO_GENERATE__" {
 				s.seedAutoTrigger(ctx, conv.ID, now)
 			} else {
-				s.seedFirstMessage(ctx, conv.ID, ch.FirstMessage, now)
+				s.seedFirstMessage(ctx, conv.ID, bundle.Character.FirstMessage, now)
 			}
 		}
 	}
@@ -162,7 +153,7 @@ func (s *Service) seedFirstMessage(ctx context.Context, convID uuid.UUID, text s
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*storage.Conversation, error) {
-	return s.repo.Get(ctx, id)
+	return s.GetOwned(ctx, id)
 }
 
 // GetOwned 读取对话并校验归属当前玩家；归属不符返回 ErrNotFound（不泄漏存在性）。
@@ -199,10 +190,12 @@ func (s *Service) EnsureActive(ctx context.Context, id uuid.UUID) (*storage.Conv
 	return conv, nil
 }
 
-// Update 局部更新对话可编辑字段（目前为标题与各模板绑定）。
-func (s *Service) Update(ctx context.Context, id uuid.UUID, fields map[string]any) (*storage.Conversation, error) {
-	fields["updated_at"] = time.Now()
-	if err := s.repo.UpdateFields(ctx, id, fields); err != nil {
+// UpdateTitle 更新普通用户唯一可编辑的对话元数据。
+func (s *Service) UpdateTitle(ctx context.Context, id uuid.UUID, title string) (*storage.Conversation, error) {
+	if _, err := s.GetOwned(ctx, id); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateFields(ctx, id, map[string]any{"title": title, "updated_at": time.Now()}); err != nil {
 		return nil, err
 	}
 	return s.repo.Get(ctx, id)
@@ -220,6 +213,9 @@ func (s *Service) IncrementRewindsUsed(ctx context.Context, id uuid.UUID) error 
 
 // End 结束对话：置为 ended 并解除生成锁。
 func (s *Service) End(ctx context.Context, id uuid.UUID) (*storage.Conversation, error) {
+	if _, err := s.GetOwned(ctx, id); err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	if err := s.repo.UpdateFields(ctx, id, map[string]any{
 		"status": storage.StatusEnded, "ended_at": now, "is_processing": false, "updated_at": now,
@@ -231,6 +227,13 @@ func (s *Service) End(ctx context.Context, id uuid.UUID) (*storage.Conversation,
 
 // Archive 归档对话。
 func (s *Service) Archive(ctx context.Context, id uuid.UUID) (*storage.Conversation, error) {
+	conv, err := s.GetOwned(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if conv.Status != storage.StatusActive {
+		return nil, ErrNotActive
+	}
 	now := time.Now()
 	if err := s.repo.UpdateFields(ctx, id, map[string]any{
 		"status": storage.StatusArchived, "archived_at": now, "updated_at": now,
@@ -240,8 +243,15 @@ func (s *Service) Archive(ctx context.Context, id uuid.UUID) (*storage.Conversat
 	return s.repo.Get(ctx, id)
 }
 
-// Restore 将归档/结束的对话恢复为 active。
+// Restore 只将未结算的归档对话恢复为 active；已结束对话不可恢复。
 func (s *Service) Restore(ctx context.Context, id uuid.UUID) (*storage.Conversation, error) {
+	conv, err := s.GetOwned(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if conv.Status != storage.StatusArchived {
+		return nil, ErrNotActive
+	}
 	now := time.Now()
 	if err := s.repo.UpdateFields(ctx, id, map[string]any{
 		"status": storage.StatusActive, "archived_at": nil, "ended_at": nil, "updated_at": now,
@@ -253,28 +263,13 @@ func (s *Service) Restore(ctx context.Context, id uuid.UUID) (*storage.Conversat
 
 // Delete 软删除对话（MVP 先软删除）。
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	if _, err := s.GetOwned(ctx, id); err != nil {
+		return err
+	}
 	now := time.Now()
 	return s.repo.UpdateFields(ctx, id, map[string]any{
 		"status": storage.StatusDeleted, "deleted_at": now, "updated_at": now,
 	})
-}
-
-// WorldBookIDs 返回对话绑定的世界书 id（模板文件 slug）。
-func (s *Service) WorldBookIDs(ctx context.Context, id uuid.UUID) ([]string, error) {
-	return s.repo.WorldBookIDs(ctx, id)
-}
-
-// SetWorldBooks 覆盖对话的世界书绑定。
-func (s *Service) SetWorldBooks(ctx context.Context, id uuid.UUID, bookIDs []string) error {
-	return s.repo.SetWorldBooks(ctx, id, bookIDs)
-}
-
-func (s *Service) AddWorldBook(ctx context.Context, id uuid.UUID, bookID string) error {
-	return s.repo.AddWorldBook(ctx, id, bookID)
-}
-
-func (s *Service) RemoveWorldBook(ctx context.Context, id uuid.UUID, bookID string) error {
-	return s.repo.RemoveWorldBook(ctx, id, bookID)
 }
 
 // TryLock / Unlock 暴露对话级生成锁。

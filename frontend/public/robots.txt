@@ -1,7 +1,4 @@
 # 应用内页均为个人运行时内容，不允许索引；仅保留首页可抓取。
 User-agent: *
 Disallow: /conversations/
-Disallow: /characters
-Disallow: /worldbooks
-Disallow: /prompts
 Disallow: /settings

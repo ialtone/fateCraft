@@ -2,147 +2,158 @@
 
 ## 技术栈
 
-- Vue 3。
-- Vite。
-- TypeScript。
-- Pinia。
-- Vue Router。
-- marked。
-- DOMPurify。
+- Vue 3 Composition API 与单文件组件。
+- TypeScript 负责 API、事件和 Store 类型。
+- Vite 负责开发服务器、代理和生产构建。
+- Pinia 保存认证、挑战、对话和运行时状态。
+- Vue Router 管理登录、对话、设置和管理员路由。
+- Axios 访问 REST API，原生 WebSocket 接收生成事件。
+- Naive UI 提供表单、按钮、标签、弹窗和消息提示。
 
-## 页面结构
+前端是交互层，不是安全边界。按钮隐藏、路由守卫和只读控件用于体验，真正权限必须由后端执行。
 
-### 对话列表页 `/`
+## 应用启动
 
-功能：
+应用启动后首先加载公开认证配置，再调用 `/api/auth/me` 恢复会话。路由守卫根据三种状态决定跳转：
 
-- 显示对话列表。
-- 新建对话。
-- 搜索对话。
-- 打开对话。
-- 结束对话。
-- 归档和删除。
-- 按 active、ended、archived 过滤。
+- 未确认身份：等待认证 Store 初始化。
+- 未登录：除 `/login` 外跳转登录页。
+- 已登录：访问 `/login` 时回到首页。
+- 非管理员：访问带 `meta.admin` 的路由时回到首页。
 
-### 主对话页 `/conversations/:id`
+Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转换为统一错误消息。401 应使认证 Store 清理本地用户状态。
 
-布局：
+## 路由与页面
 
-```text
-┌──────────────────────────────────────────────┐
-│ 顶部：对话标题 / 模型 / 保存状态 / 对话状态   │
-├──────────────┬─────────────────┬─────────────┤
-│ 状态面板      │ 剧情时间线       │ 上下文检查器 │
-│ StatePanel   │ MessageTimeline │ Context     │
-├──────────────┴─────────────────┴─────────────┤
-│ 底部输入 ActionInput                          │
-└──────────────────────────────────────────────┘
-```
+| 路由 | 页面 | 主要职责 |
+| --- | --- | --- |
+| `/login` | LoginView | 邮箱登录/注册、LinuxDo 登录、禁用方式提示 |
+| `/` | ConversationListView | 已发布挑战、我的对话、筛选与创建入口 |
+| `/conversations/:id` | ConversationView | 消息、生成、状态、判定、结局和上下文 |
+| `/settings` | SettingsView | 当前用户 LLM 配置 |
+| `/admin` | AdminView | 全局判定设置与挑战版本管理 |
 
-当对话状态为 ended：
+Character、WorldBook 和 Prompt 不再拥有普通用户独立路由。旧页面、Store、组件和 API 均应删除，不能只从导航隐藏。
 
-- 输入框禁用。
-- 继续、重试、编辑状态默认禁用。
-- 显示“此对话已结束，可返回列表或新建对话”。
+## 主导航
 
-### 角色卡页 `/characters`
+已登录用户固定显示首页和设置；`auth.isAdmin` 为真时额外显示管理入口。用户菜单展示当前名称并提供退出登录。
 
-- 创建角色。
-- 编辑描述、性格、开场白、示例对话。
-- 绑定标签。
+导航不读取或缓存角色权限以外的管理数据。管理员身份仍以 `/auth/me` 返回的服务端用户为准。
 
-### 世界书页 `/worldbooks`
+## 首页与创建流程
 
-- 世界书列表。
-- 条目编辑。
-- 关键词和优先级配置。
-- token 估算。
+首页同时承载挑战发现和对话管理：
 
-### Prompt 页 `/prompts`
+- 挑战区域显示名称、图标、版本、简介、标签、功能和奖励概要。
+- 对话区域按 active、ended、archived 筛选，支持标题搜索。
+- active 对话显示进入、归档和删除等适用操作。
+- ended 对话只读，不显示恢复入口。
 
-- Prompt 预设列表。
-- 分段编辑。
-- 启用/禁用。
-- 排序。
-- token 预览。
+`CreateConversationModal` 打开时加载已发布挑战，默认选中指定挑战或列表第一项。切换挑战后必须重新选择该挑战允许的 Persona。提交体只包含 `challenge_slug`、`persona_slug` 和非空标题。
 
-### 设置页 `/settings`
+## 对话页面
 
-- Base URL。
-- API Key，由后端保存或环境变量管理。
-- 模型名。
-- 最大上下文。
-- 最大回复 token。
-- temperature/top_p。
+页面进入时并行或按依赖顺序加载：
 
-## 组件拆分
+- 对话元数据。
+- 展示消息。
+- 当前状态。
+- 账号回溯信息。
+- WebSocket 连接。
 
-- `ConversationLayout.vue`：主对话布局。
-- `ConversationList.vue`：对话列表。
-- `ConversationStatusBadge.vue`：active/ended/archived 状态。
-- `StatePanel.vue`：左侧状态面板。
-- `StateTree.vue`：递归渲染 JSON 状态。
-- `MessageTimeline.vue`：消息列表。
-- `MessageItem.vue`：单条消息，含编辑/删除/复制。
-- `ActionInput.vue`：输入框和发送操作。
-- `ContextInspector.vue`：上下文明细。
-- `PromptSegmentList.vue`：Prompt 分段列表。
-- `WorldBookEntryEditor.vue`：世界书条目编辑。
-- `CharacterEditor.vue`：角色卡编辑。
+只有 active 对话显示输入和生成操作。ended 或 archived 对话显示只读状态提示。
 
-## Store 设计
+流式输出必须按 `message_id` 聚合，避免两阶段判定产生的不同消息互相覆盖。收到最终 `message_created` 后以服务端消息替换临时内容；收到 `state_update`、`roll_result`、`ending_triggered` 时更新对应 Store 或展示业务弹窗。
 
-### useConversationStore
+WebSocket 事件不是可靠队列。刷新或重连后应重新读取 REST 数据，不能仅依赖已收到事件恢复状态。
 
-- currentConversation。
-- conversationList。
-- publicState。
-- loadConversation。
-- createConversation。
-- updateConversation。
-- endConversation。
-- archiveConversation。
-- switchConversation。
+## Store 边界
 
-### useChatStore
+### `auth`
 
-- messages。
-- isGenerating。
-- sendMessage。
-- editMessage。
-- deleteMessage。
-- regenerate。
-- continueMessage。
+保存公开认证配置、当前用户、初始化和登录状态；提供 `isAdmin` 派生值及邮箱、LinuxDo、退出流程。
 
-### useSocketStore
+### `challenges`
 
-- connect(conversationId)。
-- disconnect。
-- reconnect。
-- handleMessage。
-- sendUserInput。
-- switchConversation 时关闭旧连接并打开新连接。
+只保存普通用户可见的已发布挑战公开列表，不缓存完整版本 JSON。
 
-### useContextStore
+### `conversations`
 
-- lastContextBuild。
-- loadLastContext。
-- selectedSegment。
+保存列表、当前对话和最近结局事件；封装创建、标题更新、归档、恢复、结束和删除。
 
-### useWorldBookStore
+### `chat`
 
-- worldBooks。
-- entries。
-- saveEntry。
-- testActivation。
+保存当前对话展示消息与发送、编辑、重新生成、续写状态。切换对话时必须清空，不能把上一局消息带入下一局。
 
-## 交互细节
+### `socket`
 
-- 发送消息后立即把用户消息插入当前对话时间线。
-- AI 流式返回时显示正在生成的 assistant 消息。
-- 状态更新到达后刷新当前对话左侧面板。
-- 编辑历史消息后提示用户“后续上下文会受影响”。
-- 重新生成会删除或隐藏当前对话上一条 AI 消息，然后重新请求。
-- 上下文检查器默认折叠，调试时展开。
-- 切换对话时清空当前消息缓存、状态缓存和上下文检查器缓存。
-- 新建对话时可选择相同角色和世界书模板，但不继承旧对话运行时数据。
+管理连接、生成中状态、流式增量和事件分发。它只保存传输状态，结局等业务结果应写入业务 Store。
+
+### `state`、`context`
+
+分别保存当前结构化状态、修订记录，以及上下文构建摘要和详情。普通用户没有状态写 API。
+
+### `settings`、`account`
+
+保存当前用户自己的 LLM 设置和账号统计。API Key 只显示是否已配置，不回显密文或明文。
+
+## 管理页面
+
+管理页面分为三个 Tab：
+
+### 玩法设置
+
+使用 Switch 控制全局判定开关，Select 选择 easy/normal/hard，保存后以服务端响应覆盖本地值。
+
+### 内置内容
+
+- 列出服务器仓库中发现的内置挑战，不展示技术资产正文。
+- 对比仓库版本、数据库当前版本和 SHA-256 内容哈希。
+- `available` 可由管理员确认后导入并立即发布。
+- `imported` 表示同版本同哈希已经发布，不重复导入。
+- `conflict` 表示同版本内容不同或仓库版本不高于数据库当前版本，禁止覆盖或降级。
+- 前端只提交 slug，不能指定服务器路径或绕过发布校验。
+
+### 挑战内容
+
+- 左侧列出挑战包及其版本和状态。
+- 可创建新挑战包。
+- 可从当前版本复制指定版本号的新草稿。
+- 选择版本后加载完整 `manifest + assets + reward_rules` 文档。
+- draft 显示保存和发布按钮，published 使用只读编辑器。
+- 保存前先做 JSON 语法和顶层结构检查，业务校验以服务端发布结果为准。
+- 发布成功后刷新挑战列表和当前版本内容。
+
+当前使用完整 JSON 编辑器是管理 MVP，不应把它解释为普通用户自定义功能。后续可增加结构化表单，但必须继续提交同一版本文档契约。
+
+## 类型契约
+
+`src/types/api.ts` 维护后端模型与 WebSocket 事件；`src/types/auth.ts` 维护认证公开类型。删除后端字段或路由时，应同时删除前端类型、Store 和页面引用，避免“类型还在但功能已不存在”。
+
+对话创建类型不得重新加入 Character、Prompt 或 WorldBook ID。管理员完整版本类型不得复用于普通挑战公开响应。
+
+## 错误与加载状态
+
+- 所有提交操作应有 loading，避免重复点击。
+- 读取失败显示可操作错误，不把空列表误当成“没有内容”。
+- 发布失败保留编辑器内容，展示服务端具体校验原因。
+- 401 进入重新登录流程，403 显示权限不足，404 不推测资源属于其他用户。
+- WebSocket 错误结束生成中状态，但不删除已落库消息。
+
+## 响应式与交互约束
+
+- 固定工具条、对话输入区和状态面板不能因长标题或长标签错位。
+- 移动端优先保证对话阅读和输入，辅助面板可折叠。
+- 图标按钮需要 tooltip 或可访问名称。
+- 危险操作应使用明确确认，不能把“结束”“归档”“删除”混成同一语义。
+
+## 前端回归清单
+
+- 未登录访问受保护路由会到登录页。
+- 普通用户看不到管理入口且直接访问 `/admin` 被守卫拦截。
+- LinuxDo 与邮箱按钮并列，注册作为次级入口；关闭方式提交时有明确提示。
+- 创建表单切换挑战会修正无效 Persona。
+- ended 对话没有输入、归档或恢复按钮。
+- 管理员已发布版本只读，草稿可保存和发布。
+- 类型检查和生产构建通过。

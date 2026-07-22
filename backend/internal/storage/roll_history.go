@@ -47,3 +47,13 @@ func (r *RollHistoryRepo) Recent(ctx context.Context, convID uuid.UUID, limit in
 		Find(&rows).Error
 	return rows, err
 }
+
+// HasSuccess 判断某次挑战是否存在成功的服务端判定流水。
+func (r *RollHistoryRepo) HasSuccess(ctx context.Context, convID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&RollHistoryEntry{}).
+		Where("conversation_id = ? AND success = ?", convID.String(), true).
+		Limit(1).
+		Count(&count).Error
+	return count > 0, err
+}

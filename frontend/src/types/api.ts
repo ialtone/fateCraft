@@ -8,7 +8,7 @@ export type MessageRoleEnum = 'system' | 'user' | 'assistant' | 'tool' | 'intern
 /** 状态修订来源 */
 export type RevisionSourceEnum = 'ai' | 'user' | 'system'
 
-/** 判定难度模式 */
+/** 判定难度模式（仅管理员全局设置） */
 export type DifficultyModeEnum = 'easy' | 'normal' | 'hard'
 
 /** 对话状态类型 */
@@ -17,160 +17,6 @@ export type ConversationStatusEnum = 'active' | 'ended' | 'archived' | 'deleted'
 /** 展示消息类型（roll_result 为天命判定结果，对照 backend roll_flow.go 的 AppendSystemChatEvent） */
 export type DisplayMessageTypeEnum =
   'user' | 'assistant' | 'system' | 'event' | 'state' | 'roll_result'
-
-// ============================================================================
-// 模板实体（文件存储）
-// ============================================================================
-
-/** 角色卡 - 定义 AI 扮演的角色 */
-export interface Character {
-  /** 角色 ID（slug） */
-  id: string
-  /** 角色名称 */
-  name: string
-  /** 角色描述 */
-  description: string
-  /** 性格特征 */
-  personality: string
-  /** 场景设定 */
-  scenario: string
-  /** 开场白 */
-  first_message: string
-  /** 示例对话 */
-  example_dialogues: string
-  /** 系统提示词覆盖 */
-  system_prompt_override: string
-  /** 标签 */
-  tags: string[]
-  /** 头像 URL */
-  avatar_url?: string
-  /** 所属预设包 ID */
-  pack_id?: string
-  /** 创建时间 */
-  created_at: string
-  /** 更新时间 */
-  updated_at: string
-}
-
-/** 玩家人设 - 定义玩家的身份和说话风格 */
-export interface Persona {
-  /** 人设 ID（slug） */
-  id: string
-  /** 人设名称 */
-  name: string
-  /** 人设描述 */
-  description: string
-  /** 说话风格 */
-  speaking_style: string
-  /** 限制条件 */
-  constraints: string
-  /** 所属预设包 ID */
-  pack_id?: string
-  /** 创建时间 */
-  created_at: string
-  /** 更新时间 */
-  updated_at: string
-}
-
-/** 场景 - 定义故事发生的背景 */
-export interface Scenario {
-  /** 场景 ID（slug） */
-  id: string
-  /** 场景名称 */
-  name: string
-  /** 场景描述 */
-  description: string
-  /** 开场文本 */
-  opening: string
-  /** 所属预设包 ID */
-  pack_id?: string
-  /** 创建时间 */
-  created_at: string
-  /** 更新时间 */
-  updated_at: string
-}
-
-/** Prompt 预设 - 包含多个 Prompt 分段的集合 */
-export interface PromptPreset {
-  /** 预设 ID（slug） */
-  id: string
-  /** 预设名称 */
-  name: string
-  /** 预设描述 */
-  description?: string
-  /** 创建时间 */
-  created_at: string
-  /** 更新时间 */
-  updated_at: string
-  /** Prompt 分段列表 */
-  segments: PromptSegment[]
-}
-
-/** Prompt 分段 - Prompt 预设中的单个分段 */
-export interface PromptSegment {
-  /** 分段 ID */
-  id: string
-  /** 所属预设 ID */
-  preset_id: string
-  /** 分段键名 */
-  key: string
-  /** 角色类型 */
-  role: MessageRoleEnum
-  /** 分段内容 */
-  content: string
-  /** 是否启用 */
-  enabled: boolean
-  /** 是否必需 */
-  required: boolean
-  /** 优先级 */
-  priority: number
-  /** 位置顺序 */
-  position: number
-}
-
-/** 世界书 - 包含多个世界书条目的集合 */
-export interface WorldBook {
-  /** 世界书 ID（slug） */
-  id: string
-  /** 世界书名称 */
-  name: string
-  /** 世界书描述 */
-  description?: string
-  /** 创建时间 */
-  created_at: string
-  /** 更新时间 */
-  updated_at: string
-  /** 世界书条目列表 */
-  entries: WorldBookEntry[]
-}
-
-/** 世界书条目 - 世界书中的单个知识条目 */
-export interface WorldBookEntry {
-  /** 条目 ID */
-  id: string
-  /** 所属世界书 ID */
-  world_book_id: string
-  /** 条目标题 */
-  title: string
-  /** 条目内容 */
-  content: string
-  /** 触发关键词 */
-  keywords: string[]
-  /** 是否始终激活 */
-  constant: boolean
-  /** 是否启用 */
-  enabled: boolean
-  /** 优先级 */
-  priority: number
-  /** 预算组 */
-  budget_group: string
-  /** Token 数量 */
-  token_count?: number
-  /** 备注 */
-  notes: string
-  /** 元数据 */
-  metadata: Record<string, any>
-}
 
 // ============================================================================
 // 对话与运行时数据
@@ -188,20 +34,14 @@ export interface Conversation {
   status: ConversationStatusEnum
   /** 是否正在生成中 */
   is_processing: boolean
-  /** 使用的角色卡 ID */
-  character_id?: string
-  /** 使用的玩家人设 ID */
-  persona_id?: string
-  /** 使用的场景 ID */
-  scenario_id?: string
-  /** 使用的 Prompt 预设 ID */
-  prompt_preset_id?: string
+  /** 创建时固定的挑战版本与内容哈希 */
+  challenge_version_id: string
+  challenge_hash: string
+  character_asset_id?: string
+  persona_asset_id?: string
+  scenario_asset_id?: string
   /** 本次轮回使用的天道回溯次数 */
   rewinds_used_this_trial: number
-  /** 对话级判定系统开关（null/缺失 = 跟随全局设置，对照 backend models.go） */
-  roll_system_enabled?: boolean | null
-  /** 对话级判定难度（缺失 = 跟随全局设置） */
-  roll_difficulty_mode?: string
   /** 创建时间 */
   created_at: string
   /** 更新时间 */
@@ -300,6 +140,8 @@ export interface ContextBuildLog {
   conversation_id: string
   /** 触发消息 ID */
   trigger_message_id?: string
+  challenge_version_id: string
+  challenge_hash: string
   /** 使用的模型 */
   model: string
   /** 最大上下文 Token 数 */
@@ -320,8 +162,6 @@ export interface ContextBuildLog {
 
 /** LLM 设置 - 大语言模型的配置 */
 export interface LLMSettings {
-  /** 设置 ID */
-  id: number
   /** API 基础 URL */
   base_url: string
   /** 是否已设置 API Key */
@@ -338,12 +178,173 @@ export interface LLMSettings {
   top_p: number
   /** 是否启用流式输出 */
   stream_enabled: boolean
-  /** 是否启用天命判定系统 */
-  roll_system_enabled: boolean
-  /** 判定难度模式 */
-  roll_difficulty_mode: DifficultyModeEnum
   /** 更新时间 */
   updated_at: string
+}
+
+/** 管理员维护的平台判定设置 */
+export interface AdminRollSettings {
+  id: number
+  roll_system_enabled: boolean
+  roll_difficulty_mode: DifficultyModeEnum
+  updated_at: string
+}
+
+export type SMTPSecurity = 'none' | 'starttls' | 'tls'
+
+export interface AdminAuthSettings {
+  id: number
+  email_auth_enabled: boolean
+  email_registration_enabled: boolean
+  email_verification_enabled: boolean
+  invitation_required: boolean
+  smtp_host: string
+  smtp_port: number
+  smtp_security: SMTPSecurity
+  smtp_username: string
+  has_smtp_password: boolean
+  sender_email: string
+  sender_name: string
+  verification_subject: string
+  verification_template: string
+  verification_code_ttl_minutes: number
+  verification_resend_seconds: number
+  updated_at: string
+}
+
+export interface InvitationCode {
+  id: string
+  code_hint: string
+  label: string
+  enabled: boolean
+  max_uses: number
+  used_count: number
+  expires_at?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreatedInvitation {
+  invitation: InvitationCode
+  code: string
+}
+
+export interface ChallengePersonaOption {
+  id: string
+  slug: string
+  name: string
+  description?: string
+}
+
+export interface ChallengeRewardOverview {
+  reward_key: string
+  ending_title: string
+  multiplier: string
+}
+
+export interface PublicChallenge {
+  id: string
+  slug: string
+  name: string
+  description: string
+  version: string
+  icon?: string
+  tags: string[]
+  features: string[]
+  quick_start_guide: string
+  personas: ChallengePersonaOption[]
+  reward_overview: ChallengeRewardOverview[]
+}
+
+export interface ChallengePack {
+  id: string
+  slug: string
+  name: string
+  description: string
+  cover_url?: string
+  status: 'active' | 'hidden' | 'retired'
+  current_version_id?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ChallengeVersion {
+  id: string
+  challenge_pack_id: string
+  version: string
+  status: 'draft' | 'published' | 'retired'
+  manifest: Record<string, any>
+  content_hash: string
+  created_by?: string
+  published_by?: string
+  published_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ChallengeAsset {
+  id: string
+  challenge_version_id: string
+  kind: 'character' | 'persona' | 'scenario' | 'prompt' | 'worldbook'
+  slug: string
+  name: string
+  content: Record<string, any>
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ChallengeRewardRule {
+  id: string
+  challenge_version_id: string
+  reward_key: string
+  ending_type: string
+  ending_title: string
+  conditions: Record<string, any>
+  calculation: Record<string, any>
+  max_reward?: number
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminChallengePack {
+  pack: ChallengePack
+  versions: ChallengeVersion[]
+}
+
+export interface ChallengeVersionDocument {
+  version: ChallengeVersion
+  assets: ChallengeAsset[]
+  reward_rules: ChallengeRewardRule[]
+}
+
+export interface SaveChallengeVersionInput {
+  manifest: Record<string, any>
+  assets: ChallengeAsset[]
+  reward_rules: ChallengeRewardRule[]
+}
+
+export type BuiltinChallengeStatus = 'available' | 'imported' | 'conflict'
+
+export interface AdminBuiltinChallenge {
+  slug: string
+  name: string
+  description: string
+  version: string
+  content_hash: string
+  current_version?: string
+  status: BuiltinChallengeStatus
+  importable: boolean
+}
+
+export interface BuiltinImportResult {
+  slug: string
+  version: string
+  content_hash: string
+  created: boolean
 }
 
 // ============================================================================
@@ -354,36 +355,16 @@ export interface LLMSettings {
 export interface CreateConversationInput {
   /** 对话标题（留空时后端默认「新的对话」） */
   title?: string
-  /** 角色卡 ID（文件 slug） */
-  character_id?: string
-  /** 玩家人设 ID */
-  persona_id?: string
-  /** 场景 ID */
-  scenario_id?: string
-  /** Prompt 预设 ID */
-  prompt_preset_id?: string
-  /** 绑定的世界书 ID 列表 */
-  world_book_ids?: string[]
-  /** 对话级判定系统开关（不传 = 跟随全局设置） */
-  roll_system_enabled?: boolean
-  /** 对话级判定难度（不传 = 跟随全局设置） */
-  roll_difficulty_mode?: string
+  /** 已发布挑战 slug */
+  challenge_slug: string
+  /** 该挑战允许的玩家人设 slug */
+  persona_slug?: string
 }
 
 /** 更新对话请求体（对照 backend/internal/api/conversations.go 的 updateConvBody，只传需要修改的字段） */
 export interface UpdateConversationInput {
   /** 对话标题 */
   title?: string
-  /** 角色卡 ID */
-  character_id?: string
-  /** 玩家人设 ID */
-  persona_id?: string
-  /** Prompt 预设 ID */
-  prompt_preset_id?: string
-  /** 场景 ID */
-  scenario_id?: string
-  /** 绑定的世界书 ID 列表（整组替换） */
-  world_book_ids?: string[]
 }
 
 /** 编辑消息请求体（对照 backend/internal/chat/service.go 的 EditInput） */
@@ -428,6 +409,13 @@ export interface GenerationDeltaEvent extends SocketEventBase {
 export interface GenerationFinishedEvent extends SocketEventBase {
   type: 'generation_finished'
   /** 流式回复的展示消息 ID */
+  message_id?: string
+}
+
+/** 候选回复未通过服务端动作预校验，已撤销且不会持久化 */
+export interface GenerationDiscardedEvent extends SocketEventBase {
+  type: 'generation_discarded'
+  /** 要从时间线移除的临时流式消息 ID */
   message_id?: string
 }
 
@@ -495,6 +483,7 @@ export type SocketEvent =
   | GenerationStartedEvent
   | GenerationDeltaEvent
   | GenerationFinishedEvent
+  | GenerationDiscardedEvent
   | MessageCreatedEvent
   | MessageUpdatedEvent
   | StateUpdateEvent
@@ -520,6 +509,7 @@ const KNOWN_SOCKET_EVENT_TYPES: Record<SocketEvent['type'], true> = {
   generation_started: true,
   generation_delta: true,
   generation_finished: true,
+  generation_discarded: true,
   message_created: true,
   message_updated: true,
   state_update: true,

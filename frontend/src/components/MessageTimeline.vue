@@ -99,6 +99,8 @@ async function onEdit(id: string, content: string) {
 <style scoped>
 .timeline {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   padding: 24px 28px;
   overflow-y: auto;
 }
@@ -117,5 +119,16 @@ async function onEdit(id: string, content: string) {
 .empty p {
   line-height: 2;
   letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+  .timeline {
+    padding: 16px 14px;
+    overscroll-behavior: contain;
+  }
+
+  .empty {
+    margin-top: 8vh;
+  }
 }
 </style>

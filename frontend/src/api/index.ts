@@ -1,6 +1,13 @@
 import axios from 'axios'
 import type {
-  Character,
+  AdminAuthSettings,
+  InvitationCode,
+  CreatedInvitation,
+  AdminRollSettings,
+  AdminChallengePack,
+  AdminBuiltinChallenge,
+  ChallengePack,
+  ChallengeVersionDocument,
   Conversation,
   ContextBuildLog,
   CreateConversationInput,
@@ -8,17 +15,15 @@ import type {
   EditMessageInput,
   LLMSettings,
   MemorySummary,
-  Persona,
-  PromptPreset,
-  PromptSegment,
-  Scenario,
+  PublicChallenge,
+  SaveChallengeVersionInput,
+  BuiltinImportResult,
   StateRevision,
   UpdateConversationInput,
-  WorldBook,
-  WorldBookEntry,
 } from '@/types'
+import type { AuthConfig, AuthUser } from '@/types'
 
-const http = axios.create({ baseURL: '/api', timeout: 30000 })
+const http = axios.create({ baseURL: '/api', timeout: 30000, withCredentials: true })
 
 // 全局响应拦截器：提取后端返回的 error 字段，统一错误消息。
 http.interceptors.response.use(
@@ -37,9 +42,7 @@ export const conversationsApi = {
       .get<{ conversations: Conversation[] }>('/conversations', { params })
       .then((r) => r.data.conversations),
   get: (id: string) =>
-    http
-      .get<{ conversation: Conversation; world_book_ids: string[] }>(`/conversations/${id}`)
-      .then((r) => r.data),
+    http.get<{ conversation: Conversation }>(`/conversations/${id}`).then((r) => r.data),
   create: (body: CreateConversationInput) =>
     http.post<Conversation>('/conversations', body).then((r) => r.data),
   update: (id: string, body: UpdateConversationInput) =>
@@ -80,13 +83,6 @@ export const stateApi = {
     http
       .get<{ state: Record<string, any> }>(`/conversations/${convId}/state`)
       .then((r) => r.data.state),
-  patch: (convId: string, body: { patch?: Record<string, any>; state?: Record<string, any> }) =>
-    http
-      .patch<{ state: Record<string, any>; skipped?: string[] }>(
-        `/conversations/${convId}/state`,
-        body,
-      )
-      .then((r) => r.data),
   revisions: (convId: string) =>
     http
       .get<{ revisions: StateRevision[] }>(`/conversations/${convId}/state/revisions`)
@@ -114,56 +110,10 @@ export const summaryApi = {
       .then((r) => r.data),
 }
 
-// 角色卡 / Persona / 场景
-export const charactersApi = {
-  list: () => http.get<{ characters: Character[] }>('/characters').then((r) => r.data.characters),
-  get: (id: string) => http.get<Character>(`/characters/${id}`).then((r) => r.data),
-  create: (body: Record<string, any>) =>
-    http.post<Character>('/characters', body).then((r) => r.data),
-  update: (id: string, body: Record<string, any>) =>
-    http.patch<Character>(`/characters/${id}`, body).then((r) => r.data),
-  remove: (id: string) => http.delete(`/characters/${id}`).then((r) => r.data),
-}
-
-export const personasApi = {
-  list: () => http.get<{ personas: Persona[] }>('/personas').then((r) => r.data.personas),
-  create: (body: Record<string, any>) => http.post<Persona>('/personas', body).then((r) => r.data),
-}
-
-export const scenariosApi = {
-  list: () => http.get<{ scenarios: Scenario[] }>('/scenarios').then((r) => r.data.scenarios),
-}
-
-// Prompt 预设
-export const promptsApi = {
-  list: () => http.get<{ prompts: PromptPreset[] }>('/prompts').then((r) => r.data.prompts),
-  get: (id: string) => http.get<PromptPreset>(`/prompts/${id}`).then((r) => r.data),
-  create: (body: Record<string, any>) =>
-    http.post<PromptPreset>('/prompts', body).then((r) => r.data),
-  update: (id: string, body: Record<string, any>) =>
-    http.patch<PromptPreset>(`/prompts/${id}`, body).then((r) => r.data),
-  remove: (id: string) => http.delete(`/prompts/${id}`).then((r) => r.data),
-  addSegment: (presetId: string, body: Record<string, any>) =>
-    http.post<PromptSegment>(`/prompts/${presetId}/segments`, body).then((r) => r.data),
-  updateSegment: (id: string, body: Record<string, any>) =>
-    http.patch<PromptSegment>(`/prompt-segments/${id}`, body).then((r) => r.data),
-  removeSegment: (id: string) => http.delete(`/prompt-segments/${id}`).then((r) => r.data),
-}
-
-// 世界书
-export const worldbooksApi = {
-  list: () => http.get<{ worldbooks: WorldBook[] }>('/worldbooks').then((r) => r.data.worldbooks),
-  get: (id: string) => http.get<WorldBook>(`/worldbooks/${id}`).then((r) => r.data),
-  create: (body: Record<string, any>) =>
-    http.post<WorldBook>('/worldbooks', body).then((r) => r.data),
-  update: (id: string, body: Record<string, any>) =>
-    http.patch<WorldBook>(`/worldbooks/${id}`, body).then((r) => r.data),
-  remove: (id: string) => http.delete(`/worldbooks/${id}`).then((r) => r.data),
-  addEntry: (bookId: string, body: Record<string, any>) =>
-    http.post<WorldBookEntry>(`/worldbooks/${bookId}/entries`, body).then((r) => r.data),
-  updateEntry: (id: string, body: Record<string, any>) =>
-    http.patch<WorldBookEntry>(`/worldbook-entries/${id}`, body).then((r) => r.data),
-  removeEntry: (id: string) => http.delete(`/worldbook-entries/${id}`).then((r) => r.data),
+export const challengesApi = {
+  list: () =>
+    http.get<{ challenges: PublicChallenge[] }>('/challenges').then((r) => r.data.challenges),
+  get: (slug: string) => http.get<PublicChallenge>(`/challenges/${slug}`).then((r) => r.data),
 }
 
 // 设置
@@ -176,11 +126,75 @@ export const settingsApi = {
     http.post<{ models: string[] }>('/settings/fetch-models', body).then((r) => r.data),
 }
 
+// 管理员全局玩法设置
+export const adminApi = {
+  getRollSettings: () => http.get<AdminRollSettings>('/admin/roll-settings').then((r) => r.data),
+  updateRollSettings: (body: { roll_system_enabled: boolean; roll_difficulty_mode: string }) =>
+    http.patch<AdminRollSettings>('/admin/roll-settings', body).then((r) => r.data),
+  getAuthSettings: () => http.get<AdminAuthSettings>('/admin/auth-settings').then((r) => r.data),
+  updateAuthSettings: (body: Record<string, unknown>) =>
+    http.patch<AdminAuthSettings>('/admin/auth-settings', body).then((r) => r.data),
+  testEmail: (email: string) =>
+    http.post('/admin/auth-settings/test-email', { email }).then((r) => r.data),
+  listInvitationCodes: () =>
+    http
+      .get<{ invitation_codes: InvitationCode[] }>('/admin/invitation-codes')
+      .then((r) => r.data.invitation_codes),
+  createInvitationCode: (body: { label: string; max_uses: number; expires_at?: string }) =>
+    http.post<CreatedInvitation>('/admin/invitation-codes', body).then((r) => r.data),
+  updateInvitationCode: (id: string, body: Record<string, unknown>) =>
+    http.patch<InvitationCode>(`/admin/invitation-codes/${id}`, body).then((r) => r.data),
+  listBuiltins: () =>
+    http
+      .get<{ builtins: AdminBuiltinChallenge[] }>('/admin/builtin-challenges')
+      .then((r) => r.data.builtins),
+  importBuiltin: (slug: string) =>
+    http
+      .post<BuiltinImportResult>(`/admin/builtin-challenges/${encodeURIComponent(slug)}/import`)
+      .then((r) => r.data),
+  listChallenges: () =>
+    http
+      .get<{ challenges: AdminChallengePack[] }>('/admin/challenges')
+      .then((r) => r.data.challenges),
+  createChallenge: (body: { slug: string; name: string; description: string }) =>
+    http.post<ChallengePack>('/admin/challenges', body).then((r) => r.data),
+  getChallengeVersion: (id: string) =>
+    http.get<ChallengeVersionDocument>(`/admin/challenge-versions/${id}`).then((r) => r.data),
+  createChallengeVersion: (packId: string, version: string) =>
+    http
+      .post<ChallengeVersionDocument>(`/admin/challenges/${packId}/versions`, { version })
+      .then((r) => r.data),
+  saveChallengeVersion: (id: string, body: SaveChallengeVersionInput) =>
+    http.put<ChallengeVersionDocument>(`/admin/challenge-versions/${id}`, body).then((r) => r.data),
+  publishChallengeVersion: (id: string) =>
+    http
+      .post<ChallengeVersionDocument>(`/admin/challenge-versions/${id}/publish`)
+      .then((r) => r.data),
+}
+
 // 账号（天道回溯）
 export const accountApi = {
   get: () => http.get('/account').then((r) => r.data),
   useRewind: () =>
     http.post<{ success: boolean; account: any }>('/account/rewind/use').then((r) => r.data),
+}
+
+// 认证
+export const authApi = {
+  config: () => http.get<AuthConfig>('/auth/config').then((r) => r.data),
+  me: () => http.get<{ user: AuthUser }>('/auth/me').then((r) => r.data.user),
+  login: (body: { email: string; password: string }) =>
+    http.post<{ user: AuthUser }>('/auth/login', body).then((r) => r.data.user),
+  sendRegistrationCode: (email: string) =>
+    http.post('/auth/email-code', { email }).then((r) => r.data),
+  register: (body: {
+    email: string
+    password: string
+    display_name: string
+    verification_code?: string
+    invitation_code?: string
+  }) => http.post<{ user: AuthUser }>('/auth/register', body).then((r) => r.data.user),
+  logout: () => http.post('/auth/logout').then((r) => r.data),
 }
 
 export default http

@@ -85,6 +85,9 @@ const usagePct = computed(() => {
 <style scoped>
 .inspector {
   height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
   background: var(--bg-panel);
   border-left: 1px solid var(--border-soft);
   display: flex;
@@ -182,5 +185,13 @@ const usagePct = computed(() => {
 
 .dot.off {
   background: var(--text-faint);
+}
+
+@media (max-width: 768px) {
+  .inspector {
+    width: 100%;
+    border-left: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 </style>

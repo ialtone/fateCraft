@@ -199,7 +199,7 @@ function cancel() {
           @click="send"
         >
           <template #icon><NIcon :component="ArrowUpOutline" /></template>
-          落笔
+          <span class="send-label">落笔</span>
         </NButton>
       </div>
     </template>
@@ -333,8 +333,23 @@ function cancel() {
     gap: 8px;
   }
 
-  .box button {
-    padding: 8px 12px;
+  .input-area {
+    padding: 8px max(12px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+
+  .box :deep(.n-input) {
+    min-width: 0;
+  }
+
+  .send {
+    width: 44px;
+    padding: 0;
+    letter-spacing: 0;
+  }
+
+  .send-label {
+    display: none;
   }
 }
 </style>

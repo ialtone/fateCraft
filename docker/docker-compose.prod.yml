@@ -54,7 +54,7 @@ services:
     ports:
       - "8081:8081"
     volumes:
-      # 模板 JSON 数据（角色卡/世界书等）直接挂载仓库目录，编辑实时落盘到宿主机
+      # 判定配置、输出 Schema 与空库首次初始化材料；运行时挑战内容从 PostgreSQL 读取
       - ../backend/data:/app/backend/data
     healthcheck:
       test:

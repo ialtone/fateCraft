@@ -14,6 +14,10 @@ func (s *Server) getState(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return
+	}
 	st, err := s.state.Get(c.Request.Context(), id)
 	if err != nil {
 		fail(c, err)
@@ -33,13 +37,17 @@ func (s *Server) patchState(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return
+	}
 	var body patchStateBody
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if body.State != nil {
-		after, err := s.state.Replace(c.Request.Context(), id, body.State, storage.SourceUser)
+		after, err := s.state.Replace(c.Request.Context(), id, body.State, storage.SourceSystem)
 		if err != nil {
 			fail(c, err)
 			return
@@ -47,7 +55,7 @@ func (s *Server) patchState(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"state": after})
 		return
 	}
-	after, skipped, err := s.state.Apply(c.Request.Context(), id, body.Patch, storage.SourceUser, nil)
+	after, skipped, err := s.state.Apply(c.Request.Context(), id, body.Patch, storage.SourceSystem, nil)
 	if err != nil {
 		fail(c, err)
 		return
@@ -58,6 +66,10 @@ func (s *Server) patchState(c *gin.Context) {
 func (s *Server) stateRevisions(c *gin.Context) {
 	id, ok := paramUUID(c, "id")
 	if !ok {
+		return
+	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
 		return
 	}
 	limit := 50

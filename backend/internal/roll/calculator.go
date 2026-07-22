@@ -50,7 +50,7 @@ func (s *Service) CalculateResult(
 	historyAdj := s.getAdjustment(ctx, convID, req.Type, rewardValue)
 	result.Breakdown.History = historyAdj
 
-	// 7. 难度模式
+	// 7. 难度模式由管理员全局设置传入，用户请求不能覆盖。
 	diffAdj := config.DifficultyModes[difficultyMode]
 	result.Breakdown.DifficultyMode = diffAdj
 

@@ -1,8 +1,6 @@
-// 预设包相关
-export type { PresetPack, ResourceWithPack } from './presetPack'
-
 // 账号相关
 export type { Account } from './account'
+export type { AuthConfig, AuthUser } from './auth'
 
 // API 相关类型
 export type {
@@ -13,13 +11,6 @@ export type {
   ConversationStatusEnum,
   DisplayMessageTypeEnum,
   // 实体类型
-  Character,
-  Persona,
-  Scenario,
-  PromptPreset,
-  PromptSegment,
-  WorldBook,
-  WorldBookEntry,
   Conversation,
   ChatMessage,
   DisplayMessage,
@@ -27,6 +18,24 @@ export type {
   MemorySummary,
   ContextBuildLog,
   LLMSettings,
+  AdminRollSettings,
+  AdminAuthSettings,
+  SMTPSecurity,
+  InvitationCode,
+  CreatedInvitation,
+  PublicChallenge,
+  ChallengePersonaOption,
+  ChallengeRewardOverview,
+  ChallengePack,
+  ChallengeVersion,
+  ChallengeAsset,
+  ChallengeRewardRule,
+  AdminChallengePack,
+  AdminBuiltinChallenge,
+  BuiltinChallengeStatus,
+  BuiltinImportResult,
+  ChallengeVersionDocument,
+  SaveChallengeVersionInput,
   SocketEvent,
   IncomingSocketEvent,
   UnknownSocketEvent,

@@ -48,8 +48,6 @@ async function save() {
     temperature: Number(form.value.temperature),
     top_p: Number(form.value.top_p),
     stream_enabled: !!form.value.stream_enabled,
-    roll_system_enabled: !!form.value.roll_system_enabled,
-    roll_difficulty_mode: form.value.roll_difficulty_mode || 'normal',
   }
   // 仅当填写了新 key 时才提交，避免清空已有密钥。
   if (apiKey.value) body.api_key = apiKey.value
@@ -116,7 +114,7 @@ async function fetchModels() {
 
     <section class="card">
       <div class="card-head">外观</div>
-      <div class="row spread" style="padding: 4px 0">
+      <div class="appearance-row row spread">
         <div>
           <div>主题模式</div>
           <div class="faint sm">
@@ -176,7 +174,7 @@ async function fetchModels() {
             <template #unchecked>关闭</template>
           </NSwitch>
         </NFormItem>
-        <div class="row" style="gap: 16px">
+        <div class="token-row row">
           <NFormItem label="最大上下文 token" style="flex: 1">
             <NInputNumber
               v-model:value="form.max_context_tokens"
@@ -225,44 +223,8 @@ async function fetchModels() {
           </template>
           <NSlider v-model:value="form.top_p" :min="0" :max="1" :step="0.05" />
         </NFormItem>
-
-        <!-- 判定系统配置 -->
-        <div class="section-divider">
-          <span>天命判定系统</span>
-        </div>
-
-        <NFormItem>
-          <template #label>
-            <span>启用判定系统</span>
-            <NPopover trigger="hover" placement="top">
-              <template #trigger>
-                <span style="margin-left: 4px; cursor: help; opacity: 0.6">ⓘ</span>
-              </template>
-              <div style="max-width: 320px">
-                启用后，AI 在遇到不确定事件（战斗、探索、炼丹等）时会发起天命判定（D100掷骰），
-                根据角色属性、天赋、情境等因素计算成功率，让叙事更有紧张感和不可预测性。<br /><br />
-                推荐搭配「轮回试炼」等预设包使用。
-              </div>
-            </NPopover>
-          </template>
-          <NSwitch v-model:value="form.roll_system_enabled">
-            <template #checked>开启</template>
-            <template #unchecked>关闭</template>
-          </NSwitch>
-        </NFormItem>
-
-        <NFormItem v-if="form.roll_system_enabled" label="判定难度模式">
-          <NSelect
-            v-model:value="form.roll_difficulty_mode"
-            :options="[
-              { label: '简单（成功率 +15%）', value: 'easy' },
-              { label: '普通（标准难度）', value: 'normal' },
-              { label: '困难（成功率 -15%）', value: 'hard' },
-            ]"
-          />
-        </NFormItem>
       </NForm>
-      <div class="row" style="justify-content: flex-end">
+      <div class="save-row row">
         <NButton type="primary" @click="save">保存设置</NButton>
       </div>
     </section>
@@ -320,5 +282,43 @@ async function fetchModels() {
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 1px;
+}
+
+.appearance-row {
+  padding: 4px 0;
+}
+
+.token-row {
+  gap: 16px;
+}
+
+.save-row {
+  justify-content: flex-end;
+}
+
+@media (max-width: 560px) {
+  .card {
+    padding: 16px;
+  }
+
+  .appearance-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .appearance-row > .n-button {
+    width: 100%;
+  }
+
+  .token-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .save-row > .n-button {
+    width: 100%;
+  }
 }
 </style>

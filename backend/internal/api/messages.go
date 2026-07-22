@@ -22,6 +22,10 @@ func (s *Server) listMessages(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return
+	}
 	var before *uuid.UUID
 	if b := c.Query("before"); b != "" {
 		if bid, err := uuid.Parse(b); err == nil {
@@ -69,7 +73,7 @@ func (s *Server) postMessage(c *gin.Context) {
 		return
 	}
 	gen := s.hub.Gen()
-	s.hub.RunDetached(id, func(ctx context.Context, emit realtime.EmitFunc) {
+	s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Generate(ctx, id, body.Content, emit)
 	})
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
@@ -85,7 +89,7 @@ func (s *Server) regenerate(c *gin.Context) {
 		return
 	}
 	gen := s.hub.Gen()
-	s.hub.RunDetached(id, func(ctx context.Context, emit realtime.EmitFunc) {
+	s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Regenerate(ctx, id, emit)
 	})
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
@@ -101,7 +105,7 @@ func (s *Server) continueGen(c *gin.Context) {
 		return
 	}
 	gen := s.hub.Gen()
-	s.hub.RunDetached(id, func(ctx context.Context, emit realtime.EmitFunc) {
+	s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Continue(ctx, id, emit)
 	})
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
@@ -111,6 +115,10 @@ func (s *Server) continueGen(c *gin.Context) {
 func (s *Server) resolveMessageConv(c *gin.Context, msgID uuid.UUID) (uuid.UUID, bool) {
 	disp, err := s.messages.GetDisplayByID(c.Request.Context(), msgID)
 	if err != nil {
+		fail(c, err)
+		return uuid.Nil, false
+	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), disp.ConversationID); err != nil {
 		fail(c, err)
 		return uuid.Nil, false
 	}
@@ -198,7 +206,7 @@ func (s *Server) editAndRegenerate(c *gin.Context) {
 
 	// 触发重新生成：走不再 AppendUser 的路径，避免上下文出现重复用户消息。
 	gen := s.hub.Gen()
-	s.hub.RunDetached(convID, func(ctx context.Context, emit realtime.EmitFunc) {
+	s.hub.RunDetached(c.Request.Context(), convID, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.GenerateAfterEdit(ctx, convID, emit)
 	})
 

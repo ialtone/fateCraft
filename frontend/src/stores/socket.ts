@@ -156,6 +156,9 @@ export const useSocketStore = defineStore('socket', () => {
       case 'generation_finished':
         if (ev.message_id) chat.endStream(ev.message_id)
         break
+      case 'generation_discarded':
+        if (ev.message_id) chat.discardStream(ev.message_id)
+        break
       case 'message_created':
         if (ev.message) chat.applyServerMessage(ev.message)
         break

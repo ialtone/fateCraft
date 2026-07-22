@@ -50,8 +50,10 @@
   注：compose 已设置 `name: fatecraft`，容器名为 `fatecraft-postgresql-1`；
   容器内的超级用户就是 `POSTGRES_USER` 指定的 `fatecraft`，没有 `postgres` 用户。
 
-- **模板数据**：角色卡/Persona/场景/Prompt/世界书存于仓库 `backend/data/` 的 JSON 文件，
-  compose 直接挂载该目录进后端容器（`/app/backend/data`），前端编辑会实时写回宿主机文件。
+- **挑战内容**：运行时内容存于 PostgreSQL。compose 挂载 `backend/data/` 用于
+  `roll_config.yaml`、输出 Schema 和空库首次启动的内置挑战材料。后端启动时发现
+  `challenge_packs` 为空会自动校验并发布内置挑战，不需要额外命令；数据库已有任意挑战包时
+  不读取、不升级也不覆盖内容。服务不会把管理端修改写回宿主机文件。
 - **复用外部 PostgreSQL** 时需手动初始化：由管理员创建数据库与用户后执行 `init.sql`：
 
   ```bash

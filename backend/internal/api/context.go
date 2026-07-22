@@ -11,6 +11,10 @@ func (s *Server) lastContext(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return
+	}
 	log, err := s.ctxLogs.Last(c.Request.Context(), id)
 	if err != nil {
 		fail(c, err)

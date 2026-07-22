@@ -4,6 +4,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string
+    public?: boolean
+    admin?: boolean
   }
 }
 
@@ -13,6 +15,12 @@ const BASE_TITLE = '命运茶馆 Fatecraft'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { title: '登录', public: true },
+    },
     {
       path: '/',
       name: 'conversations',
@@ -25,28 +33,16 @@ const router = createRouter({
       meta: { title: '对话' },
     },
     {
-      path: '/characters',
-      name: 'characters',
-      component: () => import('@/views/CharactersView.vue'),
-      meta: { title: '角色卡' },
-    },
-    {
-      path: '/worldbooks',
-      name: 'worldbooks',
-      component: () => import('@/views/WorldBooksView.vue'),
-      meta: { title: '世界书' },
-    },
-    {
-      path: '/prompts',
-      name: 'prompts',
-      component: () => import('@/views/PromptsView.vue'),
-      meta: { title: 'Prompt 预设' },
-    },
-    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
       meta: { title: '设置' },
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('@/views/AdminView.vue'),
+      meta: { title: '管理', admin: true },
     },
     {
       // 兜底 404：history 模式下服务器把所有路径都回退到 index.html，

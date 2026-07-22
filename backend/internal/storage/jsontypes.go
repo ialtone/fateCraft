@@ -32,7 +32,7 @@ func (m *JSONMap) Scan(src any) error {
 	return json.Unmarshal(b, m)
 }
 
-// GormDataType 让 GORM AutoMigrate 生成 jsonb 列。
+// GormDataType 告诉 GORM 这些值应按 jsonb 参数读写。
 func (JSONMap) GormDataType() string { return "jsonb" }
 
 // JSONDoc 对应一个保存任意 JSON（对象或数组）的 jsonb 列。

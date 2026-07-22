@@ -10,47 +10,30 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/contextbuilder"
 	"github.com/ialtone/fatecraft/internal/storage"
-)
-
-// 当 Prompt 预设缺少核心分段时使用的内置兜底内容，保证 envelope 指令始终存在。
-const (
-	defaultSystemMaster = "你是一个沉浸式文字冒险/角色扮演叙事引擎。根据玩家输入推进剧情，保持人物性格一致。"
-	defaultOutputSchema = `你必须只输出一个 JSON 对象，不要包含任何额外文字或代码块标记。格式：{"narrative":"剧情文本(Markdown)","state_update":{},"notes":"可选"}。state_update 键使用点号路径，数组追加用键名加 + 后缀；仅允许更新 profile.* / attributes.* / traits / inventory.* / relationships.* / location.* / quests / risks / world_flags.*。`
+	"github.com/ialtone/fatecraft/internal/worldbook"
 )
 
 // assembleInput 收集构造上下文所需的全部数据（仅限当前 conversation）。
-func (g *Generator) assembleInput(ctx context.Context, conv *storage.Conversation, settings *storage.LLMSettings) (contextbuilder.Input, error) {
+func (g *Generator) assembleInput(ctx context.Context, conv *storage.Conversation, settings *storage.LLMSettings, runtimeDirective string) (contextbuilder.Input, error) {
 	in := contextbuilder.Input{
 		MaxContextTokens:       settings.MaxContextTokens,
 		ReservedResponseTokens: settings.MaxResponseTokens,
 		Model:                  settings.Model,
+		RuntimeDirective:       runtimeDirective,
 	}
 
-	// Prompt 预设分段（按 position 排序，保证核心分段存在）。
-	var segs []storage.PromptSegment
-	if conv.PromptPresetID != nil {
-		if preset, err := g.promptStore.Get(*conv.PromptPresetID); err == nil {
-			segs = append([]storage.PromptSegment(nil), preset.Segments...)
-			sort.SliceStable(segs, func(i, j int) bool { return segs[i].Position < segs[j].Position })
-		}
+	bundle, err := g.challenge.Bundle(ctx, conv)
+	if err != nil {
+		return in, err
 	}
-	in.PresetSegments = ensureCoreSegments(segs)
 
-	if conv.CharacterID != nil {
-		if c, err := g.charStore.Get(*conv.CharacterID); err == nil {
-			in.Character = &c
-		}
-	}
-	if conv.PersonaID != nil {
-		if p, err := g.personaStore.Get(*conv.PersonaID); err == nil {
-			in.Persona = &p
-		}
-	}
-	if conv.ScenarioID != nil {
-		if s, err := g.scenStore.Get(*conv.ScenarioID); err == nil {
-			in.Scenario = &s
-		}
-	}
+	// Prompt、角色、Persona、场景和世界书都来自对话固定的挑战版本。
+	segs := append([]storage.PromptSegment(nil), bundle.Prompt.Segments...)
+	sort.SliceStable(segs, func(i, j int) bool { return segs[i].Position < segs[j].Position })
+	in.PresetSegments = segs
+	in.Character = bundle.Character
+	in.Persona = bundle.Persona
+	in.Scenario = bundle.Scenario
 
 	st, err := g.stateSvc.Get(ctx, conv.ID)
 	if err != nil {
@@ -69,42 +52,18 @@ func (g *Generator) assembleInput(ctx context.Context, conv *storage.Conversatio
 	in.History = history
 
 	// 世界书激活。
-	bookIDs, _ := g.convSvc.WorldBookIDs(ctx, conv.ID)
-	if len(bookIDs) > 0 {
+	if len(bundle.WorldBooks) > 0 {
 		scanText := buildScanText(history, st, summary)
 		worldBudget := contextbuilder.WorldBudget(contextbuilder.PromptBudget(settings.MaxContextTokens, settings.MaxResponseTokens))
-		activated, _ := g.worldSvc.Activate(bookIDs, scanText, worldBudget)
+		var entries []storage.WorldBookEntry
+		for _, book := range bundle.WorldBooks {
+			entries = append(entries, book.Entries...)
+		}
+		activated, _ := worldbook.Scan(entries, scanText, worldBudget, g.counter)
 		in.WorldActivated = activated
 	}
 
 	return in, nil
-}
-
-// ensureCoreSegments 在缺失时补齐 system_master 与 output_schema 兜底分段。
-func ensureCoreSegments(segs []storage.PromptSegment) []storage.PromptSegment {
-	hasMaster, hasSchema := false, false
-	for _, s := range segs {
-		if s.Key == "system_master" {
-			hasMaster = true
-		}
-		if s.Key == "output_schema" {
-			hasSchema = true
-		}
-	}
-	var prepend []storage.PromptSegment
-	if !hasMaster {
-		prepend = append(prepend, storage.PromptSegment{
-			Key: "system_master", Role: storage.RoleSystem, Content: defaultSystemMaster,
-			Enabled: true, Required: true, Priority: 10,
-		})
-	}
-	if !hasSchema {
-		prepend = append(prepend, storage.PromptSegment{
-			Key: "output_schema", Role: storage.RoleSystem, Content: defaultOutputSchema,
-			Enabled: true, Required: true, Priority: 20,
-		})
-	}
-	return append(prepend, segs...)
 }
 
 // filterCovered 剔除被最新摘要覆盖（含）之前的历史消息。

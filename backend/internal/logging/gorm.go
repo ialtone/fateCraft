@@ -3,10 +3,18 @@ package logging
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+)
+
+var (
+	_ gormlogger.Interface = (*gormZap)(nil)
+	_ gorm.ParamsFilter    = (*gormZap)(nil)
 )
 
 // gormZap 把 GORM 的日志桥接到 zap，使 SQL 错误/慢查询与业务日志同源。
@@ -17,11 +25,11 @@ type gormZap struct {
 }
 
 // GormLogger 返回 zap 实现的 GORM 日志器：
-// SQL 错误记 Error、慢查询（>200ms）记 Warn、其余语句仅在 debug 级别可见。
+// SQL 故障记 Error、约束拒绝和慢查询记 Warn、未命中及普通 SQL 仅在 debug 可见。
 func GormLogger() gormlogger.Interface {
 	return &gormZap{
 		log:           Named("gorm"),
-		level:         gormlogger.Warn,
+		level:         gormlogger.Info,
 		slowThreshold: 200 * time.Millisecond,
 	}
 }
@@ -50,24 +58,62 @@ func (g *gormZap) Error(_ context.Context, msg string, args ...any) {
 	}
 }
 
+// ParamsFilter 让 GORM 保留 SQL 占位符，不把密码、令牌、邮箱或 API Key
+// 等绑定参数展开到日志。callbacks 会在调用 Trace 的 fc 中应用此过滤器。
+func (g *gormZap) ParamsFilter(_ context.Context, sql string, _ ...any) (string, []any) {
+	return sql, nil
+}
+
 func (g *gormZap) Trace(_ context.Context, begin time.Time, fc func() (string, int64), err error) {
 	if g.level <= gormlogger.Silent {
 		return
 	}
 	elapsed := time.Since(begin)
+	switch {
+	case err != nil && errors.Is(err, gormlogger.ErrRecordNotFound):
+		g.trace(gormlogger.Info, zapcore.DebugLevel, "SQL 未命中", elapsed, fc)
+	case err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)):
+		g.trace(gormlogger.Info, zapcore.DebugLevel, "SQL 已取消", elapsed, fc)
+	case err != nil && isIntegrityConstraint(err):
+		g.trace(gormlogger.Warn, zapcore.WarnLevel, "SQL 约束拒绝", elapsed, fc, zap.Error(err))
+	case err != nil:
+		g.trace(gormlogger.Error, zapcore.ErrorLevel, "SQL 执行失败", elapsed, fc, zap.Error(err))
+	case g.slowThreshold > 0 && elapsed > g.slowThreshold:
+		g.trace(gormlogger.Warn, zapcore.WarnLevel, "慢查询", elapsed, fc)
+	default:
+		g.trace(gormlogger.Info, zapcore.DebugLevel, "SQL", elapsed, fc)
+	}
+}
+
+func (g *gormZap) trace(
+	minimum gormlogger.LogLevel,
+	level zapcore.Level,
+	message string,
+	elapsed time.Duration,
+	fc func() (string, int64),
+	extra ...zap.Field,
+) {
+	if g.level < minimum || !g.log.Core().Enabled(level) {
+		return
+	}
 	sql, rows := fc()
 	fields := []zap.Field{
 		zap.Duration("elapsed", elapsed),
 		zap.Int64("rows", rows),
 		zap.String("sql", sql),
 	}
-	switch {
-	case err != nil && !errors.Is(err, gormlogger.ErrRecordNotFound):
-		// ErrRecordNotFound 是常规业务分支（上层翻译为 404），不按错误记。
-		g.log.Error("SQL 执行失败", append(fields, zap.Error(err))...)
-	case g.slowThreshold > 0 && elapsed > g.slowThreshold:
-		g.log.Warn("慢查询", fields...)
-	default:
-		g.log.Debug("SQL", fields...)
+	fields = append(fields, extra...)
+	g.log.Log(level, message, fields...)
+}
+
+type sqlStateError interface {
+	SQLState() string
+}
+
+func isIntegrityConstraint(err error) bool {
+	if errors.Is(err, gorm.ErrDuplicatedKey) || errors.Is(err, gorm.ErrForeignKeyViolated) {
+		return true
 	}
+	var stateErr sqlStateError
+	return errors.As(err, &stateErr) && strings.HasPrefix(stateErr.SQLState(), "23")
 }

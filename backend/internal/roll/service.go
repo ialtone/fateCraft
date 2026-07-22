@@ -36,3 +36,11 @@ func (s *Service) Record(ctx context.Context, convID uuid.UUID, rollType string,
 			zap.String("conversation_id", convID.String()), zap.Error(err))
 	}
 }
+
+// HasSuccessfulChallenge 用服务端判定流水校验挑战是否具备成功结算资格。
+func (s *Service) HasSuccessfulChallenge(ctx context.Context, convID uuid.UUID) (bool, error) {
+	if s == nil || s.history == nil {
+		return false, nil
+	}
+	return s.history.HasSuccess(ctx, convID)
+}

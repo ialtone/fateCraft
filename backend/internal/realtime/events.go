@@ -7,16 +7,17 @@ const (
 	TypeCancelGeneration = "cancel_generation"
 
 	// 服务端 -> 客户端
-	TypeGenerationStarted  = "generation_started"
-	TypeGenerationDelta    = "generation_delta"
-	TypeGenerationFinished = "generation_finished"
-	TypeStateUpdate        = "state_update"
-	TypeMessageCreated     = "message_created"
-	TypeMessageUpdated     = "message_updated"
-	TypeContextBuilt       = "context_built"
-	TypeConversationEnded  = "conversation_ended"
-	TypeEndingTriggered    = "ending_triggered"
-	TypeError              = "error"
+	TypeGenerationStarted   = "generation_started"
+	TypeGenerationDelta     = "generation_delta"
+	TypeGenerationFinished  = "generation_finished"
+	TypeGenerationDiscarded = "generation_discarded"
+	TypeStateUpdate         = "state_update"
+	TypeMessageCreated      = "message_created"
+	TypeMessageUpdated      = "message_updated"
+	TypeContextBuilt        = "context_built"
+	TypeConversationEnded   = "conversation_ended"
+	TypeEndingTriggered     = "ending_triggered"
+	TypeError               = "error"
 )
 
 // EmitFunc 是把生成事件推送给客户端的回调。

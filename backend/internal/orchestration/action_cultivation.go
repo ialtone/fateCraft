@@ -2,62 +2,68 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/chat"
-	"github.com/ialtone/fatecraft/internal/conversation"
 	"github.com/ialtone/fatecraft/internal/identity"
-	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/realtime"
 	"github.com/ialtone/fatecraft/internal/state"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 // CultivationEndingHandler 是"修仙"玩法（reincarnation-trials 预设包）的
-// trigger_ending 动作处理器：提取灵石/修为等级、记录轮回历史（TrialHistory）、
-// 按结局类型更新账号统计，最后结束对话并广播结局事件。
+// trigger_ending 动作处理器：采集服务端状态并委托挑战服务事务结算。
 //
 // 该玩法记账逻辑从通用编排器中拆出：换题材的预设包注册各自的处理器即可，
 // 编排器不再硬编码任何题材语义。
 type CultivationEndingHandler struct {
-	convSvc     *conversation.Service
-	chatSvc     *chat.Service
-	stateSvc    *state.Service
-	accountRepo *storage.AccountRepository
-	identity    identity.Provider // 当前玩家身份来源（单用户模式下固定返回 dev id）
+	chatSvc   *chat.Service
+	stateSvc  *state.Service
+	challenge *challenge.Service
+	identity  identity.Provider // 当前玩家身份来源（由认证中间件写入 context）
 }
 
 // NewCultivationEndingHandler 构造修仙结局处理器。
 func NewCultivationEndingHandler(
-	convSvc *conversation.Service,
 	chatSvc *chat.Service,
 	stateSvc *state.Service,
-	accountRepo *storage.AccountRepository,
+	challengeSvc *challenge.Service,
 	ident identity.Provider,
 ) *CultivationEndingHandler {
 	return &CultivationEndingHandler{
-		convSvc: convSvc, chatSvc: chatSvc, stateSvc: stateSvc,
-		accountRepo: accountRepo, identity: ident,
+		chatSvc: chatSvc, stateSvc: stateSvc, challenge: challengeSvc, identity: ident,
 	}
 }
 
-// Handle 处理 trigger_ending 动作：自动结束对话并广播结局事件。
-func (h *CultivationEndingHandler) Handle(ctx context.Context, convID uuid.UUID, params map[string]any, emit realtime.EmitFunc) {
+// Prepare 在模型状态更新落库前采集并校验结算输入。
+func (h *CultivationEndingHandler) Prepare(ctx context.Context, convID uuid.UUID, params map[string]any) (PreparedAction, error) {
 	endingType := getStringParam(params, "ending_type", "neutral")
+	rewardKey := getStringParam(params, "reward_key", "")
 	title := getStringParam(params, "title", "故事终章")
 	summary := getStringParam(params, "summary", "")
 
 	// 获取当前状态，提取灵石数量和角色信息。
-	currentState, _ := h.stateSvc.Get(ctx, convID)
+	currentState, err := h.stateSvc.Get(ctx, convID)
+	if err != nil {
+		return nil, err
+	}
 	spiritStones := extractSpiritStones(currentState)
+	if spiritStones < 0 {
+		spiritStones = 0
+	}
 	characterName := extractStringFromState(currentState, "profile.name")
 	cultivationLevel := extractStringFromState(currentState, "profile.cultivation_level")
 
 	// 计算存活回合数（用户消息数量）。
-	messages, _ := h.chatSvc.History(ctx, convID, false)
+	messages, err := h.chatSvc.History(ctx, convID, false)
+	if err != nil {
+		return nil, err
+	}
 	survivalTurns := 0
 	for _, msg := range messages {
 		if msg.Role == storage.RoleUser {
@@ -65,61 +71,58 @@ func (h *CultivationEndingHandler) Handle(ctx context.Context, convID uuid.UUID,
 		}
 	}
 
-	// 记录轮回历史（playerID 由身份 Provider 解析，保持与 conversation.Service 一致）。
-	playerID := h.identity.CurrentPlayerID(ctx)
-	history := &storage.TrialHistory{
-		PlayerID:           playerID,
-		ConversationID:     convID.String(),
-		EndingType:         endingType,
-		SpiritStonesEarned: 0,
-		CharacterName:      characterName,
-		CultivationLevel:   cultivationLevel,
-		SurvivalTurns:      survivalTurns,
+	playerID, err := uuid.Parse(h.identity.CurrentPlayerID(ctx))
+	if err != nil {
+		return nil, errors.New("当前用户身份无效")
 	}
-
-	log := logging.Named("ending").With(zap.String("conversation_id", convID.String()))
-
-	// 根据结局类型更新账号统计。记账失败会导致灵石/胜负未落库，必须留痕（不中断结局）。
-	if endingType == "good" {
-		// 成功结局：记录灵石。
-		history.SpiritStonesEarned = spiritStones
-		if h.accountRepo != nil {
-			if err := h.accountRepo.RecordTrialSuccess(playerID, spiritStones); err != nil {
-				log.Error("记录成功结局账号统计失败", zap.Int64("spirit_stones", spiritStones), zap.Error(err))
-			}
-		}
-	} else {
-		// 失败结局：灵石归零。
-		history.SpiritStonesEarned = 0
-		if h.accountRepo != nil {
-			if err := h.accountRepo.RecordTrialFailure(playerID); err != nil {
-				log.Error("记录失败结局账号统计失败", zap.Error(err))
-			}
-		}
+	input := challenge.SettlementInput{
+		ConversationID: convID, PlayerID: playerID, EndingType: endingType,
+		EndingTitle: title, RewardKey: rewardKey, BaseReward: spiritStones,
+		CharacterName: characterName, CultivationLevel: cultivationLevel, SurvivalTurns: survivalTurns,
 	}
-
-	// 保存历史记录。
-	if h.accountRepo != nil {
-		if err := h.accountRepo.AddTrialHistory(history); err != nil {
-			log.Error("保存轮回历史失败", zap.Error(err))
-		}
+	if err := h.challenge.ValidateSettlement(ctx, input); err != nil {
+		return nil, err
 	}
+	return &preparedCultivationEnding{handler: h, input: input, summary: summary}, nil
+}
 
-	// 结束对话。失败时记录日志但仍广播结局事件——结局在叙事上已经发生，
-	// 不应因状态位写入失败而让前端收不到结局弹窗（对话锁自愈会兜底处理残留状态）。
-	if _, err := h.convSvc.End(ctx, convID); err != nil {
-		log.Warn("结束对话失败，仍广播结局事件", zap.Error(err))
+type preparedCultivationEnding struct {
+	handler *CultivationEndingHandler
+	input   challenge.SettlementInput
+	summary string
+}
+
+// Commit 使用 Prepare 时冻结的状态和奖励基数执行事务结算。
+func (a *preparedCultivationEnding) Commit(ctx context.Context, emit realtime.EmitFunc) {
+	result, err := a.handler.challenge.Settle(ctx, a.input)
+	if err != nil {
+		msg := "挑战结算未通过：" + err.Error()
+		fields := []zap.Field{
+			zap.String("ending_type", a.input.EndingType),
+			zap.String("ending_title", a.input.EndingTitle),
+			zap.String("reward_key", a.input.RewardKey),
+			zap.Error(err),
+		}
+		switch {
+		case errors.Is(err, challenge.ErrSettlementDenied), errors.Is(err, storage.ErrNotFound):
+			emit(warningEvent(a.input.ConversationID, msg, fields...))
+		case errors.Is(err, storage.ErrAlreadySettled), errors.Is(err, challenge.ErrConversationEnded):
+			emit(infoEvent(a.input.ConversationID, msg, fields...))
+		default:
+			emit(errorEvent(a.input.ConversationID, "挑战结算失败: "+err.Error(), fields...))
+		}
+		return
 	}
 
 	// 广播结局事件。
 	emit(realtime.Event{
 		Type:           realtime.TypeEndingTriggered,
-		ConversationID: convID.String(),
-		EndingType:     endingType,
-		EndingTitle:    title,
-		EndingSummary:  summary,
-		SpiritStones:   spiritStones,
-		SurvivalTurns:  survivalTurns,
+		ConversationID: a.input.ConversationID.String(),
+		EndingType:     a.input.EndingType,
+		EndingTitle:    a.input.EndingTitle,
+		EndingSummary:  a.summary,
+		SpiritStones:   result.Run.RewardAmount,
+		SurvivalTurns:  a.input.SurvivalTurns,
 	})
 }
 

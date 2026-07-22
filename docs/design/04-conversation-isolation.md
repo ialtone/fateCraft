@@ -1,124 +1,119 @@
 # 04. 对话隔离与生命周期
 
-## 核心要求
+## 隔离目标
 
-系统必须按“对话”组织内容。一次对话结束后，用户可以切到下一个已有对话，也可以直接新开对话。不同对话之间默认互不联系。
+每个对话代表一个玩家在固定挑战版本下的一次独立运行。任何消息、状态、记忆、判定或结算都不能因为 UUID 可猜、前端伪造或仓储漏过滤而跨到其他用户或其他对话。
 
-## 术语
+对话固定保存：
 
-- Conversation：产品层面的对话，是用户看到和管理的最小剧情单位。
-- Message：某个对话中的单条用户、AI 或系统消息。
-- Conversation State：某个对话独立维护的结构化状态。
-- Conversation Memory：某个对话独立维护的摘要记忆。
-- Context Build：某次请求 AI 时，基于当前对话构造出来的上下文记录。
+- `player_id`：所有者。
+- `challenge_version_id`：创建时的发布版本。
+- `challenge_hash`：该版本内容哈希。
+- `character_asset_id`、`persona_asset_id`、`scenario_asset_id`：本局固定资产。
 
-## 隔离原则
+消息、展示消息、状态、状态修订、摘要、上下文日志、判定流水和结算流水都通过 `conversation_id` 归属对话。
 
-- 每个对话有独立消息历史。
-- 每个对话有独立结构化状态。
-- 每个对话有独立摘要记忆。
-- 每个对话有独立上下文构建日志。
-- 每个对话有独立生成锁。
-- 当前对话构造上下文时，只读取当前 conversation_id 下的数据。
-- 角色卡、Prompt 预设、世界书可以作为模板被多个对话选择，但它们不是运行时记忆。
-- 默认不把 A 对话的历史、状态、摘要或世界书激活结果带入 B 对话。
+## 身份传播
 
-## 生命周期
+1. `requireAuth` 从 HttpOnly Cookie 读取会话令牌。
+2. 认证服务只用令牌哈希查询 `auth_sessions`。
+3. 中间件将用户对象放入 Gin context，并把用户 ID 写入 request context。
+4. 对话、设置和账号领域服务通过 `identity.Provider` 获取当前用户，不信任请求体中的玩家 ID。
 
-对话状态建议：
+普通用户不能通过提交 `player_id` 切换身份。结算动作中的玩家 ID也来自已认证 context，并在事务中再次和对话所有者比较。
 
-- active：正在进行。
-- ended：已结束，不再继续生成，但可查看和复制。
-- archived：归档隐藏。
-- deleted：软删除或硬删除，MVP 可先软删除。
+## 读取隔离
 
-流程：
+`conversation.Service.GetOwned` 是对话侧的基础归属检查：
 
-1. 用户新建对话。
-2. 用户选择角色、Persona、世界书和 Prompt 预设。
-3. 系统初始化该对话的独立状态。
-4. 用户在该对话内持续输入和生成。
-5. 用户点击“结束对话”。
-6. 后端将 conversation.status 改为 ended。
-7. 前端返回对话列表，用户选择下一个对话或新建对话。
+1. 按 UUID 读取对话。
+2. 比较 `conversation.player_id` 和当前身份。
+3. 不匹配时返回 `storage.ErrNotFound`。
 
-## 新开对话
+返回 404 而不是 403，是为了避免泄漏某个 UUID 是否真实存在。消息、摘要、状态、上下文和 WebSocket 在执行自身操作前，都必须直接或间接通过同一归属检查。
 
-新开对话时可以复用模板：
+列表查询必须在 SQL 中带 `player_id` 条件，不能先读取全量再由前端过滤。
 
-- 同一个角色卡。
-- 同一个 Persona。
-- 同一个 Prompt 预设。
-- 同一个世界书集合。
+## 状态机
 
-新开对话时不复用运行时数据：
+```text
+           archive             restore
+active  ------------> archived ---------> active
+  |
+  | manual end or settlement
+  v
+ended
 
-- 不复用旧消息。
-- 不复用旧 character_state。
-- 不复用旧 memory_summary。
-- 不复用旧 context_build_logs。
-- 不复用旧世界书命中状态。
+active/ended/archived -- soft delete --> deleted
+```
 
-## 从旧对话派生
+约束：
 
-可以后续做“从此处另开分支”，但必须显式操作。
+- 只有 `active` 对话允许生成、编辑、重新生成、续写和归档。
+- `archived` 只由未结束的 active 对话产生，因此可以恢复。
+- `ended` 是终态，不允许归档后再恢复。
+- `deleted` 默认不出现在列表中，不提供普通恢复流程。
+- 结算会把状态设为 `ended`，写入 `ended_at` 并释放生成锁。
 
-派生对话规则：
+手动结束不等于挑战成功，不会写入 `challenge_run` 或发放奖励。
 
-- 用户明确点击“从当前状态创建新对话”。
-- 后端复制选定消息之前的历史或复制当前状态。
-- 新对话拥有新的 conversation_id。
-- 新对话之后的消息、摘要、上下文日志仍独立保存。
-- UI 必须标记来源，避免用户误以为自动共享。
+## 新建对话
 
-MVP 暂不做派生，只做新建、结束、切换。
+创建流程必须由后端完成选择解析：
 
-## 前端交互
+1. 按 `challenge_slug` 查 active 挑战包及当前发布版本。
+2. 重算已发布版本内容哈希并与记录比较。
+3. 校验 `persona_slug` 位于允许集合并属于该版本。
+4. 从 Manifest 固定 Character 和 Scenario。
+5. 写入对话的版本、哈希和资产 ID。
+6. 初始化默认状态。
+7. 根据 Character 开场白写入首条消息或自动生成触发消息。
 
-对话列表需要展示：
+前端不能提交版本 ID、哈希和技术资产 ID。数据库组合外键还会保证对话选中资产来自同一挑战版本。
 
-- 标题。
-- 角色名。
-- 更新时间。
-- 状态：active/ended/archived。
-- 最近一条展示消息预览。
+## 挑战版本隔离
 
-主对话页需要提供：
+新对话总是使用挑战包当前发布版本。旧对话不跟随 `current_version_id`：
 
-- 结束对话按钮。
-- 返回对话列表按钮。
-- 新开对话按钮。
-- 当前对话状态提示。
+- 管理员发布 `1.1.0` 后，已存在的 `1.0.0` 对话仍加载 `1.0.0`。
+- 运行时允许加载 published 或 retired 的固定版本。
+- 每次装配 Bundle 都重算 Manifest、资产和奖励规则哈希。
+- 版本状态不可用、记录哈希不匹配或对话哈希不匹配时停止生成。
 
-当对话 ended：
+这样可以避免进行中的挑战因管理员更新内容而改变规则，也能发现直接修改数据库 JSON 的行为。
 
-- 输入框禁用。
-- 继续生成、重试、编辑状态默认禁用。
-- 可以复制为新对话，后续版本支持。
+## 并发控制
 
-## 后端约束
+### 生成锁
 
-- 所有消息 API 必须校验 conversation_id。
-- 所有状态 API 必须校验 conversation_id。
-- ContextBuilder 必须只接收一个 conversation_id。
-- MemoryService 必须只读取当前 conversation_id 的摘要。
-- WorldBookService 可以读取模板世界书，但激活日志必须写当前 conversation_id。
-- WebSocket 路径绑定 conversation_id，不能在一个连接里混用多个对话。
+`conversations.is_processing` 是对话级生成锁。抢锁使用带条件的原子 UPDATE，只有从 `false` 改为 `true` 的请求可以开始生成。完成、失败或取消后释放锁；服务启动时还会清理进程异常退出留下的锁。
 
-## 数据约束
+生成锁只解决同一对话重复生成，不替代所有权与 active 状态检查。
 
-所有运行时表必须带 `conversation_id`：
+### 状态更新
 
-- chat_messages。
-- display_messages。
-- conversation_states。
-- state_revisions。
-- memory_summaries。
-- context_build_logs。
+状态补丁在事务中对 `conversation_states` 加行锁，读取当前值、应用白名单补丁、写入新状态和修订记录。这样两个并发状态更新不会基于同一旧值互相覆盖。
 
-模板表不需要绑定单一对话：
+### 结算
 
-- characters。
-- personas。
-- prompt_presets。
-- world_books。
+结算事务对 `conversations` 加 `FOR UPDATE` 锁，并依赖 `challenge_runs.conversation_id` 唯一约束。即使模型或网络重复提交结局，也只有一笔可以更新账号并完成对话。
+
+## WebSocket 隔离
+
+WebSocket 握手先经过会话认证。生成器开始工作前再次读取并校验对话归属和 active 状态。Hub 的广播键是对话 UUID，只有已通过该对话归属检查的连接可以加入。
+
+客户端断线不改变数据库事实；重新进入页面时应通过 REST 重新加载对话、消息和状态，不能假设事件一定完整送达。
+
+## 删除语义
+
+当前删除是软删除，只修改对话状态与 `deleted_at`。关联消息和状态仍保留，用于一致性和后续审计。数据库外键的 `ON DELETE CASCADE` 只在未来执行物理删除时生效。
+
+## 安全回归清单
+
+- 使用 A 用户 Cookie 请求 B 用户对话、消息、摘要和上下文，均返回 404。
+- 直接连接 B 用户 WebSocket 被拒绝。
+- archived 对话可以恢复，ended 对话不能恢复。
+- 同一 active 对话同时发送两个生成请求，只有一个获得生成锁。
+- 发布新版本不会改变旧对话的 Bundle。
+- 修改已发布 JSON 后，旧对话和新建对话都不能继续使用损坏版本。
+- 两个并发成功结局只产生一条结算流水。

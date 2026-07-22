@@ -15,6 +15,10 @@ func (s *Server) listSummaries(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return
+	}
 	sums, err := s.memory.List(c.Request.Context(), id)
 	if err != nil {
 		fail(c, err)
@@ -32,6 +36,10 @@ func (s *Server) generateSummary(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if _, err := s.conv.EnsureActive(ctx, id); err != nil {
+		fail(c, err)
+		return
+	}
 	history, err := s.chat.History(ctx, id, false)
 	if err != nil {
 		fail(c, err)
@@ -47,7 +55,7 @@ func (s *Server) generateSummary(c *gin.Context) {
 		transcript.WriteString(m.Role + ": " + m.Content + "\n")
 	}
 
-	settings, err := s.settings.Get(ctx)
+	settings, err := s.settings.Get(ctx, s.identity.CurrentPlayerID(ctx))
 	if err != nil {
 		fail(c, err)
 		return
@@ -96,6 +104,10 @@ func (s *Server) editSummary(c *gin.Context) {
 	}
 	convID, ok := paramUUIDFromString(c, body.ConversationID)
 	if !ok {
+		return
+	}
+	if _, err := s.conv.EnsureActive(c.Request.Context(), convID); err != nil {
+		fail(c, err)
 		return
 	}
 	sum, err := s.memory.Edit(c.Request.Context(), convID, sumID, body.Content)

@@ -1,30 +1,53 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
+import { computed, onMounted, watch } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { LogOutOutline } from '@vicons/ionicons5'
+import {
+  NAvatar,
+  NButton,
+  NConfigProvider,
+  NDialogProvider,
+  NIcon,
+  NMessageProvider,
+  NTooltip,
+} from 'naive-ui'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useThemeStore } from '@/stores/theme'
 import { useAccountStore } from '@/stores/account'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const router = useRouter()
 const theme = useThemeStore()
 const account = useAccountStore()
+const auth = useAuthStore()
 
 // 主对话页使用全屏三栏布局，不显示顶部导航。
 const isConversation = computed(() => route.name === 'conversation')
+const isAuthPage = computed(() => route.name === 'login')
 
-const navs = [
-  { to: '/', label: '对话' },
-  { to: '/characters', label: '角色卡' },
-  { to: '/worldbooks', label: '世界书' },
-  { to: '/prompts', label: 'Prompt' },
+const navs = computed(() => [
+  { to: '/', label: '挑战' },
   { to: '/settings', label: '设置' },
-]
+  ...(auth.isAdmin ? [{ to: '/admin', label: '管理' }] : []),
+])
 
 // 加载账号数据
 onMounted(() => {
-  account.load().catch(() => {})
+  watch(
+    () => auth.user,
+    (user) => {
+      if (user) account.load().catch(() => {})
+      else account.reset()
+    },
+    { immediate: true },
+  )
 })
+
+async function logout() {
+  await auth.logout()
+  await router.replace('/login')
+}
 </script>
 
 <template>
@@ -36,7 +59,7 @@ onMounted(() => {
     <NMessageProvider placement="top">
       <NDialogProvider>
         <div class="app">
-          <header v-if="!isConversation" class="topnav">
+          <header v-if="!isConversation && !isAuthPage" class="topnav">
             <RouterLink to="/" class="brand">
               <span class="lantern" aria-hidden="true"></span>
               <span class="brand-cn">命运茶馆</span>
@@ -59,10 +82,24 @@ onMounted(() => {
                   <span class="stat-value">{{ account.rewindCount }}</span>
                 </span>
               </div>
+              <div v-if="auth.user" class="user-brief">
+                <NAvatar v-if="auth.user.avatar_url" round :size="28" :src="auth.user.avatar_url" />
+                <span class="user-name">{{ auth.user.display_name }}</span>
+                <NTooltip>
+                  <template #trigger>
+                    <NButton quaternary circle size="small" aria-label="退出登录" @click="logout">
+                      <template #icon
+                        ><NIcon><LogOutOutline /></NIcon
+                      ></template>
+                    </NButton>
+                  </template>
+                  退出登录
+                </NTooltip>
+              </div>
               <ThemeToggle />
             </div>
           </header>
-          <main :class="{ full: isConversation }">
+          <main :class="{ full: isConversation, 'auth-main': isAuthPage }">
             <RouterView />
           </main>
         </div>
@@ -74,8 +111,11 @@ onMounted(() => {
 <style scoped>
 .app {
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .topnav {
@@ -174,6 +214,22 @@ onMounted(() => {
   padding: 4px 0;
 }
 
+.user-brief {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.user-name {
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stat-item {
   display: flex;
   align-items: center;
@@ -204,6 +260,8 @@ onMounted(() => {
 
 main {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
   padding: 28px 24px;
 }
@@ -213,13 +271,30 @@ main.full {
   overflow: hidden;
 }
 
+main.auth-main {
+  padding: 0;
+  overflow: auto;
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .topnav {
-    grid-template-columns: auto 1fr auto;
-    padding: 0 12px;
-    height: 52px;
-    gap: 8px;
+    grid-template-areas:
+      'brand account'
+      'links links';
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: auto;
+    min-height: calc(88px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0
+      max(12px, env(safe-area-inset-left));
+    column-gap: 8px;
+    row-gap: 0;
+  }
+
+  .brand {
+    grid-area: brand;
+    min-width: 0;
+    align-self: center;
   }
 
   .brand-cn {
@@ -232,10 +307,18 @@ main.full {
   }
 
   .links {
+    grid-area: links;
+    align-self: end;
     gap: 2px;
     justify-content: flex-start;
     overflow-x: auto;
     scrollbar-width: none; /* Firefox */
+  }
+
+  .nav-right {
+    grid-area: account;
+    align-self: center;
+    gap: 4px;
   }
 
   .links::-webkit-scrollbar {
@@ -243,27 +326,43 @@ main.full {
   }
 
   .nav-link {
-    padding: 6px 10px;
+    display: grid;
+    min-height: 40px;
+    padding: 6px 12px;
+    place-items: center;
     font-size: 12px;
     letter-spacing: 1px;
     white-space: nowrap;
   }
 
   .account-brief {
-    gap: 8px;
+    display: none;
   }
 
-  .stat-item {
-    padding: 3px 8px;
-    font-size: 12px;
+  .user-brief {
+    gap: 3px;
+    padding-left: 0;
+    border-left: 0;
   }
 
-  .stat-icon {
-    font-size: 13px;
+  .user-name {
+    display: none;
   }
 
   main {
-    padding: 16px 12px;
+    padding: 16px max(12px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+}
+
+@media (max-width: 380px) {
+  .brand {
+    gap: 6px;
+  }
+
+  .brand-cn {
+    font-size: 14px;
+    letter-spacing: 1px;
   }
 }
 </style>

@@ -10,7 +10,8 @@ import (
 )
 
 func (s *Server) getLLMSettings(c *gin.Context) {
-	st, err := s.settings.Get(c.Request.Context())
+	playerID := s.identity.CurrentPlayerID(c.Request.Context())
+	st, err := s.settings.Get(c.Request.Context(), playerID)
 	if err != nil {
 		fail(c, err)
 		return
@@ -21,25 +22,24 @@ func (s *Server) getLLMSettings(c *gin.Context) {
 
 // llmSettingsBody 更新 LLM 设置。api_key 为 nil 时保留原值，避免置空。
 type llmSettingsBody struct {
-	BaseURL            *string  `json:"base_url"`
-	APIKey             *string  `json:"api_key"`
-	Model              *string  `json:"model"`
-	MaxContextTokens   *int     `json:"max_context_tokens"`
-	MaxResponseTokens  *int     `json:"max_response_tokens"`
-	Temperature        *float64 `json:"temperature"`
-	TopP               *float64 `json:"top_p"`
-	StreamEnabled      *bool    `json:"stream_enabled"`
-	RollSystemEnabled  *bool    `json:"roll_system_enabled"`
-	RollDifficultyMode *string  `json:"roll_difficulty_mode"`
+	BaseURL           *string  `json:"base_url"`
+	APIKey            *string  `json:"api_key"`
+	Model             *string  `json:"model"`
+	MaxContextTokens  *int     `json:"max_context_tokens"`
+	MaxResponseTokens *int     `json:"max_response_tokens"`
+	Temperature       *float64 `json:"temperature"`
+	TopP              *float64 `json:"top_p"`
+	StreamEnabled     *bool    `json:"stream_enabled"`
 }
 
 func (s *Server) updateLLMSettings(c *gin.Context) {
+	playerID := s.identity.CurrentPlayerID(c.Request.Context())
 	var b llmSettingsBody
 	if err := c.ShouldBindJSON(&b); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	cur, err := s.settings.Get(c.Request.Context())
+	cur, err := s.settings.Get(c.Request.Context(), playerID)
 	if err != nil {
 		fail(c, err)
 		return
@@ -68,14 +68,8 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 	if b.StreamEnabled != nil {
 		cur.StreamEnabled = *b.StreamEnabled
 	}
-	if b.RollSystemEnabled != nil {
-		cur.RollSystemEnabled = *b.RollSystemEnabled
-	}
-	if b.RollDifficultyMode != nil {
-		cur.RollDifficultyMode = *b.RollDifficultyMode
-	}
 	cur.UpdatedAt = time.Now()
-	if err := s.settings.Save(c.Request.Context(), cur); err != nil {
+	if err := s.settings.Save(c.Request.Context(), playerID, cur); err != nil {
 		fail(c, err)
 		return
 	}
@@ -109,7 +103,7 @@ func (s *Server) fetchModels(c *gin.Context) {
 		apiKey = *b.APIKey
 	} else {
 		// 否则使用数据库中保存的 key
-		settings, err := s.settings.Get(c.Request.Context())
+		settings, err := s.settings.Get(c.Request.Context(), s.identity.CurrentPlayerID(c.Request.Context()))
 		if err == nil && settings.APIKey != "" {
 			apiKey = settings.APIKey
 		}

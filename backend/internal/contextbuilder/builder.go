@@ -27,6 +27,7 @@ const (
 	orderScenario
 	orderPresetSystem
 	orderState
+	orderRuntimeDirective
 	orderSummary
 	orderWorldBook
 	orderStyle
@@ -45,6 +46,8 @@ type Input struct {
 	State          map[string]any
 	Summary        *storage.MemorySummary
 	WorldActivated []worldbook.Activated
+	// RuntimeDirective 是服务端在单次重试中注入的必选约束，不写入聊天历史。
+	RuntimeDirective string
 
 	// History 为时间正序、未隐藏、且已剔除被摘要覆盖部分之外的内部消息。
 	History []storage.ChatMessage
@@ -70,7 +73,7 @@ type Result struct {
 	PromptBudget       int
 	UsedPromptTokens   int
 	IncludedMessageIDs []uuid.UUID
-	ActivatedEntryIDs  []string // 世界书条目 id（模板存文件，id 为字符串）
+	ActivatedEntryIDs  []string // 世界书条目 id（内容存于挑战版本 JSON，id 为字符串）
 }
 
 // Build 在 token 预算内构造 Chat Completion 消息与构建日志。
@@ -129,6 +132,11 @@ func Build(in Input, counter tokenizer.Counter) (*Result, error) {
 
 	// 当前结构化状态（必选，注入要短）。
 	add("current_state", storage.RoleSystem, renderState(in.State), true, orderState, "state")
+	if strings.TrimSpace(in.RuntimeDirective) != "" {
+		add("runtime_directive", storage.RoleSystem,
+			"<runtime_directive>\n"+in.RuntimeDirective+"\n</runtime_directive>",
+			true, orderRuntimeDirective, "runtime")
+	}
 
 	// 摘要记忆（可选）。
 	if in.Summary != nil && in.Summary.Content != "" {

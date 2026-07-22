@@ -12,7 +12,7 @@ ENV TZ=Asia/Shanghai
 
 COPY ./bin/fatecraft ./fatecraft
 
-# 模板数据目录由 compose 挂载到 /app/backend/data（DATA_DIR=data）。
+# 判定配置、响应 Schema 和首次启动材料由 compose 挂载到 /app/backend/data（DATA_DIR=data）。
 RUN chmod +x ./fatecraft && mkdir -p data
 
 EXPOSE 8081

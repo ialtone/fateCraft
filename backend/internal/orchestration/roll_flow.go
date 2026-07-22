@@ -23,6 +23,7 @@ func (g *Generator) runRollFlow(
 	ctx context.Context,
 	conv *storage.Conversation,
 	settings *storage.LLMSettings,
+	difficultyMode string,
 	env protocol.Envelope,
 	displayID uuid.UUID,
 	emit realtime.EmitFunc,
@@ -32,7 +33,7 @@ func (g *Generator) runRollFlow(
 
 	// 客户端已取消则不落库，直接结束。
 	if ctx.Err() != nil {
-		emit(errorEvent(convID, "生成已取消"))
+		emit(infoEvent(convID, "生成已取消"))
 		return
 	}
 
@@ -85,12 +86,6 @@ func (g *Generator) runRollFlow(
 		return
 	}
 
-	// 优先使用对话级难度配置，如果未设置则使用全局配置。
-	difficultyMode := settings.RollDifficultyMode
-	if conv.RollDifficultyMode != nil && *conv.RollDifficultyMode != "" {
-		difficultyMode = *conv.RollDifficultyMode
-	}
-
 	detailedResult := g.roll.CalculateResult(ctx, req, playerState, convID, difficultyMode)
 	outcome := roll.ExecuteRoll(detailedResult, int(req.Sides))
 
@@ -115,7 +110,7 @@ func (g *Generator) runRollFlow(
 
 	// 客户端已取消则不再发起第二阶段。
 	if ctx.Err() != nil {
-		emit(errorEvent(convID, "生成已取消"))
+		emit(infoEvent(convID, "生成已取消"))
 		return
 	}
 
@@ -136,7 +131,7 @@ func (g *Generator) runRollFlow(
 	// runPass 内部已在真实失败/取消时推送错误事件；这里再补一次取消检查，
 	// 覆盖"流式读取正常结束但 ctx 期间被取消"的情形，取消时不落库。
 	if ctx.Err() != nil {
-		emit(errorEvent(convID, "生成已取消"))
+		emit(infoEvent(convID, "生成已取消"))
 		return
 	}
 
@@ -151,11 +146,12 @@ func (g *Generator) runRollFlow(
 		}
 	}
 
-	// 第二阶段收尾：复用通用管线收尾（落库 + 状态 + 动作 + 推事件）。
+	// 第二阶段收尾：动作仍须在落库前预校验；无效结局会丢弃并重试一次。
 	finalMeta := map[string]any{
 		"model":          settings.Model,
 		"after_roll":     true,
 		"roll_result_id": resultDisp.ID.String(),
 	}
-	g.finalizePass(ctx, convID, finalID, env2, pass.raw, finalMeta, false, emit)
+	pass.env = env2
+	g.finalizeCandidate(ctx, conv, settings, pass, finalID, nil, finalMeta, false, false, emit)
 }

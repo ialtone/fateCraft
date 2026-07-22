@@ -58,9 +58,13 @@ const keyLabels: Record<string, string> = {
   location: '位置',
   quests: '任务',
   risks: '风险',
+  traits: '当前特质',
   world_flags: '世界标记',
+  cultivation: '修炼状态',
+  ascension: '飞升准备',
 
   // 通用字段
+  id: '标识',
   name: '姓名',
   age: '年龄',
   gender: '性别',
@@ -77,6 +81,8 @@ const keyLabels: Record<string, string> = {
   count: '数量',
   amount: '金额',
   talent: '天赋',
+  clothing: '服饰',
+  attire: '服饰',
 
   // attributes 下的属性
   health: '生命值',
@@ -134,6 +140,9 @@ const keyLabels: Record<string, string> = {
 
   // 修真相关（轮回试炼）
   cultivation_level: '修为境界',
+  cultivation_stage: '修为阶段',
+  cultivation_progress: '修炼进度',
+  remaining_lifespan: '剩余寿元',
   spiritual_root: '灵根',
   technique: '功法',
   techniques: '功法',
@@ -144,10 +153,83 @@ const keyLabels: Record<string, string> = {
   lifespan: '寿元',
   realm: '境界',
   quantity: '数量',
+  breakthrough_attempts: '突破尝试次数',
+  failed_breakthroughs: '突破失败次数',
+  talent_awakened: '天赋已觉醒',
+  cultivation_method: '当前功法',
+  void_rift_discovered: '已发现虚空裂缝',
+  ascension_token_owned: '持有飞升符',
+  tribulation_preparation: '渡劫准备度',
+  karma_debt: '因果业债',
+}
+
+// 未出现在完整映射中的 snake_case/camelCase 字段，仅在每个词段都可识别时
+// 自动组合中文标签。这样新增同类状态不会直接把整段英文暴露给玩家。
+const keyTokenLabels: Record<string, string> = {
+  current: '当前',
+  max: '最大',
+  remaining: '剩余',
+  cultivation: '修炼',
+  ascension: '飞升',
+  spirit: '灵',
+  stones: '石',
+  lifespan: '寿元',
+  level: '等级',
+  stage: '阶段',
+  progress: '进度',
+  breakthrough: '突破',
+  attempts: '次数',
+  failed: '失败',
+  talent: '天赋',
+  awakened: '已觉醒',
+  method: '功法',
+  void: '虚空',
+  rift: '裂缝',
+  discovered: '已发现',
+  token: '符令',
+  owned: '持有',
+  tribulation: '天劫',
+  preparation: '准备度',
+  karma: '因果',
+  debt: '业债',
+  world: '世界',
+  flags: '标记',
+  is: '是否',
+  has: '拥有',
+}
+
+function translateCompoundKey(key: string): string {
+  const normalized = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+
+  if (normalized.length < 2 || normalized.some((part) => !keyTokenLabels[part])) return key
+  return normalized.map((part) => keyTokenLabels[part]).join('')
 }
 
 function translateKey(key: string): string {
-  return keyLabels[key] || key
+  return keyLabels[key] || translateCompoundKey(key)
+}
+
+const valueLabels: Record<string, string> = {
+  active: '进行中',
+  completed: '已完成',
+  failed: '已失败',
+  pending: '待处理',
+  unknown: '未知',
+  none: '无',
+  male: '男',
+  female: '女',
+}
+
+function formatValue(value: unknown): string {
+  if (value === true) return '是'
+  if (value === false) return '否'
+  if (value === null || value === undefined || value === '') return '未设置'
+  if (typeof value === 'string') return valueLabels[value.toLowerCase()] || value
+  return String(value)
 }
 
 // 判断是否是物品对象（包含 name 和 description）
@@ -157,9 +239,13 @@ function isItemObject(val: any): boolean {
   )
 }
 
-// 获取物品对象的排序键列表
-function getItemKeys(obj: any): string[] {
-  const keys = Object.keys(obj)
+// 技术标识不属于玩家状态信息，避免把内部英文 slug/ID 暴露在状态栏。
+const hiddenTechnicalKeys = new Set(['id', 'slug', 'internal_id', 'event_key'])
+
+// 获取对象的可见键；物品对象优先展示名称、描述和数量。
+function getObjectKeys(obj: any): string[] {
+  const keys = Object.keys(obj).filter((key) => !hiddenTechnicalKeys.has(key))
+  if (!isItemObject(obj)) return keys
   const order = ['name', 'description', 'quantity']
   return order.filter((k) => keys.includes(k)).concat(keys.filter((k) => !order.includes(k)))
 }
@@ -169,7 +255,7 @@ function getItemKeys(obj: any): string[] {
   <div class="tree">
     <template v-if="typeOf(data) === 'object'">
       <div
-        v-for="key in isItemObject(data) ? getItemKeys(data) : Object.keys(data)"
+        v-for="key in getObjectKeys(data)"
         :key="key"
         class="node"
       >
@@ -188,7 +274,7 @@ function getItemKeys(obj: any): string[] {
         </template>
         <div v-else class="leaf">
           <span class="key">{{ translateKey(key as string) }}</span>
-          <span class="val">{{ data[key] }}</span>
+          <span class="val">{{ formatValue(data[key]) }}</span>
         </div>
       </div>
     </template>
@@ -205,7 +291,7 @@ function getItemKeys(obj: any): string[] {
         </div>
       </div>
     </template>
-    <span v-else class="val">{{ data }}</span>
+    <span v-else class="val">{{ formatValue(data) }}</span>
   </div>
 </template>
 

@@ -17,7 +17,7 @@ tasks:
       - go test ./...
 
   backend:build:
-    desc: 交叉编译 Linux amd64 后端二进制，供 Docker 镜像使用
+    desc: 交叉编译 Linux amd64 后端服务，供 Docker 镜像使用
     dir: backend
     env:
       CGO_ENABLED: '0'

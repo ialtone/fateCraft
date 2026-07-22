@@ -17,6 +17,8 @@ type HistoryStore interface {
 	Append(ctx context.Context, convID uuid.UUID, rollType string, success bool) error
 	// Recent 按时间倒序返回最近 limit 条流水（最新在前）。
 	Recent(ctx context.Context, convID uuid.UUID, limit int) ([]storage.RollHistoryEntry, error)
+	// HasSuccess 判断本次挑战是否至少通过过一次服务端判定。
+	HasSuccess(ctx context.Context, convID uuid.UUID) (bool, error)
 }
 
 // recentWindow 计算历史调整时读取的流水条数（与旧内存实现的"最近10次"一致）。

@@ -42,7 +42,7 @@ func TestParseEnvelope_WithAction(t *testing.T) {
 	}
 }
 
-// TestParseEnvelope_WithoutAction 测试没有 action 字段的信封（向后兼容）。
+// TestParseEnvelope_WithoutAction 测试 action 为可选字段的普通叙事信封。
 func TestParseEnvelope_WithoutAction(t *testing.T) {
 	raw := `{
 		"narrative": "普通的剧情推进。",

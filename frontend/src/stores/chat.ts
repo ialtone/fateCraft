@@ -101,6 +101,16 @@ export const useChatStore = defineStore('chat', () => {
     if (msg) msg.streaming = false
   }
 
+  // 服务端在动作预校验失败时撤销整份候选回复；该消息从未落库，必须连同
+  // 已显示的流式增量一起移除，避免玩家把无效结局当成已经发生的剧情。
+  function discardStream(id: string) {
+    messages.value = messages.value.filter((m) => m.id !== id)
+    if (streamingId.value === id) {
+      streamingId.value = null
+      isGenerating.value = false
+    }
+  }
+
   // 删除指定消息之后的所有消息（天道回溯：编辑历史消息后乐观截断时间线）。
   function truncateAfter(messageId: string) {
     const idx = messages.value.findIndex((m) => m.id === messageId)
@@ -147,6 +157,7 @@ export const useChatStore = defineStore('chat', () => {
     beginStream,
     appendDelta,
     endStream,
+    discardStream,
     truncateAfter,
     removeLastAssistant,
     updateMarkdown,

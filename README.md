@@ -1,104 +1,123 @@
 # Fatecraft
 
-基于 `docs/design/` 实现的沉浸式 AI 文字冒险 / 角色扮演平台。前后端分离，对话之间默认互相隔离。
+Fatecraft 是一个版本化挑战驱动的 AI 文字冒险平台。玩家选择管理员已发布的挑战和允许的 Persona，在平台统一的 Prompt、世界书、判定和奖励规则下完成试炼；每个对话的状态、消息和记忆彼此隔离。
 
-- 后端：Go + Gin + GORM（PostgreSQL）+ OpenAI 兼容流式 LLM，WebSocket 推送。
-- 前端：Vue 3 + Vite + TypeScript + Pinia。
+- 后端：Go、Gin、GORM、PostgreSQL、OpenAI 兼容 LLM、WebSocket。
+- 前端：Vue 3、Vite、TypeScript、Pinia、Naive UI。
+- 登录：LinuxDo Connect OAuth 2.0 + PKCE，以及默认关闭的邮箱登录/注册。
 
-## 目录结构
+## 核心架构
 
-```
+PostgreSQL 是运行时挑战内容的唯一权威。角色卡、Persona、场景、Prompt、世界书和奖励规则都属于一个 `challenge_version`，发布后不可原地修改。新对话固定保存版本 ID 和内容哈希，因此管理员发布新版本不会改变已经开始的挑战。
+
+普通用户只能：
+
+- 查看已发布挑战及公开奖励概要。
+- 选择挑战允许的 Persona。
+- 创建和操作自己的对话。
+
+管理员可以创建挑战包、复制草稿版本、编辑完整版本 JSON、执行发布校验，并统一设置判定开关和难度。Prompt、世界书、场景、角色和奖励规则没有普通用户读写 API。
+
+成功结局只允许模型提交 `reward_key`。后端按对话固定版本读取结构化奖励规则，校验服务端 `roll_history`，计算奖励，并在同一 PostgreSQL 事务中更新账号、写入唯一 `challenge_run` 和结束对话。
+
+## 内置玩法：飞升试炼
+
+当前官方挑战是“飞升试炼”。玩家从凡人或低阶修士起步，在寿元耗尽前通过任务、探索、战斗、炼制和闭关积累修为与灵石。突破需要模型发起天命判定，由后端掷骰并保存真实流水；失败可能消耗资源、寿元或造成境界倒退。
+
+一局的主要抉择是“继续提高境界争取更高奖励，还是尽早以较安全的路线离场”：
+
+- 正统渡劫：至少化神期，完成九波雷劫，成功后按局内灵石的 3 倍结算。
+- 虚空裂缝：至少元婴期，发现裂缝并通过穿越判定，成功后按 2 倍结算。
+- 仙缘传送：至少结丹期并取得飞升符，风险最低，成功后按 1.5 倍结算。
+- 主动坐化是 `neutral` 结局，寿元耗尽或陨落是 `bad` 结局，二者都不发放挑战奖励。
+
+境界与寿元表、资源循环、完整路线条件、结构化状态、结算事务和当前尚未硬校验的边界，统一维护在 [飞升试炼玩法规格](docs/design/14-ascension-trial-gameplay.md)。协议示例见 [AI 动作示例](docs/design/12-ai-actions-examples.md)。
+
+## 目录
+
+```text
 backend/
-  cmd/server/main.go      入口，装配依赖（组合根）
-  internal/               config / storage / filestore / contextbuilder / llm / realtime / api / tokenizer / 各领域服务
-                          orchestration 生成编排管线（上下文→LLM→解析→落库→应用状态→动作→推送）
-                          protocol 模型输出信封协议（narrative/state_update/action/roll_request 解析与流式提取）
-                          roll 天命判定（判定计算 / 历史调整 / 词表与特质匹配）
-                          identity 玩家身份抽象（单用户 Provider，为多用户预留）
-  scripts/sql/init.sql    数据库初始化脚本（手动执行）
-  data/                   模板与配置数据目录（预设包 / 共享资源 / 判定配置 / 输出 schema），可由 DATA_DIR 改址
-  .env.example            环境变量样例
+  cmd/server/             HTTP 与 WebSocket 服务组合根
+  internal/challenge/     挑战查询、版本发布、哈希与奖励结算
+  internal/challengeimport/ 仓库挑战材料加载、导入与空库初始化策略
+  internal/orchestration/ 上下文、LLM、判定和动作编排
+  internal/storage/       PostgreSQL 模型与仓储
+  scripts/sql/init.sql    空数据库权威 schema
+  data/preset_packs/      空库首次启动使用的官方挑战材料
+  data/roll_config.yaml   判定算法与词表
+  data/schemas/           模型结构化输出 Schema
 frontend/
-  src/                    api / stores / views / components / types
-docker/                   Docker 部署（compose、镜像、env、自动备份），见 docker/README.md
-Taskfile.yml              go-task 任务入口（开发/构建/测试）
+  src/views/              挑战首页、对话、设置与管理员页面
+  src/stores/             会话、挑战、对话和运行时状态
+docs/design/              正式设计文档
 ```
 
-## 后端运行
+## 首次初始化
 
-数据库由你手动初始化。使用 `backend/scripts/sql/init.sql` 建表（权威 schema）：
+这是新项目结构，不包含旧表兼容、迁移或 AutoMigrate 旁路。请创建或清空 `fatecraft` 数据库后，通过 Navicat 连接该数据库并完整执行 [init.sql](backend/scripts/sql/init.sql)。脚本会一次创建认证、挑战版本、对话、上下文、判定和结算表。
 
-```bash
-# 创建数据库和用户
-psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE fatecraft WITH ENCODING='UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=template0;"
-psql -h localhost -p 5432 -U postgres -c "CREATE USER fatecraft WITH PASSWORD 'fatecraft-dev';"
-psql -h localhost -p 5432 -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE fatecraft TO fatecraft;"
-psql -h localhost -p 5432 -U postgres -d fatecraft -c "GRANT ALL ON SCHEMA public TO fatecraft;"
-
-# 执行初始化脚本
-psql -h localhost -p 5432 -U fatecraft -d fatecraft -f backend/scripts/sql/init.sql
-```
-
-模板数据不入数据库，存放在 `backend/data/` 下，启动时自动加载：
-
-- `preset_packs/reincarnation-trials/` — 内置修仙预设包「轮回试炼」，含 characters（命运编织者 / 天道试炼官 / 轮回引路人）/ personas（剑修、炼丹师等玩家人设）/ scenarios（轮回之门 / 命运长河 / 天道试炼场）/ prompts（飞升试炼预设）/ worldbooks（飞升系统设定），预设包内容整体只读；
-- `shared/` — 运行时可写目录（characters / personas / scenarios / prompts），前端新建或编辑模板时后端写回这里的 JSON 文件，初始为空；
-- `schemas/narrative_response.json` — 模型结构化输出的 JSON Schema；
-- `roll_config.yaml` — 天命判定系统配置（判定类别、情境修正词表、收益平衡等）。
-
-然后配置并启动后端：
+然后配置 `backend/.env` 并启动后端：
 
 ```bash
 cd backend
-cp .env.example .env        # 填写 DATABASE_URL，可选 LLM_API_KEY
-go mod tidy
-go run ./cmd/server         # 监听 :8081
+go run ./cmd/server
 ```
 
-> LLM 的 Base URL / API Key / 模型可在前端「设置」页配置，或写入 `llm_settings` 表 / `LLM_API_KEY` 环境变量。
+后端发现 `challenge_packs` 完全为空时，由独立的 `internal/challengeimport` 模块在事务中读取 `data/preset_packs/*`，校验资源引用和奖励规则、计算稳定内容哈希，并自动发布内置挑战。多个后端同时首次启动会通过 PostgreSQL advisory lock 串行初始化。
 
-## 前端运行
+只要数据库已经存在任意挑战包，启动过程就完全跳过内置内容初始化，不读取、不升级也不覆盖数据库内容。仓库内置玩法提升版本后，由管理员进入“内置内容”检查版本与哈希并显式导入发布；自定义玩法仍通过草稿编辑器维护。
 
 ```bash
 cd frontend
-npm install
-npm run dev                 # 监听 :5173，自动代理 /api 与 /ws 到 :8081
+pnpm install
+pnpm dev
 ```
 
-打开 http://localhost:5173 ，新建对话即可开始。
+默认地址是前端 `http://localhost:5173`、后端 `http://localhost:8081`。前端开发服务器代理 `/api` 和 `/ws`。
 
-## Task 与 Docker
+## 登录配置
 
-装有 [go-task](https://taskfile.dev) 时可用统一入口（任务清单见 `Taskfile.yml`）：
+首个创建的用户自动成为管理员，后续用户默认为普通用户。服务端会话使用随机令牌，数据库只保存令牌哈希；会话默认有效期为 14 天，可通过 `AUTH_SESSION_TTL` 调整。
+
+邮箱登录、注册、邮箱验证码、邀请码和 SMTP 发信均由管理员在“管理 -> 账号与注册”中维护，保存后立即生效。SMTP 密码经 AES-GCM 加密后写入数据库；部署前必须配置一个至少 32 字符且长期保持不变的密钥：
+
+```env
+AUTH_DATA_ENCRYPTION_KEY=replace-with-a-long-random-secret
+```
+
+验证码只保存 bcrypt 摘要，最多尝试 5 次且只能消费一次。邀请码使用高熵随机值，数据库只保存 SHA-256 摘要；邀请码原文只在管理员创建后展示一次。邮箱注册默认关闭，邮箱登录默认开启。
+
+LinuxDo Connect 需要在应用后台登记完全一致的回调地址：
+
+```text
+本地：http://localhost:5173/api/auth/linuxdo/callback
+生产：https://你的域名/api/auth/linuxdo/callback
+```
+
+对应环境变量为 `LINUXDO_CLIENT_ID`、`LINUXDO_CLIENT_SECRET`、`LINUXDO_REDIRECT_URI`。不要提交包含真实密钥的 `.env`，也不要在已保存 SMTP 密码后随意更换 `AUTH_DATA_ENCRYPTION_KEY`。
+
+## 内容发布
+
+管理员登录后进入“管理 -> 挑战内容”：
+
+1. 从当前发布版本复制一个新版本草稿，或新建挑战包和首个草稿。
+2. 编辑 `manifest`、`assets`、`reward_rules` 组成的版本文档。
+3. 保存草稿。
+4. 执行“校验并发布”。
+
+发布会检查 Manifest 与挑战包的一致性、资源类型与 ID、`system_master`、`settlement_security`、`output_schema` 三个核心 Prompt 分段、世界书条目、奖励条件和 Prompt 奖励引用。锁定草稿后，校验、SHA-256 计算和当前版本切换在同一事务内完成。
+
+## 验证
 
 ```bash
-task backend:dev        # 本机跑后端（:8081）
-task frontend:dev       # 本机跑前端（:5173）
-task backend:test       # go vet + go test
-task backend:build      # 交叉编译 Linux amd64 二进制 → docker/backend/bin/
-task frontend:build     # 前端产物 → docker/frontend/dist/
+cd backend
+go test ./...
+go vet ./...
 ```
-
-Docker 部署（PostgreSQL 18 + 每日自动备份 sidecar + 后端，生产另含 nginx 前端站点）：
 
 ```bash
-task backend:build && task frontend:build
-cd docker
-docker compose -f docker-compose.dev.yml up --build          # 开发：后端 :8081
-docker compose -f docker-compose.prod.yml up --build -d      # 生产：前端入口 :8088
+cd frontend
+pnpm build
 ```
 
-数据库需要手动初始化（见 `docker/README.md`）；模板 JSON 目录直接挂载进容器。详见 `docker/README.md`。
-
-## 关键设计落点
-
-- **对话隔离**：所有运行时表带 `conversation_id`，仓储层强制按对话查询；模板（角色卡 / Persona / 场景 / Prompt 预设 / 世界书）存放于 `backend/data/` 下的 JSON 文件（每个模板一个文件，id 即文件名 slug），可跨对话复用，但不携带运行时记忆。
-- **上下文管理**：`contextbuilder` 按 token 预算装配（必选段超预算直接报错、不发请求），倒序填充最近历史，世界书按关键词 + 预算激活，写入 `context_build_logs` 供「上下文检查器」展示。
-- **结构化状态**：模型输出 `{narrative, state_update, action}` 信封；后端按路径白名单校验后应用补丁并记录修订；AI 可通过 action 字段触发系统级操作（如自动结束对话）。
-- **生成流程**：WebSocket `user_input` → 校验 active + 抢生成锁 → 保存用户消息 → 构造上下文 → 流式回复 → 解析 → 应用状态 → 处理动作 → 落库 → 推送。
-
-## 测试
-
-```bash
-cd backend && go test ./...     # contextbuilder 预算 / state 路径白名单 / worldbook 扫描 / action 解析
-```
+数据库 schema、主要 HTTP 路由、内容生命周期和玩法维护索引详见 [设计文档](docs/design/README.md)。
