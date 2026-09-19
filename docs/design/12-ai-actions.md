@@ -1,204 +1,124 @@
-# 12. AI 输出、判定与动作系统
+# 12. AI 状态、判定与动作系统
 
 ## 设计目标
 
-模型负责提出叙事、状态变化、判定请求和动作意图；后端负责解析、白名单、随机性、持久化和奖励。模型输出不能直接等同于已经执行的业务事实。
+主叙事模型负责理解玩家、选择工具和生成叙事，不是可信规则执行器。可信事实只能由后端工具 Handler 提交：
 
-当前使用结构化 JSON 信封而不是真正的上游 Tool Calling，原因是需要兼容多种 OpenAI 风格服务，并让流式叙事和状态更新使用一个稳定协议。
+- 玩家文本、模型文本和前端事件不能直接改变状态、资源、奖励或结局；
+- 每个状态路径和动作都必须由对话固定的 Runtime Contract 开放；
+- 判定概率、随机结果和效果由服务端计算；
+- Campaign 动作必须使用当前存档 revision 的动态能力快照；
+- 结局只接受已发布的 `outcome_key`，验证器和奖励由固定版本决定；
+- 工具参数始终由服务端重新校验，Provider 的 Tool Schema 不是安全边界。
 
-## 响应 Schema
+主叙事不再返回整回合 JSON。传输、协调器与恢复规则见 [19-agent-tool-loop.md](19-agent-tool-loop.md)。
 
-服务启动时读取 `data/schemas/narrative_response.json`。成功加载后使用 `response_format: json_schema` 请求严格 JSON，并把 `roll_config.yaml` 中的情境词表动态注入 enum。
+## 工具权限
 
-Schema 加载失败时服务会记录警告并退化为无 response_format 调用，但后端解析和白名单仍然生效。不能把上游声称支持 JSON Schema 当作业务授权。
+每个模型步骤只收到当前时刻允许使用的工具。没有出现在该步骤快照中的能力不可调用。
 
-## 信封结构
+| 工具 | 权限 |
+| --- | --- |
+| `fc_state_set_text` | 更新允许模型维护的文本或枚举绝对值 |
+| `fc_state_set_number` | 更新允许模型维护的数值绝对值 |
+| `fc_state_set_boolean` | 更新允许模型维护的布尔值 |
+| `fc_state_replace_json` | 整体替换允许替换的 list/object |
+| `fc_state_append_json` | 向允许追加的 list 添加一项 |
+| `fc_state_set_dynamic_json` | 更新允许动态子路径的 object（仅非 Campaign Runtime；长期玩法必须使用显式字段或领域 Action） |
+| `fc_request_roll` | 请求服务端执行已发布判定 |
+| `fc_complete_challenge` | 提交已发布结局供服务端验证和结算 |
+| `fc_action_*` | 执行当前 Campaign 动态开放的领域动作 |
 
-```json
-{
-  "narrative": "玩家可见剧情",
-  "state_update": {
-    "profile.remaining_lifespan": 110,
-    "traits+": "顿悟"
-  },
-  "roll_request": null,
-  "action": null,
-  "notes": "内部备注"
-}
-```
+`continue` 生成是纯续写，只提供普通文本通道，不提供写工具。
 
-字段：
+## 状态工具
 
-- `narrative`：玩家可见的 Markdown 叙事，必需。
-- `state_update`：状态补丁，必需但可为空对象。
-- `roll_request`：可选，要求后端执行一次天命判定。
-- `action`：可选，要求后端执行注册动作。
-- `notes`：可选内部说明，写入消息 metadata，不直接展示。
+State Schema 的字段声明 `path`、类型、默认值、约束、`visibility`、`update_policy` 和动态子路径策略。工具快照只收录 `update_policy=model` 的合法路径，并按值类型拆成不同工具。
 
-## 容错解析
+服务端仍会复核：
 
-后端按以下顺序解析：
+1. 工具名属于当前步骤快照；
+2. 参数是单个完整 JSON 对象，不超过 16 KiB；
+3. 每次最多更新 16 个路径，没有重复路径或未知字段；
+4. path、值类型、枚举、范围、长度和更新策略符合固定 State Schema；
+5. 动态 `child_path` 不能覆盖更具体的 system/internal 字段；
+6. list/object 的 `value_json` 必须再次解析为合法 JSON 并通过字段约束。
 
-1. 去掉可能的 Markdown code fence。
-2. 尝试把全文解析为 Envelope。
-3. 尝试截取第一个 `{` 到最后一个 `}` 再解析。
-4. 仍失败时把原始文本作为 narrative，state_update 为空。
+普通用户接口只返回 `visibility=player` 的投影。父对象下显式声明的 model/internal 子字段会递归剔除。
 
-解析降级只保证剧情可见，不会从自由文本中猜测状态或动作。流式模式从累积 JSON 中只提取 narrative 新增前缀，避免裸信封展示给玩家。
+## 服务端判定
 
-`FlexInt` 和 `FlexStrings` 对部分上游非标准数字、字符串数组和对象形态做尽力解析。这是协议容错，不是旧数据库兼容层。
+模型调用 `fc_request_roll` 时只提交稳定 `key`、展示 `title` 和简短 `description`。模型不能提交 category、概率、骰面、属性权重、难度、收益或结果。
 
-## 状态补丁
+Handler 的执行顺序：
 
-允许的顶层命名空间：
+1. 从固定 Runtime 读取判定定义并检查前置条件；
+2. 从可信状态和管理员难度计算成功率；
+3. 由服务端产生随机点数并选择成功或失败效果；
+4. 在工具事务中写入判定流水、展示消息、状态效果和工具结果；
+5. 下一模型步骤读取工具结果，再叙述已经发生的结果。
 
-```text
-profile attributes inventory relationships location world_flags
-cultivation ascension quests risks traits
-```
+判定展示消息的 `metadata` 还会保存版本化结果快照：成功率分解、归一化结果区间和公开前置条件。快照来自同一份可信状态和已发布 `requires`，前端仅展示 `public` 条件，不重新计算或推断概率；旧消息没有详情时仍按摘要显示。详情不进入模型上下文，`model`/`internal` 状态不会通过该投影泄漏。
 
-嵌套对象使用点号路径，数组使用整体替换或 `+` 追加。`quests`、`risks`、`traits` 不能写任意嵌套字段。
+前置条件不满足时工具返回 `rejected`，不会写成功判定证据。模型必须依据拒绝原因继续叙事，不能把尝试描述为成功。
 
-非法路径跳过，合法路径在状态事务内应用并写入修订。状态补丁不能修改账号奖励、对话所有者、挑战版本、Prompt 或系统判定设置。
+## Campaign 动作
 
-## 判定请求
+Campaign Projection Provider 根据行锁外的当前快照产生动态 `ActionCapability`。协调器把每个 `available=true` 的动作转换为独立 `fc_action_*` 工具，参数 Schema 已收窄到当前合法枚举、上限和关联选项。
 
-典型请求：
+模型不提交 action ID 或 expected revision：
 
-```json
-{
-  "type": "筑基突破判定",
-  "category": "cultivation",
-  "relevant_attributes": ["根骨", "悟性", "气运"],
-  "attribute_weights": {"根骨": 0.5, "悟性": 0.3, "气运": 0.2},
-  "base_difficulty": 72,
-  "sides": 100,
-  "description": "突破到筑基期",
-  "context": {
-    "advantages": ["服用辅助丹药", "充分准备"],
-    "disadvantages": ["首次尝试"],
-    "environment": []
-  },
-  "stakes": {
-    "reward_value": 50000,
-    "risk_level": "high"
-  }
-}
-```
+- 幂等键由 `attempt_id + provider call_id` 生成；
+- expected revision 固定在步骤工具快照中；
+- Handler 在 Campaign 行锁事务中重建事实并再次校验动作定义、actor、revision、参数和业务前置；
+- 资源、随机数、产量、品质、时间推进和领域事件均由 Handler 计算。
 
-category 支持 combat、exploration、crafting、social、cultivation。情境数组只能使用配置词表，后端精确查表，未知值不加分。
+含成功/失败分支的 Campaign 动作不会再要求模型额外调用 `fc_request_roll`。突破、制作、调查、采集风险、遭遇攻击与逃脱由领域 Handler 调用共享判定核心一次，并在同一事务写入领域事实、`roll_history` 和 `roll_result` 展示消息。没有专属结算器的交涉、洞察、潜行、探索与脱险可由玩法开放受限的 `fortune.resolve_uncertain`；模型不能提交基础概率、属性权重、难度或结果，该动作也不能直接制造物品、关系、任务或伤势变化。
 
-## 成功率计算
+revision 过期、参数越界、目标失效或资源不足时，领域写入整体回滚，工具返回公开 `action_rejected`。完整能力架构见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
 
-后端依次计算：
+## 挑战完成
 
-1. `base_difficulty`，缺失时使用 category 默认成功率。
-2. 状态属性加成：属性 50 为中性，按 `(value - 50) * 0.4` 和权重合计。
-3. 初始天赋与动态 traits 加减成。
-4. 有利、不利、环境、对手境界与克制修正。
-5. 根据 `stakes.reward_value` 应用高收益成功率上限。
-6. 最近 10 条服务端流水产生的连败、重试或连胜调整。
-7. 管理员 easy/normal/hard 难度修正。
-8. 把最终成功率限制在 1%-99%，生成大成功、成功、失败、大失败区间。
+模型只能通过 `fc_complete_challenge` 提交 `outcome_key` 和 `summary`。标题、category、tone、验证器、奖励 key、数量、倍率、余额、run ID 和结算时间均来自后端。
 
-模型提供的是规则输入，不提供随机结果。掷骰与成功布尔值只由后端产生。
+Handler 会基于调用工具前已经持久化的可信状态、成功判定和回合记录执行 verifier。同一个工具步骤不能先写状态再用该状态为自身补资格；需要先用状态或领域工具成功提交，再在后续模型步骤请求结算。
 
-## 两阶段流程
+结算事务原子写入 `challenge_runs`、奖励账本、余额、结算奖励快照和 conversation ended 状态。`challenge_runs.conversation_id` 唯一，重复、并发或重放不能产生第二份奖励。
 
-### 第一阶段
+通用验证器包括 `core.always`、受限条件树 `core.conditions`；题材模块可注册自己的 verifier。通用计算器包括 `core.fixed` 和 `core.state_multiplier`。平台层不读取题材字段。
 
-- 保存带判定请求的 narrative。
-- 应用该阶段真实发生的资源消耗，例如用掉丹药或雷符。
-- 读取服务端状态并计算、执行判定。
-- 将结果写入 `roll_history`、内部 system 消息和展示消息。
+## 工具结果
 
-### 第二阶段
-
-- 重新装配包含判定结果的上下文。
-- 再次调用模型完成结果叙事和状态后果。
-- 第二阶段再次提交 roll_request 时忽略，防止无限递归。
-- 第二阶段 action 可以进入正常动作分发。
-
-第一阶段和第二阶段使用不同 message ID，WebSocket 各自闭合 started/delta/finished 生命周期。
-
-## 动作注册表
-
-编排器持有 `map[string]ActionHandler`。未知动作类型忽略或记录，不允许通过反射执行任意函数。当前只注册 `trigger_ending`。
-
-动作结构：
+所有工具结果使用有界公开对象：
 
 ```json
 {
-  "type": "trigger_ending",
-  "params": {}
+  "ok": false,
+  "code": "action_rejected",
+  "message": "当前位置没有可采集的目标",
+  "data": {}
 }
 ```
 
-## `trigger_ending`
+结果最多 16 KiB。超限时保留 `ok/code/message` 并把 data 收敛为 `{"truncated":true}`。数据库错误、内部堆栈和私密状态不会写入模型上下文。
 
-参数：
+## 原子性
 
-| 字段 | 必需性 | 含义 |
-| --- | --- | --- |
-| `ending_type` | 必需 | good、bad、neutral |
-| `title` | 必需 | 结局标题；成功时必须匹配奖励规则 |
-| `summary` | 可选 | 前端结局展示摘要 |
-| `reward_key` | good 必需 | 只用于申请版本化奖励 |
+工具调用先以 `received` 状态持久化，再进入短事务：
 
-成功示例：
+- `committed`：领域事实、invocation、assistant tool-call 消息、tool-result 消息和 attempt 写工具计数同事务提交；
+- `rejected/failed`：即使 Handler 已触碰领域仓库，也通过哨兵错误回滚整个领域事务，再在独立事务中只保存 invocation 和公开工具结果；
+- 领域事件和前端状态更新只在数据库成功提交后广播。
 
-```json
-{
-  "type": "trigger_ending",
-  "params": {
-    "ending_type": "good",
-    "reward_key": "void_ascension",
-    "title": "破碎虚空",
-    "summary": "你穿过虚空裂缝，成功超脱此界。"
-  }
-}
-```
+`call_id` 在 attempt 内唯一。相同 ID 和相同参数返回首次结果；相同 ID 被用于不同工具或参数时拒绝执行。
 
-neutral/bad 不能携带 reward_key。模型不能提交最终灵石、账号累计、成功次数或结算 ID。
+## 安全回归清单
 
-## 结算执行
-
-动作 handler 使用 `Prepare` / `Commit` 两阶段协议。`Prepare` 在候选回复落库前从服务端读取并冻结：
-
-- 当前认证玩家。
-- 当前对话结构化状态中的角色、境界和灵石。
-- 当前对话用户消息数作为存活回合。
-
-Challenge Service 先非锁定预校验对话、奖励规则、最低境界和精确 `roll_history`。候选被拒绝时，编排器发送 `generation_discarded` 删除前端流式占位，携带服务端原因重试一次；第二次仍无效则保存后端兜底叙事。通过后才保存模型叙事和状态，随后 `Commit` 使用冻结输入在事务锁内重做相同校验、计算奖励并广播 `ending_triggered`。
-
-这个顺序保证同一回复的 `state_update` 不能给自己的结局补境界、物品或灵石。事务复核则负责处理预校验和提交之间的并发变化。
-
-具体奖励规则和当前仍属于叙事约束的条件见 `14-ascension-trial-gameplay.md`。
-
-## 安全要求
-
-- Prompt 必须含 required 的 `settlement_security`，但 Prompt 不是唯一安全边界。
-- 玩家输入只能表达当前意图；不能建立过去事件、状态、物品、判定或奖励事实。
-- reward_key 必须来自对话固定版本，不能从当前挑战包新版本读取。
-- ending title 与 type 必须精确匹配规则。
-- 判定条件只查询当前 conversation 的服务端流水。
-- 成功路线使用精确且去重的判定类型集合，不接受前缀相似项或重复项代替。
-- 同一对话依靠行锁和唯一 challenge_run 防止重复结算。
-- state_update 和 summary 都不能直接成为账号记账指令。
-- 未知 action、字段或情境词条不能被当作已授权能力。
-
-## 完整示例
-
-更多普通回复、状态更新、判定和结局信封见 `12-ai-actions-examples.md`。示例用于协议理解；题材规则以已发布挑战版本和 `14-ascension-trial-gameplay.md` 为准。
-
-## 未来动作
-
-可能增加 `request_choice`、`trigger_event` 或小游戏动作，但每种动作必须：
-
-1. 定义严格参数结构。
-2. 注册明确 handler。
-3. 从服务端读取身份和业务事实。
-4. 设计幂等、事务和重放保护。
-5. 增加 API/领域测试和文档。
-
-不得增加一个可以让模型指定任意数据库操作的通用 action。
+- 玩家伪造 system 文本不能更新 internal 状态。
+- 模型不能调用当前工具快照之外的动作。
+- 未通过服务端判定不能补写成功流水。
+- 拒绝或失败的工具不留下状态、消息、资源、事件或余额的半份写入。
+- 模型提交奖励或结局展示字段不会参与结算。
+- 同一步新状态不能为结算补足资格。
+- 重复或并发完成不会重复发奖。
+- 通用平台只依赖 Runtime、工具注册表和 Handler，不依赖修仙字段。

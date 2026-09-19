@@ -10,11 +10,9 @@ import (
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
-// HistoryStore 是判定历史的持久化接口（消费端定义，*storage.RollHistoryRepo 天然满足）。
-// 历史入库使连败补偿/连胜惩罚跨进程重启仍然生效。
+// HistoryStore 是判定历史的只读接口（消费端定义，*storage.RollHistoryRepo 天然满足）。
+// 写入只能走 orchestration.RollCommitter，确保流水、消息与状态效果原子提交。
 type HistoryStore interface {
-	// Append 追加一条判定流水。
-	Append(ctx context.Context, convID uuid.UUID, rollType string, success bool) error
 	// Recent 按时间倒序返回最近 limit 条流水（最新在前）。
 	Recent(ctx context.Context, convID uuid.UUID, limit int) ([]storage.RollHistoryEntry, error)
 	// HasSuccess 判断本次挑战是否至少通过过一次服务端判定。
@@ -26,7 +24,7 @@ const recentWindow = 10
 
 // historyAdjustment 从最近的判定流水（最新在前）计算历史调整值。
 // 纯函数：连败补偿、同类行动重试加成、高收益连胜惩罚。
-func historyAdjustment(recent []storage.RollHistoryEntry, rollType string, rewardValue int, config *Config) int {
+func historyAdjustment(recent []storage.RollHistoryEntry, rollKey string, rewardValue int, config *Config) int {
 	if len(recent) == 0 {
 		return 0
 	}
@@ -70,7 +68,7 @@ func historyAdjustment(recent []storage.RollHistoryEntry, rollType string, rewar
 
 	// 同类行动重试加成（上一次同类判定失败后重试）
 	last := recent[0]
-	if last.RollType == rollType && !last.Success {
+	if last.RollKey == rollKey && !last.Success {
 		adjustment += config.HistoryAdjust.SameActionRetry.Bonus
 	}
 
@@ -84,7 +82,7 @@ func historyAdjustment(recent []storage.RollHistoryEntry, rollType string, rewar
 }
 
 // getAdjustment 读取流水并计算历史调整；读取失败时记日志并按无历史处理（判定不因此失败）。
-func (s *Service) getAdjustment(ctx context.Context, convID uuid.UUID, rollType string, rewardValue int) int {
+func (s *Service) getAdjustment(ctx context.Context, convID uuid.UUID, rollKey string, rewardValue int) int {
 	if s.history == nil {
 		return 0
 	}
@@ -94,5 +92,5 @@ func (s *Service) getAdjustment(ctx context.Context, convID uuid.UUID, rollType 
 			zap.String("conversation_id", convID.String()), zap.Error(err))
 		return 0
 	}
-	return historyAdjustment(recent, rollType, rewardValue, s.config)
+	return historyAdjustment(recent, rollKey, rewardValue, s.config)
 }

@@ -1,261 +1,339 @@
-# 13. 挑战内容、版本与结算
+# 13. 挑战内容、版本、玩法模块与结算
 
 ## 设计目标
 
-挑战系统要同时满足：
+挑战系统负责把一套可维护内容冻结成可验证、可复现的运行版本。它必须同时满足：
 
-- 平台可以持续发布新玩法和新版本。
-- 玩家只能选择公开、安全的入口，不接触技术内容。
-- 一局开始后规则不随管理员更新漂移。
-- 发布内容可审计、可校验、不可原地修改。
-- 成功奖励可由后端验证并且不能重复领取。
+- 不同题材共享版本、对话、状态、判定、结算和奖励基础设施；
+- 特殊规则仍运行在可信后端，而不是 Prompt 或前端；
+- 已开始的对话不受后来发布影响；
+- 普通用户只能看到公开投影，不能读取 Prompt、隐藏状态和验证条件；
+- 模型不能决定结局是否成立或奖励发多少；
+- 奖励可被其他玩法或平台功能作为前置条件。
 
 ## 聚合边界
 
-`challenge_pack` 是稳定入口，`challenge_version` 是完整快照。版本拥有：
+~~~text
+ChallengePack（稳定入口）
+  `-- ChallengeVersion（不可变快照）
+        |-- Manifest
+        |-- Runtime Contract
+        |-- Assets
+        |     |-- Character
+        |     |-- Persona
+        |     |-- Scenario
+        |     |-- Prompt
+        |     `-- WorldBook
+        |-- Outcome Rules
+        `-- Reward Rules -> global Reward Definitions
+~~~
 
-- Manifest。
-- Character 资产。
-- 一个或多个 Persona 资产。
-- Scenario 资产。
-- Prompt 资产及其分段。
-- 一个或多个 WorldBook 资产。
-- Reward rules。
-
-这些内容必须作为整体发布。不能让 Prompt 使用版本 A、世界书使用版本 B、奖励读取当前最新版本。
+Pack 只表达稳定入口和当前发布版本。所有会影响生成、状态、展示、验证和奖励的内容必须属于 Version 并进入内容哈希。
 
 ## Manifest
 
-Manifest 负责版本公开元数据和资产引用，核心结构：
+Manifest 是公开元数据与入口声明，不承载技术运行细节：
 
-```json
+~~~json
 {
-  "id": "reincarnation-trials",
-  "name": "飞升试炼",
+  "id": "midnight-case",
+  "name": "午夜疑案",
   "version": "1.0.0",
-  "description": "...",
-  "author": "ialtone",
-  "tags": [],
+  "runtime_entry": "runtime/runtime.json",
+  "description": "在午夜前保存证据并指出真凶。",
+  "author": "Fatecraft",
+  "icon": "search",
+  "tags": ["悬疑", "调查"],
   "default_config": {
-    "recommended_character": "heavenly-dao-proctor",
-    "recommended_persona": "rogue-cultivator",
-    "recommended_scenario": "heavenly-trial",
-    "recommended_prompt": "ascension-trials",
-    "required_worldbooks": ["ascension-system"],
-    "allowed_personas": ["rogue-cultivator"]
+    "recommended_character": "case-narrator",
+    "recommended_persona": "private-investigator",
+    "recommended_scenario": "midnight-manor",
+    "recommended_prompt": "midnight-case-v1",
+    "required_worldbooks": ["midnight-case-rules"],
+    "allowed_personas": ["private-investigator"]
   },
-  "quick_start_guide": "...",
-  "features": []
+  "quick_start_guide": "检查现场并在倒计时结束前提出指控。",
+  "features": ["证据完整度", "服务端指控判定", "多奖励"],
+  "entry_requirement": {
+    "type": "reward_balance",
+    "reward_key": "another-pack.ticket",
+    "operator": "gte",
+    "quantity": 1
+  }
 }
-```
+~~~
 
-发布时 Manifest 的 id、name、description 必须与挑战包一致，version 必须与版本记录一致。recommended 资产必须存在；设置 allowed_personas 时，recommended Persona 必须位于其中。
+`entry_requirement` 可选，首批支持 `reward_balance` 与有界 `all/any` 组合。挑战列表只做体验提示；真正创建对话时后端重新检查当前用户余额。
+
+## Runtime Contract
+
+Runtime 与 Manifest 分离。玩法包通过 `pack.json.runtime_entry` 指向 Runtime 入口；入口只保存契约版本、引擎、模式和分层文件引用，导入器会严格解析并编译成数据库中的单一 Runtime 快照：
+
+~~~json
+{
+  "$schema": "fatecraft.runtime.schema.json",
+  "runtime_contract_version": 2,
+  "engine": {"key": "core.generic", "version": 1},
+  "mode": "challenge",
+  "includes": {
+    "state_schema": "state-schema.json",
+    "actions": "actions.json",
+    "settlement": "settlement.json",
+    "presentation": "presentation.json"
+  }
+}
+~~~
+
+Runtime 子文件分别保存 `state_schema`、`actions`、`settlement` 和 `presentation`。Campaign 模式额外通过 `includes.campaign` 引用 Campaign 配置。入口和所有被引用文件必须位于当前玩法包目录内，不能使用绝对路径、脚本或任意表达式。入口格式的 JSON Schema 位于 `backend/data/schemas/fatecraft.runtime.schema.json`；后端还会执行跨文件和模块级语义校验。`value_labels` 的命名空间和值必须是稳定 key，标签不能为空且长度受限；未知 engine、版本、action、verifier、calculator、settlement handler、状态类型或前端控件都会阻止发布。稳定值不因本地化改变。
+
+Campaign View 是玩法包提供的纯展示契约。`renderer` 当前只能为 `generic`；字段路径只能引用公开 Campaign Snapshot，集合通过 `item_fields` 声明可读标签，`visible_when` 仅支持存在、相等和有限数值比较。动作槽的 key 必须同时存在于当前 Runtime 的 `campaign.action_allowlist` 和玩法模块注册表，参数绑定只能读取公开快照或有限的 item/option/input 上下文。View 的数量、大小和嵌套深度受校验限制，不能声明权限、写库、随机或结算。
+
+普通对话可在同一 Presentation 下声明 `guidance.groups`。每个项目必须是 `message` 或 `action`：前者进入普通用户输入和生成流水，后者只能引用当前 Campaign 白名单动作。后端按公开 state/snapshot 投影可见项，Campaign guidance 还必须通过 `field_ownership` 的 player 可见校验；前端通过通用 `GuidanceRenderer` 展示；不从模型正文猜测或提取选项。
+
+Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的唯一来源。判定提交成功后，服务端把门禁时使用的可信状态冻结为 `conditions` 快照，并把 `roll_outcome.breakdown`、成功区间和 `details_version` 写入 `display_messages.metadata`。Presentation 中没有公开标签或 State Schema 可见性不是 `player` 的条件，不得把技术 key、原始期望值或实际值下发给玩家；前端只在支持的详情版本下渲染折叠面板，历史缺失详情的消息保持可读。该快照不参与结算和模型提示，也不改变 Runtime 内容哈希或数据库结构。
+
+最小 Campaign View 示例：
+
+~~~json
+{
+  "campaign_view": {
+    "renderer": "generic",
+    "header": {"title_path": "world.current.name", "time_path": "campaign.game_time", "time_format": "game_time"},
+    "sections": [
+      {"key": "character", "title": "角色", "order": 10,
+        "fields": [{"path": "character.name", "label": "姓名", "widget": "title", "order": 10}]}
+    ],
+    "actions": [
+      {"key": "some.inspect", "label": "查看", "placement": "character"}
+    ],
+    "empty_states": {"character": "暂无角色资料"}
+  }
+}
+~~~
+
+长期内容改用 `mode=campaign` 并声明 `campaign_config`。该模式不强制单局 Outcome 与 settlement，但必须声明模块允许的生命周期、投影、上下文策略、1 至 64 个 `action_allowlist` 动作、初始地点和世界时钟上限；完整配置进入内容哈希。
+
+## 玩法注册表
+
+通用挑战核心依赖 `gameplay.Registry`，不导入具体题材包。组合根显式安装：
+
+- `core.generic@1`：状态相等、状态集合、数值条件、成功判定、最少回合、all/any、固定奖励和状态倍率；内置单局修仙玩法也直接使用该模块；
+- `cultivation.campaign@1`：修仙 Campaign 生命周期、投影、上下文和完整领域动作集合；Runtime 只能从模块声明的 `campaign_actions` 中启用白名单，不允许用自由状态 JSON 冒充领域事实；
+- 后续需要特殊可信规则的模块。
+
+模块 descriptor 列出允许的 action、Campaign action、verifier、calculator 和 settlement handler。管理员界面通过 `/api/admin/gameplay-modules` 读取目录并生成选项，不在前端硬编码修仙能力。Campaign 动作的 Definition、Capability 和事务 Handler 契约见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
+
+纯内容玩法若能使用 `core.generic`，只需新增数据，不需要修改 Go。只有无法由受限通用条件安全表达的规则，才新增后端模块。
+
+## 结局规则
+
+每个版本的 `outcome_key` 稳定且唯一：
+
+~~~json
+{
+  "outcome_key": "case_solved",
+  "category": "success",
+  "title": "真相大白",
+  "tone": "success",
+  "verifier_key": "core.conditions",
+  "verifier_config": {
+    "conditions": [
+      {"type": "state_number", "path": "investigation.clue_integrity", "operator": "gte", "value": 80},
+      {"type": "successful_roll", "key": "investigation.final-accusation"}
+    ]
+  }
+}
+~~~
+
+标题与色调只用于展示，不参与安全匹配。模型只提交 outcome_key；后端在 Prepare 和最终事务内各验证一次。
+
+`core.conditions` 的 `state_in` 用于由玩法内容声明离散状态集合，例如 `{"type":"state_in","path":"case.status","values":["solved","closed"]}`。`values` 只能包含 1 到 64 个不重复的字符串、布尔值或数字，状态路径必须由该版本的 State Schema 声明。平台只做集合成员判断，不解释值的题材含义。
+
+## 全局奖励与版本规则
+
+奖励定义拥有跨玩法稳定 key，例如：
+
+~~~json
+{
+  "key": "midnight-case.case-token",
+  "kind": "currency",
+  "name": "调查凭证",
+  "description": "可用于进入其他调查玩法。",
+  "unit": "张",
+  "icon": "ticket",
+  "stackable": true,
+  "consumable": true
+}
+~~~
+
+挑战版本只保存引用、calculator 和发布时公开快照：
+
+~~~json
+{
+  "outcome_key": "case_solved",
+  "reward_key": "midnight-case.case-token",
+  "calculator_key": "core.fixed",
+  "calculator_config": {"amount": 2}
+}
+~~~
+
+一次 outcome 可以绑定多项奖励。定义的展示信息后来变化时，旧挑战仍使用发布时快照；余额与其他功能前置条件继续按稳定 reward key 识别。
+
+Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局内堆叠物按比例转为可叠加账号资源。规则必须声明每批来源量、每批奖励量、单局奖励上限及是否扣除来源；只能绑定当前版本真实终局任务，计算、扣除、授予和 Campaign 完成在同一事务执行。完整协议见 `21-campaign-outcome-rewards.md`。
 
 ## 生命周期
 
 ### Challenge Pack
 
-- 新建时为 hidden，没有 current version。
-- 首个版本发布后变为 active 并指向该版本。
-- 后续发布只更新 current version，新对话使用新版本。
-- retired 用于未来停止新玩家进入，不能破坏旧对话引用。
+- `active`：有当前发布版本，可供普通用户选择；
+- `hidden`：不在普通列表展示；
+- `retired`：停止新建，但历史对话仍保留固定内容。
 
 ### Challenge Version
 
-- `draft`：可以整体保存和反复校验。
-- `published`：不可原地修改，可供新对话选择。
-- `retired`：不再作为当前入口，但已有对话仍可运行。
-
-不支持 published 回到 draft，也不支持覆盖相同 pack + version。内容修改必须创建新版本号。
+- `draft`：管理员可修改；
+- `published`：不可原地修改，可创建新对话；
+- `retired`：不再作为新入口，历史仍可读取。
 
 ## 新建与复制草稿
 
-新挑战包的首个草稿从空 Manifest 开始，管理员需要填入完整版本文档。
+新 Pack 的首个草稿生成安全的 `core.generic` Runtime 骨架。管理员需要补齐 Manifest、入口资产、展示分组和至少一个 outcome。
 
-已有 current version 时，新草稿复制：
+已有当前版本时，“复制新版本”会：
 
-- Manifest，并自动把 `manifest.version` 改为新版本号。
-- 全部资产，重新生成数据库 UUID。
-- 全部奖励规则，重新生成数据库 UUID。
+1. 生成新的 version ID；
+2. 更新 Manifest 版本号；
+3. 深复制 Runtime 与全部资产；
+4. 为 outcome 和 reward rule 生成新 ID 并重连引用；
+5. 保持奖励定义指向全局稳定 ID；
+6. 不改变已有对话或旧发布版本。
 
-复制只产生 draft，不影响当前发布版本。数据库 `(challenge_pack_id, version)` 唯一。
+## 管理员编辑器
 
-## 草稿保存
+管理页按区域维护：
 
-管理端提交：
+1. 基本信息和入口资产选择；
+2. 角色、Persona、场景、Prompt 与世界书资产；
+3. engine、允许动作和状态 Schema；
+4. 玩家状态分组、标签、控件和术语；
+5. outcome 与 verifier；
+6. 奖励定义与 calculator；
+7. 高级 JSON 导入/导出。
 
-```json
-{
-  "manifest": {},
-  "assets": [],
-  "reward_rules": []
-}
-```
-
-保存阶段要求 Manifest 和 asset content 是合法 JSON，资产 kind、slug、name、content.id 与版本内唯一性基本有效。允许暂时缺少发布必需内容，便于分步编辑。
-
-仓储事务锁定版本并确认仍为 draft，然后替换资产和奖励规则。保存与发布使用同一版本行锁。
+保存草稿不等于发布。点击发布会先保存当前表单，再执行完整发布校验，避免误发布数据库中的旧草稿。
 
 ## 发布校验
 
-发布拒绝以下情况：
+发布至少检查：
 
-- Manifest 缺 id、name、version 或默认 Character/Persona/Scenario/Prompt。
-- Manifest 与挑战包 id、name、description 不一致。
-- Manifest version 与版本记录不一致。
-- recommended 或 required 引用不存在。
-- allowed Persona 不存在或不包含 recommended Persona。
-- 资产 kind、slug、name、JSON 或 content.id 无效。
-- 版本内出现重复 kind + slug。
-- 默认 Prompt 无法解析。
-- Prompt 缺少 enabled、required、system 的 `system_master`、`settlement_security` 或 `output_schema`。
-- Required WorldBook 条目 ID 重复、内容为空、优先级非法，或关键词条目没有关键词。
-- 没有奖励规则，reward_key 重复，结局不是有效 good 结局。
-- multiplier_bps、最小成功数或 max_reward 非法。
-- 成功奖励 key 没有出现在 Prompt 内容中。
+- Manifest ID、名称、说明与 Pack 一致，版本一致；
+- 推荐资产和允许 Persona 都属于当前版本；
+- Prompt 包含启用且必需的 `system_master`、`settlement_security`、`agent_tool_loop`；
+- 必需世界书条目 ID 唯一、内容非空、触发配置合法；
+- Runtime engine 与版本已安装；
+- 模型动作和 settlement handler 被模块允许；
+- State Schema 路径唯一，类型、默认值、约束、可见性和更新权限合法；
+- presentation 只引用 player 可见路径和平台固定控件；
+- outcome key 唯一，category/tone 合法，verifier 已安装且配置有效；
+- 通用数值条件和状态倍率引用已声明的数值字段；
+- Prompt 明确引用每个 outcome key；
+- 奖励定义存在，公开快照仍与定义一致，calculator 已安装；
+- 能力成本引用存在且可消费的奖励；
+- 入口奖励前置条件引用存在定义，条件树不过深。
 
-校验基于事务锁定后的精确快照，避免并发保存造成“哈希对应旧内容、数据库已经是新内容”。
+校验、哈希、版本状态切换和 Pack 当前版本切换在版本行与 Pack 行锁事务内完成；同一 Pack 的并发发布会串行化，最终只有一个 current published version。
 
 ## 内容哈希
 
-哈希输入包括：
+哈希输入包含规范化排序后的：
 
-- 规范化 Manifest JSON。
-- 按 kind + slug 排序后的资产 kind、slug、name、content 和 sort_order。
-- 按 reward_key 排序后的结局、条件、计算、上限和 enabled。
+- Manifest；
+- Runtime 的 engine、State Schema、actions、settlement、presentation；
+- 所有资产的 kind、slug、name、content 与排序；
+- outcome key、展示、verifier 与配置；
+- reward 绑定、calculator、配置和公开快照。
 
-JSON 先解析再重新序列化，忽略空格和对象键顺序差异。数据库 UUID、创建时间和更新时间不进入哈希，因此同一业务内容可得到稳定 SHA-256。
+数据库行 ID、创建时间等非内容字段不进入哈希。相同语义内容必须得到相同 SHA-256；任一运行规则变化必须改变哈希。
 
-发布事务把哈希写入版本并更新挑战包 current version。运行时再次用相同算法计算，必须同时满足：
+## 内置玩法导入
 
-```text
-actual_hash == challenge_version.content_hash
-conversation.challenge_hash == challenge_version.content_hash
-```
+仓库包目录包含：
 
-## 空库首次初始化
+~~~text
+data/preset_packs/<slug>/
+  pack.json
+  runtime/
+    runtime.json
+    campaign.json                 # 仅 Campaign
+    state-schema.json
+    actions.json
+    settlement.json
+    presentation.json
+  rewards.json
+  characters/
+  personas/
+  scenarios/
+  prompts/
+  worldbooks/
+  GAMEPLAY_DESIGN.md（推荐）
+~~~
 
-server 连接数据库后、开放 HTTP 监听前执行内置挑战检查：
+空数据库首次启动时，在 PostgreSQL advisory lock 下导入并发布全部内置包。导入事务会先创建或精确复用奖励定义，再创建 Pack、版本、Runtime、资产、outcome 和 reward rules，最后执行与管理端相同的发布校验。
 
-文件加载、版本文档组装和数据库导入由独立的 `internal/challengeimport` 模块负责；`internal/challenge` 不依赖文件系统，只提供领域校验与发布能力。导入模块同时提供单目录导入、全部内置内容原子导入、按 slug 管理员导入和空库启动策略，启动流程与管理员接口复用同一实现。
+数据库已有任何 Pack 时，启动不自动升级。管理员在“内置内容”查看仓库版本和哈希；新版本可显式“导入并发布”，仓库内容与数据库当前快照不一致时显示“覆盖现有内容”。覆盖必须由请求体显式确认，仍会重新执行完整发布校验。
 
-1. 开启事务并获取 PostgreSQL transaction-level advisory lock。
-2. 在锁内统计 `challenge_packs`。
-3. 只要存在任意挑战包，立即结束检查，不读取 `DATA_DIR/preset_packs`。
-4. 完全为空时，按目录名排序扫描所有内置挑战。
-5. 读取 pack.json 和 characters、personas、scenarios、prompts、worldbooks 下的 JSON。
-6. 从 Manifest 分离 reward_rules，执行与管理员发布相同的完整校验。
-7. 计算稳定内容哈希，创建 pack、draft、资产和奖励规则，再通过正常发布流程发布。
-8. 所有内置包成功后提交事务；任一失败则整体回滚并阻止 server 启动。
-
-advisory lock 防止多个后端实例在同一空库上重复初始化。检查条件是“数据库完全没有挑战包”，而不是“某个内置 slug 不存在”，因此已有自定义内容的数据库也不会被启动过程悄悄补写官方内容。
-
-首次初始化只解决新库可直接使用的问题，不是内容同步机制。内置源只接受 `major.minor.patch` 稳定版本号；后续修改官方挑战必须提升版本号。管理员在“内置内容”中确认仓库版本与哈希后显式导入发布，导入器禁止同版本覆盖和版本降级，重启服务不会更新已存在的挑战。
+同一 `slug + version` 内容变化时，覆盖事务先锁定目标版本并检查引用。无人使用时可以删除旧草稿/快照并以新 ID 重建、校验、计算哈希和发布；已被对话或 Campaign 引用时仍返回 409，要求提升版本号。仓库版本低于或等于当前版本时也不能通过覆盖回退。发布更高版本时，旧版本标记为 `retired`，其普通 active 对话自动封存为只读；旧快照不会被删除，用户可从历史对话分叉出绑定当前版本的新对话。
 
 ## 公开投影
 
-普通挑战接口只返回：
+普通挑战 API 只返回：
 
-- pack ID、slug、名称和描述。
-- 当前版本、图标、标签、功能和快速指南。
-- allowed Persona 的 ID、slug、名称和公开描述。
-- enabled good 奖励的 key、标题和格式化倍率。
+- 名称、说明、版本、图标、标签、特色和快速指南；
+- 允许选择的 Persona 摘要；
+- outcome 的 key/category/title/tone；
+- 奖励名称、说明、类型、单位和适用结局；
+- 编译后的公开 Runtime Presentation 与玩家 capabilities；
+- 当前用户是否满足入口要求及不可用原因。
 
-不返回技术 Prompt、世界书正文、Character 系统指令、完整 Scenario、奖励条件或计算 JSON。
+不返回 Prompt、WorldBook、完整 State Schema、隐藏状态、verifier_config、calculator_config 和奖励内部条件。
 
-## 玩家选择与对话固定
+## 对话固定与运行 Bundle
 
-创建对话只接受 challenge slug、persona slug 和标题。Challenge Service：
+创建对话时后端：
 
-1. 读取 active pack 的 current version。
-2. 验证状态与非空哈希。
-3. 重算完整内容哈希。
-4. 解析 Manifest 默认资产。
-5. 校验 Persona 位于 allowed 集合和同一版本。
-6. 返回 Selection，由 Conversation Service 固定到对话。
+1. 按当前用户检查已发布挑战和 entry requirement；
+2. 校验 Persona 属于允许列表；
+3. 固定 version ID、content hash 和资产 ID；
+4. 按 State Schema 初始化状态；
+5. 以后始终用该固定版本组装 Bundle。
 
-对话创建后 PATCH 只能改标题。数据库组合外键保证选中资产属于固定版本。
+管理员发布新版本不会改变已有对话绑定的 version ID、hash 或内容；旧版本普通 active 对话会被标记为 archived，只读浏览，不会跟随 Pack `current_version_id` 漂移。
 
-## 运行 Bundle
+发布版本不可原地修改，因此后端可以按 `version ID + content hash` 长期缓存完整文档及其编译结果。Bundle 不作为整份共享对象缓存：Character、Persona 和 Scenario 仍按 conversation 固定的 asset ID 从版本索引选择并复制，避免不同对话互相污染；Prompt 和世界书条目也以私有 slice 交给当前 attempt。所有对话使用缓存前都会重新核对自己的固定 hash。
 
-生成时按对话固定版本构造 Bundle：
-
-- selected Character、Persona、Scenario 必须按 ID 找到且 kind 正确。
-- Prompt 按 Manifest recommended_prompt 读取。
-- WorldBook 按 required_worldbooks 顺序读取。
-- published 和 retired 版本可用于旧对话。
-- 任一引用或哈希不一致时返回错误，不使用仓库文件或代码内置兜底。
-
-## 奖励规则
-
-当前规则结构：
-
-```json
-{
-  "reward_key": "void_ascension",
-  "ending_type": "good",
-  "ending_title": "破碎虚空",
-  "conditions": {
-    "min_cultivation_rank": 4,
-    "required_successful_rolls": [
-      "筑基突破判定",
-      "结丹突破判定",
-      "元婴突破判定",
-      "虚空裂缝穿越判定"
-    ]
-  },
-  "calculation": {
-    "multiplier_bps": 20000
-  },
-  "max_reward": null,
-  "enabled": true
-}
-```
-
-`multiplier_bps` 以 10000 表示 1 倍，避免浮点记账。`min_cultivation_rank` 使用凡人 0、练气 1、筑基 2、结丹 3、元婴 4、化神 5、炼虚 6、合体 7、大乘 8。`required_successful_rolls` 是必须全部存在的精确服务端成功判定类型，发布时拒绝空项和重复项。
-
-具体内置奖励见 `14-ascension-trial-gameplay.md`。
+公开挑战列表复用版本级展示投影，但 Pack 当前入口、用户奖励余额、入口条件和可用性仍实时读取。发布新版本通过新 version ID 自然建立新缓存项；草稿和后台编辑态永不进入长期缓存。
 
 ## 结算事务
 
-模型只能提交 ending type、title、summary 和 reward_key。修仙动作 handler 在保存候选回复前，从服务端当前状态读取局内灵石、角色、境界和回合数并冻结输入；预校验失败的候选不会落库。
+模型提出 `complete_challenge` 后：
 
-Challenge Service：
+1. 保存前用持久化状态、成功 roll key 和回合数预校验；
+2. 校验通过才保存候选成功叙事；
+3. 事务内锁 conversation 并确认 active；
+4. 检查该对话没有 `challenge_run`；
+5. 重建可信 evidence 并再次执行固定 outcome verifier；
+6. 执行全部 reward calculator；
+7. 写 run、奖励账本、余额和多奖励快照；
+8. 将对话置为 ended；
+9. 提交后发送通用 `challenge_completed`。
 
-1. 保存前非锁定预校验固定版本规则、境界和精确判定证据。
-2. 通过后保存叙事和状态，再对 conversation 加 `FOR UPDATE`。
-3. 比较 authenticated player 与 conversation owner。
-4. 要求 conversation 为 active。
-5. good 结局要求非空 reward_key。
-6. 按固定 challenge_version 查找 enabled rule。
-7. 精确匹配 ending type 与 title，并重做境界和判定集合校验。
-8. 使用冻结的 `base * multiplier_bps / 10000` 计算，并应用可选 max_reward。
-9. 更新账号奖励和成功/失败次数。
-10. 写入唯一 challenge_run。
-11. 把对话设为 ended 并释放生成锁。
-
-事务失败全部回滚。非 good 结局携带 reward_key 会被拒绝；bad 和 neutral 奖励为 0。
-
-## 权限
-
-- 普通用户：读取公开挑战、选择允许 Persona、创建并操作自己的对话。
-- 管理员：检查并导入仓库内置版本，读取完整版本文档、创建 pack 和 draft、保存、发布、设置全局判定。
-- 启动初始化器：只在空库中读取仓库材料，并走与管理端相同的领域发布规则，不属于在线 HTTP 权限。
-
-完整版本 API 永远不能因为前端隐藏而对普通用户开放。
-
-## 失败恢复
-
-- 保存失败：事务回滚，保留上一个完整 draft。
-- 发布校验失败：版本保持 draft，可继续修改。
-- 发布并发保存：版本行锁使操作串行，后发生者看到已发布状态后被拒绝。
-- 首次初始化失败：整个初始化事务回滚，server 不开始监听；修正材料后重新启动即可。
-- 多实例首次启动：advisory lock 串行检查，后获得锁的实例看到已有 pack 后直接跳过。
-- 运行时哈希失败：停止生成并由管理员检查数据库或重新发布新版本。
-- 结算重放：返回已结算冲突，不重复记账。
+唯一约束和幂等键保证并发重试不会重复结算。验证不满足是业务拒绝，不是系统错误。
 
 ## 内容演进规则
 
-任何影响玩家规则、上下文、可选 Persona 或奖励的变化都应升级挑战版本。仅文档错别字若同步进入 Manifest 或资产 JSON，也会改变哈希，仍应使用新版本。
-
-发布前应完成：JSON 解析、领域测试、前端类型检查、空库首次启动演练和玩法文档同步。不得在生产库直接 UPDATE published JSON 作为热修复。
+- 已发布版本永不原地修改；管理员覆盖未使用的内置版本时采用删除后重建，而非修改原快照。
+- 稳定 outcome key 的语义变化应提升玩法版本。
+- 奖励 key 的 kind/堆叠/消费语义变化必须创建新 key。
+- 删除后端 verifier/calculator 前，必须确认没有仍需运行的已发布版本引用。
+- 前端新增可选控件时仍要保留未知控件安全降级。
+- 新题材不得把自身字段塞回通用 challenge、事件或 App 顶栏。

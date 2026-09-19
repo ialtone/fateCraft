@@ -28,6 +28,7 @@
 - 确保二进制与前端产物已生成：`task backend:build && task frontend:build`
 - 启动全部服务（含前端站点）：`docker compose -f docker-compose.prod.yml up --build -d`
 - 访问入口：前端 `http://<host>:8088`（nginx 同时反代 `/api` 与 `/ws`，无需直连 8081）
+- 生产前必须替换 `SHARE_LINK_SIGNING_KEY`；它至少 32 字符、独立于 `AUTH_DATA_ENCRYPTION_KEY`，且所有后端实例必须一致
 
 ## 数据与初始化
 
@@ -81,5 +82,8 @@
 
 - 后端镜像不做编译，只拷贝宿主机交叉编译的二进制（alpine + 健康检查 `GET /api/health`）
 - 前端镜像为 `nginx:1.27-alpine`，托管 SPA 并反代 API/WebSocket；WebSocket 反代已配置 `Upgrade` 头与 1h 读超时
-- LLM 的 Base URL / API Key / 模型可在前端「设置」页配置（写入 `llm_settings` 表），或在 env 文件里设 `LLM_API_KEY` 作为兜底
+- Nginx 将 `/s/:token` 反代到后端的动态 Open Graph 外壳，再由浏览器进入 `/shared/:token` SPA 页面；该入口和公共分享 API不配置共享缓存，撤销立即生效
+- 应用访问日志会脱敏分享 token；外围 CDN、WAF 和负载均衡也必须对 `/s/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或做等价脱敏
+- 分享 HTML 使用严格 CSP、`Referrer-Policy: no-referrer` 和 `noindex,nofollow`；公开 API 的 gzip 由 Nginx 处理
+- LLM 的 Base URL、API Key 和模型可在前端「设置」页配置，用户配置写入 `llm_settings` 表，平台公共配置写入 `system_settings` 单例
 - 敏感信息的本机覆盖写 `backend.development.env.local` / `backend.production.env.local`（git 已忽略；如使用需在 compose 的 `env_file` 中追加该文件）

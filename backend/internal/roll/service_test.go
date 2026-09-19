@@ -15,7 +15,9 @@ type challengeHistoryStub struct {
 	err        error
 }
 
-func (*challengeHistoryStub) Append(context.Context, uuid.UUID, string, bool) error { return nil }
+func (*challengeHistoryStub) Append(context.Context, uuid.UUID, string, string, string, bool) error {
+	return nil
+}
 
 func (*challengeHistoryStub) Recent(context.Context, uuid.UUID, int) ([]storage.RollHistoryEntry, error) {
 	return nil, nil

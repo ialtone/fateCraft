@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fatecraft.runtime.schema.json",
+  "title": "Fatecraft Runtime v2 entry",
+  "description": "玩法包 runtime/runtime.json 的入口契约。被引用的子文件由后端按对应 Runtime 契约编译。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "runtime_contract_version", "engine", "mode", "includes"],
+  "properties": {
+    "$schema": {"const": "fatecraft.runtime.schema.json"},
+    "runtime_contract_version": {"const": 2},
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "version"],
+      "properties": {
+        "key": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "mode": {"enum": ["challenge", "campaign"]},
+    "includes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_schema", "actions", "settlement", "presentation"],
+      "properties": {
+        "campaign": {"$ref": "#/$defs/runtimeFile"},
+        "state_schema": {"$ref": "#/$defs/runtimeFile"},
+        "actions": {"$ref": "#/$defs/runtimeFile"},
+        "settlement": {"$ref": "#/$defs/runtimeFile"},
+        "presentation": {"$ref": "#/$defs/runtimeFile"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"mode": {"const": "campaign"}}},
+      "then": {"properties": {"includes": {"required": ["campaign"]}}}
+    },
+    {
+      "if": {"properties": {"mode": {"const": "challenge"}}},
+      "then": {"properties": {"includes": {"not": {"required": ["campaign"]}}}}
+    }
+  ],
+  "$defs": {
+    "runtimeFile": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.?(/|$))[A-Za-z0-9._/-]+\\.json$"
+    }
+  }
+}

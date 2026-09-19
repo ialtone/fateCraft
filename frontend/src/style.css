@@ -26,7 +26,6 @@
   --radius: 6px;
   --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
   --user-bubble: rgba(214, 163, 92, 0.08);
-  --font-ui: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
 }
 
 :root[data-theme='light'] {
@@ -74,7 +73,6 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.7;
   transition:

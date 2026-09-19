@@ -1,0 +1,41 @@
+[
+  {
+    "key": "mortal-path.world-seal",
+    "kind": "badge",
+    "name": "界印",
+    "description": "完成青河修仙志长期世界终局后留下的账号级纪念凭证。",
+    "unit": "枚",
+    "icon": "ribbon",
+    "stackable": true,
+    "consumable": false,
+    "featured": true,
+    "sort_order": 200,
+    "metadata": {"source_pack": "mortal-path"}
+  },
+  {
+    "key": "mortal-path.law-essence",
+    "kind": "currency",
+    "name": "法则余辉",
+    "description": "从长期世界中带出的法则积累，可供后续跨存档玩法消费。",
+    "unit": "缕",
+    "icon": "sparkles",
+    "stackable": true,
+    "consumable": true,
+    "featured": true,
+    "sort_order": 210,
+    "metadata": {"source_pack": "mortal-path"}
+  },
+  {
+    "key": "mortal-path.spirit-essence",
+    "kind": "currency",
+    "name": "灵蕴",
+    "description": "由本局灵石沉淀出的跨存档资源，可供后续玩法消费。",
+    "unit": "份",
+    "icon": "diamond",
+    "stackable": true,
+    "consumable": true,
+    "featured": true,
+    "sort_order": 220,
+    "metadata": {"source_pack": "mortal-path"}
+  }
+]

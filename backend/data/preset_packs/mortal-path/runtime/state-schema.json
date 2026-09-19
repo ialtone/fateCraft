@@ -1,0 +1,23 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "narrative.current_focus",
+        "type": "string",
+        "owner": "conversation",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "narrative.clues",
+        "type": "list",
+        "owner": "conversation",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "model"
+      }
+    ]
+  }
+}

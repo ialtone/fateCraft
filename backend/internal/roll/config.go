@@ -2,8 +2,6 @@ package roll
 
 import (
 	"os"
-	"sort"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -93,44 +91,4 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
-}
-
-// Vocab 是情境修正的枚举词表，来源即 context_modifiers 的键。
-// 启动时注入 narrative_response.json 的 enum，约束模型只能输出表内词条，
-// 使后端的精确查表计分与模型输出保持闭环（词表单一来源：roll_config.yaml）。
-type Vocab struct {
-	Advantages       []string
-	Disadvantages    []string
-	Environment      []string
-	OpponentStatuses []string // 对手状态（对手受伤/对手疲惫…）
-	OpponentElements []string // 克制关系（属性克制/属性被克），按"属性"前缀从 opponent 键中划分
-}
-
-// Vocab 返回按字典序排序的词表（排序保证注入 schema 的结果确定，便于缓存与比对）。
-func (c *Config) Vocab() Vocab {
-	v := Vocab{
-		Advantages:    sortedKeys(c.ContextModifiers.Advantages),
-		Disadvantages: sortedKeys(c.ContextModifiers.Disadvantages),
-		Environment:   sortedKeys(c.ContextModifiers.Environment),
-	}
-	for _, key := range sortedKeys(c.ContextModifiers.Opponent) {
-		switch {
-		case key == "境界差距_每级":
-			// 乘算系数，不是词条
-		case strings.HasPrefix(key, "属性"):
-			v.OpponentElements = append(v.OpponentElements, key)
-		default:
-			v.OpponentStatuses = append(v.OpponentStatuses, key)
-		}
-	}
-	return v
-}
-
-func sortedKeys(m map[string]int) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

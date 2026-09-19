@@ -5,20 +5,48 @@ import (
 	"math"
 
 	"github.com/google/uuid"
-	"github.com/ialtone/fatecraft/internal/protocol"
 )
+
+// Request is the server-owned input to probability calculation. The model can
+// provide only the stable key and presentation text through the roll tool.
+type Request struct {
+	Key                string             `json:"key"`
+	Title              string             `json:"title"`
+	Description        string             `json:"description"`
+	Category           string             `json:"category"`
+	BaseSuccessRate    int                `json:"base_success_rate"`
+	Sides              int                `json:"sides"`
+	RewardValue        int                `json:"reward_value,omitempty"`
+	RelevantAttributes []string           `json:"relevant_attributes,omitempty"`
+	AttributeWeights   map[string]float64 `json:"attribute_weights,omitempty"`
+	Context            *Context           `json:"context,omitempty"`
+}
+
+type Context struct {
+	Advantages    []string  `json:"advantages,omitempty"`
+	Disadvantages []string  `json:"disadvantages,omitempty"`
+	Environment   []string  `json:"environment,omitempty"`
+	Opponent      *Opponent `json:"opponent,omitempty"`
+}
+
+type Opponent struct {
+	RealmGap int      `json:"realm_gap,omitempty"`
+	Statuses []string `json:"statuses,omitempty"`
+	Element  string   `json:"element,omitempty"`
+}
 
 // CalculateResult 计算判定结果（完整流程），使用 Service 持有的配置与历史存储。
 func (s *Service) CalculateResult(
 	ctx context.Context,
-	req *protocol.RollRequest,
+	req *Request,
 	playerState map[string]any,
 	convID uuid.UUID,
 	difficultyMode string,
 ) *DetailedResult {
 	config := s.config
 	result := &DetailedResult{
-		RollType:    req.Type,
+		RollKey:     req.Key,
+		Title:       req.Title,
 		Category:    req.Category,
 		Description: req.Description,
 		Breakdown:   &Breakdown{},
@@ -42,12 +70,12 @@ func (s *Service) CalculateResult(
 	result.Breakdown.Context = contextBonus
 
 	// 5. 收益平衡限制
-	rewardValue := extractRewardValue(req)
+	rewardValue := req.RewardValue
 	rewardCap := applyRewardCap(base+attrBonus+traitBonus+contextBonus, rewardValue, config)
 	result.Breakdown.RewardCap = rewardCap - (base + attrBonus + traitBonus + contextBonus)
 
 	// 6. 历史调整（从持久化流水实时计算，重启后仍生效）
-	historyAdj := s.getAdjustment(ctx, convID, req.Type, rewardValue)
+	historyAdj := s.getAdjustment(ctx, convID, req.Key, rewardValue)
 	result.Breakdown.History = historyAdj
 
 	// 7. 难度模式由管理员全局设置传入，用户请求不能覆盖。
@@ -67,7 +95,8 @@ func (s *Service) CalculateResult(
 
 // DetailedResult 详细的判定结果。
 type DetailedResult struct {
-	RollType    string
+	RollKey     string
+	Title       string
 	Category    string
 	Description string
 	Breakdown   *Breakdown
@@ -101,10 +130,9 @@ type OutcomeRange struct {
 	RangeEnd    int     `json:"range_end"`
 }
 
-func calculateBase(req *protocol.RollRequest, config *Config) int {
-	// AI 提供了 base_difficulty，优先使用
-	if req.BaseDifficulty > 0 {
-		return int(req.BaseDifficulty)
+func calculateBase(req *Request, config *Config) int {
+	if req.BaseSuccessRate > 0 {
+		return req.BaseSuccessRate
 	}
 
 	// 否则从类别获取默认值
@@ -118,7 +146,7 @@ func calculateBase(req *protocol.RollRequest, config *Config) int {
 	return 50
 }
 
-func calculateAttributeBonus(req *protocol.RollRequest, state map[string]any, config *Config) int {
+func calculateAttributeBonus(req *Request, state map[string]any, config *Config) int {
 	attributes, ok := state["attributes"].(map[string]any)
 	if !ok {
 		return 0
@@ -171,7 +199,7 @@ func getAttributeValue(attributes map[string]any, name string) int {
 	return 50 // 默认中等属性
 }
 
-func calculateContextBonus(req *protocol.RollRequest, config *Config) int {
+func calculateContextBonus(req *Request, config *Config) int {
 	if req.Context == nil {
 		return 0
 	}
@@ -207,7 +235,7 @@ func sumByExactKey(items []string, table map[string]int) int {
 // calculateOpponentBonus 计算对手情境修正（结构化字段，精确计分）：
 //   - RealmGap（对手比玩家高的境界数，可为负）× 配置的「境界差距_每级」；
 //   - Statuses（对手受伤/对手疲惫等）与 Element（属性克制/属性被克）按枚举精确查表。
-func calculateOpponentBonus(opp *protocol.RollOpponent, config *Config) int {
+func calculateOpponentBonus(opp *Opponent, config *Config) int {
 	rules := config.ContextModifiers.Opponent
 	if len(rules) == 0 {
 		return 0
@@ -300,7 +328,7 @@ func calculateOutcomes(successRate int, config *Config) *OutcomeDistribution {
 
 // collectContextTokens 汇总情境里的全部枚举词条（有利/不利/环境/对手状态与克制），
 // 供特质匹配的 conditions 做精确比对。
-func collectContextTokens(req *protocol.RollRequest) []string {
+func collectContextTokens(req *Request) []string {
 	if req.Context == nil {
 		return nil
 	}
@@ -316,13 +344,6 @@ func collectContextTokens(req *protocol.RollRequest) []string {
 		}
 	}
 	return tokens
-}
-
-func extractRewardValue(req *protocol.RollRequest) int {
-	if req.Stakes != nil {
-		return req.Stakes.RewardValue
-	}
-	return 0
 }
 
 func clamp(val, min, max int) int {

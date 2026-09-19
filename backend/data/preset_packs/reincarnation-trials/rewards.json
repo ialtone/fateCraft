@@ -1,0 +1,15 @@
+[
+  {
+    "key": "reincarnation-trials.spirit-stone",
+    "kind": "currency",
+    "name": "灵石",
+    "description": "百年飞升劫中成功超脱后带离此界的账号资源。",
+    "unit": "枚",
+    "icon": "gem",
+    "stackable": true,
+    "consumable": true,
+    "featured": true,
+    "sort_order": 100,
+    "metadata": {"source_pack": "reincarnation-trials"}
+  }
+]

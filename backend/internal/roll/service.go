@@ -4,9 +4,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
-
-	"github.com/ialtone/fatecraft/internal/logging"
 )
 
 // Service 判定服务：持有判定配置与判定历史存储，
@@ -25,16 +22,13 @@ func NewService(cfg *Config, history HistoryStore) *Service {
 	}
 }
 
-// Record 记录一次判定结果，供后续判定做历史调整（连败补偿、重试加成等）。
-// 写入失败留日志但不阻断主流程（历史缺一条只影响手感，不影响正确性）。
-func (s *Service) Record(ctx context.Context, convID uuid.UUID, rollType string, success bool) {
-	if s.history == nil {
-		return
+// WithHistory 返回一个共享配置、但使用指定历史存储的判定服务副本。
+// Agent 工具事务用它把判定历史读取绑定到当前事务连接，避免持锁期间再向连接池要第二个连接。
+func (s *Service) WithHistory(history HistoryStore) *Service {
+	if s == nil {
+		return nil
 	}
-	if err := s.history.Append(ctx, convID, rollType, success); err != nil {
-		logging.Named("roll").Warn("写入判定历史失败",
-			zap.String("conversation_id", convID.String()), zap.Error(err))
-	}
+	return &Service{config: s.config, history: history}
 }
 
 // HasSuccessfulChallenge 用服务端判定流水校验挑战是否具备成功结算资格。

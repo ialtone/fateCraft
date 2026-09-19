@@ -2,164 +2,118 @@
 
 ## 目标
 
-上下文构建器要在模型窗口内提供完整规则、当前状态和尽可能多的有效历史，同时保证：
+Context Builder 在模型窗口内保留平台契约、当前权威状态、当前回合、已提交长期记忆和尽可能多的近期完整历史。它只读取当前 conversation 与固定 ChallengeVersion，不把 Memory 当作状态或权限来源。
 
-- 只读取当前对话及其固定挑战版本。
-- 核心安全规则不能因预算不足被静默删除。
-- 摘要覆盖的旧历史不重复注入。
-- 世界书只注入当前文本相关内容。
-- 每次实际选择都可通过日志审计。
+异步长期记忆、任务租约和角色问答的完整规则见 `18-async-memory-character-inquiry.md`。
 
-## 预算公式
+## 预算
 
 ```text
-prompt_budget = max_context_tokens - max_response_tokens - 256
+prompt_budget = max_context_tokens - max_response_tokens - tool_definition_tokens - 256
 world_budget  = prompt_budget * 0.22
+campaign_projection_target = min(prompt_budget * 0.50, 32768, required 后的剩余预算)
 ```
 
-固定 256 token 为 JSON 信封等格式开销预留。若 prompt budget 小于等于 0，构建立即失败。
+固定 256 Token 是传输与格式安全余量。当前 tokenizer 是统一的启发式估算器；消息的 `content_blocks`（含 thinking/replay/tool call）、Memory、Campaign Projection、工具定义和世界书使用同一版本。只有消息仍是相同的单一文本块且持久化 `tokenizer_version` 与当前版本一致时，Context Builder 才复用消息上的 Token 计数；多块内容、thinking/replay/tool block 或版本不匹配都会重新计数。Campaign 的 50% 是优先保留近期回合的目标上限，最小权威核心放不下时可以使用 required 后的全部剩余预算。
 
-当前 tokenizer 是启发式计数器，因此预算是保护性估计，不是上游模型的精确 tokenizer 结果。更换模型或计数方式时应保留同样的预算接口和日志字段。
+新设置默认使用 `128000` 上下文和 `16384` 最大输出 Token。用户仍应按实际上游模型修改；平台不根据模型名称猜测窗口。设置接口允许上下文 4096 到 2000000、回复至少 128，且强制 `max_response_tokens + 256 < max_context_tokens`。低窗口是受支持配置，不能依赖提高默认值掩盖无界投影。
 
-## 输入来源
+`prompt_budget <= 0` 或无法压缩的 required 总量溢出时直接返回 `ErrRequiredOverflow`，不调用模型。错误包含各 required 段和当前回合的 Token 明细。
 
-一次生成读取：
+## 固定快照
 
-1. 对话固定 Challenge Bundle。
-2. 用户 LLM 设置中的模型和 token 窗口。
-3. 当前结构化状态。
-4. 当前对话最新摘要。
-5. 未被摘要覆盖的内部消息历史。
-6. 由历史、状态和摘要激活的世界书条目。
+每个 `generation_attempt` 创建时保存：
 
-Challenge Bundle 在返回前重新计算内容哈希。任何版本状态、版本哈希或对话哈希不一致都会中止构建。
+- branch epoch；
+- 当前已提交 `memory_id`；
+- Memory 覆盖到的 turn sequence。
 
-## Prompt 分段
+Agent Tool Loop 的全部模型步骤复用同一 attempt 和记忆。每个步骤会重新读取已提交状态和 Campaign Projection，但后台 Worker 即使在步骤之间完成，也只影响之后新建的 attempt。
 
-Prompt 资产包含多个 `PromptSegment`：
+进程级 Challenge 缓存与 attempt 缓存职责不同：前者跨用户复用已发布版本的 Manifest、Runtime、Prompt、世界书和玩法定义编译结果；后者只在当前 attempt 固定 Bundle 和首次扫描得到的世界书激活集合。State、历史、固定 Memory、Campaign Projection、revision 和工具快照不会进入版本缓存，仍按各自一致性规则读取。
 
-- `key`：稳定语义键。
-- `role`：发送给模型的消息角色。
-- `content`：正文。
-- `enabled`：是否参与候选。
-- `required`：是否不可省略。
-- `priority`、`position`：内容维护和顺序信息。
+## 候选来源
 
-已发布 Prompt 必须包含启用、required、system role 且非空的：
+- 已发布 Prompt 的 enabled 分段；
+- Character、Persona、Scenario；
+- 当前权威 State；
+- Campaign 模式的有界 Projection；
+- attempt 固定的 `memory_policy` 和 `memory_summary`；
+- 当前 pending 回合与未被 Memory 覆盖的有效封口回合；
+- Responses 思考模型产生的协议 reasoning item（用于下一次请求回放；可读文本另投影为玩家可折叠查看的 reasoning）；
+- 由固定记忆、近期原文和当前状态激活的世界书；
+- 服务端 Agent 输出契约、当前步骤工具定义与可选 runtime directive。
 
-- `system_master`
-- `settlement_security`
-- `output_schema`
+玩家输入始终按低信任数据处理。服务端会在输出契约中固定声明该边界；当前输入命中提示注入或越权表达时，额外追加位于全部历史之后的 `security_notice` required 段。检测不改写或阻断玩家文本，也不代替工具权限和状态校验。
 
-代码不再提供这些内容的内置文字兜底，缺失时发布失败。
+Prompt 发布必须保证 `system_master`、`settlement_security` 和 `agent_tool_loop` 等核心段存在。服务端 Agent 契约不依赖玩法包，并作为历史之后的最后一条 system 消息发送；工具定义通过 Provider 原生字段传输，不伪装成 Prompt JSON。
 
-## 候选段
+## 消费顺序
 
-构建器会生成：
+1. 统计平台规则、Runtime 规则、State、runtime directive、Agent 契约、工具定义、Memory policy/body 等固定 required 内容。
+2. 把当前 pending turn 的全部有效内部消息作为 required 历史预留。
+3. Campaign 模式先把内部动作能力转换为工具快照并从 Projection 正文移除，再按剩余预算构建有界 Projection：平台核心必选，玩法主题按优先级压缩。
+4. 从新到旧尝试加入封口历史；一个 turn 的所有消息必须同时加入或同时省略。
+5. 用剩余预算加入 Character/Persona/Scenario、世界书、style 和其他可选 Prompt 段。
+6. 按语义顺序组装 system 段、时间正序历史，最后附加输出契约和（如命中）安全提示。
 
-- Prompt 中所有 enabled 分段。
-- Character 描述、性格、场景、示例对话和覆盖提示。
-- 玩家选择的 Persona 描述、说话风格和限制。
-- Scenario 描述与开场。
-- `<current_state>` JSON，始终 required。
-- 最新 `<memory_summary>`。
-- 合并后的 `<world_info>`。
+当前回合不能因普通预算不足被裁掉。任何一组 required 内容放不下都属于配置错误，不能静默生成。旧历史遇到第一组放不下的完整 turn 后停止向前填充，确保保留的是连续近期窗口。
 
-世界书在进入总预算前已经受独立 22% 预算筛选，但合并后的完整标签、标题和正文仍重新计入总 prompt token。
+## Memory 覆盖与滞后
 
-## 预算消费顺序
+只有 `message_seq` 大于固定 Memory 覆盖边界的消息会成为原文候选。Memory 不存在时从第一条有效历史开始。
 
-### 必选段
+预算压力可能暂时省略尚未被 Memory 覆盖的早期 turn。此时允许继续叙事，但构建结果和 `context_build_logs` 必须记录：
 
-先统计全部 required 段。如果总量超过 prompt budget，返回 `ErrRequiredOverflow`，不调用模型。不能只保留一部分核心规则继续运行。
+- `memory_lag=true`；
+- memory ID 与覆盖边界；
+- `omitted_turn_from` 和 `omitted_turn_until`；
+- 已存在或刚规划的 memory job ID。
 
-### 可选段
+Context Builder 还会在构建日志的 `segments` 中追加 `history_compaction` 元数据段，标记省略原因和 turn 范围。该段不注入模型消息、不改变领域存档，只把历史裁剪变成可审计的上下文决策。当前回合、必选玩法事实和未完成工具链仍属于 required 内容，无法容纳时直接返回 `ErrRequiredOverflow`。
 
-按以下优先级逐段尝试：
+省略范围不能冒充 Memory 已覆盖范围。出现 lag 时同步路径只执行有界元数据查询、创建/合并任务和非阻塞唤醒，不读取完整来源或等待 Worker。
 
-1. Character、Persona、Scenario。
-2. 最新摘要。
-3. 世界书。
-4. 其他可选 Prompt 段，包括 style。
+## State 与 Campaign Projection
 
-整段放不下时跳过并在 `SegmentInfo.skip_reason` 记录 `budget`，当前不会截断段内容。
+`<current_state>` 和 `<campaign_projection>` 是 required 段，但 Campaign Projection 不是不可拆的大 JSON。`id`、`status`、`current_location_key`、`game_time` 和 `revision` 是平台最小核心；玩法模块返回的顶层主题在此核心上分层装入。内部 `action_capabilities` 只用于生成 `fc_action_*` 工具，不进入该正文。
 
-### 历史
+`ProjectionProvider.Context` 返回 `ProjectionView.Data + ProjectionView.Priority`。Priority 只列顶层主题 key，由具体玩法模块按当前决策价值排序；平台不理解修仙、推理、经营等题材字段。未声明的主题按稳定 key 顺序作为低优先级候选。
 
-可选段处理后，从最新内部消息向旧消息倒序填充。遇到第一条放不下的消息就停止，再恢复为时间正序发送。
+完整投影能放入目标预算时原样发送。需要压缩时：
 
-如果存在可见历史但剩余预算连一条都放不下，构建失败，避免模型在完全缺少近期交互的情况下继续生成。
+- 玩法主题按 Provider Priority 整段加入，不截断主题内部 JSON；
+- `projection_control.partial=true` 告诉模型省略表示“本轮上下文不可见”，不表示权威集合为空；模型只能调用当前步骤实际提供的工具；
+- Context Build Log 在 `campaign_projection` 段记录 `original_tokens`、`compacted` 和 `omitted_keys`，不保存被省略正文。
 
-## 最终消息顺序
+只有平台最小核心和压缩控制信息仍无法放入 required 剩余预算时才停止生成。玩法 Provider 自身仍必须维持集合与字节上限，Token 压缩不是接收无界数据的理由。
 
-已选段按语义顺序发送：
+Memory 只补充人物、关系、承诺、目标与已发生剧情。当前数值、位置、资源、任务状态、动作能力、判定和奖励始终以 State、Campaign Projection 和服务端流水为准。
 
-1. `system_master`
-2. `output_schema`
-3. Character
-4. Persona
-5. Scenario
-6. 其他普通 Prompt system 段
-7. 当前状态
-8. 摘要
-9. 世界书
-10. style
-11. 时间正序历史
+## 世界书
 
-required 影响是否必须纳入，不改变上述最终语义顺序。
+世界书扫描使用：
 
-## 摘要覆盖
+- 最近最多 6 条未覆盖原文；
+- 当前 State 中递归提取的字符串；
+- 固定 Memory 的 rendered text。
 
-如果最新摘要有 `covered_until_message_id`，该消息及之前历史都从候选中删除。摘要本身作为独立 system 段注入，之后消息继续按正常历史参与预算。
-
-若覆盖消息在历史中找不到，当前实现保留全部历史。这通常意味着摘要数据损坏或消息被删除，应通过上下文日志排查。
-
-## 状态格式
-
-当前状态使用紧凑 JSON 包裹：
-
-```text
-<current_state>
-{"profile":{...},"attributes":{...}}
-</current_state>
-```
-
-状态是 required 段。内容设计应避免无界增长；大段历史文本、物品描述或任务全文不应无限塞入状态，否则会挤压摘要、世界书与对话历史。
-
-## 世界书扫描输入
-
-世界书扫描文本由三部分拼接：
-
-- 最近最多 6 条未覆盖历史消息。
-- 当前状态中递归提取出的字符串值。
-- 最新摘要正文。
-
-扫描细节见 `09-worldbook-memory.md`。
+Worker 不扫描世界书。世界书只在正常 Context Build 时按固定挑战版本激活，详细算法见 `09-worldbook-memory.md`。
 
 ## 构建日志
 
-每次正常生成写入 `context_build_logs`：
+每次正常生成记录 conversation、trigger message、turn/attempt、branch epoch、固定 Memory、模型窗口、回复预留、实际使用 Token、候选段、纳入消息 ID、世界书 entry ID、Memory lag/省略范围和任务 ID。
 
-- 对话、触发消息、挑战版本和哈希。
-- 模型、最大窗口、回复预留和已用 prompt token。
-- 每个候选段的 key、role、token、required、included 和 skip reason。
-- 实际纳入的消息 ID。
-- 激活的世界书 entry ID。
+同一 Agent attempt 内，已通过内容哈希校验的固定 Challenge Bundle 只装配一次；Bundle 的版本级组成来自进程级编译缓存。每一步会并行读取 State、历史和需要的固定 Memory，Campaign Projection 与工具快照仍按依赖顺序重新构建；世界书只在 attempt 首步扫描，随后固定激活集合。这样减少跨对话和工具循环中的固定内容查询与解析，又不牺牲权威状态的新鲜度。
 
-日志用于上下文检查器、预算排障和版本审计。第二阶段判定续写复用同一装配流程，但当前不会额外写一条完整构建日志。
+日志不保存 API Key、认证头或会话令牌。详细 LLM 请求日志由管理员开关独立控制。
 
-## 失败处理
+普通玩家接口只投影模型、Token 占用、纳入历史/世界书数量和 Memory lag，不返回 Prompt 分段、消息 ID、世界书内部 ID 或裁剪原因。完整构建日志仅通过管理员诊断接口读取；玩家侧上下文检查器另外展示主叙事步骤、题材无关的工具类别和 Memory 排队/运行状态，但不暴露工具参数、后台任务 ID、失败详情或重试入口。
 
-- 固定版本哈希失败：停止生成，不能降级到仓库文件或内置 Prompt。
-- required 段溢出：提示调整上下文窗口、回复预留或内容大小。
-- 世界书超预算：跳过低优先候选，不影响 required 规则。
-- 摘要读取失败：当前按无摘要继续；消息历史仍是权威记录。
-- 上下文日志写入失败：记录应用日志，但不改变已经构造出的模型请求。
+## 失败规则
 
-## 维护检查
-
-- 新增 required 分段时验证最小上下文窗口仍能容纳。
-- 修改段顺序时补 Context Builder 测试。
-- 修改摘要覆盖规则时测试边界消息是否重复。
-- 修改世界书预算时同时检查独立预算与合并后总预算。
-- 日志不得写入 LLM API Key 或会话令牌。
+- 固定版本或内容哈希不一致：停止生成。
+- 固定 required、Campaign 最小核心或当前 turn 放不下：停止生成，并返回分段 Token 明细。
+- 可选段超预算：整段跳过并记录 `skip_reason=budget`。
+- Context 日志写入失败：记录应用日志，不改变已构造请求。
+- Memory Worker 失败：保持最后成功链头，不中断当前叙事。

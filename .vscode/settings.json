@@ -1,0 +1,7 @@
+{
+  "taskfile.path": "task",
+  "taskfile.updateOn": "save",
+  "taskfile.tree.nesting": true,
+  "taskfile.tree.status": false,
+  "taskfile.doubleClickTimeout": 0
+}

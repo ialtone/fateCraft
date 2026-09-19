@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NIcon, useDialog } from 'naive-ui'
 import {
@@ -7,11 +7,14 @@ import {
   ChevronBackOutline,
   DocumentTextOutline,
   StatsChartOutline,
+  ShareSocialOutline,
 } from '@vicons/ionicons5'
-import StatePanel from '@/components/StatePanel.vue'
+import CharacterSidebar from '@/components/CharacterSidebar.vue'
 import MessageTimeline from '@/components/MessageTimeline.vue'
 import ContextInspector from '@/components/ContextInspector.vue'
 import ActionInput from '@/components/ActionInput.vue'
+import ConversationGuidanceBar from '@/components/ConversationGuidanceBar.vue'
+import { useGuidanceStore } from '@/stores/guidance'
 import ConversationStatusBadge from '@/components/ConversationStatusBadge.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useConversationStore } from '@/stores/conversations'
@@ -20,7 +23,15 @@ import { useStateStore } from '@/stores/state'
 import { useContextStore } from '@/stores/context'
 import { useSocketStore } from '@/stores/socket'
 import { useSettingsStore } from '@/stores/settings'
-import { useAccountStore } from '@/stores/account'
+import { useRuntimeStore } from '@/stores/runtime'
+import { useRewardStore } from '@/stores/rewards'
+import { useCampaignStore } from '@/stores/campaign'
+import { useInquiryStore } from '@/stores/inquiry'
+import type { CompletionInfo } from '@/stores/conversations'
+
+const ConversationShareDialog = defineAsyncComponent(
+  () => import('@/components/ConversationShareDialog.vue'),
+)
 
 const route = useRoute()
 const router = useRouter()
@@ -31,110 +42,69 @@ const stateStore = useStateStore()
 const context = useContextStore()
 const socket = useSocketStore()
 const settings = useSettingsStore()
-const account = useAccountStore()
+const runtime = useRuntimeStore()
+const guidance = useGuidanceStore()
+const rewards = useRewardStore()
+const campaign = useCampaignStore()
+const inquiry = useInquiryStore()
+const forking = ref(false)
+const showShare = ref(false)
 
 const showInspector = ref(true)
 const mobilePane = ref<'state' | 'chat' | 'context'>('chat')
 const convId = computed(() => route.params.id as string)
 const editable = computed(() => convStore.current?.status === 'active')
 
-// 监听结局触发（结局信息已从 socket store 挪到对话 store）
 watch(
-  () => convStore.endingTriggered,
-  (ending) => {
-    if (!ending) return
-
-    if (ending.type === 'bad') {
-      // 失败结局，显示天道回溯提示
-      showDeathDialog(ending)
-    } else if (ending.type === 'good') {
-      // 成功结局，显示破碎虚空庆祝
-      showSuccessDialog(ending)
-    } else {
-      // neutral 及未知类型：展示中性结局摘要
-      showNeutralDialog(ending)
-    }
-  },
+  () => convStore.completion,
+  (completion) => completion && showCompletion(completion),
 )
 
-function showDeathDialog(ending: { type: string; title: string; summary: string }) {
-  // 账号数据未加载完成时不用假数据判断，只展示结局摘要
-  const rewindHint = account.loaded
-    ? account.rewindCount > 0
-      ? `天道尚有转机——你还剩余 ${account.rewindCount} 次天道回溯。\n\n点击你曾落笔之处的「编辑」按钮，可逆转时光，重书命数。`
-      : '天道已定，时光不可逆转。你已无可用的天道回溯。'
-    : '账号数据加载中，回溯次数请稍后在顶栏查看。'
-
-  dialog.error({
-    title: '◆ 道消身殒 ◆',
-    content: `${ending.summary}\n\n${rewindHint}`,
-    positiveText: '知晓',
-    style: {
-      maxWidth: '500px',
-    },
+function showCompletion(completion: CompletionInfo) {
+  const presentation = runtime.presentation?.completion_view
+  const rewardLines = completion.rewards.map(
+    (reward) =>
+      `${reward.name}：${reward.quantity.toLocaleString()} ${reward.unit}（余额 ${reward.balance_after.toLocaleString()}）`,
+  )
+  const metricLines = completion.metrics.map(
+    (metric) => `${metric.label}：${String(metric.value)}${metric.unit ? ` ${metric.unit}` : ''}`,
+  )
+  const details = [
+    completion.summary,
+    rewardLines.length ? `获得奖励\n${rewardLines.join('\n')}` : presentation?.empty_reward_text,
+    metricLines.length ? metricLines.join('\n') : '',
+  ].filter(Boolean)
+  const replay = completion.nextActions.includes('replay')
+  const back = completion.nextActions.includes('back_to_challenges')
+  const options = {
+    title: completion.title || '挑战完成',
+    content: details.join('\n\n'),
+    positiveText: replay
+      ? presentation?.replay_label || '再试一次'
+      : back
+        ? presentation?.back_label || '返回列表'
+        : '关闭',
+    negativeText: replay && back ? presentation?.back_label || '返回列表' : undefined,
+    style: { maxWidth: '520px' },
     onPositiveClick: () => {
       convStore.clearEnding()
-    },
-    onMaskClick: () => {
-      convStore.clearEnding()
-    },
-  })
-}
-
-function showNeutralDialog(ending: { type: string; title: string; summary: string }) {
-  dialog.info({
-    title: `◆ ${ending.title || '故事终章'} ◆`,
-    content: ending.summary || '这一段故事，就此落幕。',
-    positiveText: '知晓',
-    style: {
-      maxWidth: '500px',
-    },
-    onPositiveClick: () => {
-      convStore.clearEnding()
-    },
-    onMaskClick: () => {
-      convStore.clearEnding()
-    },
-  })
-}
-
-function showSuccessDialog(ending: {
-  type: string
-  title: string
-  summary: string
-  spiritStones?: number
-  survivalTurns?: number
-}) {
-  const spiritStones = ending.spiritStones || 0
-  const survivalTurns = ending.survivalTurns || 0
-  const totalStones = account.totalSpiritStones + spiritStones
-  const successCount = account.successfulTrials + 1
-
-  dialog.success({
-    title: '◆ 破碎虚空 ◆',
-    content: `${ending.summary}\n\n━━━━━━━━━━━━━━━━━━━━━\n\n🌟 本次带出\n    ${spiritStones.toLocaleString()} 颗灵石\n\n📊 累计成就\n    • 历史总灵石：${totalStones.toLocaleString()} 颗\n    • 成功轮回：${successCount} 次\n    • 本次存活：${survivalTurns} 回合\n\n━━━━━━━━━━━━━━━━━━━━━\n\n功德圆满！是否开启新的轮回？`,
-    positiveText: '再来一次',
-    negativeText: '返回列表',
-    style: {
-      maxWidth: '520px',
-    },
-    onPositiveClick: () => {
-      convStore.clearEnding()
-      // 跳转到新建对话，并预选相同配置
-      router.push('/?action=new')
+      if (replay) router.push('/?action=new')
+      else if (back) router.push('/')
     },
     onNegativeClick: () => {
       convStore.clearEnding()
-      router.push('/')
+      if (back) router.push('/')
     },
-    onMaskClick: () => {
-      convStore.clearEnding()
-    },
-  })
+    onMaskClick: () => convStore.clearEnding(),
+  }
+  if (completion.category === 'success') dialog.success(options)
+  else if (completion.category === 'failure') dialog.error(options)
+  else dialog.info(options)
 }
 
 // 组件是否已卸载：卸载后进行中的 open() 不得再触碰 store / socket
 let disposed = false
+let activityTimer: ReturnType<typeof setInterval> | null = null
 
 // 最新 id 守卫：open() 的每个 await 期间用户可能已切换对话或离开本页，
 // 陈旧的 open 继续跑会用旧对话数据覆盖新对话、其尾部的 socket.connect
@@ -146,21 +116,56 @@ function stale(id: string) {
 async function open(id: string) {
   // 切换对话时清空所有缓存（doc 05）。
   chat.reset()
+  guidance.reset()
   stateStore.reset()
   context.reset()
+  runtime.reset()
+  campaign.reset()
+  inquiry.reset()
   socket.disconnect()
 
   await convStore.load(id)
   if (stale(id)) return
-  await Promise.all([chat.load(id), stateStore.load(id), context.loadLast(id)])
+  // 进入正在生成的对话（刷新页面 / 从列表点入）：agent.turn.started 已经
+  // 错过，不标记的话输入框不锁、也没有任何“生成中”指示。占位与增量由
+  // 后续 WS 事件补齐，结束兜底见 activity 轮询。
+  if (convStore.current?.is_processing) chat.markGenerating()
+  await Promise.all([
+    chat.load(id),
+    guidance.load(id),
+    stateStore.load(id),
+    context.loadRuntimeInspector(id),
+    runtime.load(id),
+    convStore.current?.campaign_id
+      ? campaign.load(convStore.current.campaign_id)
+      : Promise.resolve(null),
+  ])
   if (stale(id)) return
   socket.connect(id)
 }
 
 onMounted(async () => {
   if (!settings.settings) await settings.load().catch(() => {})
-  await account.load().catch(() => {}) // 加载账号数据
+  await rewards.load().catch(() => {})
   await open(convId.value)
+  activityTimer = setInterval(async () => {
+    if (disposed || !convId.value) return
+    await context.loadActivity(convId.value)
+    // 兜底复位：open() 因 is_processing 标记的“生成中”在服务端结束、而
+    // 本端又错过了收尾事件时（narrative 回到 idle 且没有流式占位），把
+    // 状态收回来，避免输入框永久锁死。有流式占位说明生成仍在事件流内，
+    // 交由 turn.completed / failed / error 正常收尾。
+    if (
+      !disposed &&
+      chat.isGenerating &&
+      !chat.streamingId &&
+      context.activity.narrative === 'idle'
+    ) {
+      chat.stopGenerating()
+      guidance.load(convId.value)
+      chat.load(convId.value).catch(() => {})
+    }
+  }, 5000)
 })
 
 watch(convId, (id, prev) => {
@@ -171,8 +176,14 @@ onBeforeUnmount(() => {
   // 先置卸载标记，让进行中的 open() 在下一个 await 后自行中止，
   // 避免陈旧续体在列表页重新 connect 出无限重连定时器
   disposed = true
+  if (activityTimer) {
+    clearInterval(activityTimer)
+    activityTimer = null
+  }
   socket.disconnect()
   convStore.clearCurrent()
+  campaign.reset()
+  inquiry.reset()
 })
 
 function endConversation() {
@@ -183,6 +194,21 @@ function endConversation() {
     negativeText: '取消',
     onPositiveClick: () => convStore.end(convId.value),
   })
+}
+
+async function forkConversation() {
+  if (forking.value || !convStore.current || convStore.current.campaign_id) return
+  forking.value = true
+  try {
+    const created = await convStore.fork(convId.value)
+    await router.push(`/conversations/${created.id}`)
+  } catch (error: any) {
+    // ActionInput already owns generation errors; this action is local to the
+    // page, so keep its failure visible without mutating the source record.
+    dialog.error({ title: '无法创建新对话', content: error?.message || '请稍后重试' })
+  } finally {
+    forking.value = false
+  }
 }
 </script>
 
@@ -210,6 +236,20 @@ function endConversation() {
       <div class="bar-actions row">
         <span class="model-name faint sm mono">{{ settings.settings?.model }}</span>
         <NButton
+          quaternary
+          circle
+          size="small"
+          aria-label="分享对话"
+          :disabled="
+            !convStore.current ||
+            convStore.current.status === 'deleted' ||
+            convStore.current.is_processing
+          "
+          @click="showShare = true"
+        >
+          <template #icon><NIcon :component="ShareSocialOutline" /></template>
+        </NButton>
+        <NButton
           class="inspector-toggle"
           quaternary
           size="small"
@@ -220,12 +260,36 @@ function endConversation() {
         <NButton v-if="editable" quaternary size="small" type="error" @click="endConversation"
           >结束</NButton
         >
+        <NButton
+          v-else-if="
+            convStore.current &&
+            !convStore.current.campaign_id &&
+            convStore.current.status !== 'deleted'
+          "
+          quaternary
+          size="small"
+          :loading="forking"
+          @click="forkConversation"
+          >基于新版本继续</NButton
+        >
         <ThemeToggle />
       </div>
     </header>
 
+    <ConversationShareDialog
+      v-if="showShare && convStore.current"
+      v-model:show="showShare"
+      :conversation-id="convId"
+      :conversation-title="convStore.current.title"
+      :disabled="convStore.current.is_processing"
+    />
+
     <div v-if="!editable && convStore.current" class="ended-banner">
-      ◆ 此话本已合卷 —— 可返回列表或另启新篇 ◆
+      {{
+        convStore.current.status === 'archived'
+          ? '此版本已封存，只能浏览；可基于新版本继续。'
+          : '此挑战已结束'
+      }}
     </div>
 
     <!-- 错误提示统一由输入区（ActionInput）的可关闭警示条展示，页头不再重复挂一份 -->
@@ -254,9 +318,14 @@ function endConversation() {
     </nav>
 
     <div class="three-pane" :class="[{ 'no-inspector': !showInspector }, `mobile-${mobilePane}`]">
-      <StatePanel class="pane-state" :conv-id="convId" />
+      <CharacterSidebar
+        class="pane-state"
+        :conv-id="convId"
+        :campaign="Boolean(convStore.current?.campaign_id)"
+      />
       <div class="center pane-chat">
         <MessageTimeline :editable="editable" />
+        <ConversationGuidanceBar :conv-id="convId" :disabled="!editable" />
         <ActionInput :conv-id="convId" :disabled="!editable" />
       </div>
       <ContextInspector class="pane-context" />
@@ -302,10 +371,6 @@ function endConversation() {
 
 .sm {
   font-size: 12px;
-}
-
-.mono {
-  font-family: Consolas, Menlo, monospace;
 }
 
 .ended-banner {

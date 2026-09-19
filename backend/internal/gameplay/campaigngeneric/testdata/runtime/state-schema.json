@@ -1,0 +1,8 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {"path": "narrative.current_focus", "type": "string", "default": "", "owner": "conversation", "visibility": "player", "update_policy": "model"}
+    ]
+  }
+}

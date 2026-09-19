@@ -1,0 +1,9 @@
+{
+  "id": "wandering-cultivator",
+  "name": "无名散修",
+  "description": "出身青河村的普通少年，灵根寻常，靠谨慎、准备和长期积累踏上修行路。",
+  "speaking_style": "直接、审慎，不轻易许诺。",
+  "constraints": "没有显赫血脉和现成靠山；未知功法、物品与地点不能凭空拥有或知晓。",
+  "created_at": "2026-07-29T00:00:00Z",
+  "updated_at": "2026-07-29T00:00:00Z"
+}

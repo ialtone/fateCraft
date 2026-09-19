@@ -11,7 +11,12 @@ import (
 )
 
 func (s *Server) listChallenges(c *gin.Context) {
-	items, err := s.challenges.ListPublished(c.Request.Context())
+	playerID, err := uuid.Parse(s.identity.CurrentPlayerID(c.Request.Context()))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	items, err := s.challenges.ListPublished(c.Request.Context(), playerID)
 	if err != nil {
 		fail(c, err)
 		return
@@ -20,7 +25,12 @@ func (s *Server) listChallenges(c *gin.Context) {
 }
 
 func (s *Server) getChallenge(c *gin.Context) {
-	item, err := s.challenges.GetPublished(c.Request.Context(), c.Param("slug"))
+	playerID, err := uuid.Parse(s.identity.CurrentPlayerID(c.Request.Context()))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	item, err := s.challenges.GetPublished(c.Request.Context(), c.Param("slug"), playerID)
 	if err != nil {
 		fail(c, err)
 		return

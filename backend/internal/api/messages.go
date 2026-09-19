@@ -2,16 +2,16 @@ package api
 
 import (
 	"context"
-	"errors"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/chat"
 	"github.com/ialtone/fatecraft/internal/realtime"
-	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 // maxMessageListLimit 是单次拉取消息数量的上限。
@@ -22,27 +22,27 @@ func (s *Server) listMessages(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
-		fail(c, err)
-		return
-	}
 	var before *uuid.UUID
 	if b := c.Query("before"); b != "" {
-		if bid, err := uuid.Parse(b); err == nil {
-			before = &bid
+		bid, err := uuid.Parse(b)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "before 必须是有效 UUID"})
+			return
 		}
+		before = &bid
 	}
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		n, err := strconv.Atoi(l)
-		if err != nil || n < 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "limit 必须是非负整数"})
+		if err != nil || n < 1 || n > maxMessageListLimit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit 必须是 1 到 500 的整数"})
 			return
 		}
-		if n > maxMessageListLimit {
-			n = maxMessageListLimit
-		}
 		limit = n
+	}
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return
 	}
 	msgs, err := s.chat.ListDisplay(c.Request.Context(), id, before, limit)
 	if err != nil {
@@ -54,7 +54,19 @@ func (s *Server) listMessages(c *gin.Context) {
 
 // postMessageBody 是 REST 发送消息的入参。
 type postMessageBody struct {
-	Content string `json:"content"`
+	Content   string `json:"content"`
+	RequestID string `json:"request_id"`
+}
+
+type generationActionBody struct {
+	RequestID string `json:"request_id"`
+}
+
+func requestIDFromString(raw string) (uuid.UUID, error) {
+	if strings.TrimSpace(raw) == "" {
+		return uuid.New(), nil
+	}
+	return uuid.Parse(raw)
 }
 
 // postMessage 通过 REST 触发一次生成；结果通过该对话的 WebSocket 广播。
@@ -64,7 +76,7 @@ func (s *Server) postMessage(c *gin.Context) {
 		return
 	}
 	var body postMessageBody
-	if err := c.ShouldBindJSON(&body); err != nil || body.Content == "" {
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Content) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content 不能为空"})
 		return
 	}
@@ -72,10 +84,19 @@ func (s *Server) postMessage(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	requestID, err := requestIDFromString(body.RequestID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
+		return
+	}
 	gen := s.hub.Gen()
-	s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
-		gen.Generate(ctx, id, body.Content, emit)
-	})
+	// REST 入口无法判断队列状态，直接尝试启动；对话忙时返回 409，由客户端决定重试或排队。
+	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
+		gen.Generate(ctx, id, requestID, body.Content, emit)
+	}) {
+		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		return
+	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
 }
 
@@ -88,10 +109,23 @@ func (s *Server) regenerate(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	var body generationActionBody
+	if err := c.ShouldBindJSON(&body); err != nil && err != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	requestID, err := requestIDFromString(body.RequestID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
+		return
+	}
 	gen := s.hub.Gen()
-	s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
-		gen.Regenerate(ctx, id, emit)
-	})
+	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
+		gen.Regenerate(ctx, id, requestID, emit)
+	}) {
+		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		return
+	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
 }
 
@@ -104,10 +138,23 @@ func (s *Server) continueGen(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	var body generationActionBody
+	if err := c.ShouldBindJSON(&body); err != nil && err != io.EOF {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	requestID, err := requestIDFromString(body.RequestID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
+		return
+	}
 	gen := s.hub.Gen()
-	s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
-		gen.Continue(ctx, id, emit)
-	})
+	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
+		gen.Continue(ctx, id, requestID, emit)
+	}) {
+		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		return
+	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
 }
 
@@ -125,29 +172,7 @@ func (s *Server) resolveMessageConv(c *gin.Context, msgID uuid.UUID) (uuid.UUID,
 	return disp.ConversationID, true
 }
 
-func (s *Server) editMessage(c *gin.Context) {
-	msgID, ok := paramUUID(c, "id")
-	if !ok {
-		return
-	}
-	convID, ok := s.resolveMessageConv(c, msgID)
-	if !ok {
-		return
-	}
-	var in chat.EditInput
-	if err := c.ShouldBindJSON(&in); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	disp, err := s.chat.EditDisplay(c.Request.Context(), convID, msgID, in)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, disp)
-}
-
-// editAndRegenerate 编辑用户消息后，删除所有后续消息并重新生成（天道回溯）。
+// editAndRegenerate 编辑用户消息后，删除所有后续消息并重新生成。
 func (s *Server) editAndRegenerate(c *gin.Context) {
 	msgID, ok := paramUUID(c, "id")
 	if !ok {
@@ -157,74 +182,44 @@ func (s *Server) editAndRegenerate(c *gin.Context) {
 	if !ok {
 		return
 	}
+	target, err := s.messages.GetDisplayByID(c.Request.Context(), msgID)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	if target.Type != "user" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能改写自己的输入消息"})
+		return
+	}
 
 	// 确保对话处于活跃状态
 	if _, err := s.conv.EnsureActive(c.Request.Context(), convID); err != nil {
 		fail(c, err)
 		return
 	}
-
 	var in chat.EditInput
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if in.Content == nil {
+	if in.Content == nil || strings.TrimSpace(*in.Content) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content 不能为空"})
 		return
 	}
-
-	// 天道回溯原子化：先扣减回溯次数，扣减失败（次数不足）直接返回，
-	// 成功后再执行编辑 + 重生成；前端无需先调 /account/rewind/use。
-	playerID := s.identity.CurrentPlayerID(c.Request.Context())
-	if err := s.account.UseRewind(playerID); err != nil {
-		if errors.Is(err, storage.ErrNoRewinds) {
-			c.JSON(http.StatusConflict, gin.H{"error": "没有可用的天道回溯次数"})
-			return
-		}
-		fail(c, err)
-		return
-	}
-
-	// 编辑用户消息。失败时补偿性退还已扣减的回溯次数，避免"扣了但没回溯成"。
-	disp, err := s.chat.EditDisplay(c.Request.Context(), convID, msgID, in)
+	requestID, err := requestIDFromString(in.RequestID)
 	if err != nil {
-		_ = s.account.AddRewind(playerID, 1)
-		fail(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
 		return
 	}
-
-	// 删除该消息之后的所有消息。失败同样退还次数。
-	if err := s.messages.DeleteDisplayMessagesAfter(c.Request.Context(), convID, msgID); err != nil {
-		_ = s.account.AddRewind(playerID, 1)
-		fail(c, err)
-		return
-	}
-
-	// 记录本局已用回溯次数（尽力而为，不阻断主流程）
-	_ = s.conv.IncrementRewindsUsed(c.Request.Context(), convID)
-
-	// 触发重新生成：走不再 AppendUser 的路径，避免上下文出现重复用户消息。
+	// The background coordinator owns reward consumption, branch replacement,
+	// replacement attempt creation and message binding as one operation.
 	gen := s.hub.Gen()
-	s.hub.RunDetached(c.Request.Context(), convID, func(ctx context.Context, emit realtime.EmitFunc) {
-		gen.GenerateAfterEdit(ctx, convID, emit)
-	})
+	if !s.hub.RunDetached(c.Request.Context(), convID, func(ctx context.Context, emit realtime.EmitFunc) {
+		gen.Rewrite(ctx, convID, requestID, msgID, strings.TrimSpace(*in.Content), emit)
+	}) {
+		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		return
+	}
 
-	c.JSON(http.StatusAccepted, gin.H{"status": "accepted", "message": disp})
-}
-
-func (s *Server) deleteMessage(c *gin.Context) {
-	msgID, ok := paramUUID(c, "id")
-	if !ok {
-		return
-	}
-	convID, ok := s.resolveMessageConv(c, msgID)
-	if !ok {
-		return
-	}
-	if err := s.chat.DeleteDisplay(c.Request.Context(), convID, msgID); err != nil {
-		fail(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
 }

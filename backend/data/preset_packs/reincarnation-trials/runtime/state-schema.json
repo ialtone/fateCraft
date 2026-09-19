@@ -1,0 +1,385 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "profile",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "profile.name",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.gender",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.title",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.appearance",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.attire",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.background",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.talent",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.cultivation_realm_key",
+        "type": "enum",
+        "default": "mortal",
+        "visibility": "player",
+        "update_policy": "system",
+        "constraints": {
+          "values": [
+            "mortal",
+            "qi-refining",
+            "foundation",
+            "golden-core",
+            "nascent-soul",
+            "spirit-transformation",
+            "void-refining",
+            "body-integration",
+            "great-ascension"
+          ]
+        }
+      },
+      {
+        "path": "profile.cultivation_level",
+        "type": "enum",
+        "default": "凡人",
+        "visibility": "player",
+        "update_policy": "system",
+        "constraints": {
+          "values": [
+            "凡人",
+            "练气期",
+            "筑基期",
+            "结丹期",
+            "元婴期",
+            "化神期",
+            "炼虚期",
+            "合体期",
+            "大乘期"
+          ]
+        }
+      },
+      {
+        "path": "profile.cultivation_stage",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "profile.cultivation_progress",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "profile.age",
+        "type": "number",
+        "default": 18,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "profile.lifespan",
+        "type": "number",
+        "default": 80,
+        "visibility": "player",
+        "update_policy": "system",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "profile.remaining_lifespan",
+        "type": "number",
+        "default": 80,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "attributes",
+        "type": "object",
+        "default": {
+          "灵石": 1,
+          "根骨": 50,
+          "悟性": 50,
+          "气运": 50,
+          "慧根": 50,
+          "魅力": 50
+        },
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "attributes.灵石",
+        "type": "integer",
+        "default": 1,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "attributes.根骨",
+        "type": "integer",
+        "default": 50,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "attributes.悟性",
+        "type": "integer",
+        "default": 50,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "attributes.气运",
+        "type": "integer",
+        "default": 50,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "attributes.慧根",
+        "type": "integer",
+        "default": 50,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "attributes.魅力",
+        "type": "integer",
+        "default": 50,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "traits",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "inventory",
+        "type": "object",
+        "default": {
+          "items": []
+        },
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "inventory.items",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "relationships",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "location",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "location.current",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "quests",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "risks",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "cultivation",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "cultivation.cultivation_method",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "cultivation.breakthrough_attempts",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "cultivation.failed_breakthroughs",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "cultivation.talent_awakened",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "ascension",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "ascension.void_rift_discovered",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "ascension.ascension_token_owned",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "system"
+      },
+      {
+        "path": "ascension.tribulation_preparation",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "ascension.karma_debt",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0
+        }
+      },
+      {
+        "path": "world_flags",
+        "type": "object",
+        "default": {},
+        "visibility": "model",
+        "update_policy": "model",
+        "allow_children": true
+      }
+    ]
+  }
+}

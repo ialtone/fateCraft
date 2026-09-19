@@ -1,0 +1,111 @@
+{
+  "id": "mortal-path-world",
+  "name": "青河修仙志世界规则",
+  "description": "从青河郡到上灵界的公开背景、地理、势力与修行边界。",
+  "entries": [
+    {
+      "id": "cultivation-realm-progression",
+      "world_book_id": "mortal-path-world",
+      "title": "共同修仙境界规范",
+      "content": "本修仙设定采用九个大境界，从低到高依次为凡人、练气、筑基、结丹（金丹）、元婴、化神、炼虚、合体、大乘；参考寿元上限依次约为八十年、一百二十年、二百年、五百年、一千年、二千年、五千年、一万年、二万年。练气分一至十三层，筑基及以上通常分初期、中期、后期、大圆满。凡人尚不能运用灵力；练气可施展基础术法和驱使低阶法器；筑基建立道基并形成稳定的功法、丹药与法器体系；结丹凝聚金丹，足以镇守一方；元婴神魂蜕变；化神开始触及天地法则；炼虚、合体逐步驾驭空间与法身；大乘接近下界极限。大乘圆满后的渡劫属于飞升转折，不另列普通境界。上述名称、顺序、寿元和能力尺度属于共同世界常识；具体突破成本、成功率、事件与结局由当前玩法的可信规则决定，玩家和叙事都不能自行跳级或改名。",
+      "keywords": ["境界", "修为", "练气", "筑基", "结丹", "元婴", "化神", "炼虚", "合体", "大乘", "渡劫", "飞升"],
+      "constant": true,
+      "enabled": true,
+      "priority": 5,
+      "budget_group": "default",
+      "notes": "两个内置修仙玩法共同引用的公开境界规范",
+      "metadata": {"shared_rule_id": "cultivation.realm-catalog.v1", "inquiry_visible": true}
+    },
+    {
+      "id": "cultivation-foundation-concepts",
+      "world_book_id": "mortal-path-world",
+      "title": "共同修仙基础体系",
+      "content": "灵根决定修士对灵气属性的亲和与修炼倾向，但不等同于境界；功法负责修炼根基与成长路线，术法用于战斗和施展具体效果，秘术往往以寿元、精血、神魂或因果为代价。法器、法宝需要与境界、神识和炼化程度匹配，丹药与灵药用于修炼、疗伤、突破或延寿，灵石既是修炼资源也是通行货币。任何功法、术法、法宝、丹药、灵药和灵石都必须有可信来源，不能因玩家自述或叙事便利凭空获得；具体名称、品阶、产地、取得方式和数值效果由当前玩法包独立定义。",
+      "keywords": ["灵根", "功法", "术法", "秘术", "法器", "法宝", "丹药", "灵药", "灵石"],
+      "constant": true,
+      "enabled": true,
+      "priority": 6,
+      "budget_group": "default",
+      "notes": "两个内置修仙玩法共同引用的公开基础术语",
+      "metadata": {"shared_rule_id": "cultivation.foundation-concepts.v1", "inquiry_visible": true}
+    },
+    {
+      "id": "green-river-foundation",
+      "world_book_id": "mortal-path-world",
+      "title": "青河郡",
+      "content": "青河郡位于大梁南境，凡俗村镇沿青河分布。青岚门控制北山灵脉，赤霞观守着落雷崖火脉，青河林氏经营北麓灵田；百草商会、青河散修会与大梁青河署维持明面秩序，黑水盟则活跃于南沼和地下商路。七方势力既合作也争夺药材、灵田、矿脉和交通。凡人与低阶散修主要依靠驿道、渡船和步行移动。",
+      "keywords": ["青河", "青岚门", "赤霞观", "青河林氏", "百草商会", "黑水盟", "青石坊市"],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "notes": "低阶区域公开常识",
+      "metadata": {}
+    },
+    {
+      "id": "cultivation-boundaries",
+      "world_book_id": "mortal-path-world",
+      "title": "修行边界",
+      "content": "修为、功法、法器和丹药均需明确来源。练气修士不能御空远行，凡人也不能凭意志抵御妖兽与修士术法。交易、人情、宗门身份和地形准备往往比正面对抗更重要。",
+      "keywords": ["修炼", "功法", "法器", "丹药", "突破", "战斗"],
+      "constant": true,
+      "enabled": true,
+      "priority": 20,
+      "budget_group": "default",
+      "notes": "凡人流尺度约束",
+      "metadata": {}
+    },
+    {
+      "id": "green-river-geography",
+      "world_book_id": "mortal-path-world",
+      "title": "青河郡地理与营生",
+      "content": "青河村、旧渡和县城是凡俗起点；听风竹林、百药涧、落雷崖、废弃采石洞与伏流石窟提供不同药材、矿材和妖兽素材；北麓灵田出产灵米，南沼与黑苇夜市风险最高。地点资源并非无限，采集会消耗区域存量，轮作、商队、灵脉和生态事件可能恢复或压低供给。生产和买卖必须依赖真实材料、器具、技艺、地点与市场库存。",
+      "keywords": ["采集", "灵田", "百药涧", "落雷崖", "南沼", "市场", "炼丹", "炼器", "制符"],
+      "constant": true,
+      "enabled": true,
+      "priority": 30,
+      "budget_group": "default",
+      "notes": "阶段五垂直玩法循环",
+      "metadata": {}
+    },
+    {
+      "id": "green-river-dynamics",
+      "world_book_id": "mortal-path-world",
+      "title": "任务与世界演化",
+      "content": "采药人失踪、外门失踪案和南沼夜船构成会逐步展开的线索链；未出现的后续任务不是玩家可预知的公开事实。世界时间只在行动中推进，到期事件会改变区域资源、危险、稳定、势力强弱、NPC 目标和市场价格。角色只能依据已发现地点、已出现任务和当前投影行动。",
+      "keywords": ["任务", "失踪", "夜船", "世界事件", "区域局势", "行情"],
+      "constant": true,
+      "enabled": true,
+      "priority": 40,
+      "budget_group": "default",
+      "notes": "避免剧透与静态世界",
+      "metadata": {}
+    },
+    {
+      "id": "star-sea-and-boundary-ruins",
+      "world_book_id": "mortal-path-world",
+      "title": "天星海与界墟",
+      "content": "筑基修士可从落雷崖登上远行星舟，经云帆港进入天星海。星舟盟掌握公开航路，沉星岛和坠星海渊则受渊兽与星潮影响。结丹后才足以在渡虚关登记进入界墟；守界司驻守空间裂隙，古星台保存法则刻痕，界隙核心连接上层界域。跨域并非瞬移，境界、航程、补给、市场库存与空间风险都必须真实结算。",
+      "keywords": ["天星海", "云帆港", "沉星岛", "界墟", "渡虚关", "古星台", "守界司"],
+      "constant": false,
+      "enabled": true,
+      "priority": 50,
+      "budget_group": "default",
+      "notes": "筑基至元婴阶段公开常识",
+      "metadata": {}
+    },
+    {
+      "id": "upper-spirit-realm",
+      "world_book_id": "mortal-path-world",
+      "title": "上灵界与九关天陆",
+      "content": "化神修士可通过稳定后的界隙抵达上灵界接引台。九律道庭以万律城和天关阵线维持法则秩序，但不会无条件庇护下界来客。炼虚、合体和大乘修士可以选择加入道庭执掌防线，或收集法则残片开辟独立道路；大乘圆满后必须经过渡劫，才能触发飞升终局。两种终局都必须由已解锁任务、真实地点、资源与遭遇结果共同达成。",
+      "keywords": ["上灵界", "接引台", "万律城", "九律道庭", "天关", "法则残片"],
+      "constant": false,
+      "enabled": true,
+      "priority": 60,
+      "budget_group": "default",
+      "notes": "化神以后公开常识",
+      "metadata": {}
+    }
+  ]
+}

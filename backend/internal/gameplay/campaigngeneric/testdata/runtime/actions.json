@@ -1,0 +1,3 @@
+{
+  "actions": {"model": ["update_state", "domain_action"], "player": [], "capabilities": {}}
+}

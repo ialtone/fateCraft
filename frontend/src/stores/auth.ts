@@ -75,6 +75,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // 会话已在服务端失效（业务请求返回 401）时仅清空本地登录态，
+  // 不再调用 logout 接口。
+  function expireSession() {
+    user.value = null
+  }
+
   function linuxDOLoginURL(returnTo = '/') {
     const params = new URLSearchParams({ return_to: returnTo })
     return `/api/auth/linuxdo/start?${params.toString()}`
@@ -93,6 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
     sendRegistrationCode,
     register,
     logout,
+    expireSession,
     linuxDOLoginURL,
   }
 })

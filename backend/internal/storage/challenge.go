@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,12 +13,27 @@ import (
 
 var (
 	ErrPublishedVersion = errors.New("已发布的挑战版本不可修改")
+	ErrVersionInUse     = errors.New("挑战版本已被存档或对话使用，无法覆盖")
 	ErrAlreadySettled   = errors.New("该挑战已经结算")
 )
 
 type ChallengeRepository struct{ db *gorm.DB }
 
-type PublicationValidator func(ChallengePack, ChallengeVersion, []ChallengeAsset, []ChallengeRewardRule) (string, error)
+type PublicationValidator func(
+	ChallengePack,
+	ChallengeVersion,
+	ChallengeRuntimeConfig,
+	[]ChallengeAsset,
+	[]GameplayDefinition,
+	[]ChallengeOutcomeRule,
+	[]ChallengeRewardRule,
+) (string, error)
+
+type ChallengeRewardGrant struct {
+	Definition RewardDefinition
+	Quantity   int64
+	Snapshot   JSONMap
+}
 
 func NewChallengeRepository(db *gorm.DB) *ChallengeRepository {
 	return &ChallengeRepository{db: db}
@@ -25,12 +41,14 @@ func NewChallengeRepository(db *gorm.DB) *ChallengeRepository {
 
 func (r *ChallengeRepository) WithTx(ctx context.Context, fn func(*ChallengeRepository) error) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return fn(&ChallengeRepository{db: tx})
+		return fn(NewChallengeRepository(tx))
 	})
 }
 
-// LockBootstrap serializes the empty-database bootstrap across server instances.
-// The transaction-scoped advisory lock is released automatically on commit or rollback.
+func (r *ChallengeRepository) Rewards() *RewardRepository {
+	return NewRewardRepository(r.db)
+}
+
 func (r *ChallengeRepository) LockBootstrap(ctx context.Context) error {
 	return r.db.WithContext(ctx).
 		Exec("SELECT pg_advisory_xact_lock(hashtext('fatecraft:challenge-bootstrap'))").Error
@@ -48,53 +66,66 @@ func (r *ChallengeRepository) ListPacks(ctx context.Context, publishedOnly bool)
 		query = query.Where("status = ? AND current_version_id IS NOT NULL", ChallengePackActive)
 	}
 	var packs []ChallengePack
-	err := query.Order("created_at ASC").Find(&packs).Error
+	err := query.Order("created_at ASC, id ASC").Limit(100).Find(&packs).Error
 	return packs, err
 }
 
 func (r *ChallengeRepository) GetPack(ctx context.Context, id uuid.UUID) (*ChallengePack, error) {
-	var pack ChallengePack
-	err := r.db.WithContext(ctx).First(&pack, "id = ?", id).Error
+	var row ChallengePack
+	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &pack, err
+	return &row, err
+}
+
+// LockPack serializes publication of versions belonging to the same
+// challenge. Without this lock two concurrent publishes can both observe the
+// same old current_version_id and retire/update inconsistent versions.
+func (r *ChallengeRepository) LockPack(ctx context.Context, id uuid.UUID) (*ChallengePack, error) {
+	var row ChallengePack
+	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&row, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &row, err
 }
 
 func (r *ChallengeRepository) GetPackBySlug(ctx context.Context, slug string) (*ChallengePack, error) {
-	var pack ChallengePack
-	err := r.db.WithContext(ctx).First(&pack, "slug = ?", slug).Error
+	var row ChallengePack
+	err := r.db.WithContext(ctx).First(&row, "slug = ?", slug).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &pack, err
+	return &row, err
 }
 
-func (r *ChallengeRepository) CreatePack(ctx context.Context, pack *ChallengePack) error {
-	return r.db.WithContext(ctx).Create(pack).Error
+func (r *ChallengeRepository) CreatePack(ctx context.Context, row *ChallengePack) error {
+	return r.db.WithContext(ctx).Create(row).Error
 }
 
-func (r *ChallengeRepository) SavePack(ctx context.Context, pack *ChallengePack) error {
-	return r.db.WithContext(ctx).Save(pack).Error
+func (r *ChallengeRepository) SavePack(ctx context.Context, row *ChallengePack) error {
+	return r.db.WithContext(ctx).Save(row).Error
 }
 
 func (r *ChallengeRepository) GetVersion(ctx context.Context, id uuid.UUID) (*ChallengeVersion, error) {
-	var version ChallengeVersion
-	err := r.db.WithContext(ctx).First(&version, "id = ?", id).Error
+	var row ChallengeVersion
+	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &version, err
+	return &row, err
 }
 
 func (r *ChallengeRepository) LockVersion(ctx context.Context, id uuid.UUID) (*ChallengeVersion, error) {
-	var version ChallengeVersion
+	var row ChallengeVersion
 	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
-		First(&version, "id = ?", id).Error
+		First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &version, err
+	return &row, err
 }
 
 func (r *ChallengeRepository) VersionByNumber(ctx context.Context, packID uuid.UUID, version string) (*ChallengeVersion, error) {
@@ -109,73 +140,177 @@ func (r *ChallengeRepository) VersionByNumber(ctx context.Context, packID uuid.U
 }
 
 func (r *ChallengeRepository) ListVersions(ctx context.Context, packID uuid.UUID) ([]ChallengeVersion, error) {
-	var versions []ChallengeVersion
-	err := r.db.WithContext(ctx).
-		Where("challenge_pack_id = ?", packID).
-		Order("created_at DESC").Find(&versions).Error
-	return versions, err
+	var rows []ChallengeVersion
+	err := r.db.WithContext(ctx).Where("challenge_pack_id = ?", packID).
+		Order("created_at DESC, id DESC").Find(&rows).Error
+	return rows, err
 }
 
-func (r *ChallengeRepository) CreateVersion(ctx context.Context, version *ChallengeVersion) error {
-	return r.db.WithContext(ctx).Create(version).Error
+func (r *ChallengeRepository) CreateVersion(ctx context.Context, row *ChallengeVersion) error {
+	return r.db.WithContext(ctx).Create(row).Error
+}
+
+// DeleteVersionIfUnused removes a version so repository-maintained built-in
+// content can recreate the same version number. Existing conversations keep
+// published snapshots immutable and therefore block this operation.
+func (r *ChallengeRepository) DeleteVersionIfUnused(ctx context.Context, versionID uuid.UUID) error {
+	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
+		if _, err := tx.LockVersion(ctx, versionID); err != nil {
+			return err
+		}
+		var references int64
+		if err := tx.db.WithContext(ctx).Model(&Conversation{}).
+			Where("challenge_version_id = ?", versionID).Count(&references).Error; err != nil {
+			return err
+		}
+		if references > 0 {
+			return ErrVersionInUse
+		}
+		if err := tx.db.WithContext(ctx).Model(&Campaign{}).
+			Where("challenge_version_id = ?", versionID).Count(&references).Error; err != nil {
+			return err
+		}
+		if references > 0 {
+			return ErrVersionInUse
+		}
+		now := time.Now()
+		if err := tx.db.WithContext(ctx).Model(&ChallengePack{}).
+			Where("current_version_id = ?", versionID).
+			Updates(map[string]any{
+				"current_version_id": nil,
+				"status":             ChallengePackHidden,
+				"updated_at":         now,
+			}).Error; err != nil {
+			return err
+		}
+		return tx.db.WithContext(ctx).Delete(&ChallengeVersion{}, "id = ?", versionID).Error
+	})
+}
+
+// ActivatePublishedVersion switches the pack entry to an already published
+// snapshot. It is used when an explicit built-in overwrite selects repository
+// content that is already present but is not the current version.
+func (r *ChallengeRepository) ActivatePublishedVersion(ctx context.Context, packID, versionID uuid.UUID) error {
+	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
+		version, err := tx.LockVersion(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		if version.ChallengePackID != packID {
+			return ErrNotFound
+		}
+		if version.Status != ChallengeVersionPublished {
+			return ErrPublishedVersion
+		}
+		result := tx.db.WithContext(ctx).Model(&ChallengePack{}).
+			Where("id = ?", packID).
+			Updates(map[string]any{
+				"current_version_id": versionID,
+				"status":             ChallengePackActive,
+				"updated_at":         time.Now(),
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrNotFound
+		}
+		return nil
+	})
+}
+
+func (r *ChallengeRepository) GetRuntime(ctx context.Context, versionID uuid.UUID) (*ChallengeRuntimeConfig, error) {
+	var row ChallengeRuntimeConfig
+	err := r.db.WithContext(ctx).First(&row, "challenge_version_id = ?", versionID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &row, err
 }
 
 func (r *ChallengeRepository) ListAssets(ctx context.Context, versionID uuid.UUID) ([]ChallengeAsset, error) {
-	var assets []ChallengeAsset
-	err := r.db.WithContext(ctx).
-		Where("challenge_version_id = ?", versionID).
-		Order("kind ASC, sort_order ASC, slug ASC").Find(&assets).Error
-	return assets, err
+	var rows []ChallengeAsset
+	err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).
+		Order("kind ASC, sort_order ASC, slug ASC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ChallengeRepository) ListDefinitions(ctx context.Context, versionID uuid.UUID) ([]GameplayDefinition, error) {
+	var rows []GameplayDefinition
+	err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).
+		Order("kind ASC, sort_order ASC, key ASC").Find(&rows).Error
+	return rows, err
 }
 
 func (r *ChallengeRepository) GetAsset(ctx context.Context, id uuid.UUID) (*ChallengeAsset, error) {
-	var asset ChallengeAsset
-	err := r.db.WithContext(ctx).First(&asset, "id = ?", id).Error
+	var row ChallengeAsset
+	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &asset, err
+	return &row, err
 }
 
 func (r *ChallengeRepository) AssetBySlug(ctx context.Context, versionID uuid.UUID, kind, slug string) (*ChallengeAsset, error) {
-	var asset ChallengeAsset
+	var row ChallengeAsset
 	err := r.db.WithContext(ctx).
 		Where("challenge_version_id = ? AND kind = ? AND slug = ?", versionID, kind, slug).
-		First(&asset).Error
+		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &asset, err
+	return &row, err
+}
+
+func (r *ChallengeRepository) ListOutcomeRules(ctx context.Context, versionID uuid.UUID) ([]ChallengeOutcomeRule, error) {
+	var rows []ChallengeOutcomeRule
+	err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).
+		Order("outcome_key ASC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ChallengeRepository) OutcomeRule(ctx context.Context, versionID uuid.UUID, key string) (*ChallengeOutcomeRule, error) {
+	var row ChallengeOutcomeRule
+	err := r.db.WithContext(ctx).
+		Where("challenge_version_id = ? AND outcome_key = ? AND enabled = ?", versionID, key, true).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &row, err
 }
 
 func (r *ChallengeRepository) ListRewardRules(ctx context.Context, versionID uuid.UUID) ([]ChallengeRewardRule, error) {
-	var rules []ChallengeRewardRule
-	err := r.db.WithContext(ctx).
-		Where("challenge_version_id = ?", versionID).
-		Order("reward_key ASC").Find(&rules).Error
-	return rules, err
+	var rows []ChallengeRewardRule
+	err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).
+		Order("outcome_rule_id ASC, reward_definition_id ASC").Find(&rows).Error
+	return rows, err
 }
 
-func (r *ChallengeRepository) RewardRule(ctx context.Context, versionID uuid.UUID, key string) (*ChallengeRewardRule, error) {
-	var rule ChallengeRewardRule
+func (r *ChallengeRepository) RewardRulesForOutcome(ctx context.Context, outcomeID uuid.UUID) ([]ChallengeRewardRule, error) {
+	var rows []ChallengeRewardRule
 	err := r.db.WithContext(ctx).
-		Where("challenge_version_id = ? AND reward_key = ? AND enabled = ?", versionID, key, true).
-		First(&rule).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrNotFound
-	}
-	return &rule, err
+		Where("outcome_rule_id = ? AND enabled = ?", outcomeID, true).
+		Order("reward_definition_id ASC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ChallengeRepository) RewardDefinition(ctx context.Context, id uuid.UUID) (*RewardDefinition, error) {
+	return r.Rewards().DefinitionByID(ctx, id)
 }
 
 func (r *ChallengeRepository) ReplaceDraft(
 	ctx context.Context,
 	versionID uuid.UUID,
 	manifest JSONDoc,
+	runtime ChallengeRuntimeConfig,
 	assets []ChallengeAsset,
+	definitions []GameplayDefinition,
+	outcomes []ChallengeOutcomeRule,
 	rules []ChallengeRewardRule,
 ) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
-		return tx.replaceDraft(ctx, versionID, manifest, assets, rules)
+		return tx.replaceDraft(ctx, versionID, manifest, runtime, assets, definitions, outcomes, rules)
 	})
 }
 
@@ -183,7 +318,10 @@ func (r *ChallengeRepository) replaceDraft(
 	ctx context.Context,
 	versionID uuid.UUID,
 	manifest JSONDoc,
+	runtime ChallengeRuntimeConfig,
 	assets []ChallengeAsset,
+	definitions []GameplayDefinition,
+	outcomes []ChallengeOutcomeRule,
 	rules []ChallengeRewardRule,
 ) error {
 	version, err := r.LockVersion(ctx, versionID)
@@ -193,65 +331,108 @@ func (r *ChallengeRepository) replaceDraft(
 	if version.Status != ChallengeVersionDraft {
 		return ErrPublishedVersion
 	}
-	if err := r.db.WithContext(ctx).Model(&ChallengeVersion{}).
-		Where("id = ?", versionID).
-		Updates(map[string]any{"manifest": manifest, "content_hash": "", "updated_at": time.Now()}).Error; err != nil {
-		return err
-	}
-	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeAsset{}).Error; err != nil {
+	now := time.Now()
+	if err := r.db.WithContext(ctx).Model(&ChallengeVersion{}).Where("id = ?", versionID).
+		Updates(map[string]any{"manifest": manifest, "content_hash": "", "updated_at": now}).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeRewardRule{}).Error; err != nil {
 		return err
 	}
-	now := time.Now()
-	for i := range assets {
-		assets[i].ChallengeVersionID = versionID
-		if assets[i].ID == uuid.Nil {
-			assets[i].ID = uuid.New()
+	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeOutcomeRule{}).Error; err != nil {
+		return err
+	}
+	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeAsset{}).Error; err != nil {
+		return err
+	}
+	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&GameplayDefinition{}).Error; err != nil {
+		return err
+	}
+	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeRuntimeConfig{}).Error; err != nil {
+		return err
+	}
+
+	runtime.ChallengeVersionID = versionID
+	runtime.CreatedAt = now
+	runtime.UpdatedAt = now
+	if err := r.db.WithContext(ctx).Create(&runtime).Error; err != nil {
+		return err
+	}
+	for index := range assets {
+		assets[index].ChallengeVersionID = versionID
+		if assets[index].ID == uuid.Nil {
+			assets[index].ID = uuid.New()
 		}
-		if assets[i].CreatedAt.IsZero() {
-			assets[i].CreatedAt = now
+		if assets[index].CreatedAt.IsZero() {
+			assets[index].CreatedAt = now
 		}
-		assets[i].UpdatedAt = now
-		if err := r.db.WithContext(ctx).Create(&assets[i]).Error; err != nil {
+		assets[index].UpdatedAt = now
+		if err := r.db.WithContext(ctx).Create(&assets[index]).Error; err != nil {
 			return err
 		}
 	}
-	for i := range rules {
-		rules[i].ChallengeVersionID = versionID
-		if rules[i].ID == uuid.Nil {
-			rules[i].ID = uuid.New()
+	for index := range definitions {
+		definitions[index].ChallengeVersionID = versionID
+		if definitions[index].Tags == nil {
+			definitions[index].Tags = make([]string, 0)
 		}
-		if rules[i].CreatedAt.IsZero() {
-			rules[i].CreatedAt = now
+		if definitions[index].ID == uuid.Nil {
+			definitions[index].ID = uuid.New()
 		}
-		rules[i].UpdatedAt = now
-		if err := r.db.WithContext(ctx).Create(&rules[i]).Error; err != nil {
+		if definitions[index].CreatedAt.IsZero() {
+			definitions[index].CreatedAt = now
+		}
+		definitions[index].UpdatedAt = now
+		if err := r.db.WithContext(ctx).Create(&definitions[index]).Error; err != nil {
+			return err
+		}
+	}
+	for index := range outcomes {
+		outcomes[index].ChallengeVersionID = versionID
+		if outcomes[index].ID == uuid.Nil {
+			outcomes[index].ID = uuid.New()
+		}
+		if outcomes[index].CreatedAt.IsZero() {
+			outcomes[index].CreatedAt = now
+		}
+		outcomes[index].UpdatedAt = now
+		if err := r.db.WithContext(ctx).Create(&outcomes[index]).Error; err != nil {
+			return err
+		}
+	}
+	for index := range rules {
+		rules[index].ChallengeVersionID = versionID
+		if rules[index].ID == uuid.Nil {
+			rules[index].ID = uuid.New()
+		}
+		if rules[index].CreatedAt.IsZero() {
+			rules[index].CreatedAt = now
+		}
+		rules[index].UpdatedAt = now
+		if err := r.db.WithContext(ctx).Create(&rules[index]).Error; err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// CreateDraftWithContent 原子创建一个草稿及其完整内容。
 func (r *ChallengeRepository) CreateDraftWithContent(
 	ctx context.Context,
 	version *ChallengeVersion,
+	runtime ChallengeRuntimeConfig,
 	assets []ChallengeAsset,
+	definitions []GameplayDefinition,
+	outcomes []ChallengeOutcomeRule,
 	rules []ChallengeRewardRule,
 ) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
 		if err := tx.CreateVersion(ctx, version); err != nil {
 			return err
 		}
-		return tx.replaceDraft(ctx, version.ID, version.Manifest, assets, rules)
+		return tx.replaceDraft(ctx, version.ID, version.Manifest, runtime, assets, definitions, outcomes, rules)
 	})
 }
 
-// Publish locks the draft and validates the exact content snapshot that is
-// published. ReplaceDraft uses the same row lock, so save and publish cannot
-// interleave and leave a stale content hash behind.
 func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherID uuid.UUID, validate PublicationValidator) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
 		version, err := tx.LockVersion(ctx, versionID)
@@ -261,7 +442,11 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		if version.Status != ChallengeVersionDraft {
 			return ErrPublishedVersion
 		}
-		pack, err := tx.GetPack(ctx, version.ChallengePackID)
+		pack, err := tx.LockPack(ctx, version.ChallengePackID)
+		if err != nil {
+			return err
+		}
+		runtime, err := tx.GetRuntime(ctx, versionID)
 		if err != nil {
 			return err
 		}
@@ -269,11 +454,19 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		if err != nil {
 			return err
 		}
+		definitions, err := tx.ListDefinitions(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		outcomes, err := tx.ListOutcomeRules(ctx, versionID)
+		if err != nil {
+			return err
+		}
 		rules, err := tx.ListRewardRules(ctx, versionID)
 		if err != nil {
 			return err
 		}
-		contentHash, err := validate(*pack, *version, assets, rules)
+		contentHash, err := validate(*pack, *version, *runtime, assets, definitions, outcomes, rules)
 		if err != nil {
 			return err
 		}
@@ -294,6 +487,14 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		if result.RowsAffected != 1 {
 			return ErrPublishedVersion
 		}
+		// 发布同一玩法的新版本后，旧版本必须退役。普通对话不再允许
+		// 继续生成，但保留全部消息和状态用于浏览；长期 Campaign 存档
+		// 仍由其自身生命周期管理，不在这里强制中断领域动作。
+		if pack.CurrentVersionID != nil && *pack.CurrentVersionID != version.ID {
+			if err := tx.retireVersionAndArchiveConversations(ctx, *pack.CurrentVersionID, now); err != nil {
+				return err
+			}
+		}
 		return tx.db.WithContext(ctx).Model(&ChallengePack{}).
 			Where("id = ?", version.ChallengePackID).
 			Updates(map[string]any{
@@ -302,85 +503,138 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 	})
 }
 
+// retireVersionAndArchiveConversations freezes a superseded version without
+// deleting it. The foreign keys intentionally keep old snapshots addressable
+// for read-only replay and audit. Only ordinary conversations are archived;
+// Campaigns are independent long-lived saves and remain pinned to their
+// original version until their own lifecycle ends.
+func (r *ChallengeRepository) retireVersionAndArchiveConversations(ctx context.Context, versionID uuid.UUID, archivedAt time.Time) error {
+	if err := r.db.WithContext(ctx).Model(&ChallengeVersion{}).
+		Where("id = ? AND status = ?", versionID, ChallengeVersionPublished).
+		Updates(map[string]any{
+			"status":     ChallengeVersionRetired,
+			"updated_at": archivedAt,
+		}).Error; err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Model(&Conversation{}).
+		Where("challenge_version_id = ? AND campaign_id IS NULL AND status = ?", versionID, StatusActive).
+		Updates(map[string]any{
+			"status":      StatusArchived,
+			"archived_at": archivedAt,
+			"updated_at":  archivedAt,
+		}).Error
+}
+
 func (r *ChallengeRepository) GetRun(ctx context.Context, convID uuid.UUID) (*ChallengeRun, error) {
-	var run ChallengeRun
-	err := r.db.WithContext(ctx).First(&run, "conversation_id = ?", convID).Error
+	var row ChallengeRun
+	err := r.db.WithContext(ctx).First(&row, "conversation_id = ?", convID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &run, err
+	return &row, err
 }
 
-// Conversation 返回待结算对话但不加锁，供保存模型回复前的资格预校验使用。
-// 最终 Settle 仍会在事务中通过 LockConversation 重做同一套校验。
+func (r *ChallengeRepository) ListRunRewards(ctx context.Context, runID uuid.UUID) ([]ChallengeRunReward, error) {
+	var rows []ChallengeRunReward
+	err := r.db.WithContext(ctx).Where("challenge_run_id = ?", runID).
+		Order("reward_key_snapshot ASC").Find(&rows).Error
+	return rows, err
+}
+
 func (r *ChallengeRepository) Conversation(ctx context.Context, convID uuid.UUID) (*Conversation, error) {
-	var conv Conversation
-	err := r.db.WithContext(ctx).First(&conv, "id = ?", convID).Error
+	var row Conversation
+	err := r.db.WithContext(ctx).First(&row, "id = ?", convID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &conv, err
+	return &row, err
 }
 
-// SuccessfulRollTypes 返回 required 中已经成功过的精确判定类型（去重）。
-func (r *ChallengeRepository) SuccessfulRollTypes(ctx context.Context, convID uuid.UUID, required []string) ([]string, error) {
-	if len(required) == 0 {
-		return []string{}, nil
-	}
+func (r *ChallengeRepository) SuccessfulRollKeys(ctx context.Context, convID uuid.UUID) ([]string, error) {
 	var found []string
-	err := r.db.WithContext(ctx).Model(&RollHistoryEntry{}).
-		Distinct("roll_type").
-		Where("conversation_id = ? AND success = ? AND roll_type IN ?", convID, true, required).
-		Pluck("roll_type", &found).Error
+	err := r.db.WithContext(ctx).Model(&RollHistoryEntry{}).Distinct("roll_key").
+		Where("conversation_id = ? AND success = ?", convID, true).
+		Pluck("roll_key", &found).Error
 	return found, err
 }
 
-// LockConversation 锁定待结算对话，确保同一对话只能完成一次结算。
 func (r *ChallengeRepository) LockConversation(ctx context.Context, convID uuid.UUID) (*Conversation, error) {
-	var conv Conversation
+	var row Conversation
 	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
-		First(&conv, "id = ?", convID).Error
+		First(&row, "id = ?", convID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}
-	return &conv, err
+	return &row, err
 }
 
-// CompleteRun 在当前事务中写入结算流水、更新账号统计并结束对话。
-func (r *ChallengeRepository) CompleteRun(ctx context.Context, conv *Conversation, run *ChallengeRun) error {
+// CompleteRun is called inside the settlement transaction after the
+// conversation has been locked and all trusted verification has succeeded.
+func (r *ChallengeRepository) CompleteRun(
+	ctx context.Context,
+	conv *Conversation,
+	run *ChallengeRun,
+	grants []ChallengeRewardGrant,
+) ([]ChallengeRunReward, error) {
 	var existing ChallengeRun
 	err := r.db.WithContext(ctx).First(&existing, "conversation_id = ?", conv.ID).Error
 	if err == nil {
-		return ErrAlreadySettled
+		return nil, ErrAlreadySettled
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	playerID := conv.PlayerID
-	account := Account{PlayerID: playerID}
-	if err := r.db.WithContext(ctx).Where("player_id = ?", playerID).FirstOrCreate(&account, Account{
-		PlayerID: playerID, RewindCount: 10, TotalRewindsEarned: 10,
-	}).Error; err != nil {
-		return err
-	}
-
-	accountUpdates := map[string]any{"updated_at": run.SettledAt}
-	switch run.Result {
-	case "good":
-		accountUpdates["total_spirit_stones"] = gorm.Expr("total_spirit_stones + ?", run.RewardAmount)
-		accountUpdates["successful_trials"] = gorm.Expr("successful_trials + 1")
-	case "bad":
-		accountUpdates["failed_trials"] = gorm.Expr("failed_trials + 1")
-	}
-	if err := r.db.WithContext(ctx).Model(&Account{}).
-		Where("player_id = ?", playerID).Updates(accountUpdates).Error; err != nil {
-		return err
+		return nil, err
 	}
 	if err := r.db.WithContext(ctx).Create(run).Error; err != nil {
-		return err
+		return nil, err
 	}
-	return r.db.WithContext(ctx).Model(&Conversation{}).Where("id = ?", conv.ID).Updates(map[string]any{
-		"status": StatusEnded, "ended_at": run.SettledAt, "is_processing": false, "updated_at": run.SettledAt,
-	}).Error
+
+	playerID, err := uuid.Parse(conv.PlayerID)
+	if err != nil {
+		return nil, fmt.Errorf("玩家 ID 无效: %w", err)
+	}
+	rewards := make([]ChallengeRunReward, 0, len(grants))
+	for _, grant := range grants {
+		result, err := r.Rewards().GrantInCurrentTx(ctx, RewardMutation{
+			PlayerID: playerID, RewardKey: grant.Definition.Key, Quantity: grant.Quantity,
+			SourceType: "challenge_run", SourceID: run.ID.String(),
+			IdempotencyKey: "challenge_run:" + run.ID.String() + ":" + grant.Definition.Key,
+			ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !result.Applied || result.Ledger == nil {
+			continue
+		}
+		snapshot := grant.Snapshot
+		row := ChallengeRunReward{
+			ChallengeRunID: run.ID, RewardDefinitionID: grant.Definition.ID,
+			LedgerID: result.Ledger.ID, Quantity: grant.Quantity,
+			RewardKeySnapshot: grant.Definition.Key,
+			NameSnapshot:      stringFromMap(snapshot, "name", grant.Definition.Name),
+			UnitSnapshot:      stringFromMap(snapshot, "unit", grant.Definition.Unit),
+			IconSnapshot:      stringFromMap(snapshot, "icon", grant.Definition.Icon),
+			BalanceAfter:      result.Balance,
+		}
+		if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
+			return nil, err
+		}
+		rewards = append(rewards, row)
+	}
+	if err := r.db.WithContext(ctx).Model(&Conversation{}).Where("id = ?", conv.ID).
+		Updates(map[string]any{
+			"status": StatusEnded, "ended_at": run.SettledAt,
+			"is_processing": false, "updated_at": run.SettledAt,
+		}).Error; err != nil {
+		return nil, err
+	}
+	return rewards, nil
+}
+
+func stringFromMap(values JSONMap, key, fallback string) string {
+	if value, ok := values[key].(string); ok && value != "" {
+		return value
+	}
+	return fallback
 }

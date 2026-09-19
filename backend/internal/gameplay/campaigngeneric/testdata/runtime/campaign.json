@@ -1,0 +1,14 @@
+{
+  "campaign": {
+    "lifecycle_handler": "campaign.generic_lifecycle",
+    "projection_handler": "campaign.generic_projection",
+    "context_policy": "campaign.generic_context",
+    "action_allowlist": ["world.investigate", "travel.move"],
+    "field_ownership": [
+      {"path": "campaign", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaigns"},
+      {"path": "world", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaigns"}
+    ],
+    "initial_location_key": "world.start",
+    "world_clock": {"calendar_key": "world.default", "max_due_events_per_turn": 8}
+  }
+}

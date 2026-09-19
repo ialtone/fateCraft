@@ -1,0 +1,1054 @@
+{
+  "presentation": {
+    "state_panel_title": "行旅札记",
+    "state_sections": [
+      {
+        "key": "narrative",
+        "title": "当前叙事",
+        "order": 10,
+        "fields": [
+          {
+            "path": "narrative.current_focus",
+            "label": "当前焦点",
+            "widget": "text",
+            "order": 10
+          },
+          {
+            "path": "narrative.clues",
+            "label": "线索",
+            "widget": "list",
+            "order": 20
+          }
+        ]
+      }
+    ],
+    "completion_view": {},
+    "terminology": {
+      "challenge": "世界",
+      "outcome": "命途",
+      "reward": "所得"
+    },
+    "value_labels": {
+      "campaign.outcome": {
+        "world_warden": "执掌天关",
+        "law_seeker": "携律远行"
+      },
+      "campaign.status": {
+        "active": "进行中",
+        "completed": "已完成",
+        "dead": "命途终结",
+        "abandoned": "已放弃"
+      },
+      "campaign.character.stage": {
+        "ordinary": "凡俗",
+        "tempered": "淬体",
+        "peak": "凡俗巅峰",
+        "early": "初期",
+        "middle": "中期",
+        "late": "后期",
+        "perfected": "大圆满"
+      },
+      "campaign.character.active_effect": {
+        "max_health": "气血上限",
+        "max_mana": "法力上限",
+        "max_spiritual_sense": "神识上限",
+        "physical_attack": "物攻",
+        "physical_defense": "物防",
+        "spiritual_attack": "法攻",
+        "spiritual_defense": "法防",
+        "movement": "身法",
+        "cultivation_gain": "修炼收益",
+        "mana_cost_reduction": "法力减耗",
+        "healing_power": "疗效"
+      },
+      "campaign.technique.category": {
+        "cultivation": "功法",
+        "movement": "身法",
+        "spell": "术法",
+        "body": "炼体",
+        "secret": "秘术",
+        "craft": "技艺"
+      },
+      "campaign.technique.equipped_slot": {
+        "primary": "主修",
+        "secondary": "辅修",
+        "movement": "身法",
+        "combat": "战斗",
+        "defense": "防御",
+        "utility": "辅助",
+        "secret": "秘术",
+        "body": "炼体",
+        "craft_alchemy": "炼丹",
+        "craft_artifact": "炼器",
+        "craft_talisman": "制符"
+      },
+      "campaign.item.equipped_slot": {
+        "weapon": "武器",
+        "accessory": "饰品",
+        "armor": "护具",
+        "body": "护具",
+        "craft_tool": "工器"
+      },
+      "campaign.item.state": {
+        "stored": "收纳",
+        "equipped": "已装备"
+      },
+      "campaign.recipe.craft_type": {
+        "alchemy": "炼丹",
+        "artifact": "炼器",
+        "talisman": "制符"
+      },
+      "campaign.recipe.requirement": {
+        "location": "地点不符",
+        "realm": "境界不足",
+        "mana": "法力不足",
+        "materials": "材料不足",
+        "recipe_knowledge": "尚未学习",
+        "equipment": "缺少器具",
+        "technique": "技艺不足"
+      },
+      "campaign.quest.status": {
+        "offered": "待接受",
+        "active": "进行中",
+        "blocked": "条件未足",
+        "completed": "已完成",
+        "failed": "已违约",
+        "expired": "已过期"
+      },
+      "campaign.encounter.status": {
+        "active": "交战中",
+        "won": "胜出",
+        "lost": "落败",
+        "fled": "脱离",
+        "abandoned": "中止"
+      },
+      "campaign.relationship.public_stance": {
+        "neutral": "中立",
+        "friendly": "友好",
+        "cordial": "亲善",
+        "respectful": "敬重",
+        "trusting": "信赖",
+        "distrustful": "猜疑",
+        "suspicious": "疑忌",
+        "indifferent": "冷淡",
+        "fearful": "畏惧",
+        "hostile": "敌对",
+        "enemy": "敌对",
+        "ally": "盟友"
+      },
+      "campaign.faction.reputation_level": {
+        "honored": "崇敬",
+        "ally": "盟友",
+        "friendly": "友好",
+        "outsider": "局外人",
+        "unwelcome": "不受欢迎",
+        "hostile": "敌对",
+        "nemesis": "死敌"
+      },
+      "campaign.faction.position": {
+        "outsider": "局外人",
+        "registered_scout": "登记斥候",
+        "member": "成员",
+        "elder": "长老",
+        "leader": "首领",
+        "outer_disciple": "外门弟子",
+        "inner_disciple": "内门弟子",
+        "registered_trader": "登记商户",
+        "guild_steward": "商会执事",
+        "registered_agent": "登记差役",
+        "county_consultant": "县署顾问",
+        "registered_member": "登记成员",
+        "route_keeper": "商路管事",
+        "registered_disciple": "登记弟子",
+        "fire_hall_disciple": "火堂弟子",
+        "guest_farmer": "客籍农修",
+        "clan_guest": "家族客卿"
+      }
+    },
+    "campaign_view": {
+      "renderer": "generic",
+      "title": "长期世界",
+      "header": {
+        "title_path": "world.current.name",
+        "time_path": "campaign.game_time",
+        "time_format": "game_time"
+      },
+      "sections": [
+        {
+          "key": "summary",
+          "title": "命途",
+          "order": 0,
+          "fields": [
+            {
+              "path": "campaign.status",
+              "label": "状态",
+              "widget": "badge",
+              "order": 10,
+              "value_namespace": "campaign.status"
+            },
+            {
+              "path": "campaign.outcome_key",
+              "label": "结局",
+              "widget": "text",
+              "order": 20,
+              "value_namespace": "campaign.outcome"
+            }
+          ]
+        },
+        {
+          "key": "rewards",
+          "title": "本次带出",
+          "order": 5,
+          "visible_when": {
+            "path": "outcome_rewards",
+            "exists": true
+          },
+          "fields": [
+            {
+              "path": "outcome_rewards",
+              "label": "所得",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "奖励"
+                },
+                {
+                  "path": "quantity",
+                  "label": "数量"
+                },
+                {
+                  "path": "unit",
+                  "label": "单位"
+                },
+                {
+                  "path": "balance",
+                  "label": "当前持有"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "character",
+          "title": "角色",
+          "order": 10,
+          "visible_when": {
+            "path": "character",
+            "exists": true
+          },
+          "fields": [
+            {
+              "path": "character.name",
+              "label": "姓名",
+              "widget": "title",
+              "order": 10
+            },
+            {
+              "path": "character.realm_name",
+              "label": "境界",
+              "widget": "badge",
+              "order": 20
+            },
+            {
+              "path": "character.stage_name",
+              "label": "阶段",
+              "widget": "text",
+              "order": 30
+            },
+            {
+              "path": "character.foundation_quality",
+              "label": "根基",
+              "widget": "number",
+              "order": 40
+            },
+            {
+              "path": "character.cultivation_progress",
+              "label": "修为",
+              "widget": "number",
+              "order": 50
+            },
+            {
+              "path": "character.cultivation_required",
+              "label": "下阶所需修为",
+              "widget": "number",
+              "order": 60
+            },
+            {
+              "path": "character.health",
+              "label": "气血",
+              "widget": "number",
+              "order": 70
+            },
+            {
+              "path": "character.max_health",
+              "label": "气血上限",
+              "widget": "number",
+              "order": 80
+            },
+            {
+              "path": "character.mana",
+              "label": "法力",
+              "widget": "number",
+              "order": 90
+            },
+            {
+              "path": "character.max_mana",
+              "label": "法力上限",
+              "widget": "number",
+              "order": 100
+            },
+            {
+              "path": "character.spiritual_sense",
+              "label": "神识",
+              "widget": "number",
+              "order": 110
+            },
+            {
+              "path": "character.max_spiritual_sense",
+              "label": "神识上限",
+              "widget": "number",
+              "order": 120
+            },
+            {
+              "path": "character.age_days",
+              "label": "年龄（天）",
+              "widget": "number",
+              "order": 130
+            },
+            {
+              "path": "character.lifespan_days",
+              "label": "寿元（天）",
+              "widget": "number",
+              "order": 140
+            },
+            {
+              "path": "character.public_identity",
+              "label": "身份",
+              "widget": "text",
+              "order": 150
+            },
+            {
+              "path": "character.injuries",
+              "label": "伤势",
+              "widget": "item_list",
+              "order": 160
+            },
+            {
+              "path": "character.long_term_effects",
+              "label": "长期状态",
+              "widget": "item_list",
+              "order": 170
+            },
+            {
+              "path": "character.active_effects",
+              "label": "生效加成",
+              "widget": "item_list",
+              "order": 180
+            }
+          ]
+        },
+        {
+          "key": "techniques",
+          "title": "能力",
+          "order": 20,
+          "fields": [
+            {
+              "path": "techniques",
+              "label": "已掌握能力",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "category",
+                  "label": "类别",
+                  "value_namespace": "campaign.technique.category"
+                },
+                {
+                  "path": "mastery",
+                  "label": "熟练度",
+                  "unit": ""
+                },
+                {
+                  "path": "equipped_slot",
+                  "label": "装备位",
+                  "value_namespace": "campaign.technique.equipped_slot"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "inventory",
+          "title": "物品",
+          "order": 30,
+          "fields": [
+            {
+              "path": "inventory.stacks",
+              "label": "物品堆",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "quantity",
+                  "label": "数量"
+                },
+                {
+                  "path": "quality_key",
+                  "label": "品质"
+                }
+              ]
+            },
+            {
+              "path": "inventory.instances",
+              "label": "装备",
+              "widget": "item_list",
+              "order": 20,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "state",
+                  "label": "状态",
+                  "value_namespace": "campaign.item.state"
+                },
+                {
+                  "path": "equipped_slot",
+                  "label": "装备位",
+                  "value_namespace": "campaign.item.equipped_slot"
+                },
+                {
+                  "path": "durability",
+                  "label": "耐久"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "crafting",
+          "title": "营生",
+          "order": 40,
+          "fields": [
+            {
+              "path": "recipes",
+              "label": "配方",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "craft_type",
+                  "label": "类型",
+                  "value_namespace": "campaign.recipe.craft_type"
+                },
+                {
+                  "path": "available",
+                  "label": "可用"
+                },
+                {
+                  "path": "mana_cost",
+                  "label": "法力消耗"
+                },
+                {
+                  "path": "missing_requirements",
+                  "label": "未满足条件",
+                  "value_namespace": "campaign.recipe.requirement"
+                },
+                {
+                  "path": "inputs",
+                  "label": "材料",
+                  "item_fields": [
+                    {
+                      "path": "quantity",
+                      "label": "数量"
+                    },
+                    {
+                      "path": "options",
+                      "label": "可选物品"
+                    }
+                  ]
+                },
+                {
+                  "path": "outputs",
+                  "label": "产出",
+                  "item_fields": [
+                    {
+                      "path": "name",
+                      "label": "名称"
+                    },
+                    {
+                      "path": "quantity",
+                      "label": "数量"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "path": "markets",
+              "label": "市场",
+              "widget": "item_list",
+              "order": 20,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "currency_name",
+                  "label": "货币"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "quests",
+          "title": "任务",
+          "order": 50,
+          "fields": [
+            {
+              "path": "quests",
+              "label": "任务",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "status",
+                  "label": "状态",
+                  "value_namespace": "campaign.quest.status"
+                },
+                {
+                  "path": "due_game_time",
+                  "label": "截止时间"
+                },
+                {
+                  "path": "objectives",
+                  "label": "目标",
+                  "item_fields": [
+                    {
+                      "path": "label",
+                      "label": "目标"
+                    },
+                    {
+                      "path": "current",
+                      "label": "当前"
+                    },
+                    {
+                      "path": "target",
+                      "label": "目标值"
+                    },
+                    {
+                      "path": "satisfied",
+                      "label": "已满足"
+                    }
+                  ]
+                },
+                {
+                  "path": "rewards",
+                  "label": "奖励",
+                  "item_fields": [
+                    {
+                      "path": "label",
+                      "label": "奖励"
+                    },
+                    {
+                      "path": "amount",
+                      "label": "数量"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "path": "obligations",
+              "label": "承诺",
+              "widget": "item_list",
+              "order": 20,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "status",
+                  "label": "状态",
+                  "value_namespace": "campaign.quest.status"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "encounters",
+          "title": "遭遇",
+          "order": 60,
+          "fields": [
+            {
+              "path": "encounters",
+              "label": "遭遇记录",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "opponent_name",
+                  "label": "对手"
+                },
+                {
+                  "path": "status",
+                  "label": "状态",
+                  "value_namespace": "campaign.encounter.status"
+                },
+                {
+                  "path": "round",
+                  "label": "回合"
+                }
+              ]
+            },
+            {
+              "path": "available_encounters",
+              "label": "当前位置",
+              "widget": "item_list",
+              "order": 20,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "遭遇"
+                },
+                {
+                  "path": "opponent_name",
+                  "label": "对手"
+                },
+                {
+                  "path": "opponent_realm_rank",
+                  "label": "阶位"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "world",
+          "title": "世界",
+          "order": 70,
+          "fields": [
+            {
+              "path": "world.current",
+              "label": "当前位置",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "地点"
+                },
+                {
+                  "path": "content.description",
+                  "label": "描述"
+                }
+              ]
+            },
+            {
+              "path": "world.current_path",
+              "label": "所在路径",
+              "widget": "list",
+              "order": 20,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "地点"
+                }
+              ]
+            },
+            {
+              "path": "world.available_routes",
+              "label": "可达地点",
+              "widget": "item_list",
+              "order": 30,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "地点"
+                },
+                {
+                  "path": "travel_minutes",
+                  "label": "耗时",
+                  "unit": "分"
+                },
+                {
+                  "path": "accessible",
+                  "label": "可进入"
+                }
+              ]
+            },
+            {
+              "path": "world.current.gathering",
+              "label": "可采集资源",
+              "widget": "item_list",
+              "order": 40,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "资源"
+                },
+                {
+                  "path": "min_quantity",
+                  "label": "最低数量"
+                },
+                {
+                  "path": "max_quantity",
+                  "label": "最高数量"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "relationships",
+          "title": "关系",
+          "order": 80,
+          "fields": [
+            {
+              "path": "relationships",
+              "label": "人物关系",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "人物"
+                },
+                {
+                  "path": "relationship.public_stance",
+                  "label": "态度",
+                  "value_namespace": "campaign.relationship.public_stance"
+                },
+                {
+                  "path": "relationship.trust",
+                  "label": "信任"
+                },
+                {
+                  "path": "relationship.affinity",
+                  "label": "亲近"
+                },
+                {
+                  "path": "relationship.hostility",
+                  "label": "敌意"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "factions",
+          "title": "势力",
+          "order": 90,
+          "fields": [
+            {
+              "path": "factions",
+              "label": "势力关系",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "势力"
+                },
+                {
+                  "path": "reputation",
+                  "label": "声望"
+                },
+                {
+                  "path": "reputation_level",
+                  "label": "等级",
+                  "value_namespace": "campaign.faction.reputation_level"
+                },
+                {
+                  "path": "position_key",
+                  "label": "身份",
+                  "value_namespace": "campaign.faction.position"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "key": "cultivation.practice",
+          "label": "修炼",
+          "placement": "techniques",
+          "source_path": "techniques",
+          "enabled_when": {
+            "path": "item.practice.available",
+            "equals": true
+          },
+          "arguments": {
+            "technique_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "cultivation.attempt_breakthrough",
+          "label": "尝试突破",
+          "placement": "character"
+        },
+        {
+          "key": "cultivation.learn_technique",
+          "label": "学习",
+          "placement": "techniques",
+          "source_path": "techniques",
+          "arguments": {
+            "technique_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "cultivation.equip_technique",
+          "label": "装备",
+          "placement": "techniques",
+          "source_path": "techniques",
+          "arguments": {
+            "technique_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "cultivation.unequip_technique",
+          "label": "卸下",
+          "placement": "techniques",
+          "source_path": "techniques",
+          "arguments": {
+            "technique_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "craft.learn_recipe",
+          "label": "学习配方",
+          "placement": "crafting",
+          "source_path": "recipes",
+          "enabled_when": {
+            "path": "item.learnable",
+            "equals": true
+          },
+          "arguments": {
+            "recipe_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "craft.execute_recipe",
+          "label": "制作",
+          "placement": "crafting",
+          "source_path": "recipes",
+          "enabled_when": {
+            "path": "item.available",
+            "equals": true
+          },
+          "arguments": {
+            "recipe_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "trade.buy",
+          "label": "购买",
+          "placement": "crafting",
+          "source_path": "markets",
+          "item_path": "items",
+          "enabled_when": {
+            "path": "item.buyable",
+            "equals": true
+          },
+          "arguments": {
+            "market_key": {
+              "from": "parent.key"
+            },
+            "item_kind": {
+              "from": "item.kind"
+            },
+            "item_key": {
+              "from": "item.key"
+            },
+            "quality_key": {
+              "from": "item.quality_key"
+            },
+            "quantity": {
+              "value": 1
+            }
+          }
+        },
+        {
+          "key": "trade.sell",
+          "label": "出售",
+          "placement": "crafting",
+          "source_path": "markets",
+          "item_path": "items",
+          "enabled_when": {
+            "path": "item.sellable",
+            "equals": true
+          },
+          "arguments": {
+            "market_key": {
+              "from": "parent.key"
+            },
+            "item_kind": {
+              "from": "item.kind"
+            },
+            "item_key": {
+              "from": "item.key"
+            },
+            "quality_key": {
+              "from": "item.quality_key"
+            },
+            "quantity": {
+              "value": 1
+            }
+          }
+        },
+        {
+          "key": "quest.accept",
+          "label": "接受任务",
+          "placement": "quests",
+          "source_path": "quests",
+          "enabled_when": {
+            "path": "item.can_accept",
+            "equals": true
+          },
+          "arguments": {
+            "quest_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "quest.submit",
+          "label": "提交任务",
+          "placement": "quests",
+          "source_path": "quests",
+          "enabled_when": {
+            "path": "item.can_submit",
+            "equals": true
+          },
+          "arguments": {
+            "quest_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "travel.move",
+          "label": "前往",
+          "placement": "world",
+          "source_path": "world.available_routes",
+          "enabled_when": {
+            "path": "item.accessible",
+            "equals": true
+          },
+          "arguments": {
+            "destination_key": {
+              "from": "item.location_key"
+            }
+          }
+        },
+        {
+          "key": "world.investigate",
+          "label": "调查",
+          "placement": "world"
+        },
+        {
+          "key": "world.gather",
+          "label": "采集",
+          "placement": "world",
+          "source_path": "world.current.gathering",
+          "arguments": {
+            "item_key": {
+              "from": "item.item_key"
+            }
+          }
+        },
+        {
+          "key": "encounter.start",
+          "label": "应战",
+          "placement": "encounters",
+          "source_path": "available_encounters",
+          "arguments": {
+            "encounter_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "encounter.act",
+          "label": "攻击",
+          "placement": "encounters",
+          "source_path": "encounters",
+          "enabled_when": {
+            "path": "item.status",
+            "equals": "active"
+          },
+          "arguments": {
+            "encounter_id": {
+              "from": "item.id"
+            },
+            "move": {
+              "value": "attack"
+            }
+          }
+        },
+        {
+          "key": "encounter.flee",
+          "label": "逃离",
+          "placement": "encounters",
+          "source_path": "encounters",
+          "enabled_when": {
+            "path": "item.status",
+            "equals": "active"
+          },
+          "arguments": {
+            "encounter_id": {
+              "from": "item.id"
+            }
+          }
+        }
+      ],
+      "empty_states": {
+        "character": "暂无角色资料",
+        "techniques": "暂无已掌握能力",
+        "inventory": "暂无物品",
+        "crafting": "暂无营生记录",
+        "quests": "暂无任务或承诺",
+        "encounters": "当前位置没有可触发的遭遇",
+        "world": "暂无世界资料",
+        "relationships": "暂无人物关系",
+        "factions": "暂无势力关系"
+      }
+    }
+  }
+}

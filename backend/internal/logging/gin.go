@@ -2,6 +2,7 @@ package logging
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,7 @@ func GinLogger() gin.HandlerFunc {
 	log := Named("http")
 	return func(c *gin.Context) {
 		start := time.Now()
-		path := c.Request.URL.Path
+		path := safeRequestPath(c.Request.URL.Path)
 		query := c.Request.URL.RawQuery
 
 		c.Next()
@@ -54,7 +55,7 @@ func GinRecovery() gin.HandlerFunc {
 			if err := recover(); err != nil {
 				log.Error("请求处理 panic",
 					zap.Any("error", err),
-					zap.String("path", c.Request.URL.Path),
+					zap.String("path", safeRequestPath(c.Request.URL.Path)),
 					zap.Stack("stack"),
 				)
 				c.AbortWithStatus(http.StatusInternalServerError)
@@ -62,4 +63,19 @@ func GinRecovery() gin.HandlerFunc {
 		}()
 		c.Next()
 	}
+}
+
+func safeRequestPath(path string) string {
+	for _, prefix := range []string{"/s/", "/api/public/conversation-shares/"} {
+		if index := strings.Index(path, prefix); index >= 0 {
+			tail := path[index+len(prefix):]
+			if slash := strings.IndexByte(tail, '/'); slash >= 0 {
+				tail = tail[slash:]
+			} else {
+				tail = ""
+			}
+			return path[:index] + prefix + "[redacted]" + tail
+		}
+	}
+	return path
 }

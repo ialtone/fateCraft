@@ -1,0 +1,35 @@
+{
+  "id": "mortal-path",
+  "name": "青河修仙志",
+  "version": "3.6.2",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "从青河村起步，跨越天星海、界墟与上灵界的长期修仙世界。成长、生产、经济、遭遇、任务、NPC 与世界演化均由后端可信规则持续维护。",
+  "author": "ialtone",
+  "icon": "map",
+  "tags": ["凡人流", "开放世界", "世界演化", "修仙"],
+  "default_config": {
+    "recommended_character": "world-narrator",
+    "recommended_persona": "wandering-cultivator",
+    "recommended_scenario": "green-river-beginning",
+    "recommended_prompt": "mortal-path-v1",
+    "required_worldbooks": ["mortal-path-world"],
+    "allowed_personas": ["wandering-cultivator", "herb-apprentice", "lin-clan-sideline", "old-ferry-hand", "qinglan-handyman", "yamen-runner"]
+  },
+  "outcomes": [
+    {"outcome_key": "world_warden", "category": "success", "title": "执掌天关", "tone": "success", "verifier_key": "core.always", "verifier_config": {}},
+    {"outcome_key": "law_seeker", "category": "success", "title": "携律远行", "tone": "info", "verifier_key": "core.always", "verifier_config": {}}
+  ],
+  "reward_rules": [
+    {"outcome_key": "world_warden", "reward_key": "mortal-path.world-seal", "calculator_key": "core.fixed", "calculator_config": {"amount": 1}},
+    {"outcome_key": "world_warden", "reward_key": "mortal-path.law-essence", "calculator_key": "campaign.extract_item_stack", "calculator_config": {"item_key": "law-fragment", "quality_key": "common", "source_quantity": 1, "reward_quantity": 1, "maximum_reward_quantity": 12, "consume": true}},
+    {"outcome_key": "world_warden", "reward_key": "mortal-path.spirit-essence", "calculator_key": "campaign.extract_item_stack", "calculator_config": {"item_key": "low-spirit-stone", "quality_key": "common", "source_quantity": 100, "reward_quantity": 1, "maximum_reward_quantity": 20, "consume": true}},
+    {"outcome_key": "law_seeker", "reward_key": "mortal-path.world-seal", "calculator_key": "core.fixed", "calculator_config": {"amount": 1}},
+    {"outcome_key": "law_seeker", "reward_key": "mortal-path.law-essence", "calculator_key": "campaign.extract_item_stack", "calculator_config": {"item_key": "law-fragment", "quality_key": "common", "source_quantity": 1, "reward_quantity": 1, "maximum_reward_quantity": 12, "consume": true}},
+    {"outcome_key": "law_seeker", "reward_key": "mortal-path.spirit-essence", "calculator_key": "campaign.extract_item_stack", "calculator_config": {"item_key": "low-spirit-stone", "quality_key": "common", "source_quantity": 100, "reward_quantity": 1, "maximum_reward_quantity": 20, "consume": true}}
+  ],
+  "quick_start_guide": "从青河村调查、采集和委托起步，以修炼、生产、交易和遭遇积累实力。境界按凡人、练气、筑基、结丹、元婴、化神、炼虚、合体、大乘递进；筑基后可由落雷崖前往天星海，结丹后进入界墟，化神后登临上灵界。大乘圆满后以渡劫飞升作为终局转折，玩家可选择执掌天关或携律远行。",
+  "features": ["长期连续世界", "九阶可信境界成长", "多路线功法与法宝", "跨区域与界域门禁", "逐回合可信斗法", "炼丹炼器制符", "动态市场与资源", "连续主线与支线", "NPC 与势力演化", "双终局同步结算"],
+  "dependencies": [],
+  "created_at": "2026-07-29T00:00:00Z",
+  "updated_at": "2026-09-05T00:00:00Z"
+}

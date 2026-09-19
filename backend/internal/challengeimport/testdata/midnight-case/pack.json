@@ -1,0 +1,62 @@
+{
+  "id": "midnight-case",
+  "name": "午夜疑案",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "在钟楼敲响十二下前保存证据并指出真正的凶手。",
+  "author": "Fatecraft tests",
+  "icon": "search",
+  "tags": ["悬疑", "调查"],
+  "default_config": {
+    "recommended_character": "case-narrator",
+    "recommended_persona": "private-investigator",
+    "recommended_scenario": "midnight-manor",
+    "recommended_prompt": "midnight-case-v1",
+    "required_worldbooks": ["midnight-case-rules"],
+    "allowed_personas": ["private-investigator"]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "case_solved",
+      "category": "success",
+      "title": "真相大白",
+      "tone": "success",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {"type": "state_number", "path": "investigation.clue_integrity", "operator": "gte", "value": 80},
+          {"type": "successful_roll", "key": "investigation.final-accusation"}
+        ]
+      }
+    },
+    {
+      "outcome_key": "time_expired",
+      "category": "failure",
+      "title": "午夜已至",
+      "tone": "error",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {"type": "state_number", "path": "investigation.remaining_minutes", "operator": "lte", "value": 0}
+        ]
+      }
+    }
+  ],
+  "reward_rules": [
+    {
+      "outcome_key": "case_solved",
+      "reward_key": "midnight-case.truth-seeker",
+      "calculator_key": "core.fixed",
+      "calculator_config": {"amount": 1}
+    },
+    {
+      "outcome_key": "case_solved",
+      "reward_key": "midnight-case.case-token",
+      "calculator_key": "core.fixed",
+      "calculator_config": {"amount": 2}
+    }
+  ],
+  "quick_start_guide": "检查现场、保护线索并在时间耗尽前提出最终指控。",
+  "features": ["证据完整度", "倒计时", "服务端指控判定", "多奖励结算"],
+  "dependencies": []
+}

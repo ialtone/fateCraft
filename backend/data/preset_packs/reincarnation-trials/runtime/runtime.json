@@ -1,0 +1,15 @@
+{
+  "$schema": "fatecraft.runtime.schema.json",
+  "runtime_contract_version": 2,
+  "engine": {
+    "key": "core.generic",
+    "version": 1
+  },
+  "mode": "challenge",
+  "includes": {
+    "state_schema": "state-schema.json",
+    "actions": "actions.json",
+    "settlement": "settlement.json",
+    "presentation": "presentation.json"
+  }
+}

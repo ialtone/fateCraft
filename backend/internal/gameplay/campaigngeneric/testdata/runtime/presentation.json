@@ -1,0 +1,20 @@
+{
+  "presentation": {
+    "state_panel_title": "世界状态",
+    "state_sections": [],
+    "completion_view": {},
+    "campaign_view": {
+      "renderer": "generic",
+      "title": "漫游地图",
+      "header": {"title_path": "world.current.name", "time_path": "campaign.game_time", "time_format": "game_time"},
+      "sections": [{
+        "key": "world",
+        "title": "世界",
+        "order": 10,
+        "fields": [{"path": "world.current", "label": "当前位置", "widget": "item_list", "order": 10, "item_fields": [{"path": "name", "label": "地点"}]}]
+      }],
+      "actions": [{"key": "world.investigate", "label": "调查", "placement": "world"}],
+      "empty_states": {"world": "暂无地点资料"}
+    }
+  }
+}

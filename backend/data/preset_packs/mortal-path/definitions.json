@@ -1,0 +1,1795 @@
+[
+  {
+    "kind": "realm", "key": "mortal", "name": "凡人",
+    "content": {
+      "rank": 0, "stages": ["ordinary", "tempered", "peak"], "stage_labels": ["凡俗", "淬体", "凡俗巅峰"],
+      "cultivation_required": 100, "lifespan_days": 29200, "starting_age_days": 5840,
+      "max_health": 100, "max_mana": 30, "max_spiritual_sense": 20,
+      "next_realm_key": "qi-refining", "breakthrough_chance": 80,
+      "breakthrough_minutes": 1440, "failure_progress_loss_percent": 15, "failure_health_damage": 8
+    },
+    "tags": ["境界", "凡俗"], "search_text": "凡人 锻体 引气", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "realm", "key": "qi-refining", "name": "练气",
+    "content": {
+      "rank": 1, "stages": ["layer-1", "layer-2", "layer-3", "layer-4", "layer-5", "layer-6", "layer-7", "layer-8", "layer-9", "layer-10", "layer-11", "layer-12", "layer-13"], "stage_labels": ["一层", "二层", "三层", "四层", "五层", "六层", "七层", "八层", "九层", "十层", "十一层", "十二层", "十三层"],
+      "cultivation_required": 1000, "lifespan_days": 43800,
+      "max_health": 160, "max_mana": 180, "max_spiritual_sense": 100,
+      "next_realm_key": "foundation", "breakthrough_chance": 55,
+      "breakthrough_minutes": 4320, "failure_progress_loss_percent": 25, "failure_health_damage": 24
+    },
+    "tags": ["境界", "练气"], "search_text": "练气 灵力 神识", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "realm", "key": "foundation", "name": "筑基",
+    "content": {
+      "rank": 2, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 5000, "lifespan_days": 73000,
+      "max_health": 300, "max_mana": 600, "max_spiritual_sense": 320,
+      "next_realm_key": "golden-core", "breakthrough_chance": 42,
+      "breakthrough_minutes": 10080, "failure_progress_loss_percent": 30, "failure_health_damage": 60
+    },
+    "tags": ["境界", "筑基"], "search_text": "筑基 道基", "visibility": "player", "sort_order": 30
+  },
+
+  {
+    "kind": "technique", "key": "basic-breathing", "name": "引气诀",
+    "content": {
+      "category": "cultivation", "max_layer": 9, "minimum_realm_rank": 0,
+      "practice_minutes": 120, "mana_cost": 1, "cultivation_gain": 12,
+      "mastery_gain": 35, "insight_gain": 1, "allowed_slots": ["primary"],
+      "starting_pool": "primary-method", "starting_weight": 2, "starting_slot": "primary",
+      "source_item_key": "manual.basic-breathing",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_mana": 5}},
+        {"layer": 3, "effects": {"cultivation_gain": 3}},
+        {"layer": 6, "effects": {"max_mana": 15, "mana_cost_reduction": 1}},
+        {"layer": 9, "effects": {"spiritual_attack": 8}}
+      ]
+    },
+    "tags": ["主修", "基础"], "search_text": "引气 呼吸 吐纳", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "technique", "key": "light-step", "name": "轻身步",
+    "content": {
+      "category": "movement", "max_layer": 6, "minimum_realm_rank": 0,
+      "practice_minutes": 90, "mana_cost": 0, "cultivation_gain": 3,
+      "mastery_gain": 50, "insight_gain": 1, "allowed_slots": ["movement"],
+      "starting_pool": "secondary-art", "starting_weight": 2, "starting_slot": "movement",
+      "source_item_key": "manual.light-step",
+      "layer_effects": [
+        {"layer": 1, "effects": {"movement": 2}},
+        {"layer": 3, "effects": {"movement": 3}},
+        {"layer": 6, "effects": {"movement": 5, "physical_defense": 2}}
+      ]
+    },
+    "tags": ["身法", "基础"], "search_text": "轻身 身法 赶路", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "technique", "key": "greenwood-nurturing", "name": "青木养元功",
+    "content": {
+      "category": "cultivation", "max_layer": 12, "minimum_realm_rank": 0,
+      "practice_minutes": 180, "mana_cost": 2, "cultivation_gain": 22,
+      "mastery_gain": 30, "insight_gain": 2, "allowed_slots": ["primary", "secondary"],
+      "starting_pool": "primary-method", "starting_weight": 2, "starting_slot": "primary",
+      "source_item_key": "manual.greenwood",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_health": 5, "healing_power": 3}},
+        {"layer": 4, "effects": {"cultivation_gain": 4, "max_mana": 8}},
+        {"layer": 8, "effects": {"max_health": 15, "healing_power": 7}},
+        {"layer": 12, "effects": {"spiritual_defense": 10}}
+      ]
+    },
+    "tags": ["主修", "木行", "疗伤"], "search_text": "青木 养元 木灵根", "visibility": "player", "sort_order": 30
+  },
+  {
+    "kind": "technique", "key": "iron-body", "name": "铁衣锻体法",
+    "content": {
+      "category": "body", "max_layer": 8, "minimum_realm_rank": 0,
+      "practice_minutes": 150, "mana_cost": 0, "cultivation_gain": 8,
+      "mastery_gain": 40, "insight_gain": 1, "allowed_slots": ["body"],
+      "starting_pool": "secondary-art", "starting_weight": 2, "starting_slot": "body",
+      "source_item_key": "manual.iron-body",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_health": 8, "physical_defense": 2}},
+        {"layer": 4, "effects": {"physical_defense": 5}},
+        {"layer": 8, "effects": {"max_health": 20, "physical_attack": 5}}
+      ]
+    },
+    "tags": ["炼体", "防御"], "search_text": "铁衣 锻体 防御", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "technique", "key": "basic-alchemy", "name": "小云火炼丹术",
+    "content": {
+      "category": "craft", "max_layer": 6, "minimum_realm_rank": 0,
+      "practice_minutes": 120, "mana_cost": 1, "cultivation_gain": 2,
+      "mastery_gain": 55, "insight_gain": 1, "allowed_slots": ["craft_alchemy"],
+      "starting_pool": "craft-discipline", "starting_weight": 1, "starting_slot": "craft_alchemy",
+      "source_item_key": "manual.basic-alchemy"
+    },
+    "tags": ["生产", "炼丹"], "search_text": "炼丹 云火 丹炉", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "technique", "key": "basic-forging", "name": "百炼锻器诀",
+    "content": {
+      "category": "craft", "max_layer": 6, "minimum_realm_rank": 0,
+      "practice_minutes": 150, "mana_cost": 1, "cultivation_gain": 2,
+      "mastery_gain": 45, "insight_gain": 1, "allowed_slots": ["craft_artifact"],
+      "starting_pool": "craft-discipline", "starting_weight": 1, "starting_slot": "craft_artifact",
+      "source_item_key": "manual.basic-forging"
+    },
+    "tags": ["生产", "炼器"], "search_text": "炼器 锻造 百炼", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "technique", "key": "basic-talisman", "name": "引灵画符法",
+    "content": {
+      "category": "craft", "max_layer": 6, "minimum_realm_rank": 0,
+      "practice_minutes": 100, "mana_cost": 1, "cultivation_gain": 2,
+      "mastery_gain": 60, "insight_gain": 1, "allowed_slots": ["craft_talisman"],
+      "starting_pool": "craft-discipline", "starting_weight": 1, "starting_slot": "craft_talisman",
+      "source_item_key": "manual.basic-talisman"
+    },
+    "tags": ["生产", "制符"], "search_text": "制符 引灵 符笔", "visibility": "player", "sort_order": 70
+  },
+
+  {
+    "kind": "item", "key": "low-spirit-stone", "name": "下品灵石",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 20, "max_grant_per_action": 1000},
+    "tags": ["货币", "修炼资源"], "search_text": "灵石 交易", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "item", "key": "healing-pill", "name": "回春丸",
+    "content": {"stackable": true, "consumable": true, "starting_quantity": 3, "max_grant_per_action": 20, "effects": {"health": 30}},
+    "tags": ["丹药", "疗伤"], "search_text": "回春丸 气血 疗伤", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "item", "key": "qi-gathering-pill", "name": "聚气散",
+    "content": {"stackable": true, "consumable": true, "starting_quantity": 2, "max_grant_per_action": 20, "effects": {"mana": 12, "cultivation_progress": 18}},
+    "tags": ["丹药", "修炼"], "search_text": "聚气散 法力 修为", "visibility": "player", "sort_order": 30
+  },
+  {
+    "kind": "item", "key": "manual.basic-breathing", "name": "无名吐纳残篇",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "基础吐纳"], "search_text": "吐纳 残篇 引气", "visibility": "player", "sort_order": 35
+  },
+  {
+    "kind": "item", "key": "manual.greenwood", "name": "青木功残卷",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "功法"], "search_text": "青木功 玉简 残卷", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "item", "key": "manual.iron-body", "name": "铁衣法抄本",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "炼体"], "search_text": "铁衣 锻体 抄本", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "item", "key": "manual.light-step", "name": "轻身步图谱",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "身法"], "search_text": "轻身 步法 图谱", "visibility": "player", "sort_order": 55
+  },
+  {
+    "kind": "item", "key": "manual.basic-alchemy", "name": "小云火炼丹札",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "炼丹"], "search_text": "云火 炼丹 丹札", "visibility": "player", "sort_order": 56
+  },
+  {
+    "kind": "item", "key": "manual.basic-forging", "name": "百炼锻器谱",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "炼器"], "search_text": "百炼 锻器 图谱", "visibility": "player", "sort_order": 57
+  },
+  {
+    "kind": "item", "key": "manual.basic-talisman", "name": "引灵画符抄",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1},
+    "tags": ["传承", "制符"], "search_text": "引灵 画符 抄本", "visibility": "player", "sort_order": 58
+  },
+  {
+    "kind": "item", "key": "green-river-herb", "name": "青河草",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 4, "max_grant_per_action": 50},
+    "tags": ["药材", "低阶"], "search_text": "青河草 药材", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "item", "key": "clear-spring-water", "name": "清灵泉水",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 3, "max_grant_per_action": 100},
+    "tags": ["材料", "炼丹"], "search_text": "泉水 炼丹 调和", "visibility": "player", "sort_order": 70
+  },
+  {
+    "kind": "item", "key": "green-pattern-ore", "name": "青纹矿",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 2, "max_grant_per_action": 100},
+    "tags": ["矿材", "炼器"], "search_text": "青纹矿 矿石 炼器", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "item", "key": "spirit-wood", "name": "养灵木",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 2, "max_grant_per_action": 100},
+    "tags": ["灵材", "炼器"], "search_text": "养灵木 木行 灵材", "visibility": "player", "sort_order": 90
+  },
+  {
+    "kind": "item", "key": "blank-talisman-paper", "name": "空白符纸",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 5, "max_grant_per_action": 100},
+    "tags": ["材料", "制符"], "search_text": "符纸 制符", "visibility": "player", "sort_order": 100
+  },
+  {
+    "kind": "item", "key": "spirit-cinnabar", "name": "灵砂",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 3, "max_grant_per_action": 100},
+    "tags": ["材料", "制符"], "search_text": "灵砂 朱砂 制符", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "item", "key": "ward-talisman", "name": "护身符",
+    "content": {"stackable": true, "consumable": true, "max_grant_per_action": 50, "effects": {"health": 12, "spiritual_sense": 4}},
+    "tags": ["符箓", "防护"], "search_text": "护身符 防护", "visibility": "player", "sort_order": 120
+  },
+  {
+    "kind": "item", "key": "pill-dregs", "name": "药渣",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100},
+    "tags": ["失败产物", "炼丹"], "search_text": "药渣 炼丹失败", "visibility": "player", "sort_order": 130
+  },
+  {
+    "kind": "item", "key": "refining-slag", "name": "炼器废渣",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100},
+    "tags": ["失败产物", "炼器"], "search_text": "废渣 炼器失败", "visibility": "player", "sort_order": 140
+  },
+  {
+    "kind": "item", "key": "ruined-talisman", "name": "废符",
+    "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100},
+    "tags": ["失败产物", "制符"], "search_text": "废符 制符失败", "visibility": "player", "sort_order": 150
+  },
+  {
+    "kind": "item", "key": "recipe-jade.greenwood-token", "name": "灵木护符炼制札记",
+    "content": {"stackable": true, "consumable": false, "starting_quantity": 1, "max_grant_per_action": 1},
+    "tags": ["配方", "炼器"], "search_text": "灵木护符 配方 札记", "visibility": "player", "sort_order": 160
+  },
+
+  {
+    "kind": "equipment", "key": "mortal-iron-sword", "name": "百炼铁剑",
+    "content": {"allowed_slots": ["weapon"], "durability_max": 100, "starting_owned": true, "bonuses": {"physical_attack": 8}},
+    "tags": ["武器", "凡器"], "search_text": "铁剑 武器", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "equipment", "key": "traveler-robe", "name": "青布行衣",
+    "content": {"allowed_slots": ["body"], "durability_max": 80, "starting_owned": true, "bonuses": {"physical_defense": 3}},
+    "tags": ["防具", "凡器"], "search_text": "行衣 防具", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "equipment", "key": "spirit-wood-token", "name": "灵木护符",
+    "content": {"allowed_slots": ["accessory"], "durability_max": 60, "bonuses": {"max_mana": 10}},
+    "tags": ["法器", "护符"], "search_text": "灵木 护符 法力", "visibility": "player", "sort_order": 30
+  },
+  {
+    "kind": "equipment", "key": "novice-pill-furnace", "name": "青陶丹炉",
+    "content": {"allowed_slots": ["craft_tool"], "durability_max": 80, "starting_owned": true},
+    "tags": ["器具", "炼丹"], "search_text": "丹炉 炼丹 器具", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "equipment", "key": "hundred-forge-hammer", "name": "百炼锤",
+    "content": {"allowed_slots": ["craft_tool"], "durability_max": 120, "starting_owned": true},
+    "tags": ["器具", "炼器"], "search_text": "锻锤 炼器 器具", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "equipment", "key": "spirit-line-brush", "name": "引灵符笔",
+    "content": {"allowed_slots": ["craft_tool"], "durability_max": 70, "starting_owned": true},
+    "tags": ["器具", "制符"], "search_text": "符笔 制符 器具", "visibility": "player", "sort_order": 60
+  },
+
+  {
+    "kind": "recipe", "key": "healing-pill-recipe", "name": "回春丸方",
+    "content": {
+      "craft_type": "alchemy", "starting_known": true,
+      "allowed_location_keys": ["green-river-village", "bluestone-market"],
+      "inputs": [
+        {"quantity": 2, "options": [{"item_key": "green-river-herb", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "clear-spring-water", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["novice-pill-furnace"],
+      "technique_key": "basic-alchemy", "min_technique_mastery": 0, "min_realm_rank": 0,
+      "mana_cost": 2, "craft_minutes": 180, "success_chance_bps": 7200, "mastery_bonus_bps": 1800,
+      "failure_input_loss_bps": 7500,
+      "outputs": [{"kind": "item", "key": "healing-pill", "quantity": 2, "quality_weights": {"common": 7500, "fine": 2200, "superior": 300}}],
+      "failure_outputs": [{"kind": "item", "key": "pill-dregs", "quantity": 1, "quality_weights": {"common": 1}}],
+      "failure_effect": {"mana_damage": 2, "category": "poison", "effect_key": "minor-pill-toxin", "severity": 8, "duration_minutes": 720, "description": "试药时吸入少量驳杂丹气"}
+    },
+    "tags": ["炼丹", "丹方"], "search_text": "回春丸 炼丹 青河草", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "recipe", "key": "greenwood-token-recipe", "name": "灵木护符炼法",
+    "content": {
+      "craft_type": "artifact", "source_item_key": "recipe-jade.greenwood-token",
+      "allowed_location_keys": ["bluestone-market"],
+      "inputs": [
+        {"quantity": 2, "options": [{"item_key": "green-pattern-ore", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "spirit-wood", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["hundred-forge-hammer"],
+      "technique_key": "basic-forging", "min_technique_mastery": 0, "min_realm_rank": 0,
+      "mana_cost": 4, "craft_minutes": 360, "success_chance_bps": 6200, "mastery_bonus_bps": 2200,
+      "failure_input_loss_bps": 10000,
+      "outputs": [{"kind": "equipment", "key": "spirit-wood-token", "quantity": 1, "quality_weights": {"common": 8000, "fine": 1800, "superior": 200}}],
+      "failure_outputs": [{"kind": "item", "key": "refining-slag", "quantity": 1, "quality_weights": {"common": 1}}],
+      "failure_effect": {"health_damage": 8, "category": "injury", "effect_key": "forge-burn", "severity": 12, "duration_minutes": 1440, "description": "炉火失控造成轻微灼伤"}
+    },
+    "tags": ["炼器", "法器配方"], "search_text": "灵木护符 炼器 青纹矿", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "recipe", "key": "ward-talisman-recipe", "name": "护身符法",
+    "content": {
+      "craft_type": "talisman", "starting_known": true,
+      "allowed_location_keys": ["green-river-village", "bluestone-market"],
+      "inputs": [
+        {"quantity": 1, "options": [{"item_key": "blank-talisman-paper", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "spirit-cinnabar", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["spirit-line-brush"],
+      "technique_key": "basic-talisman", "min_technique_mastery": 0, "min_realm_rank": 0,
+      "mana_cost": 3, "craft_minutes": 120, "success_chance_bps": 7600, "mastery_bonus_bps": 1600,
+      "failure_input_loss_bps": 10000,
+      "outputs": [{"kind": "item", "key": "ward-talisman", "quantity": 2, "quality_weights": {"common": 8200, "fine": 1600, "superior": 200}}],
+      "failure_outputs": [{"kind": "item", "key": "ruined-talisman", "quantity": 1, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["制符", "符法"], "search_text": "护身符 制符 灵砂", "visibility": "player", "sort_order": 30
+  },
+
+  {
+    "kind": "market", "key": "bluestone-guild-market", "name": "青石坊市百草行",
+    "content": {
+      "location_key": "bluestone-market", "currency_item_key": "low-spirit-stone", "faction_key": "hundred-herbs-guild",
+      "restock_interval_minutes": 1440, "price_modifier_bps": 10000,
+      "scarcity_markup_bps": 3000, "reputation_adjustment_bps": 1800,
+      "items": [
+        {"kind": "item", "key": "green-river-herb", "quality_key": "common", "max_stock": 40, "initial_stock": 24, "restock_quantity": 8, "base_buy_price": 2, "base_sell_price": 1},
+        {"kind": "item", "key": "clear-spring-water", "quality_key": "common", "max_stock": 30, "initial_stock": 18, "restock_quantity": 6, "base_buy_price": 2, "base_sell_price": 1},
+        {"kind": "item", "key": "green-pattern-ore", "quality_key": "common", "max_stock": 20, "initial_stock": 8, "restock_quantity": 4, "base_buy_price": 5, "base_sell_price": 3},
+        {"kind": "item", "key": "spirit-wood", "quality_key": "common", "max_stock": 16, "initial_stock": 6, "restock_quantity": 3, "base_buy_price": 8, "base_sell_price": 4},
+        {"kind": "item", "key": "blank-talisman-paper", "quality_key": "common", "max_stock": 50, "initial_stock": 30, "restock_quantity": 10, "base_buy_price": 2, "base_sell_price": 1},
+        {"kind": "item", "key": "spirit-cinnabar", "quality_key": "common", "max_stock": 30, "initial_stock": 16, "restock_quantity": 6, "base_buy_price": 4, "base_sell_price": 2},
+        {"kind": "item", "key": "healing-pill", "quality_key": "common", "max_stock": 20, "initial_stock": 10, "restock_quantity": 4, "base_buy_price": 8, "base_sell_price": 4},
+        {"kind": "item", "key": "ward-talisman", "quality_key": "common", "max_stock": 20, "initial_stock": 6, "restock_quantity": 3, "base_buy_price": 10, "base_sell_price": 5},
+        {"kind": "equipment", "key": "spirit-wood-token", "quality_key": "common", "max_stock": 4, "initial_stock": 1, "restock_quantity": 1, "base_buy_price": 80, "base_sell_price": 42}
+      ]
+    },
+    "tags": ["市场", "百草商会"], "search_text": "青石坊市 百草行 交易", "visibility": "player", "sort_order": 10
+  },
+
+  {
+    "kind": "location", "key": "mortal-realm", "name": "人间界",
+    "content": {
+      "node_type": "realm", "description": "凡俗王朝与低阶修行地域所在的下层界域。",
+      "connections": []
+    },
+    "tags": ["界域"], "search_text": "人间界 凡俗 修行界", "visibility": "player", "sort_order": 1
+  },
+  {
+    "kind": "location", "key": "green-river-county", "name": "青河郡",
+    "content": {
+      "node_type": "region", "parent_key": "mortal-realm",
+      "description": "位于北山灵脉南麓的边郡，宗门、商会与凡俗聚落沿青河分布。",
+      "connections": [],
+      "initial_state": {
+        "resource_level": 6200, "danger_level": 2400, "stability": 6800, "conflict_stage": 0,
+        "faction_power": {
+          "green-mist-sect": 5600, "hundred-herbs-guild": 4200, "blackwater-league": 1800,
+          "liang-magistracy": 3600, "loose-cultivator-association": 2400,
+          "red-cloud-temple": 2600, "green-river-lin-clan": 3000
+        }
+      }
+    },
+    "tags": ["地区", "低阶修行区"], "search_text": "青河郡 北山灵脉", "visibility": "player", "sort_order": 2
+  },
+  {
+    "kind": "location", "key": "green-river-village", "name": "青河村",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "沿河而建的凡俗村落，靠采药、捕鱼和驿道生计。", "realm_layer": "mortal", "danger_rank": 0,
+      "spiritual_energy": 5, "facilities": ["inn", "herbalist"], "investigation_minutes": 90,
+      "gathering": {
+        "minutes": 120, "risk_chance_bps": 500, "risk_health_damage": 3,
+        "entries": [
+          {"item_key": "green-river-herb", "min_quantity": 1, "max_quantity": 2, "weight": 70},
+          {"item_key": "clear-spring-water", "min_quantity": 1, "max_quantity": 2, "weight": 30}
+        ]
+      },
+      "connections": [
+        {"location_key": "old-ferry", "travel_minutes": 45},
+        {"location_key": "bamboo-woods", "travel_minutes": 90},
+        {"location_key": "county-town", "travel_minutes": 150},
+        {"location_key": "reed-marsh", "travel_minutes": 120}
+      ]
+    },
+    "tags": ["村落", "安全"], "search_text": "青河村 村民 药铺", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "location", "key": "old-ferry", "name": "青河旧渡",
+    "content": {
+      "node_type": "location", "description": "通往青石坊市的旧渡口，夜间常有身份不明的船只靠岸。", "parent_key": "green-river-county",
+      "realm_layer": "mortal", "danger_rank": 1, "spiritual_energy": 4, "facilities": ["ferry"], "investigation_minutes": 120,
+      "gathering": {
+        "minutes": 120,
+        "entries": [
+          {"item_key": "clear-spring-water", "min_quantity": 1, "max_quantity": 3, "weight": 75},
+          {"item_key": "moon-dew", "min_quantity": 1, "max_quantity": 1, "weight": 25}
+        ]
+      },
+      "connections": [
+        {"location_key": "green-river-village", "travel_minutes": 45},
+        {"location_key": "bluestone-market", "travel_minutes": 180},
+        {"location_key": "south-marsh", "travel_minutes": 210}
+      ]
+    },
+    "tags": ["渡口", "商路"], "search_text": "旧渡 渡船 黑泥", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "location", "key": "bamboo-woods", "name": "听风竹林",
+    "content": {
+      "node_type": "location", "description": "村北的大片竹林，外围可采药，深处偶有妖气。", "parent_key": "green-river-county",
+      "realm_layer": "mortal", "danger_rank": 1, "spiritual_energy": 12, "facilities": ["foraging"], "investigation_minutes": 150,
+      "gathering": {
+        "minutes": 150, "risk_chance_bps": 1200, "risk_health_damage": 5,
+        "entries": [
+          {"item_key": "green-river-herb", "min_quantity": 1, "max_quantity": 4, "weight": 55},
+          {"item_key": "spirit-wood", "min_quantity": 1, "max_quantity": 2, "weight": 30},
+          {"item_key": "mist-beast-hide", "min_quantity": 1, "max_quantity": 1, "weight": 15}
+        ]
+      },
+      "connections": [
+        {"location_key": "green-river-village", "travel_minutes": 90},
+        {"location_key": "abandoned-cave", "travel_minutes": 150},
+        {"location_key": "herb-valley", "travel_minutes": 180},
+        {"location_key": "mist-cliff", "travel_minutes": 240}
+      ]
+    },
+    "tags": ["野外", "药材"], "search_text": "竹林 药材 妖兽", "visibility": "player", "sort_order": 30
+  },
+  {
+    "kind": "location", "key": "abandoned-cave", "name": "废弃采石洞",
+    "content": {
+      "node_type": "scene", "description": "早年开采青纹石留下的洞窟，入口被藤蔓与落石遮蔽。", "parent_key": "bamboo-woods",
+      "realm_layer": "qi-refining", "danger_rank": 2, "spiritual_energy": 22, "facilities": ["exploration"], "investigation_minutes": 180,
+      "gathering": {
+        "minutes": 210, "risk_chance_bps": 2500, "risk_health_damage": 10,
+        "entries": [
+          {"item_key": "green-pattern-ore", "min_quantity": 1, "max_quantity": 3, "weight": 75},
+          {"item_key": "star-iron-sand", "min_quantity": 1, "max_quantity": 1, "weight": 25}
+        ]
+      },
+      "connections": [
+        {"location_key": "bamboo-woods", "travel_minutes": 150},
+        {"location_key": "underground-river", "travel_minutes": 90}
+      ]
+    },
+    "tags": ["洞窟", "探索"], "search_text": "采石洞 遗迹 妖气", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "location", "key": "bluestone-market", "name": "青石坊市",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "百草商会主持的低阶坊市，散修、药农与宗门弟子在此交易。", "realm_layer": "qi-refining",
+      "danger_rank": 1, "spiritual_energy": 18, "facilities": ["market", "inn", "message-board"], "investigation_minutes": 120,
+      "connections": [
+        {"location_key": "old-ferry", "travel_minutes": 180},
+        {"location_key": "green-mist-gate", "travel_minutes": 240},
+        {"location_key": "county-town", "travel_minutes": 120}
+      ]
+    },
+    "tags": ["坊市", "交易"], "search_text": "青石坊市 商会 散修", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "location", "key": "green-mist-gate", "name": "青岚山门",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "青岚门外山门，未持令牌者只能在迎客坪等候。", "realm_layer": "qi-refining",
+      "danger_rank": 1, "spiritual_energy": 35, "facilities": ["sect-gate"], "investigation_minutes": 90,
+      "connections": [
+        {"location_key": "bluestone-market", "travel_minutes": 240},
+        {"location_key": "outer-courtyard", "travel_minutes": 30}
+      ],
+      "entry_requirements": [{"faction_key": "green-mist-sect", "permission_key": "outer_gate_access"}]
+    },
+    "tags": ["宗门", "山门"], "search_text": "青岚门 山门 宗门", "visibility": "player", "sort_order": 60
+  },
+
+  {
+    "kind": "faction", "key": "green-mist-sect", "name": "青岚门",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {"outer_gate_access": 100},
+      "position_thresholds": {"outer_disciple": 1000, "inner_disciple": 5000},
+      "resource": "北山灵脉", "goal": "维持青河郡修行秩序与灵脉控制"
+    },
+    "tags": ["宗门", "正道"], "search_text": "青岚门 宗门 灵脉", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "faction", "key": "hundred-herbs-guild", "name": "百草商会",
+    "content": {
+      "initial_reputation": 50,
+      "position_thresholds": {"registered_trader": 500, "guild_steward": 3000},
+      "resource": "药材商路", "goal": "维持坊市贸易并扩张药材收购网络"
+    },
+    "tags": ["商会", "中立"], "search_text": "百草商会 药材 坊市", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "faction", "key": "blackwater-league", "name": "黑水盟",
+    "content": {"initial_reputation": -100, "resource": "南沼暗线", "goal": "绕过宗门与商会控制建立地下商路"},
+    "tags": ["灰色势力", "黑市"], "search_text": "黑水盟 南沼 黑市", "visibility": "player", "sort_order": 30
+  },
+
+  {
+    "kind": "npc_archetype", "key": "village-herbalist", "name": "顾药师",
+    "content": {
+      "initial": true, "instance_key": "gu-herbalist", "location_key": "green-river-village",
+      "faction_key": "hundred-herbs-guild", "realm_key": "mortal", "stage_key": "peak",
+      "public_profile": {"role": "村中药师", "manner": "寡言谨慎"},
+      "private_state": {"secret": "替商会辨认山中异常药材"},
+      "goals": {"primary": "找回失踪的采药人"}
+    },
+    "tags": ["关键 NPC", "药师"], "search_text": "顾药师 药铺 采药人", "visibility": "model", "sort_order": 10
+  },
+  {
+    "kind": "npc_archetype", "key": "ferry-keeper", "name": "老邢",
+    "content": {
+      "initial": true, "instance_key": "xing-ferryman", "location_key": "old-ferry",
+      "faction_key": "", "realm_key": "mortal", "stage_key": "tempered",
+      "public_profile": {"role": "守渡人", "manner": "圆滑健谈"},
+      "private_state": {"secret": "见过黑水盟夜船"},
+      "goals": {"primary": "保住渡口生计"}
+    },
+    "tags": ["关键 NPC", "渡口"], "search_text": "老邢 守渡 夜船", "visibility": "model", "sort_order": 20
+  },
+  {
+    "kind": "npc_archetype", "key": "guild-appraiser", "name": "沈青禾",
+    "content": {
+      "initial": true, "instance_key": "shen-appraiser", "location_key": "bluestone-market",
+      "faction_key": "hundred-herbs-guild", "realm_key": "qi-refining", "stage_key": "middle",
+      "public_profile": {"role": "商会鉴定师", "manner": "礼貌而精于算计"},
+      "private_state": {"secret": "正在调查假丹药流入坊市"},
+      "goals": {"primary": "维护商会信誉", "investigation_progress": 0}
+    },
+    "tags": ["关键 NPC", "商会"], "search_text": "沈青禾 鉴定师 商会", "visibility": "model", "sort_order": 30
+  },
+  {
+    "kind": "npc_archetype", "key": "outer-disciple", "name": "陆沉舟",
+    "content": {
+      "initial": true, "instance_key": "lu-disciple", "location_key": "green-mist-gate",
+      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "early",
+      "public_profile": {"role": "青岚门外门弟子", "manner": "守规矩但并不傲慢"},
+      "private_state": {"secret": "想查明师兄在采石洞失踪的原因"},
+      "goals": {"primary": "积累外门功绩"}
+    },
+    "tags": ["关键 NPC", "宗门"], "search_text": "陆沉舟 外门弟子 青岚门", "visibility": "model", "sort_order": 40
+  },
+  {
+    "kind": "npc_archetype", "key": "wandering-herb-gatherer", "name": "采药散修",
+    "content": {
+      "spawnable": true, "max_instances": 8,
+      "allowed_locations": ["green-river-village", "old-ferry", "bamboo-woods", "bluestone-market"],
+      "faction_key": "hundred-herbs-guild", "realm_key": "mortal", "stage_key": "tempered",
+      "public_profile": {"role": "往来青河郡的采药人", "manner": "谨慎而熟悉山野"},
+      "private_state": {"secret": "可能知道一条尚未公开的药材线索"},
+      "goals": {"primary": "安全卖出本次采集的药材"}
+    },
+    "tags": ["原型 NPC", "采药"], "search_text": "散修 采药人 山野 线索", "visibility": "model", "sort_order": 50
+  },
+
+  {
+    "kind": "world_event", "key": "county-shadow-conflict", "name": "青河暗流",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 360,
+      "repeat_interval_minutes": 1440, "priority": 300,
+      "variants": [
+        {
+          "key": "blackwater-pressure", "weight": 45,
+          "summary": "黑水盟的暗线向渡口与山路扩张，青河郡局势趋于紧张。",
+          "effects": {
+            "danger_delta": 260, "stability_delta": -180, "conflict_stage": 1,
+            "faction_power_deltas": {"blackwater-league": 180, "green-mist-sect": -80}
+          }
+        },
+        {
+          "key": "sect-patrol", "weight": 35,
+          "summary": "青岚门增派巡山弟子，压制了郡内数处可疑据点。",
+          "effects": {
+            "danger_delta": -180, "stability_delta": 220, "conflict_stage": 1,
+            "faction_power_deltas": {"green-mist-sect": 160, "blackwater-league": -100}
+          }
+        },
+        {
+          "key": "uneasy-balance", "weight": 20,
+          "summary": "各方暂时收敛锋芒，但旧渡附近仍流传着夜船出没的消息。",
+          "effects": {"danger_delta": 60, "stability_delta": -40}
+        }
+      ]
+    },
+    "tags": ["区域事件", "势力冲突"], "search_text": "青河郡 黑水盟 青岚门 冲突", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "world_event", "key": "guild-market-cycle", "name": "坊市行情",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 720,
+      "repeat_interval_minutes": 2880, "priority": 200,
+      "variants": [
+        {
+          "key": "herb-shortage", "weight": 50,
+          "summary": "山中药材来货减少，百草行临时上调了坊市价格。",
+          "effects": {"resource_delta": -140, "market_price_modifier_deltas_bps": {"bluestone-guild-market": 900}}
+        },
+        {
+          "key": "caravan-arrival", "weight": 50,
+          "summary": "一支药材商队抵达青石坊市，常用物资的行情有所回落。",
+          "effects": {"resource_delta": 180, "market_price_modifier_deltas_bps": {"bluestone-guild-market": -700}}
+        }
+      ]
+    },
+    "tags": ["区域事件", "市场"], "search_text": "青石坊市 行情 药材 商队", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "world_event", "key": "appraiser-investigation", "name": "鉴定师的暗查",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 540,
+      "repeat_interval_minutes": 2160, "priority": 100,
+      "variants": [
+        {
+          "key": "new-lead", "weight": 70,
+          "summary": "沈青禾沿着假丹药的来路查到了一条新线索。",
+          "effects": {"npc_goal_deltas": {"shen-appraiser": {"investigation_progress": 12}}}
+        },
+        {
+          "key": "cold-trail", "weight": 30,
+          "summary": "假丹药的线索一度中断，沈青禾转而排查坊市中的旧账。",
+          "effects": {"npc_goal_deltas": {"shen-appraiser": {"investigation_progress": 4}}}
+        }
+      ]
+    },
+    "tags": ["区域事件", "NPC 目标"], "search_text": "沈青禾 假丹药 调查", "visibility": "player", "sort_order": 30
+  },
+
+  {
+    "kind": "quest", "key": "guild-herb-order", "name": "百草行的药材单",
+    "content": {
+      "quest_type": "quest", "initial": true, "starting_status": "offered",
+      "accept_location_keys": ["green-river-village", "bluestone-market"],
+      "objectives": [
+        {"key": "deliver-herbs", "type": "item", "item_key": "green-river-herb", "quality_key": "common", "quantity": 6, "consume": true}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 12},
+        {"type": "faction_reputation", "faction_key": "hundred-herbs-guild", "amount": 40}
+      ],
+      "unlock_quest_keys": ["bamboo-trail-clue"],
+      "associations": {"region_keys": ["green-river-county"], "faction_keys": ["hundred-herbs-guild"], "npc_keys": ["gu-herbalist"]}
+    },
+    "tags": ["任务", "采药", "商会"], "search_text": "百草行 青河草 药材单", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "quest", "key": "sect-ward-promise", "name": "山门护符之约",
+    "content": {
+      "quest_type": "obligation", "initial": true, "starting_status": "offered", "deadline_minutes": 1440,
+      "accept_location_keys": ["bluestone-market", "green-mist-gate"],
+      "objectives": [
+        {"key": "deliver-ward", "type": "item", "item_key": "ward-talisman", "quality_key": "common", "quantity": 1, "consume": true}
+      ],
+      "rewards": [
+        {"type": "faction_reputation", "faction_key": "green-mist-sect", "amount": 120},
+        {"type": "faction_contribution", "faction_key": "green-mist-sect", "amount": 100}
+      ],
+      "unlock_quest_keys": ["sect-cave-investigation"],
+      "associations": {"region_keys": ["green-river-county"], "faction_keys": ["green-mist-sect"], "npc_keys": ["lu-disciple"], "world_event_keys": ["county-shadow-conflict"]}
+    },
+    "tags": ["承诺", "宗门", "截止时间"], "search_text": "青岚门 护符 承诺 山门", "visibility": "player", "sort_order": 20
+  },
+
+  {
+    "kind": "technique", "key": "red-sun-breathing", "name": "赤阳吐纳法",
+    "content": {
+      "category": "cultivation", "max_layer": 12, "minimum_realm_rank": 0, "practice_minutes": 180,
+      "mana_cost": 3, "cultivation_gain": 25, "mastery_gain": 28, "insight_gain": 2,
+      "allowed_slots": ["primary", "secondary"],
+      "starting_pool": "primary-method", "starting_weight": 1, "starting_slot": "primary",
+      "source_item_key": "manual.red-sun-breathing",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_mana": 6}},
+        {"layer": 4, "effects": {"cultivation_gain": 5, "spiritual_attack": 3}},
+        {"layer": 8, "effects": {"max_mana": 18}},
+        {"layer": 12, "effects": {"spiritual_attack": 12}}
+      ]
+    },
+    "tags": ["主修", "火行"], "search_text": "赤阳 吐纳 火行 修炼", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "technique", "key": "water-mirror-art", "name": "水镜养神诀",
+    "content": {
+      "category": "cultivation", "max_layer": 12, "minimum_realm_rank": 0, "practice_minutes": 210,
+      "mana_cost": 2, "cultivation_gain": 20, "mastery_gain": 30, "insight_gain": 3,
+      "allowed_slots": ["primary", "secondary"],
+      "starting_pool": "primary-method", "starting_weight": 1, "starting_slot": "primary",
+      "source_item_key": "manual.water-mirror",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_spiritual_sense": 6}},
+        {"layer": 4, "effects": {"spiritual_defense": 4}},
+        {"layer": 8, "effects": {"max_spiritual_sense": 18, "cultivation_gain": 4}},
+        {"layer": 12, "effects": {"spiritual_defense": 12}}
+      ]
+    },
+    "tags": ["主修", "水行", "神识"], "search_text": "水镜 养神 水行 神识", "visibility": "player", "sort_order": 90
+  },
+  {
+    "kind": "technique", "key": "earth-vein-method", "name": "厚土载元功",
+    "content": {
+      "category": "cultivation", "max_layer": 12, "minimum_realm_rank": 0, "practice_minutes": 240,
+      "mana_cost": 2, "cultivation_gain": 19, "mastery_gain": 32, "insight_gain": 2,
+      "allowed_slots": ["primary", "secondary"],
+      "starting_pool": "primary-method", "starting_weight": 1, "starting_slot": "primary",
+      "source_item_key": "manual.earth-vein",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_health": 10}},
+        {"layer": 4, "effects": {"physical_defense": 4}},
+        {"layer": 8, "effects": {"max_health": 25, "cultivation_gain": 4}},
+        {"layer": 12, "effects": {"physical_defense": 12}}
+      ]
+    },
+    "tags": ["主修", "土行", "稳固"], "search_text": "厚土 载元 土行 防御", "visibility": "player", "sort_order": 100
+  },
+  {
+    "kind": "technique", "key": "green-mist-sword-art", "name": "青岚十三剑",
+    "content": {
+      "category": "spell", "max_layer": 9, "minimum_realm_rank": 1, "practice_minutes": 150,
+      "mana_cost": 5, "cultivation_gain": 5, "mastery_gain": 38, "insight_gain": 2,
+      "allowed_slots": ["combat"], "source_item_key": "manual.green-mist-sword",
+      "layer_effects": [
+        {"layer": 1, "effects": {"physical_attack": 4}},
+        {"layer": 3, "effects": {"spiritual_attack": 5}},
+        {"layer": 6, "effects": {"movement": 3, "physical_attack": 6}},
+        {"layer": 9, "effects": {"spiritual_attack": 14}}
+      ]
+    },
+    "tags": ["剑诀", "青岚门"], "search_text": "青岚 十三剑 剑诀", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "technique", "key": "vine-binding-spell", "name": "缠藤术",
+    "content": {
+      "category": "spell", "max_layer": 6, "minimum_realm_rank": 1, "practice_minutes": 120,
+      "mana_cost": 4, "cultivation_gain": 3, "mastery_gain": 45, "insight_gain": 1,
+      "allowed_slots": ["combat", "utility"], "source_item_key": "manual.vine-binding",
+      "layer_effects": [
+        {"layer": 1, "effects": {"spiritual_attack": 3}},
+        {"layer": 3, "effects": {"spiritual_attack": 5}},
+        {"layer": 6, "effects": {"spiritual_attack": 8, "movement": 2}}
+      ]
+    },
+    "tags": ["术法", "木行", "控制"], "search_text": "缠藤 木行 术法", "visibility": "player", "sort_order": 120
+  },
+  {
+    "kind": "technique", "key": "stone-skin-method", "name": "磐石炼身法",
+    "content": {
+      "category": "body", "max_layer": 9, "minimum_realm_rank": 0, "practice_minutes": 180,
+      "mana_cost": 1, "cultivation_gain": 7, "mastery_gain": 36, "insight_gain": 1,
+      "allowed_slots": ["body"],
+      "starting_pool": "secondary-art", "starting_weight": 1, "starting_slot": "body",
+      "source_item_key": "manual.stone-skin",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_health": 12}},
+        {"layer": 3, "effects": {"physical_defense": 4}},
+        {"layer": 6, "effects": {"max_health": 20, "spiritual_defense": 3}},
+        {"layer": 9, "effects": {"physical_defense": 10}}
+      ]
+    },
+    "tags": ["炼体", "土行"], "search_text": "磐石 炼身 防御", "visibility": "player", "sort_order": 130
+  },
+  {
+    "kind": "technique", "key": "cloud-shadow-step", "name": "流云匿影步",
+    "content": {
+      "category": "movement", "max_layer": 9, "minimum_realm_rank": 1, "practice_minutes": 120,
+      "mana_cost": 3, "cultivation_gain": 3, "mastery_gain": 42, "insight_gain": 2,
+      "allowed_slots": ["movement"], "source_item_key": "manual.cloud-shadow-step",
+      "layer_effects": [
+        {"layer": 1, "effects": {"movement": 4}},
+        {"layer": 3, "effects": {"physical_defense": 2}},
+        {"layer": 6, "effects": {"movement": 7}},
+        {"layer": 9, "effects": {"movement": 10, "spiritual_defense": 4}}
+      ]
+    },
+    "tags": ["身法", "隐匿"], "search_text": "流云 匿影 身法", "visibility": "player", "sort_order": 140
+  },
+  {
+    "kind": "technique", "key": "spirit-shield-spell", "name": "小灵盾术",
+    "content": {
+      "category": "spell", "max_layer": 6, "minimum_realm_rank": 1, "practice_minutes": 110,
+      "mana_cost": 4, "cultivation_gain": 2, "mastery_gain": 48, "insight_gain": 1,
+      "allowed_slots": ["combat", "defense"], "source_item_key": "manual.spirit-shield",
+      "layer_effects": [
+        {"layer": 1, "effects": {"spiritual_defense": 4}},
+        {"layer": 3, "effects": {"physical_defense": 3}},
+        {"layer": 6, "effects": {"spiritual_defense": 10, "max_mana": 8}}
+      ]
+    },
+    "tags": ["术法", "防御"], "search_text": "灵盾 防御 术法", "visibility": "player", "sort_order": 150
+  },
+  {
+    "kind": "technique", "key": "blood-burning-secret", "name": "燃血秘术",
+    "content": {
+      "category": "secret", "max_layer": 3, "minimum_realm_rank": 0, "practice_minutes": 240,
+      "mana_cost": 0, "cultivation_gain": 1, "mastery_gain": 30, "insight_gain": 2,
+      "allowed_slots": ["secret"], "source_item_key": "manual.blood-burning",
+      "layer_effects": [
+        {"layer": 1, "effects": {"physical_attack": 5}},
+        {"layer": 2, "effects": {"movement": 3}},
+        {"layer": 3, "effects": {"physical_attack": 8, "spiritual_attack": 5}}
+      ]
+    },
+    "tags": ["秘术", "代价"], "search_text": "燃血 秘术 拼命", "visibility": "player", "sort_order": 160
+  },
+  {
+    "kind": "technique", "key": "hundred-herbs-sense", "name": "百草辨灵术",
+    "content": {
+      "category": "secret", "max_layer": 6, "minimum_realm_rank": 0, "practice_minutes": 100,
+      "mana_cost": 1, "cultivation_gain": 2, "mastery_gain": 55, "insight_gain": 3,
+      "allowed_slots": ["utility"], "source_item_key": "manual.hundred-herbs-sense",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_spiritual_sense": 3}},
+        {"layer": 3, "effects": {"healing_power": 4}},
+        {"layer": 6, "effects": {"max_spiritual_sense": 8, "healing_power": 8}}
+      ]
+    },
+    "tags": ["秘术", "采药", "炼丹"], "search_text": "百草 辨灵 采药", "visibility": "player", "sort_order": 170
+  },
+  {
+    "kind": "technique", "key": "thunder-finger", "name": "掌心雷引",
+    "content": {
+      "category": "spell", "max_layer": 9, "minimum_realm_rank": 1, "practice_minutes": 180,
+      "mana_cost": 7, "cultivation_gain": 4, "mastery_gain": 34, "insight_gain": 2,
+      "allowed_slots": ["combat"], "source_item_key": "manual.thunder-finger",
+      "layer_effects": [
+        {"layer": 1, "effects": {"spiritual_attack": 6}},
+        {"layer": 3, "effects": {"spiritual_attack": 7}},
+        {"layer": 6, "effects": {"max_mana": 10, "spiritual_attack": 8}},
+        {"layer": 9, "effects": {"spiritual_attack": 15}}
+      ]
+    },
+    "tags": ["雷法", "攻击"], "search_text": "掌心雷 雷法 攻击", "visibility": "player", "sort_order": 180
+  },
+  {
+    "kind": "technique", "key": "breath-concealment", "name": "敛息诀",
+    "content": {
+      "category": "secret", "max_layer": 6, "minimum_realm_rank": 0, "practice_minutes": 90,
+      "mana_cost": 1, "cultivation_gain": 1, "mastery_gain": 58, "insight_gain": 2,
+      "allowed_slots": ["utility", "secret"], "source_item_key": "manual.breath-concealment",
+      "layer_effects": [
+        {"layer": 1, "effects": {"spiritual_defense": 2}},
+        {"layer": 3, "effects": {"movement": 2}},
+        {"layer": 6, "effects": {"spiritual_defense": 7, "movement": 3}}
+      ]
+    },
+    "tags": ["秘术", "隐匿"], "search_text": "敛息 隐匿 躲避", "visibility": "player", "sort_order": 190
+  },
+  {
+    "kind": "technique", "key": "foundation-condensing-guide", "name": "小周天筑基篇",
+    "content": {
+      "category": "cultivation", "max_layer": 12, "minimum_realm_rank": 1, "practice_minutes": 360,
+      "mana_cost": 8, "cultivation_gain": 34, "mastery_gain": 22, "insight_gain": 4,
+      "allowed_slots": ["primary", "secondary"], "source_item_key": "manual.foundation-guide",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_mana": 12}},
+        {"layer": 4, "effects": {"cultivation_gain": 8}},
+        {"layer": 8, "effects": {"max_health": 20, "max_spiritual_sense": 15}},
+        {"layer": 12, "effects": {"cultivation_gain": 12, "spiritual_defense": 10}}
+      ]
+    },
+    "tags": ["主修", "筑基准备"], "search_text": "小周天 筑基 凝元", "visibility": "player", "sort_order": 200
+  },
+
+  {"kind": "item", "key": "manual.red-sun-breathing", "name": "赤阳吐纳法玉简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "火行"], "search_text": "赤阳 吐纳 玉简", "visibility": "player", "sort_order": 170},
+  {"kind": "item", "key": "manual.water-mirror", "name": "水镜养神诀玉简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "水行"], "search_text": "水镜 养神 玉简", "visibility": "player", "sort_order": 180},
+  {"kind": "item", "key": "manual.earth-vein", "name": "厚土载元功石简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "土行"], "search_text": "厚土 载元 石简", "visibility": "player", "sort_order": 190},
+  {"kind": "item", "key": "manual.green-mist-sword", "name": "青岚十三剑谱", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "剑诀"], "search_text": "青岚 十三剑 剑谱", "visibility": "player", "sort_order": 200},
+  {"kind": "item", "key": "manual.vine-binding", "name": "缠藤术法简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "木行术法"], "search_text": "缠藤 术法 法简", "visibility": "player", "sort_order": 210},
+  {"kind": "item", "key": "manual.stone-skin", "name": "磐石炼身图", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "炼体"], "search_text": "磐石 炼身 图录", "visibility": "player", "sort_order": 220},
+  {"kind": "item", "key": "manual.cloud-shadow-step", "name": "流云匿影步册", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "身法"], "search_text": "流云 匿影 身法", "visibility": "player", "sort_order": 230},
+  {"kind": "item", "key": "manual.spirit-shield", "name": "小灵盾术法简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "防御术法"], "search_text": "灵盾 防御 法简", "visibility": "player", "sort_order": 240},
+  {"kind": "item", "key": "manual.blood-burning", "name": "燃血秘术残页", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "秘术"], "search_text": "燃血 秘术 残页", "visibility": "player", "sort_order": 250},
+  {"kind": "item", "key": "manual.hundred-herbs-sense", "name": "百草辨灵录", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "采药"], "search_text": "百草 辨灵 采药", "visibility": "player", "sort_order": 260},
+  {"kind": "item", "key": "manual.thunder-finger", "name": "掌心雷引残简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "雷法"], "search_text": "掌心雷 雷法 残简", "visibility": "player", "sort_order": 270},
+  {"kind": "item", "key": "manual.breath-concealment", "name": "敛息诀薄册", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "隐匿"], "search_text": "敛息 隐匿 薄册", "visibility": "player", "sort_order": 280},
+  {"kind": "item", "key": "manual.foundation-guide", "name": "小周天筑基篇玉简", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["传承", "筑基"], "search_text": "小周天 筑基 玉简", "visibility": "player", "sort_order": 290},
+
+  {"kind": "item", "key": "recipe-slip.detox-pill", "name": "清瘴丹方", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["丹方"], "search_text": "清瘴丹 解毒 丹方", "visibility": "player", "sort_order": 300},
+  {"kind": "item", "key": "recipe-slip.spirit-restoring", "name": "复灵散方", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["丹方"], "search_text": "复灵散 法力 丹方", "visibility": "player", "sort_order": 310},
+  {"kind": "item", "key": "recipe-slip.body-tempering", "name": "淬体汤方", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["丹方", "炼体"], "search_text": "淬体汤 炼体 丹方", "visibility": "player", "sort_order": 320},
+  {"kind": "item", "key": "recipe-slip.green-mist-sword", "name": "青岚剑炼图", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["炼器图"], "search_text": "青岚剑 炼器 图谱", "visibility": "player", "sort_order": 330},
+  {"kind": "item", "key": "recipe-slip.blackwater-cloak", "name": "玄水隐袍炼图", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["炼器图", "黑水盟"], "search_text": "玄水 隐袍 炼器", "visibility": "player", "sort_order": 340},
+  {"kind": "item", "key": "recipe-slip.flame-talisman", "name": "烈焰符法", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["符法"], "search_text": "烈焰符 火行 符法", "visibility": "player", "sort_order": 350},
+  {"kind": "item", "key": "recipe-slip.thunder-talisman", "name": "惊雷符法", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 1}, "tags": ["符法", "雷行"], "search_text": "惊雷符 雷行 符法", "visibility": "player", "sort_order": 360},
+
+  {"kind": "item", "key": "red-flame-fruit", "name": "赤焰果", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100}, "tags": ["药材", "火行"], "search_text": "赤焰果 火行 药材", "visibility": "player", "sort_order": 370},
+  {"kind": "item", "key": "moon-dew", "name": "月华露", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100}, "tags": ["药材", "水行"], "search_text": "月华露 水行 药材", "visibility": "player", "sort_order": 380},
+  {"kind": "item", "key": "swamp-venom-sac", "name": "沼毒囊", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100}, "tags": ["妖兽材料", "毒物"], "search_text": "沼毒囊 南沼 妖兽", "visibility": "player", "sort_order": 390},
+  {"kind": "item", "key": "star-iron-sand", "name": "星铁砂", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100}, "tags": ["矿材", "炼器"], "search_text": "星铁砂 炼器 矿材", "visibility": "player", "sort_order": 400},
+  {"kind": "item", "key": "spirit-rice", "name": "青穗灵米", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 200}, "tags": ["灵植", "食材"], "search_text": "青穗 灵米 灵田", "visibility": "player", "sort_order": 410},
+  {"kind": "item", "key": "mist-beast-hide", "name": "雾狸皮", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100}, "tags": ["妖兽材料", "炼器"], "search_text": "雾狸皮 妖兽 炼器", "visibility": "player", "sort_order": 420},
+  {"kind": "item", "key": "lightning-bamboo", "name": "雷纹竹", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 100}, "tags": ["灵材", "雷行"], "search_text": "雷纹竹 雷行 灵材", "visibility": "player", "sort_order": 430},
+
+  {"kind": "item", "key": "detox-pill", "name": "清瘴丹", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 30, "effects": {"health": 18, "spiritual_sense": 4}}, "tags": ["丹药", "解毒"], "search_text": "清瘴丹 解毒 南沼", "visibility": "player", "sort_order": 440},
+  {"kind": "item", "key": "spirit-restoring-powder", "name": "复灵散", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 30, "effects": {"mana": 28}}, "tags": ["丹药", "法力"], "search_text": "复灵散 恢复 法力", "visibility": "player", "sort_order": 450},
+  {"kind": "item", "key": "body-tempering-brew", "name": "淬体汤", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 20, "effects": {"health": 20, "cultivation_progress": 12}}, "tags": ["丹药", "炼体"], "search_text": "淬体汤 炼体 气血", "visibility": "player", "sort_order": 460},
+  {"kind": "item", "key": "flame-talisman", "name": "烈焰符", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 50, "effects": {"mana": 8, "spiritual_sense": 5}}, "tags": ["符箓", "火行"], "search_text": "烈焰符 火行 符箓", "visibility": "player", "sort_order": 470},
+  {"kind": "item", "key": "thunder-talisman", "name": "惊雷符", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 50, "effects": {"mana": 10, "spiritual_sense": 8}}, "tags": ["符箓", "雷行"], "search_text": "惊雷符 雷行 符箓", "visibility": "player", "sort_order": 480},
+
+  {"kind": "equipment", "key": "green-mist-sword", "name": "青岚灵剑", "content": {"allowed_slots": ["weapon"], "durability_max": 160, "bonuses": {"physical_attack": 12, "spiritual_attack": 9}}, "tags": ["法器", "剑"], "search_text": "青岚 灵剑 法器", "visibility": "player", "sort_order": 70},
+  {"kind": "equipment", "key": "blackwater-cloak", "name": "玄水隐袍", "content": {"allowed_slots": ["body"], "durability_max": 130, "bonuses": {"physical_defense": 6, "spiritual_defense": 8, "movement": 3}}, "tags": ["法器", "隐匿"], "search_text": "玄水 隐袍 黑水盟", "visibility": "player", "sort_order": 80},
+  {"kind": "equipment", "key": "medicine-basket", "name": "温玉药篓", "content": {"allowed_slots": ["accessory"], "durability_max": 100, "bonuses": {"healing_power": 8, "max_spiritual_sense": 5}}, "tags": ["法器", "采药"], "search_text": "温玉 药篓 采药", "visibility": "player", "sort_order": 90},
+  {"kind": "equipment", "key": "spirit-gathering-mat", "name": "小聚灵蒲团", "content": {"allowed_slots": ["accessory"], "durability_max": 120, "bonuses": {"max_mana": 18, "cultivation_gain": 5}}, "tags": ["法器", "修炼"], "search_text": "聚灵 蒲团 修炼", "visibility": "player", "sort_order": 100},
+
+  {
+    "kind": "recipe", "key": "detox-pill-recipe", "name": "清瘴丹方",
+    "content": {
+      "craft_type": "alchemy", "source_item_key": "recipe-slip.detox-pill",
+      "allowed_location_keys": ["green-river-village", "bluestone-market", "herb-valley"],
+      "inputs": [
+        {"quantity": 2, "options": [{"item_key": "green-river-herb", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "swamp-venom-sac", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["novice-pill-furnace"], "technique_key": "basic-alchemy",
+      "min_technique_mastery": 120, "min_realm_rank": 0, "mana_cost": 3, "craft_minutes": 210,
+      "success_chance_bps": 6600, "mastery_bonus_bps": 2200, "failure_input_loss_bps": 8000,
+      "outputs": [{"kind": "item", "key": "detox-pill", "quantity": 2, "quality_weights": {"common": 7600, "fine": 2100, "superior": 300}}],
+      "failure_outputs": [{"kind": "item", "key": "pill-dregs", "quantity": 1, "quality_weights": {"common": 1}}],
+      "failure_effect": {"health_damage": 4, "category": "poison", "effect_key": "swamp-pill-toxin", "severity": 12, "duration_minutes": 720, "description": "未炼净的瘴毒反噬经脉"}
+    },
+    "tags": ["炼丹", "解毒"], "search_text": "清瘴丹 南沼 解毒", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "recipe", "key": "spirit-restoring-recipe", "name": "复灵散方",
+    "content": {
+      "craft_type": "alchemy", "source_item_key": "recipe-slip.spirit-restoring",
+      "allowed_location_keys": ["bluestone-market", "outer-courtyard", "herb-valley"],
+      "inputs": [
+        {"quantity": 1, "options": [{"item_key": "moon-dew", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "clear-spring-water", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "spirit-rice", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["novice-pill-furnace"], "technique_key": "basic-alchemy",
+      "min_technique_mastery": 260, "min_realm_rank": 1, "mana_cost": 5, "craft_minutes": 240,
+      "success_chance_bps": 6000, "mastery_bonus_bps": 2600, "failure_input_loss_bps": 9000,
+      "outputs": [{"kind": "item", "key": "spirit-restoring-powder", "quantity": 2, "quality_weights": {"common": 7200, "fine": 2400, "superior": 400}}],
+      "failure_outputs": [{"kind": "item", "key": "pill-dregs", "quantity": 1, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["炼丹", "法力"], "search_text": "复灵散 月华露 法力", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "recipe", "key": "body-tempering-recipe", "name": "淬体汤方",
+    "content": {
+      "craft_type": "alchemy", "source_item_key": "recipe-slip.body-tempering",
+      "allowed_location_keys": ["green-river-village", "county-town", "bluestone-market"],
+      "inputs": [
+        {"quantity": 3, "options": [{"item_key": "spirit-rice", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "green-river-herb", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "red-flame-fruit", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["novice-pill-furnace"], "technique_key": "basic-alchemy",
+      "min_technique_mastery": 180, "min_realm_rank": 0, "mana_cost": 3, "craft_minutes": 300,
+      "success_chance_bps": 6800, "mastery_bonus_bps": 2000, "failure_input_loss_bps": 7000,
+      "outputs": [{"kind": "item", "key": "body-tempering-brew", "quantity": 2, "quality_weights": {"common": 7800, "fine": 1900, "superior": 300}}],
+      "failure_outputs": [{"kind": "item", "key": "pill-dregs", "quantity": 1, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["炼丹", "炼体"], "search_text": "淬体汤 灵米 炼体", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "recipe", "key": "green-mist-sword-recipe", "name": "青岚灵剑炼法",
+    "content": {
+      "craft_type": "artifact", "source_item_key": "recipe-slip.green-mist-sword",
+      "allowed_location_keys": ["bluestone-market", "outer-courtyard", "county-town"],
+      "inputs": [
+        {"quantity": 3, "options": [{"item_key": "green-pattern-ore", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "star-iron-sand", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "spirit-wood", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["hundred-forge-hammer"], "technique_key": "basic-forging",
+      "min_technique_mastery": 420, "min_realm_rank": 1, "mana_cost": 10, "craft_minutes": 720,
+      "success_chance_bps": 5400, "mastery_bonus_bps": 3000, "failure_input_loss_bps": 10000,
+      "outputs": [{"kind": "equipment", "key": "green-mist-sword", "quantity": 1, "quality_weights": {"common": 7200, "fine": 2400, "superior": 400}}],
+      "failure_outputs": [{"kind": "item", "key": "refining-slag", "quantity": 2, "quality_weights": {"common": 1}}],
+      "failure_effect": {"health_damage": 12, "category": "injury", "effect_key": "sword-forge-burn", "severity": 18, "duration_minutes": 1440, "description": "灵材失衡引起炉火爆燃"}
+    },
+    "tags": ["炼器", "剑器"], "search_text": "青岚灵剑 星铁砂 炼器", "visibility": "player", "sort_order": 70
+  },
+  {
+    "kind": "recipe", "key": "blackwater-cloak-recipe", "name": "玄水隐袍炼法",
+    "content": {
+      "craft_type": "artifact", "source_item_key": "recipe-slip.blackwater-cloak",
+      "allowed_location_keys": ["south-marsh", "bluestone-market"],
+      "inputs": [
+        {"quantity": 3, "options": [{"item_key": "mist-beast-hide", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "moon-dew", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "spirit-cinnabar", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["hundred-forge-hammer"], "technique_key": "basic-forging",
+      "min_technique_mastery": 360, "min_realm_rank": 1, "mana_cost": 8, "craft_minutes": 600,
+      "success_chance_bps": 5700, "mastery_bonus_bps": 2800, "failure_input_loss_bps": 9000,
+      "outputs": [{"kind": "equipment", "key": "blackwater-cloak", "quantity": 1, "quality_weights": {"common": 7500, "fine": 2200, "superior": 300}}],
+      "failure_outputs": [{"kind": "item", "key": "refining-slag", "quantity": 1, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["炼器", "隐匿"], "search_text": "玄水隐袍 雾狸皮 炼器", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "recipe", "key": "flame-talisman-recipe", "name": "烈焰符法",
+    "content": {
+      "craft_type": "talisman", "source_item_key": "recipe-slip.flame-talisman",
+      "allowed_location_keys": ["green-river-village", "bluestone-market", "county-town"],
+      "inputs": [
+        {"quantity": 1, "options": [{"item_key": "blank-talisman-paper", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "spirit-cinnabar", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "red-flame-fruit", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["spirit-line-brush"], "technique_key": "basic-talisman",
+      "min_technique_mastery": 180, "min_realm_rank": 0, "mana_cost": 5, "craft_minutes": 150,
+      "success_chance_bps": 6500, "mastery_bonus_bps": 2400, "failure_input_loss_bps": 10000,
+      "outputs": [{"kind": "item", "key": "flame-talisman", "quantity": 2, "quality_weights": {"common": 7800, "fine": 1900, "superior": 300}}],
+      "failure_outputs": [{"kind": "item", "key": "ruined-talisman", "quantity": 1, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["制符", "火行"], "search_text": "烈焰符 赤焰果 制符", "visibility": "player", "sort_order": 90
+  },
+  {
+    "kind": "recipe", "key": "thunder-talisman-recipe", "name": "惊雷符法",
+    "content": {
+      "craft_type": "talisman", "source_item_key": "recipe-slip.thunder-talisman",
+      "allowed_location_keys": ["bluestone-market", "outer-courtyard", "mist-cliff"],
+      "inputs": [
+        {"quantity": 1, "options": [{"item_key": "blank-talisman-paper", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "spirit-cinnabar", "quality_key": "common"}]},
+        {"quantity": 1, "options": [{"item_key": "lightning-bamboo", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["spirit-line-brush"], "technique_key": "basic-talisman",
+      "min_technique_mastery": 420, "min_realm_rank": 1, "mana_cost": 9, "craft_minutes": 240,
+      "success_chance_bps": 5200, "mastery_bonus_bps": 3200, "failure_input_loss_bps": 10000,
+      "outputs": [{"kind": "item", "key": "thunder-talisman", "quantity": 2, "quality_weights": {"common": 7000, "fine": 2500, "superior": 500}}],
+      "failure_outputs": [{"kind": "item", "key": "ruined-talisman", "quantity": 1, "quality_weights": {"common": 1}}],
+      "failure_effect": {"mana_damage": 8, "category": "injury", "effect_key": "talisman-shock", "severity": 16, "duration_minutes": 720, "description": "雷意逸散灼伤经脉"}
+    },
+    "tags": ["制符", "雷行"], "search_text": "惊雷符 雷纹竹 制符", "visibility": "player", "sort_order": 100
+  },
+
+  {
+    "kind": "location", "key": "county-town", "name": "青河县城",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "青河郡的凡俗治所，衙门、驿站与散修会馆挤在城东旧街。", "realm_layer": "mortal",
+      "danger_rank": 0, "spiritual_energy": 8, "facilities": ["inn", "workshop", "message-board"], "investigation_minutes": 120,
+      "connections": [
+        {"location_key": "green-river-village", "travel_minutes": 150},
+        {"location_key": "bluestone-market", "travel_minutes": 120},
+        {"location_key": "spirit-field", "travel_minutes": 180},
+        {"location_key": "lin-family-manor", "travel_minutes": 90}
+      ]
+    },
+    "tags": ["县城", "凡俗"], "search_text": "青河县城 衙门 驿站 散修会馆", "visibility": "player", "sort_order": 70
+  },
+  {
+    "kind": "location", "key": "reed-marsh", "name": "芦苇浅泽",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "青河村下游的浅泽，盛产水草与月露，雨季会有低阶毒物出没。", "realm_layer": "mortal",
+      "danger_rank": 1, "spiritual_energy": 14, "facilities": ["foraging", "fishing"], "investigation_minutes": 150,
+      "gathering": {
+        "minutes": 150, "risk_chance_bps": 1000, "risk_health_damage": 4,
+        "entries": [
+          {"item_key": "moon-dew", "min_quantity": 1, "max_quantity": 2, "weight": 55},
+          {"item_key": "green-river-herb", "min_quantity": 1, "max_quantity": 3, "weight": 30},
+          {"item_key": "swamp-venom-sac", "min_quantity": 1, "max_quantity": 1, "weight": 15}
+        ]
+      },
+      "connections": [
+        {"location_key": "green-river-village", "travel_minutes": 120},
+        {"location_key": "south-marsh", "travel_minutes": 180}
+      ]
+    },
+    "tags": ["野外", "水泽"], "search_text": "芦苇 浅泽 月华露 毒物", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "location", "key": "spirit-field", "name": "北麓灵田",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "青岚门租给灵农耕种的低阶灵田，青穗灵米与常用药苗在此轮作。", "realm_layer": "qi-refining",
+      "danger_rank": 1, "spiritual_energy": 28, "facilities": ["spirit-farm", "foraging"], "investigation_minutes": 120,
+      "gathering": {
+        "minutes": 180, "risk_chance_bps": 600, "risk_health_damage": 3,
+        "entries": [
+          {"item_key": "spirit-rice", "min_quantity": 2, "max_quantity": 5, "weight": 70},
+          {"item_key": "green-river-herb", "min_quantity": 1, "max_quantity": 3, "weight": 30}
+        ]
+      },
+      "connections": [
+        {"location_key": "county-town", "travel_minutes": 180},
+        {"location_key": "outer-courtyard", "travel_minutes": 150},
+        {"location_key": "lin-family-manor", "travel_minutes": 120}
+      ]
+    },
+    "tags": ["灵田", "资源地"], "search_text": "北麓 灵田 灵米 灵农", "visibility": "player", "sort_order": 90
+  },
+  {
+    "kind": "location", "key": "herb-valley", "name": "百药涧",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "听风竹林深处的湿润山涧，药材密集，也吸引了争食灵草的雾狸。", "realm_layer": "qi-refining",
+      "danger_rank": 2, "spiritual_energy": 32, "facilities": ["foraging", "alchemy"], "investigation_minutes": 180,
+      "gathering": {
+        "minutes": 210, "risk_chance_bps": 1800, "risk_health_damage": 7,
+        "entries": [
+          {"item_key": "green-river-herb", "min_quantity": 2, "max_quantity": 5, "weight": 40},
+          {"item_key": "red-flame-fruit", "min_quantity": 1, "max_quantity": 2, "weight": 25},
+          {"item_key": "moon-dew", "min_quantity": 1, "max_quantity": 2, "weight": 20},
+          {"item_key": "mist-beast-hide", "min_quantity": 1, "max_quantity": 1, "weight": 15}
+        ]
+      },
+      "connections": [
+        {"location_key": "bamboo-woods", "travel_minutes": 180},
+        {"location_key": "mist-cliff", "travel_minutes": 150},
+        {"location_key": "red-cloud-temple", "travel_minutes": 180}
+      ]
+    },
+    "tags": ["药谷", "野外"], "search_text": "百药涧 灵草 雾狸", "visibility": "player", "sort_order": 100
+  },
+  {
+    "kind": "location", "key": "mist-cliff", "name": "落雷崖",
+    "content": {
+      "node_type": "scene", "parent_key": "herb-valley",
+      "description": "北山支脉上一处终年积雾的断崖，雷雨后偶尔能找到雷纹竹。", "realm_layer": "qi-refining",
+      "danger_rank": 3, "spiritual_energy": 45, "facilities": ["exploration", "talisman"], "investigation_minutes": 240,
+      "gathering": {
+        "minutes": 300, "risk_chance_bps": 3200, "risk_health_damage": 12,
+        "entries": [
+          {"item_key": "lightning-bamboo", "min_quantity": 1, "max_quantity": 2, "weight": 55},
+          {"item_key": "star-iron-sand", "min_quantity": 1, "max_quantity": 2, "weight": 30},
+          {"item_key": "red-flame-fruit", "min_quantity": 1, "max_quantity": 1, "weight": 15}
+        ]
+      },
+      "connections": [
+        {"location_key": "bamboo-woods", "travel_minutes": 240},
+        {"location_key": "herb-valley", "travel_minutes": 150},
+        {"location_key": "cloud-sail-port", "travel_minutes": 2880}
+      ]
+    },
+    "tags": ["险地", "雷行资源"], "search_text": "落雷崖 雷纹竹 雷雨", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "location", "key": "underground-river", "name": "伏流石窟",
+    "content": {
+      "node_type": "scene", "parent_key": "bamboo-woods",
+      "description": "采石洞下方的地下伏流，水路最终通向南沼，岩壁夹杂星铁砂。", "realm_layer": "qi-refining",
+      "danger_rank": 3, "spiritual_energy": 38, "facilities": ["mining", "exploration"], "investigation_minutes": 240,
+      "gathering": {
+        "minutes": 270, "risk_chance_bps": 3000, "risk_health_damage": 12,
+        "entries": [
+          {"item_key": "star-iron-sand", "min_quantity": 1, "max_quantity": 3, "weight": 55},
+          {"item_key": "green-pattern-ore", "min_quantity": 2, "max_quantity": 4, "weight": 30},
+          {"item_key": "clear-spring-water", "min_quantity": 1, "max_quantity": 3, "weight": 15}
+        ]
+      },
+      "connections": [
+        {"location_key": "abandoned-cave", "travel_minutes": 90},
+        {"location_key": "south-marsh", "travel_minutes": 210}
+      ]
+    },
+    "tags": ["洞窟", "矿脉"], "search_text": "伏流 石窟 星铁砂 地下河", "visibility": "player", "sort_order": 120
+  },
+  {
+    "kind": "location", "key": "outer-courtyard", "name": "青岚外院",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "青岚门处理外门事务与低阶委托的院落，设有练功坪、丹房和炼器棚。", "realm_layer": "qi-refining",
+      "danger_rank": 0, "spiritual_energy": 52, "facilities": ["sect", "alchemy", "forge", "talisman"], "investigation_minutes": 90,
+      "connections": [
+        {"location_key": "green-mist-gate", "travel_minutes": 30},
+        {"location_key": "spirit-field", "travel_minutes": 150}
+      ],
+      "entry_requirements": [{"faction_key": "green-mist-sect", "permission_key": "outer_gate_access"}]
+    },
+    "tags": ["宗门", "外院"], "search_text": "青岚 外院 外门 丹房", "visibility": "player", "sort_order": 130
+  },
+  {
+    "kind": "location", "key": "south-marsh", "name": "黑苇南沼",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "青河下游水网密布的危险沼泽，黑水盟夜船、毒兽和私采者都在芦苇后活动。", "realm_layer": "qi-refining",
+      "danger_rank": 3, "spiritual_energy": 30, "facilities": ["foraging", "black-market", "exploration"], "investigation_minutes": 210,
+      "gathering": {
+        "minutes": 240, "risk_chance_bps": 3500, "risk_health_damage": 14,
+        "entries": [
+          {"item_key": "swamp-venom-sac", "min_quantity": 1, "max_quantity": 3, "weight": 45},
+          {"item_key": "moon-dew", "min_quantity": 1, "max_quantity": 2, "weight": 25},
+          {"item_key": "mist-beast-hide", "min_quantity": 1, "max_quantity": 2, "weight": 20},
+          {"item_key": "lightning-bamboo", "min_quantity": 1, "max_quantity": 1, "weight": 10}
+        ]
+      },
+      "connections": [
+        {"location_key": "old-ferry", "travel_minutes": 210},
+        {"location_key": "reed-marsh", "travel_minutes": 180},
+        {"location_key": "underground-river", "travel_minutes": 210}
+      ]
+    },
+    "tags": ["南沼", "险地", "黑市"], "search_text": "黑苇 南沼 黑水盟 夜船", "visibility": "player", "sort_order": 140
+  },
+  {
+    "kind": "location", "key": "red-cloud-temple", "name": "赤霞观",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "落雷崖南侧的小型火行传承，门人不多，以炼体、火法和符箓闻名。", "realm_layer": "qi-refining",
+      "danger_rank": 1, "spiritual_energy": 40, "facilities": ["sect", "talisman", "alchemy"], "investigation_minutes": 120,
+      "connections": [{"location_key": "herb-valley", "travel_minutes": 180}]
+    },
+    "tags": ["宗门", "火行"], "search_text": "赤霞观 火行 炼体 符箓", "visibility": "player", "sort_order": 150
+  },
+  {
+    "kind": "location", "key": "lin-family-manor", "name": "林氏灵庄",
+    "content": {
+      "node_type": "location", "parent_key": "green-river-county",
+      "description": "依靠北麓灵田立足的修仙家族庄院，兼营灵米、药苗和低阶水法传承。", "realm_layer": "qi-refining",
+      "danger_rank": 0, "spiritual_energy": 34, "facilities": ["clan", "spirit-farm", "inn"], "investigation_minutes": 90,
+      "connections": [
+        {"location_key": "county-town", "travel_minutes": 90},
+        {"location_key": "spirit-field", "travel_minutes": 120}
+      ]
+    },
+    "tags": ["修仙家族", "灵田"], "search_text": "林氏 灵庄 修仙家族 灵田", "visibility": "player", "sort_order": 160
+  },
+
+  {
+    "kind": "faction", "key": "liang-magistracy", "name": "大梁青河署",
+    "content": {
+      "initial_reputation": 0, "permission_thresholds": {"county_archive_access": 120},
+      "position_thresholds": {"registered_agent": 600, "county_consultant": 2600},
+      "resource": "凡俗户籍、驿道与地方武备", "goal": "维持县境秩序并避免修士冲突波及凡人"
+    },
+    "tags": ["官府", "凡俗势力"], "search_text": "大梁 青河署 官府 县城", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "faction", "key": "loose-cultivator-association", "name": "青河散修会",
+    "content": {
+      "initial_reputation": 20, "permission_thresholds": {"member_trade_access": 80},
+      "position_thresholds": {"registered_member": 400, "route_keeper": 2200},
+      "resource": "散修信息、临时队伍与旧街会馆", "goal": "为无宗门修士维持安全商路和公平委托"
+    },
+    "tags": ["散修", "互助组织"], "search_text": "青河 散修会 会馆 委托", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "faction", "key": "red-cloud-temple", "name": "赤霞观",
+    "content": {
+      "initial_reputation": 0, "permission_thresholds": {"inner_fire_hall_access": 160},
+      "position_thresholds": {"registered_disciple": 800, "fire_hall_disciple": 3600},
+      "resource": "落雷崖火脉与火行符法", "goal": "保住小宗传承并争取落雷崖资源"
+    },
+    "tags": ["宗门", "火行"], "search_text": "赤霞观 宗门 火行 落雷崖", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "faction", "key": "green-river-lin-clan", "name": "青河林氏",
+    "content": {
+      "initial_reputation": 10, "permission_thresholds": {"clan_library_access": 140},
+      "position_thresholds": {"guest_farmer": 500, "clan_guest": 2800},
+      "resource": "北麓灵田、药苗与水行家传", "goal": "维持灵田收益并避免被宗门和商会吞并"
+    },
+    "tags": ["修仙家族", "灵植"], "search_text": "青河 林氏 修仙家族 灵田", "visibility": "player", "sort_order": 70
+  },
+
+  {
+    "kind": "npc_archetype", "key": "county-record-keeper", "name": "韩文吏",
+    "content": {
+      "initial": true, "instance_key": "han-clerk", "location_key": "county-town",
+      "faction_key": "liang-magistracy", "realm_key": "mortal", "stage_key": "tempered",
+      "public_profile": {"role": "青河署掌案文吏", "manner": "谨慎刻板，凡事要凭据"},
+      "private_state": {"secret": "留存着数起被压下的夜船失踪案"},
+      "goals": {"primary": "查清失踪案又不惊动修士势力", "case_progress": 0}
+    },
+    "tags": ["关键 NPC", "官府"], "search_text": "韩文吏 青河署 案卷", "visibility": "model", "sort_order": 60
+  },
+  {
+    "kind": "npc_archetype", "key": "sect-outer-elder", "name": "苏执事",
+    "content": {
+      "initial": true, "instance_key": "su-steward", "location_key": "outer-courtyard",
+      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "late",
+      "public_profile": {"role": "青岚门外院执事", "manner": "严厉务实，重视履约"},
+      "private_state": {"secret": "怀疑灵田虫害与地下伏流中的异动有关"},
+      "goals": {"primary": "稳住外院和北麓灵田", "sect_readiness": 20}
+    },
+    "tags": ["关键 NPC", "宗门"], "search_text": "苏执事 青岚 外院 灵田", "visibility": "model", "sort_order": 70
+  },
+  {
+    "kind": "npc_archetype", "key": "guild-alchemist", "name": "姚丹师",
+    "content": {
+      "initial": true, "instance_key": "yao-alchemist", "location_key": "bluestone-market",
+      "faction_key": "hundred-herbs-guild", "realm_key": "qi-refining", "stage_key": "middle",
+      "public_profile": {"role": "百草行驻坊炼丹师", "manner": "挑剔但愿意教认真之人"},
+      "private_state": {"secret": "假丹药使用了来自南沼的廉价毒囊"},
+      "goals": {"primary": "恢复坊市丹药信誉", "formula_progress": 10}
+    },
+    "tags": ["关键 NPC", "炼丹"], "search_text": "姚丹师 百草行 炼丹", "visibility": "model", "sort_order": 80
+  },
+  {
+    "kind": "npc_archetype", "key": "county-artificer", "name": "铁七",
+    "content": {
+      "initial": true, "instance_key": "tie-smith", "location_key": "county-town",
+      "faction_key": "loose-cultivator-association", "realm_key": "qi-refining", "stage_key": "early",
+      "public_profile": {"role": "旧街炼器匠", "manner": "爽直，开价透明"},
+      "private_state": {"secret": "曾从伏流石窟带回一小袋星铁砂"},
+      "goals": {"primary": "炼成一柄真正的低阶灵剑", "forge_progress": 0}
+    },
+    "tags": ["关键 NPC", "炼器"], "search_text": "铁七 旧街 炼器 星铁砂", "visibility": "model", "sort_order": 90
+  },
+  {
+    "kind": "npc_archetype", "key": "sect-talisman-scribe", "name": "温如月",
+    "content": {
+      "initial": true, "instance_key": "wen-scribe", "location_key": "outer-courtyard",
+      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "middle",
+      "public_profile": {"role": "外院符师", "manner": "温和细致，不容敷衍"},
+      "private_state": {"secret": "在尝试用雷纹竹稳定惊雷符"},
+      "goals": {"primary": "补足山门巡守所需符箓", "talisman_progress": 0}
+    },
+    "tags": ["关键 NPC", "制符"], "search_text": "温如月 符师 惊雷符", "visibility": "model", "sort_order": 100
+  },
+  {
+    "kind": "npc_archetype", "key": "loose-cultivator-coordinator", "name": "乔三槐",
+    "content": {
+      "initial": true, "instance_key": "qiao-coordinator", "location_key": "county-town",
+      "faction_key": "loose-cultivator-association", "realm_key": "qi-refining", "stage_key": "middle",
+      "public_profile": {"role": "散修会管事", "manner": "健谈，擅长撮合互利之事"},
+      "private_state": {"secret": "正筹划绕开黑水盟的安全采药路线"},
+      "goals": {"primary": "扩大散修会的互助网络", "route_progress": 5}
+    },
+    "tags": ["关键 NPC", "散修"], "search_text": "乔三槐 散修会 路线", "visibility": "model", "sort_order": 110
+  },
+  {
+    "kind": "npc_archetype", "key": "blackwater-broker", "name": "莫十三",
+    "content": {
+      "initial": true, "instance_key": "mo-broker", "location_key": "south-marsh",
+      "faction_key": "blackwater-league", "realm_key": "qi-refining", "stage_key": "late",
+      "public_profile": {"role": "南沼掮客", "manner": "笑脸迎人，从不白送消息"},
+      "private_state": {"secret": "负责把假丹药原料运入青石坊市"},
+      "goals": {"primary": "保住夜船与地下伏流两条货路", "smuggling_progress": 15}
+    },
+    "tags": ["关键 NPC", "黑水盟"], "search_text": "莫十三 南沼 掮客 夜船", "visibility": "model", "sort_order": 120
+  },
+  {
+    "kind": "npc_archetype", "key": "mist-valley-hunter", "name": "林雁回",
+    "content": {
+      "initial": true, "instance_key": "lin-hunter", "location_key": "herb-valley",
+      "faction_key": "", "realm_key": "mortal", "stage_key": "peak",
+      "public_profile": {"role": "山野猎户与采药向导", "manner": "少言，熟悉兽迹与天气"},
+      "private_state": {"secret": "失踪采药人曾托他保管半张伏流地图"},
+      "goals": {"primary": "阻止雾狸群被过度猎杀", "valley_balance": 30}
+    },
+    "tags": ["关键 NPC", "向导"], "search_text": "林雁回 百药涧 向导 雾狸", "visibility": "model", "sort_order": 130
+  },
+  {
+    "kind": "npc_archetype", "key": "red-cloud-abbot", "name": "俞照庭",
+    "content": {
+      "initial": true, "instance_key": "yu-abbot", "location_key": "red-cloud-temple",
+      "faction_key": "red-cloud-temple", "realm_key": "qi-refining", "stage_key": "late",
+      "public_profile": {"role": "赤霞观观主", "manner": "寡言持重，最看重根基与守诺"},
+      "private_state": {"secret": "落雷崖火脉正在偏移，赤霞观的护山符阵已出现裂隙"},
+      "goals": {"primary": "稳住火脉并保全赤霞观传承", "fire_vein_control": 12}
+    },
+    "tags": ["关键 NPC", "赤霞观", "火行"], "search_text": "俞照庭 赤霞观 观主 火脉", "visibility": "model", "sort_order": 140
+  },
+  {
+    "kind": "npc_archetype", "key": "lin-clan-spirit-farmer", "name": "林素禾",
+    "content": {
+      "initial": true, "instance_key": "lin-steward", "location_key": "lin-family-manor",
+      "faction_key": "green-river-lin-clan", "realm_key": "qi-refining", "stage_key": "early",
+      "public_profile": {"role": "林氏灵庄灵植管事", "manner": "温和精细，谈生意时寸步不让"},
+      "private_state": {"secret": "灵田虫害并非天灾，地下伏流里混入了来自南沼的瘴泥"},
+      "goals": {"primary": "保住北麓灵田和林氏的独立经营权", "harvest_readiness": 18}
+    },
+    "tags": ["关键 NPC", "青河林氏", "灵植"], "search_text": "林素禾 林氏灵庄 灵田 灵植", "visibility": "model", "sort_order": 150
+  },
+
+  {
+    "kind": "market", "key": "county-association-market", "name": "散修会旧街货栈",
+    "content": {
+      "location_key": "county-town", "currency_item_key": "low-spirit-stone", "faction_key": "loose-cultivator-association",
+      "restock_interval_minutes": 2160, "price_modifier_bps": 9600, "scarcity_markup_bps": 2600, "reputation_adjustment_bps": 2000,
+      "items": [
+        {"kind": "item", "key": "spirit-rice", "quality_key": "common", "max_stock": 60, "initial_stock": 30, "restock_quantity": 12, "base_buy_price": 2, "base_sell_price": 1},
+        {"kind": "item", "key": "red-flame-fruit", "quality_key": "common", "max_stock": 24, "initial_stock": 10, "restock_quantity": 5, "base_buy_price": 7, "base_sell_price": 4},
+        {"kind": "item", "key": "moon-dew", "quality_key": "common", "max_stock": 24, "initial_stock": 8, "restock_quantity": 4, "base_buy_price": 9, "base_sell_price": 5},
+        {"kind": "item", "key": "star-iron-sand", "quality_key": "common", "max_stock": 16, "initial_stock": 5, "restock_quantity": 3, "base_buy_price": 14, "base_sell_price": 8},
+        {"kind": "item", "key": "mist-beast-hide", "quality_key": "common", "max_stock": 16, "initial_stock": 6, "restock_quantity": 3, "base_buy_price": 12, "base_sell_price": 7},
+        {"kind": "item", "key": "manual.basic-breathing", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 45, "base_sell_price": 22},
+        {"kind": "item", "key": "manual.greenwood", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 75, "base_sell_price": 36},
+        {"kind": "item", "key": "manual.light-step", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 55, "base_sell_price": 26},
+        {"kind": "item", "key": "manual.basic-alchemy", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 60, "base_sell_price": 29},
+        {"kind": "item", "key": "manual.basic-forging", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 60, "base_sell_price": 29},
+        {"kind": "item", "key": "manual.basic-talisman", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 60, "base_sell_price": 29},
+        {"kind": "item", "key": "manual.red-sun-breathing", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 90, "base_sell_price": 45},
+        {"kind": "item", "key": "manual.water-mirror", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 90, "base_sell_price": 45},
+        {"kind": "item", "key": "manual.earth-vein", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 90, "base_sell_price": 45},
+        {"kind": "item", "key": "manual.stone-skin", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 75, "base_sell_price": 36},
+        {"kind": "item", "key": "manual.iron-body", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 70, "base_sell_price": 34},
+        {"kind": "item", "key": "manual.hundred-herbs-sense", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 65, "base_sell_price": 32},
+        {"kind": "item", "key": "recipe-slip.detox-pill", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 55, "base_sell_price": 25},
+        {"kind": "item", "key": "recipe-slip.body-tempering", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 70, "base_sell_price": 34},
+        {"kind": "item", "key": "recipe-slip.flame-talisman", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 60, "base_sell_price": 28},
+        {"kind": "equipment", "key": "medicine-basket", "quality_key": "common", "max_stock": 3, "initial_stock": 1, "restock_quantity": 1, "base_buy_price": 110, "base_sell_price": 55},
+        {"kind": "equipment", "key": "spirit-gathering-mat", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 160, "base_sell_price": 78}
+      ]
+    },
+    "tags": ["市场", "散修会"], "search_text": "散修会 旧街 货栈 交易", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "market", "key": "blackwater-night-market", "name": "黑苇夜市",
+    "content": {
+      "location_key": "south-marsh", "currency_item_key": "low-spirit-stone", "faction_key": "blackwater-league",
+      "restock_interval_minutes": 4320, "price_modifier_bps": 11200, "scarcity_markup_bps": 4200, "reputation_adjustment_bps": 2500,
+      "items": [
+        {"kind": "item", "key": "swamp-venom-sac", "quality_key": "common", "max_stock": 30, "initial_stock": 14, "restock_quantity": 6, "base_buy_price": 6, "base_sell_price": 3},
+        {"kind": "item", "key": "lightning-bamboo", "quality_key": "common", "max_stock": 12, "initial_stock": 3, "restock_quantity": 2, "base_buy_price": 22, "base_sell_price": 12},
+        {"kind": "item", "key": "manual.cloud-shadow-step", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 140, "base_sell_price": 68},
+        {"kind": "item", "key": "manual.spirit-shield", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 125, "base_sell_price": 60},
+        {"kind": "item", "key": "manual.blood-burning", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 80, "base_sell_price": 35},
+        {"kind": "item", "key": "manual.breath-concealment", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 95, "base_sell_price": 45},
+        {"kind": "item", "key": "manual.thunder-finger", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 210, "base_sell_price": 100},
+        {"kind": "item", "key": "recipe-slip.blackwater-cloak", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 180, "base_sell_price": 85},
+        {"kind": "item", "key": "recipe-slip.thunder-talisman", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 170, "base_sell_price": 80},
+        {"kind": "item", "key": "detox-pill", "quality_key": "common", "max_stock": 15, "initial_stock": 6, "restock_quantity": 3, "base_buy_price": 15, "base_sell_price": 8},
+        {"kind": "equipment", "key": "blackwater-cloak", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 240, "base_sell_price": 115}
+      ]
+    },
+    "tags": ["市场", "黑市"], "search_text": "黑苇 夜市 黑水盟 交易", "visibility": "player", "sort_order": 30
+  },
+
+  {
+    "kind": "world_event", "key": "spirit-field-harvest-cycle", "name": "北麓灵田轮作",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 1080, "repeat_interval_minutes": 4320, "priority": 180,
+      "variants": [
+        {"key": "good-harvest", "weight": 55, "summary": "北麓灵田收成顺利，灵米和常用药材流入县城与坊市。", "effects": {
+          "resource_delta": 240, "stability_delta": 80, "faction_power_deltas": {"green-mist-sect": 80, "loose-cultivator-association": 40, "green-river-lin-clan": 120},
+          "market_price_modifier_deltas_bps": {"bluestone-guild-market": -350, "county-association-market": -500},
+          "npc_goal_deltas": {"su-steward": {"sect_readiness": 4}, "lin-steward": {"harvest_readiness": 6}}
+        }},
+        {"key": "blight", "weight": 45, "summary": "灵田出现虫害，灵农开始高价收购清水、符箓与驱虫药材。", "effects": {
+          "resource_delta": -220, "danger_delta": 100, "stability_delta": -100, "faction_power_deltas": {"green-river-lin-clan": -90},
+          "market_price_modifier_deltas_bps": {"bluestone-guild-market": 450, "county-association-market": 650},
+          "npc_goal_deltas": {"su-steward": {"sect_readiness": -3}, "lin-steward": {"harvest_readiness": -5}}
+        }}
+      ]
+    },
+    "tags": ["区域事件", "灵田", "经济"], "search_text": "北麓 灵田 收成 虫害", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "world_event", "key": "marsh-smuggling-cycle", "name": "南沼夜船",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 900, "repeat_interval_minutes": 2880, "priority": 260,
+      "variants": [
+        {"key": "route-expands", "weight": 50, "summary": "南沼夜船接连靠岸，稀有材料增多，失踪与劫掠传闻也随之扩散。", "effects": {
+          "danger_delta": 220, "stability_delta": -160, "conflict_stage": 2,
+          "faction_power_deltas": {"blackwater-league": 180, "liang-magistracy": -60},
+          "market_price_modifier_deltas_bps": {"blackwater-night-market": -500},
+          "npc_goal_deltas": {"mo-broker": {"smuggling_progress": 8}, "han-clerk": {"case_progress": 3}}
+        }},
+        {"key": "route-disrupted", "weight": 50, "summary": "官差与散修联手截断一段夜船路线，南沼物价上涨而县境稍显安定。", "effects": {
+          "danger_delta": -140, "stability_delta": 130, "conflict_stage": 2,
+          "faction_power_deltas": {"blackwater-league": -120, "liang-magistracy": 100, "loose-cultivator-association": 60},
+          "market_price_modifier_deltas_bps": {"blackwater-night-market": 700},
+          "npc_goal_deltas": {"mo-broker": {"smuggling_progress": -5}, "han-clerk": {"case_progress": 6}}
+        }}
+      ]
+    },
+    "tags": ["区域事件", "黑水盟", "走私"], "search_text": "南沼 夜船 走私 黑水盟", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "world_event", "key": "loose-route-expedition", "name": "散修探路队",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 1260, "repeat_interval_minutes": 3600, "priority": 140,
+      "variants": [
+        {"key": "safe-route", "weight": 60, "summary": "散修会标出一条避开妖兽与暗哨的新路线，山野采集逐渐恢复。", "effects": {
+          "resource_delta": 160, "danger_delta": -120, "stability_delta": 90,
+          "faction_power_deltas": {"loose-cultivator-association": 120},
+          "npc_goal_deltas": {"qiao-coordinator": {"route_progress": 7}}
+        }},
+        {"key": "team-missing", "weight": 40, "summary": "一支探路小队迟迟未归，散修会暂停了百药涧外的低价委托。", "effects": {
+          "resource_delta": -100, "danger_delta": 180, "stability_delta": -70,
+          "faction_power_deltas": {"loose-cultivator-association": -80},
+          "npc_goal_deltas": {"qiao-coordinator": {"route_progress": -3}}
+        }}
+      ]
+    },
+    "tags": ["区域事件", "散修会", "探索"], "search_text": "散修 探路 百药涧", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "world_event", "key": "mist-beast-migration", "name": "雾狸迁徙",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 1800, "repeat_interval_minutes": 5040, "priority": 120,
+      "variants": [
+        {"key": "peaceful-migration", "weight": 55, "summary": "雾狸群沿百药涧迁往高处，山谷短期内更适合采药。", "effects": {
+          "resource_delta": 190, "danger_delta": -80, "npc_goal_deltas": {"lin-hunter": {"valley_balance": 5}}
+        }},
+        {"key": "poachers-arrive", "weight": 45, "summary": "逐利猎手追着雾狸进入百药涧，陷阱伤到了采药人，也激怒了兽群。", "effects": {
+          "resource_delta": -150, "danger_delta": 210, "stability_delta": -60,
+          "npc_goal_deltas": {"lin-hunter": {"valley_balance": -6}}
+        }}
+      ]
+    },
+    "tags": ["区域事件", "妖兽", "生态"], "search_text": "雾狸 迁徙 百药涧", "visibility": "player", "sort_order": 70
+  },
+  {
+    "kind": "world_event", "key": "northern-vein-shift", "name": "北山灵脉震动",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 2880, "repeat_interval_minutes": 10080, "priority": 320,
+      "variants": [
+        {"key": "vein-rises", "weight": 45, "summary": "北山灵气短暂上涌，灵田与落雷崖资源丰沛，各方争夺随之加剧。", "effects": {
+          "resource_delta": 420, "danger_delta": 150, "conflict_stage": 3,
+          "faction_power_deltas": {"green-mist-sect": 140, "hundred-herbs-guild": 60, "red-cloud-temple": 100},
+          "npc_goal_deltas": {"su-steward": {"sect_readiness": 8}, "wen-scribe": {"talisman_progress": 5}, "yu-abbot": {"fire_vein_control": 6}}
+        }},
+        {"key": "vein-fades", "weight": 55, "summary": "北山灵气回落，旧矿道出现塌陷，青岚门收紧了灵材外流。", "effects": {
+          "resource_delta": -360, "stability_delta": -120, "faction_power_deltas": {"red-cloud-temple": -80},
+          "market_price_modifier_deltas_bps": {"bluestone-guild-market": 600, "county-association-market": 450},
+          "npc_goal_deltas": {"su-steward": {"sect_readiness": -4}, "yu-abbot": {"fire_vein_control": -4}}
+        }}
+      ]
+    },
+    "tags": ["区域事件", "灵脉", "长期局势"], "search_text": "北山 灵脉 震动 资源", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "world_event", "key": "county-patrol-cycle", "name": "县境联合巡查",
+    "content": {
+      "region_key": "green-river-county", "initial_delay_minutes": 1500, "repeat_interval_minutes": 4320, "priority": 160,
+      "variants": [
+        {"key": "cooperation", "weight": 55, "summary": "青河署与散修会交换线索，驿道和渡口的盘查更有效率。", "effects": {
+          "danger_delta": -160, "stability_delta": 170,
+          "faction_power_deltas": {"liang-magistracy": 110, "loose-cultivator-association": 70, "blackwater-league": -70},
+          "npc_goal_deltas": {"han-clerk": {"case_progress": 5}, "qiao-coordinator": {"route_progress": 3}}
+        }},
+        {"key": "jurisdiction-dispute", "weight": 45, "summary": "官府与修士因处置俘虏发生争执，巡查草草收场。", "effects": {
+          "danger_delta": 90, "stability_delta": -130,
+          "faction_power_deltas": {"liang-magistracy": -60, "green-mist-sect": -40, "blackwater-league": 50},
+          "npc_goal_deltas": {"han-clerk": {"case_progress": -2}}
+        }}
+      ]
+    },
+    "tags": ["区域事件", "官府", "巡查"], "search_text": "青河署 散修会 巡查", "visibility": "player", "sort_order": 90
+  },
+
+  {
+    "kind": "quest", "key": "bamboo-trail-clue", "name": "竹林里的断绳",
+    "content": {
+      "quest_type": "quest", "initial": false, "starting_status": "offered",
+      "accept_location_keys": ["green-river-village", "bamboo-woods"],
+      "objectives": [{"key": "reach-herb-valley", "type": "location", "location_key": "herb-valley"}],
+      "rewards": [
+        {"type": "item", "item_key": "manual.hundred-herbs-sense", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 8},
+        {"type": "faction_reputation", "faction_key": "hundred-herbs-guild", "amount": 35}
+      ],
+      "unlock_quest_keys": ["cave-rescue"],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["hundred-herbs-guild"],
+        "npc_keys": ["gu-herbalist", "lin-hunter"], "world_event_keys": ["mist-beast-migration", "loose-route-expedition"]
+      }
+    },
+    "tags": ["任务链", "采药人", "探索"], "search_text": "竹林 断绳 百药涧 采药人", "visibility": "player", "sort_order": 30
+  },
+  {
+    "kind": "quest", "key": "cave-rescue", "name": "伏流中的求救声",
+    "content": {
+      "quest_type": "quest", "initial": false, "starting_status": "offered",
+      "accept_location_keys": ["herb-valley", "abandoned-cave"],
+      "objectives": [
+        {"key": "reach-underground-river", "type": "location", "location_key": "underground-river"},
+        {"key": "earn-guide-trust", "type": "npc_relationship", "npc_key": "lin-hunter", "dimension": "trust", "target": 8}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.vine-binding", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "recipe-slip.spirit-restoring", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 20},
+        {"type": "faction_reputation", "faction_key": "hundred-herbs-guild", "amount": 70}
+      ],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["hundred-herbs-guild", "loose-cultivator-association"],
+        "npc_keys": ["gu-herbalist", "lin-hunter"], "world_event_keys": ["mist-beast-migration", "northern-vein-shift"]
+      }
+    },
+    "tags": ["任务链", "救援", "洞窟"], "search_text": "伏流 求救 采药人 洞窟", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "quest", "key": "sect-cave-investigation", "name": "外门失踪案",
+    "content": {
+      "quest_type": "quest", "initial": false, "starting_status": "offered",
+      "accept_location_keys": ["green-mist-gate", "outer-courtyard"],
+      "objectives": [
+        {"key": "inspect-abandoned-cave", "type": "location", "location_key": "abandoned-cave"},
+        {"key": "bring-star-iron", "type": "item", "item_key": "star-iron-sand", "quality_key": "common", "quantity": 2, "consume": true}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.green-mist-sword", "quality_key": "common", "quantity": 1},
+        {"type": "faction_reputation", "faction_key": "green-mist-sect", "amount": 100},
+        {"type": "faction_contribution", "faction_key": "green-mist-sect", "amount": 240}
+      ],
+      "unlock_quest_keys": ["foundation-preparation"],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["green-mist-sect", "blackwater-league"],
+        "npc_keys": ["lu-disciple", "su-steward"], "world_event_keys": ["county-shadow-conflict", "northern-vein-shift"]
+      }
+    },
+    "tags": ["任务链", "宗门", "洞窟"], "search_text": "外门 失踪 采石洞 星铁砂", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "quest", "key": "foundation-preparation", "name": "筑基之前",
+    "content": {
+      "quest_type": "quest", "initial": false, "starting_status": "offered",
+      "accept_location_keys": ["outer-courtyard"],
+      "objectives": [
+        {"key": "sect-recognition", "type": "faction_reputation", "faction_key": "green-mist-sect", "target": 200},
+        {"key": "stable-county", "type": "region_state", "region_key": "green-river-county", "region_field": "stability", "comparison": "at_least", "target": 5600}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.foundation-guide", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "recipe-slip.green-mist-sword", "quality_key": "common", "quantity": 1},
+        {"type": "faction_contribution", "faction_key": "green-mist-sect", "amount": 700}
+      ],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["green-mist-sect"],
+        "npc_keys": ["su-steward", "wen-scribe"], "world_event_keys": ["northern-vein-shift", "spirit-field-harvest-cycle"]
+      }
+    },
+    "tags": ["任务链", "筑基", "宗门"], "search_text": "筑基 准备 青岚门 小周天", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "quest", "key": "ferry-night-boat", "name": "旧渡的夜船",
+    "content": {
+      "quest_type": "quest", "initial": true, "starting_status": "offered",
+      "accept_location_keys": ["green-river-village", "old-ferry", "county-town"],
+      "objectives": [
+        {"key": "reach-south-marsh", "type": "location", "location_key": "south-marsh"},
+        {"key": "ferryman-trust", "type": "npc_relationship", "npc_key": "xing-ferryman", "dimension": "trust", "target": 5}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.breath-concealment", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "recipe-slip.detox-pill", "quality_key": "common", "quantity": 1},
+        {"type": "faction_reputation", "faction_key": "liang-magistracy", "amount": 60}
+      ],
+      "unlock_quest_keys": ["marsh-broker-choice"],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["liang-magistracy", "blackwater-league"],
+        "npc_keys": ["xing-ferryman", "han-clerk", "mo-broker"], "world_event_keys": ["marsh-smuggling-cycle", "county-patrol-cycle"]
+      }
+    },
+    "tags": ["任务链", "旧渡", "黑水盟"], "search_text": "旧渡 夜船 南沼 黑水盟", "visibility": "player", "sort_order": 70
+  },
+  {
+    "kind": "quest", "key": "marsh-broker-choice", "name": "莫十三的价码",
+    "content": {
+      "quest_type": "quest", "initial": false, "starting_status": "offered",
+      "accept_location_keys": ["south-marsh"],
+      "objectives": [
+        {"key": "find-underground-route", "type": "location", "location_key": "underground-river"},
+        {"key": "broker-debt", "type": "npc_relationship", "npc_key": "mo-broker", "dimension": "debt", "target": 10}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "recipe-slip.blackwater-cloak", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "manual.blood-burning", "quality_key": "common", "quantity": 1},
+        {"type": "faction_reputation", "faction_key": "blackwater-league", "amount": 80}
+      ],
+      "unlock_quest_keys": ["county-stability-choice"],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["blackwater-league", "liang-magistracy"],
+        "npc_keys": ["mo-broker", "han-clerk"], "world_event_keys": ["marsh-smuggling-cycle", "county-shadow-conflict"]
+      }
+    },
+    "tags": ["任务链", "抉择", "黑水盟"], "search_text": "莫十三 价码 地下伏流", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "quest", "key": "county-stability-choice", "name": "青河的秤盘",
+    "content": {
+      "quest_type": "quest", "initial": false, "starting_status": "offered",
+      "accept_location_keys": ["county-town", "bluestone-market"],
+      "objectives": [
+        {"key": "county-trust", "type": "faction_reputation", "faction_key": "liang-magistracy", "target": 50},
+        {"key": "contain-danger", "type": "region_state", "region_key": "green-river-county", "region_field": "danger_level", "comparison": "at_most", "target": 4200}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.water-mirror", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 35},
+        {"type": "faction_reputation", "faction_key": "loose-cultivator-association", "amount": 100}
+      ],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["liang-magistracy", "blackwater-league", "loose-cultivator-association"],
+        "npc_keys": ["han-clerk", "mo-broker", "qiao-coordinator"],
+        "world_event_keys": ["marsh-smuggling-cycle", "county-patrol-cycle", "county-shadow-conflict"]
+      }
+    },
+    "tags": ["任务链", "区域结局", "势力"], "search_text": "青河 秤盘 官府 黑水盟 散修会", "visibility": "player", "sort_order": 90
+  },
+  {
+    "kind": "quest", "key": "artificer-star-iron-order", "name": "铁七的星砂委托",
+    "content": {
+      "quest_type": "quest", "initial": true, "starting_status": "offered",
+      "accept_location_keys": ["county-town"],
+      "objectives": [{"key": "deliver-star-iron", "type": "item", "item_key": "star-iron-sand", "quality_key": "common", "quantity": 3, "consume": true}],
+      "rewards": [
+        {"type": "item", "item_key": "recipe-slip.green-mist-sword", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 18},
+        {"type": "faction_reputation", "faction_key": "loose-cultivator-association", "amount": 60},
+        {"type": "faction_contribution", "faction_key": "loose-cultivator-association", "amount": 120}
+      ],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["loose-cultivator-association"],
+        "npc_keys": ["tie-smith"], "world_event_keys": ["northern-vein-shift", "loose-route-expedition"]
+      }
+    },
+    "tags": ["任务", "炼器", "散修会"], "search_text": "铁七 星铁砂 炼器 委托", "visibility": "player", "sort_order": 100
+  },
+  {
+    "kind": "quest", "key": "red-cloud-fire-trial", "name": "赤霞试火",
+    "content": {
+      "quest_type": "quest", "initial": true, "starting_status": "offered",
+      "accept_location_keys": ["herb-valley", "red-cloud-temple"],
+      "objectives": [
+        {"key": "reach-red-cloud", "type": "location", "location_key": "red-cloud-temple"},
+        {"key": "deliver-flame-fruit", "type": "item", "item_key": "red-flame-fruit", "quality_key": "common", "quantity": 3, "consume": true}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.iron-body", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 16},
+        {"type": "faction_reputation", "faction_key": "red-cloud-temple", "amount": 80},
+        {"type": "faction_contribution", "faction_key": "red-cloud-temple", "amount": 160}
+      ],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["red-cloud-temple"],
+        "npc_keys": ["yu-abbot"], "world_event_keys": ["northern-vein-shift"]
+      }
+    },
+    "tags": ["任务", "赤霞观", "炼体"], "search_text": "赤霞观 试火 赤焰果 铁衣法", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "quest", "key": "lin-clan-harvest-order", "name": "林庄的轮作单",
+    "content": {
+      "quest_type": "quest", "initial": true, "starting_status": "offered",
+      "accept_location_keys": ["county-town", "spirit-field", "lin-family-manor"],
+      "objectives": [
+        {"key": "reach-lin-manor", "type": "location", "location_key": "lin-family-manor"},
+        {"key": "deliver-spirit-rice", "type": "item", "item_key": "spirit-rice", "quality_key": "common", "quantity": 8, "consume": true}
+      ],
+      "rewards": [
+        {"type": "item", "item_key": "manual.water-mirror", "quality_key": "common", "quantity": 1},
+        {"type": "item", "item_key": "low-spirit-stone", "quality_key": "common", "quantity": 18},
+        {"type": "faction_reputation", "faction_key": "green-river-lin-clan", "amount": 85},
+        {"type": "faction_contribution", "faction_key": "green-river-lin-clan", "amount": 180}
+      ],
+      "associations": {
+        "region_keys": ["green-river-county"], "faction_keys": ["green-river-lin-clan"],
+        "npc_keys": ["lin-steward"], "world_event_keys": ["spirit-field-harvest-cycle"]
+      }
+    },
+    "tags": ["任务", "青河林氏", "灵田"], "search_text": "林氏灵庄 灵田 灵米 轮作", "visibility": "player", "sort_order": 120
+  },
+  {
+    "kind": "encounter", "key": "bamboo-woods-mist-beast", "name": "竹林雾兽",
+    "content": {
+      "location_key": "bamboo-woods", "opponent_key": "mist-beast", "opponent_name": "受惊雾狸",
+      "opponent_realm_rank": 0, "opponent_max_health": 70, "opponent_attack": 16, "opponent_defense": 3,
+      "player_damage_base": 16, "player_damage_scale_bps": 1200, "player_mana_cost": 0,
+      "round_minutes": 30, "max_rounds": 8, "flee_chance_bps": 6500,
+      "rewards": [{"item_key": "mist-beast-hide", "quality_key": "common", "quantity": 1}]
+    },
+    "tags": ["遭遇", "野兽", "竹林"], "search_text": "竹林 雾狸 遭遇", "visibility": "player", "sort_order": 10
+  },
+  {
+    "kind": "encounter", "key": "south-marsh-venom-beast", "name": "南沼毒兽",
+    "content": {
+      "location_key": "south-marsh", "opponent_key": "marsh-venom-beast", "opponent_name": "黑沼毒蜥",
+      "opponent_realm_rank": 1, "opponent_max_health": 130, "opponent_attack": 28, "opponent_defense": 8,
+      "player_damage_base": 22, "player_damage_scale_bps": 1400, "player_mana_cost": 2,
+      "round_minutes": 45, "max_rounds": 10, "flee_chance_bps": 4800,
+      "rewards": [{"item_key": "swamp-venom-sac", "quality_key": "common", "quantity": 2}]
+    },
+    "tags": ["遭遇", "毒兽", "南沼"], "search_text": "南沼 毒蜥 沼毒囊", "visibility": "player", "sort_order": 20
+  },
+  {
+    "kind": "encounter", "key": "underground-river-vein-guardian", "name": "伏流守脉兽",
+    "content": {
+      "location_key": "underground-river", "opponent_key": "vein-guardian", "opponent_name": "星铁甲兽",
+      "opponent_realm_rank": 2, "opponent_max_health": 220, "opponent_attack": 42, "opponent_defense": 15,
+      "player_damage_base": 30, "player_damage_scale_bps": 1700, "player_mana_cost": 3,
+      "round_minutes": 60, "max_rounds": 12, "flee_chance_bps": 3200,
+      "rewards": [
+        {"item_key": "star-iron-sand", "quality_key": "common", "quantity": 3},
+        {"item_key": "low-spirit-stone", "quality_key": "common", "quantity": 8}
+      ]
+    },
+    "tags": ["遭遇", "守脉兽", "伏流"], "search_text": "伏流 星铁甲兽 守脉", "visibility": "player", "sort_order": 30
+  }
+]

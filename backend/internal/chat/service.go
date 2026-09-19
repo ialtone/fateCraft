@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,15 @@ type messageRepo interface {
 	ListDisplay(ctx context.Context, convID uuid.UUID, before *uuid.UUID, limit int) ([]storage.DisplayMessage, error)
 }
 
+// atomicMessageRepo is implemented by the SQL repository. Keeping it
+// optional preserves the small mock repository used by service unit tests,
+// while production writes cross the transaction boundary exactly once.
+type atomicMessageRepo interface {
+	CreateUserWithDisplay(context.Context, uuid.UUID, string, *int) (*storage.ChatMessage, *storage.DisplayMessage, error)
+	CreateAssistantWithDisplay(context.Context, uuid.UUID, uuid.UUID, string, string, map[string]any, *int, storage.JSONDoc) (*storage.ChatMessage, *storage.DisplayMessage, error)
+	CreateSystemWithDisplay(context.Context, uuid.UUID, string, string, string, map[string]any) (*storage.ChatMessage, *storage.DisplayMessage, error)
+}
+
 // Service 负责对话内消息的持久化与编辑操作。所有方法都带 conversation_id。
 type Service struct {
 	repo messageRepo
@@ -35,6 +45,9 @@ func NewService(repo messageRepo) *Service { return &Service{repo: repo} }
 
 // AppendUser 写入一条用户消息（内部消息 + 展示消息）。
 func (s *Service) AppendUser(ctx context.Context, convID uuid.UUID, content string, tokenCount *int) (*storage.ChatMessage, *storage.DisplayMessage, error) {
+	if repo, ok := s.repo.(atomicMessageRepo); ok {
+		return repo.CreateUserWithDisplay(ctx, convID, content, tokenCount)
+	}
 	now := time.Now()
 	chatMsg := &storage.ChatMessage{
 		ID:             uuid.New(),
@@ -84,21 +97,29 @@ func (s *Service) AppendUserChatOnly(ctx context.Context, convID uuid.UUID, cont
 
 // AppendAssistant 写入一条 assistant 消息（内部消息 + 展示消息）。
 func (s *Service) AppendAssistant(ctx context.Context, convID uuid.UUID, content string, markdown string, metadata map[string]any, tokenCount *int) (*storage.ChatMessage, *storage.DisplayMessage, error) {
-	return s.AppendAssistantWithID(ctx, convID, uuid.New(), content, markdown, metadata, tokenCount)
+	return s.AppendAssistantWithIDAndBlocks(ctx, convID, uuid.New(), content, markdown, metadata, tokenCount, textBlocks(content))
 }
 
 // AppendAssistantWithID 同 AppendAssistant，但允许指定展示消息 id，
 // 以便与流式期间使用的 message_id 保持一致。
 func (s *Service) AppendAssistantWithID(ctx context.Context, convID, displayID uuid.UUID, content string, markdown string, metadata map[string]any, tokenCount *int) (*storage.ChatMessage, *storage.DisplayMessage, error) {
+	return s.AppendAssistantWithIDAndBlocks(ctx, convID, displayID, content, markdown, metadata, tokenCount, textBlocks(content))
+}
+
+// AppendAssistantWithIDAndBlocks persists the canonical ordered model output.
+// The same blocks are used for protocol replay and the safe display projection.
+func (s *Service) AppendAssistantWithIDAndBlocks(ctx context.Context, convID, displayID uuid.UUID, content string, markdown string, metadata map[string]any, tokenCount *int, blocks storage.JSONDoc) (*storage.ChatMessage, *storage.DisplayMessage, error) {
+	if len(blocks) == 0 || string(blocks) == "null" {
+		blocks = textBlocks(content)
+	}
+	if repo, ok := s.repo.(atomicMessageRepo); ok {
+		return repo.CreateAssistantWithDisplay(ctx, convID, displayID, content, markdown, metadata, tokenCount, blocks)
+	}
 	now := time.Now()
 	chatMsg := &storage.ChatMessage{
-		ID:             uuid.New(),
-		ConversationID: convID,
-		Role:           storage.RoleAssistant,
-		Content:        content,
-		TokenCount:     tokenCount,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID: uuid.New(), ConversationID: convID, Role: storage.RoleAssistant,
+		Content: content, ContentBlocks: blocks, TokenCount: tokenCount,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.repo.CreateChat(ctx, chatMsg); err != nil {
 		return nil, nil, err
@@ -107,18 +128,22 @@ func (s *Service) AppendAssistantWithID(ctx context.Context, convID, displayID u
 		metadata = map[string]any{}
 	}
 	disp := &storage.DisplayMessage{
-		ID:             displayID,
-		ConversationID: convID,
-		ChatMessageID:  &chatMsg.ID,
-		Type:           "assistant",
-		Markdown:       markdown,
-		Metadata:       storage.JSONMap(metadata),
-		CreatedAt:      now,
+		ID: displayID, ConversationID: convID, ChatMessageID: &chatMsg.ID,
+		Type: "assistant", Markdown: markdown, Metadata: storage.JSONMap(metadata),
+		Reasoning: storage.ReasoningTextBlocks(blocks), CreatedAt: now,
 	}
 	if err := s.repo.CreateDisplay(ctx, disp); err != nil {
 		return nil, nil, err
 	}
 	return chatMsg, disp, nil
+}
+
+func textBlocks(content string) storage.JSONDoc {
+	if content == "" {
+		return storage.JSONDoc("[]")
+	}
+	raw, _ := json.Marshal([]map[string]any{{"kind": "text", "text": content}})
+	return storage.JSONDoc(raw)
 }
 
 // AppendSystemEvent 写入一条系统/事件类展示消息（不进入上下文）。
@@ -145,6 +170,9 @@ func (s *Service) AppendSystemEvent(ctx context.Context, convID uuid.UUID, dtype
 // 玩家也要看到"的事件——只落展示消息会导致下一轮生成看不到该事件。
 // content 是给模型看的文本（进上下文），markdown 是给前端展示的文本，通常相同。
 func (s *Service) AppendSystemChatEvent(ctx context.Context, convID uuid.UUID, dtype, content, markdown string, metadata map[string]any) (*storage.ChatMessage, *storage.DisplayMessage, error) {
+	if repo, ok := s.repo.(atomicMessageRepo); ok {
+		return repo.CreateSystemWithDisplay(ctx, convID, dtype, content, markdown, metadata)
+	}
 	now := time.Now()
 	chatMsg := &storage.ChatMessage{
 		ID:             uuid.New(),
@@ -201,8 +229,9 @@ func (s *Service) UpdateDisplayMetadata(ctx context.Context, convID, displayID u
 
 // EditInput 编辑消息的入参。
 type EditInput struct {
-	Content *string `json:"content"`
-	Hidden  *bool   `json:"hidden"`
+	Content   *string `json:"content"`
+	Hidden    *bool   `json:"hidden"`
+	RequestID string  `json:"request_id"`
 }
 
 // EditDisplay 编辑一条展示消息，并同步其关联的内部消息内容。
@@ -219,6 +248,7 @@ func (s *Service) EditDisplay(ctx context.Context, convID, displayID uuid.UUID, 
 		if disp.ChatMessageID != nil {
 			if cm, err := s.repo.GetChat(ctx, convID, *disp.ChatMessageID); err == nil {
 				cm.Content = *in.Content
+				cm.ContentBlocks = textBlocks(*in.Content)
 				cm.UpdatedAt = time.Now()
 				if err := s.repo.UpdateChat(ctx, cm); err != nil {
 					return nil, err

@@ -6,24 +6,29 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ialtone/fatecraft/internal/gameplay"
+	"github.com/ialtone/fatecraft/internal/platformcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 type Manifest struct {
-	ID              string        `json:"id"`
-	Name            string        `json:"name"`
-	Version         string        `json:"version"`
-	Description     string        `json:"description"`
-	Author          string        `json:"author"`
-	Icon            string        `json:"icon,omitempty"`
-	Tags            []string      `json:"tags"`
-	DefaultConfig   DefaultConfig `json:"default_config"`
-	QuickStartGuide string        `json:"quick_start_guide"`
-	Features        []string      `json:"features"`
-	Dependencies    []string      `json:"dependencies"`
-	CreatedAt       string        `json:"created_at,omitempty"`
-	UpdatedAt       string        `json:"updated_at,omitempty"`
-	RewardRules     []RewardSpec  `json:"reward_rules,omitempty"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Version          string         `json:"version"`
+	RuntimeEntry     string         `json:"runtime_entry,omitempty"`
+	Description      string         `json:"description"`
+	Author           string         `json:"author"`
+	Icon             string         `json:"icon,omitempty"`
+	Tags             []string       `json:"tags"`
+	DefaultConfig    DefaultConfig  `json:"default_config"`
+	QuickStartGuide  string         `json:"quick_start_guide"`
+	Features         []string       `json:"features"`
+	Dependencies     []string       `json:"dependencies"`
+	EntryRequirement map[string]any `json:"entry_requirement,omitempty"`
+	CreatedAt        string         `json:"created_at,omitempty"`
+	UpdatedAt        string         `json:"updated_at,omitempty"`
+	Outcomes         []OutcomeSpec  `json:"outcomes,omitempty"`
+	RewardRules      []RewardSpec   `json:"reward_rules,omitempty"`
 }
 
 type DefaultConfig struct {
@@ -35,14 +40,22 @@ type DefaultConfig struct {
 	AllowedPersonas      []string `json:"allowed_personas,omitempty"`
 }
 
+type OutcomeSpec struct {
+	OutcomeKey     string         `json:"outcome_key"`
+	Category       string         `json:"category"`
+	Title          string         `json:"title"`
+	Tone           string         `json:"tone"`
+	VerifierKey    string         `json:"verifier_key"`
+	VerifierConfig map[string]any `json:"verifier_config"`
+	Enabled        *bool          `json:"enabled,omitempty"`
+}
+
 type RewardSpec struct {
-	RewardKey   string         `json:"reward_key"`
-	EndingType  string         `json:"ending_type"`
-	EndingTitle string         `json:"ending_title"`
-	Conditions  map[string]any `json:"conditions"`
-	Calculation map[string]any `json:"calculation"`
-	MaxReward   *int64         `json:"max_reward,omitempty"`
-	Enabled     *bool          `json:"enabled,omitempty"`
+	OutcomeKey       string         `json:"outcome_key"`
+	RewardKey        string         `json:"reward_key"`
+	CalculatorKey    string         `json:"calculator_key"`
+	CalculatorConfig map[string]any `json:"calculator_config"`
+	Enabled          *bool          `json:"enabled,omitempty"`
 }
 
 type AssetOption struct {
@@ -52,41 +65,73 @@ type AssetOption struct {
 	Description string    `json:"description,omitempty"`
 }
 
-type PublicChallenge struct {
-	ID              uuid.UUID     `json:"id"`
-	Slug            string        `json:"slug"`
-	Name            string        `json:"name"`
-	Description     string        `json:"description"`
-	Version         string        `json:"version"`
-	Icon            string        `json:"icon,omitempty"`
-	Tags            []string      `json:"tags"`
-	Features        []string      `json:"features"`
-	QuickStartGuide string        `json:"quick_start_guide"`
-	Personas        []AssetOption `json:"personas"`
-	RewardOverview  []RewardView  `json:"reward_overview"`
+type OutcomeView struct {
+	Key      string `json:"key"`
+	Category string `json:"category"`
+	Title    string `json:"title"`
+	Tone     string `json:"tone"`
 }
 
 type RewardView struct {
-	RewardKey   string `json:"reward_key"`
-	EndingTitle string `json:"ending_title"`
-	Multiplier  string `json:"multiplier"`
+	RewardKey    string `json:"reward_key"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Kind         string `json:"kind"`
+	Unit         string `json:"unit"`
+	Icon         string `json:"icon"`
+	OutcomeKey   string `json:"outcome_key"`
+	OutcomeTitle string `json:"outcome_title"`
+}
+
+type PublicRuntime struct {
+	EngineKey    string                         `json:"engine_key"`
+	Mode         string                         `json:"mode"`
+	Presentation gameplay.Presentation          `json:"presentation"`
+	Capabilities map[string]gameplay.Capability `json:"capabilities"`
+	// PlatformCapabilities are owned by Fatecraft and are independent of the
+	// selected challenge package. Gameplay capabilities remain in Capabilities.
+	PlatformCapabilities map[string]platformcapability.Capability `json:"platform_capabilities"`
+	Outcomes             []OutcomeView                            `json:"outcomes,omitempty"`
+}
+
+type PublicChallenge struct {
+	ID                uuid.UUID     `json:"id"`
+	Slug              string        `json:"slug"`
+	Name              string        `json:"name"`
+	Description       string        `json:"description"`
+	Version           string        `json:"version"`
+	Icon              string        `json:"icon,omitempty"`
+	Tags              []string      `json:"tags"`
+	Features          []string      `json:"features"`
+	QuickStartGuide   string        `json:"quick_start_guide"`
+	Personas          []AssetOption `json:"personas"`
+	Outcomes          []OutcomeView `json:"outcomes"`
+	RewardOverview    []RewardView  `json:"reward_overview"`
+	Runtime           PublicRuntime `json:"runtime"`
+	Available         bool          `json:"available"`
+	UnavailableReason string        `json:"unavailable_reason,omitempty"`
 }
 
 type Selection struct {
-	Version   storage.ChallengeVersion
-	Character *storage.ChallengeAsset
-	Persona   *storage.ChallengeAsset
-	Scenario  *storage.ChallengeAsset
+	ChallengeName string
+	Version       storage.ChallengeVersion
+	Runtime       storage.ChallengeRuntimeConfig
+	Contract      gameplay.RuntimeContract
+	Character     *storage.ChallengeAsset
+	Persona       *storage.ChallengeAsset
+	Scenario      *storage.ChallengeAsset
 }
 
 type Bundle struct {
-	Version    storage.ChallengeVersion
-	Manifest   Manifest
-	Character  *storage.Character
-	Persona    *storage.Persona
-	Scenario   *storage.Scenario
-	Prompt     *storage.PromptPreset
-	WorldBooks []storage.WorldBook
+	Version      storage.ChallengeVersion
+	Runtime      storage.ChallengeRuntimeConfig
+	Contract     gameplay.RuntimeContract
+	Manifest     Manifest
+	Character    *storage.Character
+	Persona      *storage.Persona
+	Scenario     *storage.Scenario
+	Prompt       *storage.PromptPreset
+	WorldEntries []storage.WorldBookEntry
 }
 
 type AdminPack struct {
@@ -95,15 +140,21 @@ type AdminPack struct {
 }
 
 type VersionDocument struct {
-	Version     storage.ChallengeVersion      `json:"version"`
-	Assets      []storage.ChallengeAsset      `json:"assets"`
-	RewardRules []storage.ChallengeRewardRule `json:"reward_rules"`
+	Version     storage.ChallengeVersion       `json:"version"`
+	Runtime     storage.ChallengeRuntimeConfig `json:"runtime"`
+	Assets      []storage.ChallengeAsset       `json:"assets"`
+	Definitions []storage.GameplayDefinition   `json:"definitions"`
+	Outcomes    []storage.ChallengeOutcomeRule `json:"outcomes"`
+	RewardRules []storage.ChallengeRewardRule  `json:"reward_rules"`
 }
 
 type SaveVersionInput struct {
-	Manifest    json.RawMessage               `json:"manifest"`
-	Assets      []storage.ChallengeAsset      `json:"assets"`
-	RewardRules []storage.ChallengeRewardRule `json:"reward_rules"`
+	Manifest    json.RawMessage                `json:"manifest"`
+	Runtime     storage.ChallengeRuntimeConfig `json:"runtime"`
+	Assets      []storage.ChallengeAsset       `json:"assets"`
+	Definitions []storage.GameplayDefinition   `json:"definitions"`
+	Outcomes    []storage.ChallengeOutcomeRule `json:"outcomes"`
+	RewardRules []storage.ChallengeRewardRule  `json:"reward_rules"`
 }
 
 type CreatePackInput struct {
@@ -113,18 +164,17 @@ type CreatePackInput struct {
 }
 
 type SettlementInput struct {
-	ConversationID   uuid.UUID
-	PlayerID         uuid.UUID
-	EndingType       string
-	EndingTitle      string
-	RewardKey        string
-	BaseReward       int64
-	CharacterName    string
-	CultivationLevel string
-	SurvivalTurns    int
-	SettledAt        time.Time
+	ConversationID uuid.UUID
+	PlayerID       uuid.UUID
+	OutcomeKey     string
+	Summary        string
+	TrustedState   map[string]any
+	TurnCount      int
+	SettledAt      time.Time
 }
 
 type SettlementResult struct {
-	Run storage.ChallengeRun `json:"run"`
+	Run     storage.ChallengeRun         `json:"run"`
+	Outcome OutcomeView                  `json:"outcome"`
+	Rewards []storage.ChallengeRunReward `json:"rewards"`
 }

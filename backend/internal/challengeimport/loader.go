@@ -2,7 +2,9 @@ package challengeimport
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,12 +15,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
+	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 type loadedChallenge struct {
 	manifest challenge.Manifest
 	document challenge.VersionDocument
+	rewards  []storage.RewardDefinition
 	hash     string
 }
 
@@ -33,8 +37,75 @@ var assetSources = []struct {
 	{"worldbooks", storage.ChallengeAssetWorldBook},
 }
 
-// loadDirectory 只负责把一个仓库目录解析成可发布版本文档，不访问数据库。
-func loadDirectory(directory string, now time.Time) (*loadedChallenge, error) {
+type rewardFile struct {
+	Key         string         `json:"key"`
+	Kind        string         `json:"kind"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Unit        string         `json:"unit"`
+	Icon        string         `json:"icon"`
+	Stackable   bool           `json:"stackable"`
+	Consumable  bool           `json:"consumable"`
+	Featured    bool           `json:"featured"`
+	SortOrder   int            `json:"sort_order"`
+	Metadata    map[string]any `json:"metadata"`
+}
+
+type gameplayDefinitionFile struct {
+	Kind       string         `json:"kind"`
+	Key        string         `json:"key"`
+	Name       string         `json:"name"`
+	Content    map[string]any `json:"content"`
+	Tags       []string       `json:"tags"`
+	SearchText string         `json:"search_text"`
+	Visibility string         `json:"visibility"`
+	SortOrder  int            `json:"sort_order"`
+}
+
+const runtimeSourceContractVersion = 2
+
+type runtimeSourceEntry struct {
+	Schema          string                `json:"$schema"`
+	ContractVersion int                   `json:"runtime_contract_version"`
+	Engine          gameplay.EngineRef    `json:"engine"`
+	Mode            string                `json:"mode"`
+	Includes        runtimeSourceIncludes `json:"includes"`
+}
+
+type runtimeSourceIncludes struct {
+	Campaign     string `json:"campaign,omitempty"`
+	StateSchema  string `json:"state_schema"`
+	Actions      string `json:"actions"`
+	Settlement   string `json:"settlement"`
+	Presentation string `json:"presentation"`
+}
+
+type runtimeCampaignFragment struct {
+	Campaign *gameplay.CampaignConfig `json:"campaign"`
+}
+
+type runtimeStateSchemaFragment struct {
+	StateSchema *gameplay.StateSchema `json:"state_schema"`
+}
+
+type runtimeActionsFragment struct {
+	Actions *gameplay.ActionConfig `json:"actions"`
+}
+
+type runtimeSettlementFragment struct {
+	Settlement *gameplay.SettlementConfig `json:"settlement"`
+}
+
+type runtimePresentationFragment struct {
+	Presentation *gameplay.Presentation `json:"presentation"`
+}
+
+// loadDirectory only parses repository files. It does not access PostgreSQL.
+func loadDirectory(directory string, now time.Time, registries ...*gameplay.Registry) (*loadedChallenge, error) {
+	registry := defaultRegistry()
+	if len(registries) > 0 && registries[0] != nil {
+		registry = registries[0]
+	}
 	manifestBytes, err := os.ReadFile(filepath.Join(directory, "pack.json"))
 	if err != nil {
 		return nil, fmt.Errorf("读取 pack.json: %w", err)
@@ -46,11 +117,43 @@ func loadDirectory(directory string, now time.Time) (*loadedChallenge, error) {
 	if _, err := parseStableVersion(manifest.Version); err != nil {
 		return nil, fmt.Errorf("内置挑战 version 无效: %w", err)
 	}
+	outcomeSpecs := append([]challenge.OutcomeSpec(nil), manifest.Outcomes...)
 	rewardSpecs := append([]challenge.RewardSpec(nil), manifest.RewardRules...)
+	manifest.Outcomes = nil
 	manifest.RewardRules = nil
 	canonicalManifest, err := json.Marshal(manifest)
 	if err != nil {
 		return nil, err
+	}
+
+	if strings.TrimSpace(manifest.RuntimeEntry) == "" {
+		return nil, fmt.Errorf("pack.json 缺少 runtime_entry")
+	}
+	runtimeContract, err := loadRuntimeSource(directory, manifest.RuntimeEntry)
+	if err != nil {
+		return nil, err
+	}
+	if err := registry.ValidateRuntime(runtimeContract); err != nil {
+		return nil, fmt.Errorf("Runtime 源文件无效: %w", err)
+	}
+	runtime, err := gameplay.EncodeRuntime(*runtimeContract)
+	if err != nil {
+		return nil, fmt.Errorf("编译 Runtime 源文件: %w", err)
+	}
+	runtime.CreatedAt = now
+	runtime.UpdatedAt = now
+
+	rewardDefs, err := loadRewardDefinitions(filepath.Join(directory, "rewards.json"), now)
+	if err != nil {
+		return nil, err
+	}
+	gameplayDefinitions, err := loadGameplayDefinitionCatalog(directory, now)
+	if err != nil {
+		return nil, err
+	}
+	definitions := make(map[string]storage.RewardDefinition, len(rewardDefs))
+	for _, definition := range rewardDefs {
+		definitions[definition.Key] = definition
 	}
 
 	assets := make([]storage.ChallengeAsset, 0)
@@ -83,30 +186,291 @@ func loadDirectory(directory string, now time.Time) (*loadedChallenge, error) {
 		}
 	}
 
+	outcomes := make([]storage.ChallengeOutcomeRule, 0, len(outcomeSpecs))
+	outcomeIDs := make(map[string]uuid.UUID, len(outcomeSpecs))
+	for _, spec := range outcomeSpecs {
+		enabled := spec.Enabled == nil || *spec.Enabled
+		outcome := storage.ChallengeOutcomeRule{
+			ID: uuid.New(), OutcomeKey: spec.OutcomeKey, Category: spec.Category,
+			Title: spec.Title, Tone: spec.Tone, VerifierKey: spec.VerifierKey,
+			VerifierConfig: storage.JSONMap(spec.VerifierConfig), Enabled: enabled,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		outcomes = append(outcomes, outcome)
+		outcomeIDs[spec.OutcomeKey] = outcome.ID
+	}
+
 	rules := make([]storage.ChallengeRewardRule, 0, len(rewardSpecs))
 	for _, spec := range rewardSpecs {
+		definition, ok := definitions[spec.RewardKey]
+		if !ok {
+			return nil, fmt.Errorf("奖励 %s 未在 rewards.json 定义", spec.RewardKey)
+		}
+		outcomeID, ok := outcomeIDs[spec.OutcomeKey]
+		if !ok {
+			return nil, fmt.Errorf("奖励 %s 引用了未知结局 %s", spec.RewardKey, spec.OutcomeKey)
+		}
 		enabled := spec.Enabled == nil || *spec.Enabled
 		rules = append(rules, storage.ChallengeRewardRule{
-			ID: uuid.New(), RewardKey: spec.RewardKey, EndingType: spec.EndingType,
-			EndingTitle: spec.EndingTitle, Conditions: storage.JSONMap(spec.Conditions),
-			Calculation: storage.JSONMap(spec.Calculation), MaxReward: spec.MaxReward,
-			Enabled: enabled, CreatedAt: now, UpdatedAt: now,
+			ID: uuid.New(), OutcomeRuleID: outcomeID, RewardDefinitionID: definition.ID,
+			CalculatorKey:    spec.CalculatorKey,
+			CalculatorConfig: storage.JSONMap(spec.CalculatorConfig),
+			PublicSnapshot:   rewardSnapshot(definition), Enabled: enabled,
+			CreatedAt: now, UpdatedAt: now,
 		})
 	}
+
 	document := challenge.VersionDocument{
 		Version: storage.ChallengeVersion{
 			Version: manifest.Version, Manifest: storage.JSONDoc(canonicalManifest),
 		},
-		Assets: assets, RewardRules: rules,
+		Runtime: runtime, Assets: assets, Definitions: gameplayDefinitions,
+		Outcomes: outcomes, RewardRules: rules,
 	}
-	if err := challenge.ValidateDocument(&document); err != nil {
+	if err := challenge.ValidateDocument(&document, registry); err != nil {
 		return nil, err
 	}
-	hash, err := challenge.ContentHash(document.Version.Manifest, document.Assets, document.RewardRules)
+	hash, err := challenge.ContentHashDocument(&document)
 	if err != nil {
 		return nil, err
 	}
-	return &loadedChallenge{manifest: manifest, document: document, hash: hash}, nil
+	return &loadedChallenge{manifest: manifest, document: document, rewards: rewardDefs, hash: hash}, nil
+}
+
+func loadRuntimeSource(packDirectory, entryReference string) (*gameplay.RuntimeContract, error) {
+	entryPath, err := resolveRuntimeSourcePath(packDirectory, entryReference)
+	if err != nil {
+		return nil, fmt.Errorf("runtime_entry 无效: %w", err)
+	}
+	var entry runtimeSourceEntry
+	if err := decodeJSONFileStrict(entryPath, &entry); err != nil {
+		return nil, fmt.Errorf("读取 Runtime 入口 %s: %w", filepath.ToSlash(entryReference), err)
+	}
+	if entry.Schema != "fatecraft.runtime.schema.json" {
+		return nil, fmt.Errorf("Runtime 入口 $schema 无效")
+	}
+	if entry.ContractVersion != runtimeSourceContractVersion {
+		return nil, fmt.Errorf("Runtime 契约版本必须为 %d", runtimeSourceContractVersion)
+	}
+	if entry.Mode != gameplay.RuntimeModeChallenge && entry.Mode != gameplay.RuntimeModeCampaign {
+		return nil, fmt.Errorf("Runtime mode 无效: %q", entry.Mode)
+	}
+	entryDirectory := filepath.Dir(entryPath)
+	required := map[string]string{
+		"state_schema": entry.Includes.StateSchema,
+		"actions":      entry.Includes.Actions,
+		"settlement":   entry.Includes.Settlement,
+		"presentation": entry.Includes.Presentation,
+	}
+	for name, reference := range required {
+		if strings.TrimSpace(reference) == "" {
+			return nil, fmt.Errorf("Runtime includes.%s 不能为空", name)
+		}
+	}
+	mode := gameplay.NormalizeRuntimeMode(entry.Mode)
+	if mode == gameplay.RuntimeModeCampaign && strings.TrimSpace(entry.Includes.Campaign) == "" {
+		return nil, fmt.Errorf("Campaign Runtime 必须声明 includes.campaign")
+	}
+	if mode != gameplay.RuntimeModeCampaign && entry.Includes.Campaign != "" {
+		return nil, fmt.Errorf("非 Campaign Runtime 不能声明 includes.campaign")
+	}
+
+	paths := map[string]string{}
+	for name, reference := range map[string]string{
+		"campaign":     entry.Includes.Campaign,
+		"state_schema": entry.Includes.StateSchema,
+		"actions":      entry.Includes.Actions,
+		"settlement":   entry.Includes.Settlement,
+		"presentation": entry.Includes.Presentation,
+	} {
+		if reference == "" {
+			continue
+		}
+		path, err := resolveRuntimeSourcePath(entryDirectory, reference)
+		if err != nil {
+			return nil, fmt.Errorf("Runtime includes.%s 无效: %w", name, err)
+		}
+		for existingName, existingPath := range paths {
+			if existingPath == path {
+				return nil, fmt.Errorf("Runtime includes.%s 与 includes.%s 不能引用同一文件", name, existingName)
+			}
+		}
+		paths[name] = path
+	}
+
+	contract := &gameplay.RuntimeContract{Engine: entry.Engine, Mode: mode}
+	if path := paths["campaign"]; path != "" {
+		var fragment runtimeCampaignFragment
+		if err := decodeJSONFileStrict(path, &fragment); err != nil {
+			return nil, fmt.Errorf("读取 Runtime campaign: %w", err)
+		}
+		if fragment.Campaign == nil {
+			return nil, fmt.Errorf("Runtime campaign 文件缺少 campaign 对象")
+		}
+		contract.Campaign = fragment.Campaign
+	}
+	var stateFragment runtimeStateSchemaFragment
+	if err := decodeJSONFileStrict(paths["state_schema"], &stateFragment); err != nil {
+		return nil, fmt.Errorf("读取 Runtime state_schema: %w", err)
+	}
+	if stateFragment.StateSchema == nil {
+		return nil, fmt.Errorf("Runtime state_schema 文件缺少 state_schema 对象")
+	}
+	contract.StateSchema = *stateFragment.StateSchema
+	var actionsFragment runtimeActionsFragment
+	if err := decodeJSONFileStrict(paths["actions"], &actionsFragment); err != nil {
+		return nil, fmt.Errorf("读取 Runtime actions: %w", err)
+	}
+	if actionsFragment.Actions == nil {
+		return nil, fmt.Errorf("Runtime actions 文件缺少 actions 对象")
+	}
+	contract.Actions = *actionsFragment.Actions
+	var settlementFragment runtimeSettlementFragment
+	if err := decodeJSONFileStrict(paths["settlement"], &settlementFragment); err != nil {
+		return nil, fmt.Errorf("读取 Runtime settlement: %w", err)
+	}
+	if settlementFragment.Settlement == nil {
+		return nil, fmt.Errorf("Runtime settlement 文件缺少 settlement 对象")
+	}
+	contract.Settlement = *settlementFragment.Settlement
+	var presentationFragment runtimePresentationFragment
+	if err := decodeJSONFileStrict(paths["presentation"], &presentationFragment); err != nil {
+		return nil, fmt.Errorf("读取 Runtime presentation: %w", err)
+	}
+	if presentationFragment.Presentation == nil {
+		return nil, fmt.Errorf("Runtime presentation 文件缺少 presentation 对象")
+	}
+	contract.Presentation = *presentationFragment.Presentation
+	return contract, nil
+}
+
+func resolveRuntimeSourcePath(allowedDirectory, reference string) (string, error) {
+	if reference == "" || strings.TrimSpace(reference) != reference || filepath.IsAbs(reference) ||
+		filepath.VolumeName(reference) != "" || strings.Contains(reference, `\`) ||
+		strings.ToLower(filepath.Ext(reference)) != ".json" {
+		return "", fmt.Errorf("必须是玩法包内的相对 JSON 路径")
+	}
+	cleanReference := filepath.Clean(filepath.FromSlash(reference))
+	if cleanReference == "." || cleanReference == ".." || strings.HasPrefix(cleanReference, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("路径不能离开玩法包")
+	}
+	allowedRoot, err := filepath.Abs(allowedDirectory)
+	if err != nil {
+		return "", err
+	}
+	target, err := filepath.Abs(filepath.Join(allowedDirectory, cleanReference))
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(allowedRoot, target)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("路径不能离开玩法包")
+	}
+	return target, nil
+}
+
+func decodeJSONFileStrict(path string, target any) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(io.LimitReader(file, 2<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return fmt.Errorf("只能包含一个 JSON 值")
+		}
+		return err
+	}
+	return nil
+}
+
+func loadGameplayDefinitionCatalog(directory string, now time.Time) ([]storage.GameplayDefinition, error) {
+	files := []string{filepath.Join(directory, "definitions.json")}
+	fragments, err := filepath.Glob(filepath.Join(directory, "definitions", "*.json"))
+	if err != nil {
+		return nil, fmt.Errorf("枚举 definitions 分片: %w", err)
+	}
+	sort.Strings(fragments)
+	files = append(files, fragments...)
+	definitions := make([]storage.GameplayDefinition, 0)
+	for _, file := range files {
+		rows, err := loadGameplayDefinitions(file, now)
+		if err != nil {
+			return nil, err
+		}
+		definitions = append(definitions, rows...)
+	}
+	return definitions, nil
+}
+
+func loadGameplayDefinitions(path string, now time.Time) ([]storage.GameplayDefinition, error) {
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("读取 %s: %w", path, err)
+	}
+	var values []gameplayDefinitionFile
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("解析 %s: %w", path, err)
+	}
+	out := make([]storage.GameplayDefinition, 0, len(values))
+	for _, value := range values {
+		visibility := strings.TrimSpace(value.Visibility)
+		if visibility == "" {
+			visibility = storage.CampaignVisibilityPlayer
+		}
+		out = append(out, storage.GameplayDefinition{
+			ID: uuid.New(), Kind: value.Kind, Key: value.Key, Name: value.Name,
+			Content: storage.JSONMap(value.Content), Tags: value.Tags,
+			SearchText: value.SearchText, Visibility: visibility, SortOrder: value.SortOrder,
+			CreatedAt: now, UpdatedAt: now,
+		})
+	}
+	return out, nil
+}
+
+func loadRewardDefinitions(path string, now time.Time) ([]storage.RewardDefinition, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取 rewards.json: %w", err)
+	}
+	var values []rewardFile
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("解析 rewards.json: %w", err)
+	}
+	out := make([]storage.RewardDefinition, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value.Key = strings.TrimSpace(value.Key)
+		if value.Key == "" || value.Kind == "" || value.Name == "" || seen[value.Key] {
+			return nil, fmt.Errorf("rewards.json 包含空值或重复 key")
+		}
+		seen[value.Key] = true
+		out = append(out, storage.RewardDefinition{
+			ID: uuid.New(), Key: value.Key, Kind: value.Kind, Name: value.Name,
+			Description: value.Description, Unit: value.Unit, Icon: value.Icon,
+			Stackable: value.Stackable, Consumable: value.Consumable,
+			Featured: value.Featured, SortOrder: value.SortOrder,
+			Metadata: storage.JSONMap(value.Metadata), CreatedAt: now, UpdatedAt: now,
+		})
+	}
+	return out, nil
+}
+
+func rewardSnapshot(definition storage.RewardDefinition) storage.JSONMap {
+	return storage.JSONMap{
+		"key": definition.Key, "kind": definition.Kind, "name": definition.Name,
+		"description": definition.Description, "unit": definition.Unit, "icon": definition.Icon,
+		"stackable": definition.Stackable, "consumable": definition.Consumable,
+	}
 }
 
 func parseStableVersion(version string) ([3]int, error) {

@@ -1,0 +1,53 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "investigation",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "investigation.clue_integrity",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 100
+        }
+      },
+      {
+        "path": "investigation.suspect",
+        "type": "string",
+        "default": "尚未锁定",
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "max_length": 80
+        }
+      },
+      {
+        "path": "investigation.remaining_minutes",
+        "type": "integer",
+        "default": 60,
+        "visibility": "player",
+        "update_policy": "model",
+        "constraints": {
+          "min": 0,
+          "max": 60
+        }
+      },
+      {
+        "path": "investigation.solution",
+        "type": "string",
+        "default": "管家",
+        "visibility": "internal",
+        "update_policy": "system"
+      }
+    ]
+  }
+}

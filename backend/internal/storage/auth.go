@@ -225,7 +225,7 @@ func (r *AuthRepository) CreateEmailUser(ctx context.Context, user *User) error 
 		if err := tx.Create(user).Error; err != nil {
 			return err
 		}
-		return createInitialAccount(tx, user.ID.String())
+		return grantInitialRewards(ctx, tx, user.ID)
 	})
 }
 
@@ -283,7 +283,7 @@ func (r *AuthRepository) RegisterEmailUser(ctx context.Context, user *User, veri
 		if err := tx.Create(user).Error; err != nil {
 			return err
 		}
-		return createInitialAccount(tx, user.ID.String())
+		return grantInitialRewards(ctx, tx, user.ID)
 	})
 }
 
@@ -420,7 +420,7 @@ func (r *AuthRepository) UpsertExternalUser(ctx context.Context, in ExternalIden
 		if err := tx.Create(&user).Error; err != nil {
 			return err
 		}
-		if err := createInitialAccount(tx, user.ID.String()); err != nil {
+		if err := grantInitialRewards(ctx, tx, user.ID); err != nil {
 			return err
 		}
 		ident = AuthIdentity{
@@ -456,8 +456,12 @@ func (r *AuthRepository) emailExists(db *gorm.DB, email string) bool {
 	return db.Model(&User{}).Where("email = ?", email).Count(&count).Error == nil && count > 0
 }
 
-func createInitialAccount(db *gorm.DB, playerID string) error {
-	return db.Create(&Account{
-		PlayerID: playerID, RewindCount: 10, TotalRewindsEarned: 10,
-	}).Error
+func grantInitialRewards(ctx context.Context, db *gorm.DB, playerID uuid.UUID) error {
+	_, err := NewRewardRepository(db).GrantInCurrentTx(ctx, RewardMutation{
+		PlayerID: playerID, RewardKey: MessageRewriteCreditKey, Quantity: 10,
+		SourceType: "user_registration", SourceID: playerID.String(),
+		IdempotencyKey: "user_registration:" + playerID.String() + ":" + MessageRewriteCreditKey,
+		Metadata:       JSONMap{"reason": "initial_allowance"},
+	})
+	return err
 }

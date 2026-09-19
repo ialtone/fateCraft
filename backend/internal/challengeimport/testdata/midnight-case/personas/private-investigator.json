@@ -1,0 +1,9 @@
+{
+  "id": "private-investigator",
+  "name": "私家调查员",
+  "description": "擅长现场观察与交叉询问。",
+  "prompt": "你受托在警方抵达前保护现场并找出真凶。",
+  "tags": ["调查员"],
+  "created_at": "2026-07-22T00:00:00Z",
+  "updated_at": "2026-07-22T00:00:00Z"
+}

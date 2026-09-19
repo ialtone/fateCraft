@@ -1,24 +1,29 @@
 package roll
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"strings"
 )
 
 // ExecuteRoll 执行掷骰并确定结果等级。
-func ExecuteRoll(detailedResult *DetailedResult, sides int) *RollOutcome {
-	// 模型输出的 sides 不可信：非法值（<=1）时兜底为 100，避免 rand.Intn panic。
-	if sides <= 1 {
-		sides = 100
+func ExecuteRoll(detailedResult *DetailedResult, sides int) (*RollOutcome, error) {
+	if sides < 2 {
+		return nil, fmt.Errorf("骰子面数必须至少为 2")
 	}
-	rolled := rand.Intn(sides) + 1
+	value, err := rand.Int(rand.Reader, big.NewInt(int64(sides)))
+	if err != nil {
+		return nil, fmt.Errorf("生成安全随机数: %w", err)
+	}
+	rolled := int(value.Int64()) + 1
 
 	outcome := &RollOutcome{
 		Rolled:      rolled,
 		Sides:       sides,
 		SuccessRate: detailedResult.Breakdown.Final,
 		Breakdown:   detailedResult.Breakdown,
+		Outcomes:    detailedResult.Outcomes,
 	}
 
 	// 结果区间（RangeStart/RangeEnd）以 1-100 百分比刻度定义，
@@ -41,8 +46,14 @@ func ExecuteRoll(detailedResult *DetailedResult, sides int) *RollOutcome {
 		outcome.Level = "failure"
 		outcome.Success = false
 	}
+	// Keep the authoritative success interval with the outcome snapshot. The
+	// interval is expressed on the normalized 1-100 scale, so clients never
+	// need to reproduce arbitrary-sided-die conversion logic.
+	if dist != nil {
+		outcome.SuccessRange = dist.Success
+	}
 
-	return outcome
+	return outcome, nil
 }
 
 // RollOutcome 掷骰结果。
@@ -53,6 +64,10 @@ type RollOutcome struct {
 	Success     bool       `json:"success"`
 	Level       string     `json:"level"` // critical_success / success / failure / critical_failure
 	Breakdown   *Breakdown `json:"breakdown"`
+	// Outcomes and SuccessRange are immutable server snapshots used by the
+	// player-facing details panel. They are optional for backwards compatibility.
+	Outcomes     *OutcomeDistribution `json:"outcomes,omitempty"`
+	SuccessRange *OutcomeRange        `json:"success_range,omitempty"`
 }
 
 // FormatResult 格式化判定结果为文本。

@@ -1,0 +1,247 @@
+{
+  "presentation": {
+    "state_panel_title": "角色状态",
+    "state_sections": [
+      {
+        "key": "identity",
+        "title": "人物档案",
+        "order": 10,
+        "fields": [
+          {
+            "path": "profile.name",
+            "label": "姓名",
+            "widget": "text",
+            "order": 10
+          },
+          {
+            "path": "profile.gender",
+            "label": "性别",
+            "widget": "text",
+            "order": 20
+          },
+          {
+            "path": "profile.title",
+            "label": "称号",
+            "widget": "text",
+            "order": 30
+          },
+          {
+            "path": "profile.talent",
+            "label": "天赋",
+            "widget": "text",
+            "order": 40
+          },
+          {
+            "path": "profile.background",
+            "label": "出身",
+            "widget": "text",
+            "order": 50
+          },
+          {
+            "path": "profile.appearance",
+            "label": "外貌",
+            "widget": "text",
+            "order": 60
+          },
+          {
+            "path": "profile.attire",
+            "label": "服饰",
+            "widget": "text",
+            "order": 70
+          }
+        ]
+      },
+      {
+        "key": "cultivation",
+        "title": "修行",
+        "order": 20,
+        "fields": [
+          {
+            "path": "profile.cultivation_level",
+            "label": "境界",
+            "widget": "badge",
+            "order": 10
+          },
+          {
+            "path": "profile.cultivation_stage",
+            "label": "阶段",
+            "widget": "text",
+            "order": 20
+          },
+          {
+            "path": "profile.cultivation_progress",
+            "label": "修为进度",
+            "widget": "progress",
+            "unit": "%",
+            "order": 30
+          },
+          {
+            "path": "cultivation.cultivation_method",
+            "label": "当前功法",
+            "widget": "text",
+            "order": 40
+          },
+          {
+            "path": "cultivation.breakthrough_attempts",
+            "label": "突破尝试",
+            "widget": "number",
+            "unit": "次",
+            "order": 50
+          },
+          {
+            "path": "cultivation.failed_breakthroughs",
+            "label": "突破失败",
+            "widget": "number",
+            "unit": "次",
+            "order": 60
+          },
+          {
+            "path": "cultivation.talent_awakened",
+            "label": "天赋觉醒",
+            "widget": "boolean",
+            "order": 70
+          }
+        ]
+      },
+      {
+        "key": "lifespan",
+        "title": "寿元",
+        "order": 30,
+        "fields": [
+          {
+            "path": "profile.age",
+            "label": "年龄",
+            "widget": "number",
+            "unit": "年",
+            "order": 10
+          },
+          {
+            "path": "profile.lifespan",
+            "label": "寿元上限",
+            "widget": "number",
+            "unit": "年",
+            "order": 20
+          },
+          {
+            "path": "profile.remaining_lifespan",
+            "label": "剩余寿元",
+            "widget": "number",
+            "unit": "年",
+            "order": 30
+          }
+        ]
+      },
+      {
+        "key": "resources",
+        "title": "属性与状态",
+        "order": 40,
+        "fields": [
+          {
+            "path": "attributes",
+            "label": "属性",
+            "widget": "item_list",
+            "order": 10
+          },
+          {
+            "path": "traits",
+            "label": "当前特质",
+            "widget": "list",
+            "order": 20
+          }
+        ]
+      },
+      {
+        "key": "world",
+        "title": "行囊与尘缘",
+        "order": 50,
+        "fields": [
+          {
+            "path": "location.current",
+            "label": "当前位置",
+            "widget": "text",
+            "order": 10
+          },
+          {
+            "path": "inventory",
+            "label": "持有物",
+            "widget": "item_list",
+            "order": 20
+          },
+          {
+            "path": "relationships",
+            "label": "人物关系",
+            "widget": "item_list",
+            "order": 30
+          },
+          {
+            "path": "quests",
+            "label": "当前任务",
+            "widget": "list",
+            "order": 40
+          },
+          {
+            "path": "risks",
+            "label": "风险与伤势",
+            "widget": "list",
+            "order": 50
+          }
+        ]
+      },
+      {
+        "key": "ascension",
+        "title": "飞升准备",
+        "order": 60,
+        "fields": [
+          {
+            "path": "ascension.void_rift_discovered",
+            "label": "发现虚空裂缝",
+            "widget": "boolean",
+            "order": 10
+          },
+          {
+            "path": "ascension.ascension_token_owned",
+            "label": "持有飞升符",
+            "widget": "boolean",
+            "order": 20
+          },
+          {
+            "path": "ascension.tribulation_preparation",
+            "label": "渡劫准备度",
+            "widget": "progress",
+            "unit": "%",
+            "order": 30
+          },
+          {
+            "path": "ascension.karma_debt",
+            "label": "因果业债",
+            "widget": "number",
+            "order": 40
+          }
+        ]
+      }
+    ],
+    "completion_view": {
+      "replay_label": "再入轮回",
+      "back_label": "返回挑战",
+      "empty_reward_text": "此世未能带回奖励"
+    },
+    "terminology": {
+      "challenge": "试炼",
+      "outcome": "结局",
+      "reward": "天命所得"
+    },
+    "value_labels": {
+      "state.profile.cultivation_realm_key": {
+        "mortal": "凡人",
+        "qi-refining": "练气期",
+        "foundation": "筑基期",
+        "golden-core": "结丹期",
+        "nascent-soul": "元婴期",
+        "spirit-transformation": "化神期",
+        "void-refining": "炼虚期",
+        "body-integration": "合体期",
+        "great-ascension": "大乘期"
+      }
+    }
+  }
+}

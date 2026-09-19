@@ -8,19 +8,27 @@ package orchestration
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/ialtone/fatecraft/internal/campaign"
 	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/chat"
 	"github.com/ialtone/fatecraft/internal/conversation"
+	"github.com/ialtone/fatecraft/internal/gameplay"
+	"github.com/ialtone/fatecraft/internal/guidance"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/memory"
+	"github.com/ialtone/fatecraft/internal/operation"
+	"github.com/ialtone/fatecraft/internal/platformcapability"
 	"github.com/ialtone/fatecraft/internal/realtime"
 	"github.com/ialtone/fatecraft/internal/roll"
 	"github.com/ialtone/fatecraft/internal/state"
@@ -31,21 +39,27 @@ import (
 // Generator 编排一次完整的生成流程（doc 06 §请求流程）。
 // 实现 realtime.Generator 接口，供 Hub 与 REST 触发的生成复用同一条管线。
 type Generator struct {
-	convSvc        *conversation.Service
-	chatSvc        *chat.Service
-	stateSvc       *state.Service
-	memSvc         *memory.Service
-	challenge      *challenge.Service
-	settings       *storage.SettingsRepo
+	convSvc   *conversation.Service
+	chatSvc   *chat.Service
+	stateSvc  *state.Service
+	memSvc    *memory.Service
+	turns     *storage.TurnRepo
+	agents    *storage.AgentRepo
+	toolTx    *AgentToolTransaction
+	challenge *challenge.Service
+	campaign  *campaign.Service
+	settings  interface {
+		Get(context.Context, string) (*storage.LLMSettings, error)
+	}
 	systemSettings *storage.SystemSettingsRepo
 	ctxRepo        *storage.ContextRepo
 	llmClient      *llm.Client
 	counter        tokenizer.Counter
-	apiKeyEnv      string                   // 数据库中 api_key 为空时使用的兜底密钥
-	roll           *roll.Service            // 判定服务；nil 表示判定系统不可用
-	actions        map[string]ActionHandler // AI 动作处理器注册表（按 action.type 分发）
-	responseSchema *llm.JSONSchema          // 结构化输出 Schema；nil 时不启用 response_format
+	roll           *roll.Service  // 判定服务；nil 表示判定系统不可用
+	rollCommitter  *RollCommitter // 判定流水、结果消息与状态效果的原子提交器
+	completion     *CompletionHandler
 	identity       identity.Provider
+	rewards        *storage.RewardRepository
 }
 
 // GeneratorDeps 是构造 Generator 的依赖集合（具名字段，取代旧的 16 个位置参数）。
@@ -54,131 +68,388 @@ type GeneratorDeps struct {
 	Chat      *chat.Service
 	State     *state.Service
 	Memory    *memory.Service
+	Turns     *storage.TurnRepo
+	Agents    *storage.AgentRepo
+	ToolTx    *AgentToolTransaction
 	Challenge *challenge.Service
-	Settings  *storage.SettingsRepo
-	System    *storage.SystemSettingsRepo
-	CtxLogs   *storage.ContextRepo
-	LLM       *llm.Client
-	Counter   tokenizer.Counter
-	APIKeyEnv string // 数据库中 api_key 为空时使用的兜底密钥
+	Campaign  *campaign.Service
+	Settings  interface {
+		Get(context.Context, string) (*storage.LLMSettings, error)
+	}
+	System  *storage.SystemSettingsRepo
+	CtxLogs *storage.ContextRepo
+	LLM     *llm.Client
+	Counter tokenizer.Counter
 
-	// Roll 判定服务（两阶段判定协议）；为 nil 时收到判定请求会报"判定配置未加载"。
+	// Roll 是判定工具使用的可信计算服务；为 nil 时判定工具会拒绝执行。
 	Roll *roll.Service
-	// Actions 按 action.type 注册的玩法动作处理器；未注册的动作类型直接忽略。
-	Actions map[string]ActionHandler
-	// ResponseSchema 结构化输出 Schema，由组合根加载注入；nil 时降级为不启用 response_format。
-	ResponseSchema *llm.JSONSchema
+	// RollCommitter 原子提交判定结果；为 nil 时收到判定请求会拒绝执行。
+	RollCommitter *RollCommitter
+	Completion    *CompletionHandler
 	// Identity 从生成 context 中解析当前用户，以读取其独立 LLM 设置。
 	Identity identity.Provider
+	// Rewards 用于在已扣除改写额度、但替代生成未提交时执行幂等返还。
+	Rewards *storage.RewardRepository
 }
 
-// NewGenerator 构造生成编排器。Schema 不再由本包自行探测文件系统，改由组合根注入。
+// NewGenerator 构造主叙事 Agent 编排器。
 func NewGenerator(d GeneratorDeps) *Generator {
 	return &Generator{
-		convSvc: d.Conv, chatSvc: d.Chat, stateSvc: d.State, memSvc: d.Memory, challenge: d.Challenge,
+		convSvc: d.Conv, chatSvc: d.Chat, stateSvc: d.State, memSvc: d.Memory,
+		turns: d.Turns, agents: d.Agents, toolTx: d.ToolTx,
+		challenge: d.Challenge, campaign: d.Campaign,
 		settings: d.Settings, systemSettings: d.System, ctxRepo: d.CtxLogs,
-		llmClient: d.LLM, counter: d.Counter, apiKeyEnv: d.APIKeyEnv,
-		roll: d.Roll, actions: d.Actions, responseSchema: d.ResponseSchema,
+		llmClient: d.LLM, counter: d.Counter,
+		roll: d.Roll, rollCommitter: d.RollCommitter, completion: d.Completion,
 		identity: d.Identity,
+		rewards:  d.Rewards,
+	}
+}
+
+// RequestCancel persists cancellation before the Hub cancels the in-memory
+// context. Generation write boundaries reject cancel_requested runs, closing
+// the small window between a user stop request and provider cancellation.
+func (g *Generator) RequestCancel(ctx context.Context, convID uuid.UUID, reason string) error {
+	return g.convSvc.CancelGeneration(ctx, convID, reason)
+}
+
+func (g *Generator) finishGenerationRun(runID uuid.UUID, ctx context.Context) {
+	status := storage.GenerationRunCompleted
+	errorCode := ""
+	committed := false
+	if tracker, ok := ctx.Value(trackerKey{}).(*generationTracker); ok {
+		tracker.mu.Lock()
+		stage, code := tracker.stage, tracker.code
+		committed = tracker.committed
+		tracker.mu.Unlock()
+		switch {
+		case committed:
+			status = storage.GenerationRunCompleted
+		case ctx.Err() != nil:
+			status = storage.GenerationRunCancelled
+			errorCode = "context_cancelled"
+		case stage != "" || code != "":
+			status = storage.GenerationRunFailed
+			errorCode = code
+		}
+	} else {
+		// A run is not considered successful merely because no attempt tracker
+		// was installed.  Preflight failures (runtime lookup, branch preparation
+		// or attempt allocation) happen before beginAttempt and previously left a
+		// misleading completed lease in the audit trail.
+		if ctx.Err() != nil {
+			status = storage.GenerationRunCancelled
+			errorCode = "context_cancelled"
+		} else {
+			status = storage.GenerationRunFailed
+			errorCode = "generation_setup_failed"
+		}
+	}
+	if !committed {
+		g.refundRewriteReservation(ctx, runID.String())
+	}
+	if err := g.convSvc.FinishGeneration(context.WithoutCancel(ctx), runID, status, errorCode); err != nil {
+		logging.Named("orchestration").Warn("释放生成运行实例失败",
+			zap.String("run_id", runID.String()), zap.Error(err))
+	}
+}
+
+// refundRewriteReservation compensates a debit whenever the replacement
+// narrative did not reach the committed boundary. It is safe to call more
+// than once: the reward repository uses a deterministic idempotency key for
+// the compensating grant. Calling it before the terminal WebSocket event keeps
+// the balance shown by the client in sync with the failure notification;
+// finishGenerationRun calls it again as a crash/early-return safety net.
+func (g *Generator) refundRewriteReservation(ctx context.Context, source string) {
+	reservation, ok := rewriteReservationFromContext(ctx)
+	if !ok || g.rewards == nil {
+		return
+	}
+	if _, err := g.rewards.RefundConsumed(context.WithoutCancel(ctx), storage.RewardRefund{
+		PlayerID: reservation.PlayerID, RewardKey: reservation.RewardKey,
+		ConsumeIdempotencyKey: reservation.ConsumeIdempotencyKey,
+		RefundIdempotencyKey:  storage.RewriteRefundIdempotencyKey(reservation.ConsumeIdempotencyKey),
+		SourceID:              reservation.SourceID,
+		Metadata: storage.JSONMap{
+			"operation": "message_rewrite_refund", "source": source,
+		},
+	}); err != nil {
+		logging.Named("orchestration").Error("返还剧情改写额度失败",
+			zap.String("source", source), zap.String("consume_idempotency_key", reservation.ConsumeIdempotencyKey), zap.Error(err))
+	}
+}
+
+// RecoverPanic 由 Hub 在生成 goroutine panic 后调用：封存该对话残留的生成租约
+// 与未完成回合，避免对话永久停留在“正在生成中”。领域事务已随 panic 回滚。
+func (g *Generator) RecoverPanic(ctx context.Context, convID uuid.UUID, recovered any) {
+	log := logging.Named("orchestration").With(zap.String("conversation_id", convID.String()), zap.Any("panic", recovered))
+	if err := g.convSvc.FailActiveGeneration(ctx, convID, "panic"); err != nil {
+		log.Error("封存 panic 生成租约失败", zap.Error(err))
+	}
+	if g.turns != nil {
+		if _, err := g.turns.FailOrphaned(ctx); err != nil {
+			log.Error("封口 panic 生成回合失败", zap.Error(err))
+		}
+	}
+}
+
+// heartbeatGeneration 续期当前生成租约。返回错误说明租约已被回收或抢占，
+// 调用方必须立即停止本轮生成。
+func (g *Generator) heartbeatGeneration(ctx context.Context) error {
+	generation, ok := operation.GenerationFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	return g.convSvc.HeartbeatGeneration(ctx, generation.ID)
+}
+
+// runLeaseHeartbeat 在后台按固定间隔续期租约，直到 ctx 结束。续期失败时
+// 取消 attempt，让正在进行的模型请求和后续写入尽快停止。
+func (g *Generator) runLeaseHeartbeat(ctx context.Context, cancel context.CancelFunc) {
+	ticker := time.NewTicker(storage.GenerationHeartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := g.heartbeatGeneration(ctx); err != nil {
+				logging.Named("orchestration").Warn("生成租约续期失败，中止本轮生成", zap.Error(err))
+				cancel()
+				return
+			}
+		}
 	}
 }
 
 // Generate 处理一次用户输入：保存用户消息并生成 AI 回复。
-func (g *Generator) Generate(ctx context.Context, convID uuid.UUID, userContent string, emit realtime.EmitFunc) {
-	conv, err := g.convSvc.EnsureActive(ctx, convID)
+func (g *Generator) Generate(ctx context.Context, convID, requestID uuid.UUID, userContent string, emit realtime.EmitFunc) {
+	request := generationRequest(requestID, "user_input", nil, userContent)
+	if selection, ok := guidance.SelectionFromContext(ctx); ok {
+		target, err := uuid.Parse(selection.ID)
+		if err != nil {
+			emit(errorEvent(convID, "无效的行动提示 ID"))
+			return
+		}
+		request = generationRequest(requestID, "user_input", &target, selection.ID+":"+selection.Key)
+	}
+	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, request)
 	if err != nil {
 		emit(domainEvent(convID, err))
 		return
 	}
-	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil {
-		emit(errorEvent(convID, "加锁失败: "+err.Error()))
-		return
-	}
-	if !locked {
+	if run == nil {
 		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
-	defer g.convSvc.Unlock(context.Background(), convID)
-
-	// 保存用户消息并推送。
-	uTokens := g.counter.Count(userContent)
-	uChat, uDisp, err := g.chatSvc.AppendUser(ctx, convID, userContent, &uTokens)
-	if err != nil {
-		emit(errorEvent(convID, "保存用户消息失败: "+err.Error()))
+	if replayed {
+		emit(realtime.Event{Type: realtime.TypeGenerationReplayed, ConversationID: convID.String(), OperationID: run.ID.String()})
 		return
 	}
-	emit(realtime.Event{Type: realtime.TypeMessageCreated, ConversationID: convID.String(), Message: uDisp})
+	ctx = operation.WithGeneration(ctx, convID, run.ID)
+	defer func() { g.finishGenerationRun(run.ID, ctx) }()
+	uTokens := g.counter.Count(userContent)
+	preparation, err := g.turns.BeginUserTurn(ctx, convID, "user_input", userContent, &uTokens)
+	if err != nil {
+		emit(errorEvent(convID, "创建生成回合失败: "+err.Error()))
+		return
+	}
+	ctx, finish, err := g.beginAttemptFromRecords(ctx, convID, "user_input", &preparation.Turn, &preparation.Attempt)
+	if err != nil {
+		emit(errorEvent(convID, "创建生成回合失败: "+err.Error()))
+		return
+	}
+	defer finish()
+	emit(decorateGenerationEvent(ctx, realtime.Event{Type: realtime.TypeMessageCreated, ConversationID: convID.String(), Message: &preparation.Display}))
 	_ = g.convSvc.Touch(ctx, convID)
 
-	g.runGeneration(ctx, conv, &uChat.ID, emit)
+	g.runGeneration(ctx, conv, &preparation.Trigger.ID, emit)
 }
 
 // Regenerate 删除最近一条 AI 回复后重新生成。
-func (g *Generator) Regenerate(ctx context.Context, convID uuid.UUID, emit realtime.EmitFunc) {
-	conv, err := g.convSvc.EnsureActive(ctx, convID)
+func (g *Generator) Regenerate(ctx context.Context, convID, requestID uuid.UUID, emit realtime.EmitFunc) {
+	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "regenerate", nil, "regenerate"))
 	if err != nil {
 		emit(domainEvent(convID, err))
 		return
 	}
-	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil {
-		emit(errorEvent(convID, "加锁失败: "+err.Error()))
-		return
-	}
-	if !locked {
+	if run == nil {
 		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
-	defer g.convSvc.Unlock(context.Background(), convID)
-
-	if err := g.chatSvc.DropLastAssistant(ctx, convID); err != nil && err != storage.ErrNotFound {
-		emit(errorEvent(convID, "删除上一条回复失败: "+err.Error()))
+	if replayed {
+		emit(realtime.Event{Type: realtime.TypeGenerationReplayed, ConversationID: convID.String(), OperationID: run.ID.String()})
 		return
 	}
-	g.runGeneration(ctx, conv, nil, emit)
+	ctx = operation.WithGeneration(ctx, convID, run.ID)
+	defer func() { g.finishGenerationRun(run.ID, ctx) }()
+	contract, err := g.challenge.RuntimeForConversation(ctx, convID)
+	if err != nil {
+		emit(errorEvent(convID, "读取玩法合约失败: "+err.Error()))
+		return
+	}
+	// Regeneration is the no-edit form of the same platform-owned capability as
+	// message rewrite. It must not depend on whatever a challenge package puts
+	// in its Runtime JSON.
+	policy := platformcapability.MessageRewritePolicy()
+	if !policy.Enabled {
+		emit(infoEvent(convID, "当前未开启剧情改写"))
+		return
+	}
+	playerID, err := uuid.Parse(g.identity.CurrentPlayerID(ctx))
+	if err != nil {
+		emit(errorEvent(convID, "当前用户身份无效"))
+		return
+	}
+	preparation, err := g.turns.BeginRegenerate(ctx, storage.RegenerateInput{
+		ConversationID: convID,
+		PlayerID:       playerID,
+		IdempotencyKey: storage.RegenerateRequestIdempotencyKey(requestID),
+		InitialState:   storage.JSONMap(gameplay.InitialState(contract.StateSchema)),
+	})
+	if err != nil {
+		if errors.Is(err, storage.ErrCampaignHistoryImmutable) || errors.Is(err, storage.ErrRegenerateNotAllowed) || errors.Is(err, storage.ErrInsufficientReward) {
+			emit(infoEvent(convID, err.Error()))
+		} else {
+			emit(errorEvent(convID, "准备重新生成失败: "+err.Error()))
+		}
+		return
+	}
+	if preparation.RewardConsumed {
+		ctx = withRewriteReservation(ctx, rewriteReservation{
+			PlayerID: playerID, RewardKey: preparation.RewardKey,
+			ConsumeIdempotencyKey: storage.RegenerateRequestIdempotencyKey(requestID),
+			SourceID:              convID.String(),
+		})
+	}
+	ctx, finish, err := g.beginAttemptFromRecords(ctx, convID, "regenerate", &preparation.Turn, &preparation.Attempt)
+	if err != nil {
+		g.refundRewriteReservation(ctx, "regenerate_attempt_setup")
+		emit(errorEvent(convID, "创建重新生成回合失败: "+err.Error()))
+		return
+	}
+	defer finish()
+
+	emit(branchReplacedEvent(ctx, convID, preparation.InvalidatedDisplayIDs, nil))
+	g.runGeneration(ctx, conv, &preparation.Trigger.ID, emit)
 }
 
-// GenerateAfterEdit 在用户消息已被编辑、后续消息已删除的前提下直接重新生成
-// （天道回溯）。不再追加用户消息，避免上下文出现重复内容。
-func (g *Generator) GenerateAfterEdit(ctx context.Context, convID uuid.UUID, emit realtime.EmitFunc) {
-	conv, err := g.convSvc.EnsureActive(ctx, convID)
+// Rewrite owns the complete edit-and-regenerate operation. Branch replacement,
+// the replacement turn/attempt and edited trigger message are committed by one
+// storage transaction after the durable generation lease is acquired.
+func (g *Generator) Rewrite(ctx context.Context, convID, requestID, messageID uuid.UUID, content string, emit realtime.EmitFunc) {
+	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "rewrite", &messageID, content))
 	if err != nil {
 		emit(domainEvent(convID, err))
 		return
 	}
-	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil {
-		emit(errorEvent(convID, "加锁失败: "+err.Error()))
-		return
-	}
-	if !locked {
+	if run == nil {
 		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
-	defer g.convSvc.Unlock(context.Background(), convID)
-
-	g.runGeneration(ctx, conv, nil, emit)
+	if replayed {
+		emit(realtime.Event{Type: realtime.TypeGenerationReplayed, ConversationID: convID.String(), OperationID: run.ID.String()})
+		return
+	}
+	ctx = operation.WithGeneration(ctx, convID, run.ID)
+	defer func() { g.finishGenerationRun(run.ID, ctx) }()
+	contract, err := g.challenge.RuntimeForConversation(ctx, convID)
+	if err != nil {
+		emit(errorEvent(convID, "读取玩法合约失败: "+err.Error()))
+		return
+	}
+	policy := platformcapability.MessageRewritePolicy()
+	if !policy.Enabled {
+		emit(infoEvent(convID, "当前未开启剧情改写"))
+		return
+	}
+	playerID, err := uuid.Parse(g.identity.CurrentPlayerID(ctx))
+	if err != nil {
+		emit(errorEvent(convID, "当前用户身份无效"))
+		return
+	}
+	preparation, err := g.turns.BeginRewrite(ctx, storage.RewriteUserMessageInput{
+		ConversationID: convID, MessageID: messageID, Content: content, PlayerID: playerID,
+		IdempotencyKey: storage.RewriteRequestIdempotencyKey(requestID),
+		InitialState:   storage.JSONMap(gameplay.InitialState(contract.StateSchema)),
+	})
+	if err != nil {
+		if errors.Is(err, storage.ErrInsufficientReward) || errors.Is(err, storage.ErrCampaignHistoryImmutable) {
+			emit(infoEvent(convID, err.Error()))
+		} else {
+			emit(errorEvent(convID, "准备剧情改写失败: "+err.Error()))
+		}
+		return
+	}
+	if preparation.RewardConsumed {
+		ctx = withRewriteReservation(ctx, rewriteReservation{
+			PlayerID: playerID, RewardKey: preparation.RewardKey,
+			ConsumeIdempotencyKey: storage.RewriteRequestIdempotencyKey(requestID),
+			SourceID:              messageID.String(),
+		})
+	}
+	if !preparation.Applied {
+		ctx = withTracker(ctx, &generationTracker{committed: true})
+		return
+	}
+	ctx, finish, err := g.beginAttemptFromRecords(ctx, convID, "rewrite", &preparation.Turn, &preparation.Attempt)
+	if err != nil {
+		g.refundRewriteReservation(ctx, "rewrite_attempt_setup")
+		emit(errorEvent(convID, "创建改写回合失败: "+err.Error()))
+		return
+	}
+	defer finish()
+	emit(branchReplacedEvent(ctx, convID, preparation.InvalidatedDisplayIDs, &preparation.Display))
+	g.runGeneration(ctx, conv, &preparation.Trigger.ID, emit)
 }
 
-// Continue 在不新增用户输入的情况下追加一段 AI 续写。
-// 通过添加仅进入上下文的"继续"消息来触发 AI 接续上文。
-func (g *Generator) Continue(ctx context.Context, convID uuid.UUID, emit realtime.EmitFunc) {
-	conv, err := g.convSvc.EnsureActive(ctx, convID)
+func branchReplacedEvent(ctx context.Context, convID uuid.UUID, invalidated []uuid.UUID, updated *storage.DisplayMessage) realtime.Event {
+	ids := make([]string, 0, len(invalidated))
+	for _, id := range invalidated {
+		ids = append(ids, id.String())
+	}
+	return decorateGenerationEvent(ctx, realtime.Event{
+		Type: realtime.TypeBranchReplaced, ConversationID: convID.String(), Message: updated,
+		Payload: map[string]any{"invalidated_message_ids": ids},
+	})
+}
+
+// Continue 追加一条可见的“继续”用户消息，并生成一段 AI 续写。
+// 该消息既进入模型上下文，也进入玩家时间线，保证实时页面与刷新后的
+// display_messages 保持一致。
+func (g *Generator) Continue(ctx context.Context, convID, requestID uuid.UUID, emit realtime.EmitFunc) {
+	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "continue", nil, "continue"))
 	if err != nil {
 		emit(domainEvent(convID, err))
 		return
 	}
-	locked, err := g.convSvc.TryLock(ctx, convID)
-	if err != nil {
-		emit(errorEvent(convID, "加锁失败: "+err.Error()))
-		return
-	}
-	if !locked {
+	if run == nil {
 		emit(infoEvent(convID, "当前对话正在生成中，请稍候"))
 		return
 	}
-	defer g.convSvc.Unlock(context.Background(), convID)
+	if replayed {
+		emit(realtime.Event{Type: realtime.TypeGenerationReplayed, ConversationID: convID.String(), OperationID: run.ID.String()})
+		return
+	}
+	ctx = operation.WithGeneration(ctx, convID, run.ID)
+	defer func() { g.finishGenerationRun(run.ID, ctx) }()
+	continueContent := "继续"
+	uTokens := g.counter.Count(continueContent)
+	preparation, err := g.turns.BeginUserTurn(ctx, convID, "continue", continueContent, &uTokens)
+	if err != nil {
+		if errors.Is(err, storage.ErrContinueNotAllowed) {
+			emit(infoEvent(convID, err.Error()))
+		} else {
+			emit(errorEvent(convID, "创建续写回合失败: "+err.Error()))
+		}
+		return
+	}
+	ctx, finish, err := g.beginAttemptFromRecords(ctx, convID, "continue", &preparation.Turn, &preparation.Attempt)
+	if err != nil {
+		emit(errorEvent(convID, "创建续写回合失败: "+err.Error()))
+		return
+	}
+	defer finish()
 
 	// ctx 已取消（如客户端立即点了取消）则不落任何消息。
 	if ctx.Err() != nil {
@@ -186,51 +457,57 @@ func (g *Generator) Continue(ctx context.Context, convID uuid.UUID, emit realtim
 		return
 	}
 
-	// 添加只进上下文、不产生展示消息的"继续"触发（仿 seedAutoTrigger），
-	// 刷新后 UI 不会出现这条消息。
-	continueContent := "继续"
-	uTokens := g.counter.Count(continueContent)
-	uChat, err := g.chatSvc.AppendUserChatOnly(ctx, convID, continueContent, &uTokens)
-	if err != nil {
-		emit(errorEvent(convID, "保存继续消息失败: "+err.Error()))
-		return
-	}
+	emit(decorateGenerationEvent(ctx, realtime.Event{Type: realtime.TypeMessageCreated, ConversationID: convID.String(), Message: &preparation.Display}))
 	_ = g.convSvc.Touch(ctx, convID)
 
-	g.runGeneration(ctx, conv, &uChat.ID, emit)
+	g.runGeneration(ctx, conv, &preparation.Trigger.ID, emit)
 }
 
-// WebSocket 仍使用 error 事件向前端展示无法继续的原因；服务端日志级别由
-// 业务语义决定，不能把所有客户端 error 事件都当成系统 ERROR。
+func generationRequest(requestID uuid.UUID, operationType string, targetMessageID *uuid.UUID, payload string) storage.GenerationRequest {
+	if requestID == uuid.Nil {
+		requestID = uuid.New()
+	}
+	hash := sha256.Sum256([]byte(operationType + "\x00" + payload))
+	return storage.GenerationRequest{
+		RequestID: requestID, OperationType: operationType, TargetMessageID: targetMessageID,
+		PayloadHash: hex.EncodeToString(hash[:]),
+	}
+}
+
+// WebSocket 用 error 事件表示“本轮生成已经终止”，用 notice 事件表示“请求未被
+// 执行 / 已取消”等非终止提示。前端只对 error 复位流式状态；notice 只展示横幅，
+// 因此另一个连接的忙碌提示不会打断正在接收的流式输出。服务端日志级别由
+// 业务语义决定，不能把所有客户端提示都当成系统 ERROR。
 func errorEvent(convID uuid.UUID, msg string, fields ...zap.Field) realtime.Event {
-	return loggedEvent(convID, msg, zapcore.ErrorLevel, "生成流程故障", fields...)
+	return loggedEvent(convID, realtime.TypeError, msg, zapcore.ErrorLevel, "生成流程故障", fields...)
 }
 
 func warningEvent(convID uuid.UUID, msg string, fields ...zap.Field) realtime.Event {
-	return loggedEvent(convID, msg, zapcore.WarnLevel, "生成请求未通过", fields...)
+	return loggedEvent(convID, realtime.TypeError, msg, zapcore.WarnLevel, "生成请求未通过", fields...)
 }
 
 func infoEvent(convID uuid.UUID, msg string, fields ...zap.Field) realtime.Event {
-	return loggedEvent(convID, msg, zapcore.InfoLevel, "生成流程未执行", fields...)
+	return loggedEvent(convID, realtime.TypeNotice, msg, zapcore.InfoLevel, "生成流程未执行", fields...)
 }
 
-func loggedEvent(convID uuid.UUID, msg string, level zapcore.Level, logMessage string, fields ...zap.Field) realtime.Event {
-	return loggedEventWith(logging.Named("orchestration"), convID, msg, level, logMessage, fields...)
+func loggedEvent(convID uuid.UUID, eventType, msg string, level zapcore.Level, logMessage string, fields ...zap.Field) realtime.Event {
+	return loggedEventWith(logging.Named("orchestration"), convID, eventType, msg, level, logMessage, fields...)
 }
 
-func loggedEventWith(log *zap.Logger, convID uuid.UUID, msg string, level zapcore.Level, logMessage string, fields ...zap.Field) realtime.Event {
+func loggedEventWith(log *zap.Logger, convID uuid.UUID, eventType, msg string, level zapcore.Level, logMessage string, fields ...zap.Field) realtime.Event {
 	base := []zap.Field{
 		zap.String("conversation_id", convID.String()),
 		zap.String("detail", msg),
 	}
 	log.Log(level, logMessage, append(base, fields...)...)
-	return realtime.Event{Type: realtime.TypeError, ConversationID: convID.String(), Error: msg}
+	return realtime.Event{Type: eventType, ConversationID: convID.String(), Error: msg}
 }
 
 func domainEvent(convID uuid.UUID, err error) realtime.Event {
 	msg := humanErr(err)
 	switch {
-	case errors.Is(err, conversation.ErrNotActive), errors.Is(err, storage.ErrNotFound):
+	case errors.Is(err, conversation.ErrNotActive), errors.Is(err, storage.ErrNotFound), errors.Is(err, storage.ErrGenerationInProgress),
+		errors.Is(err, storage.ErrTurnInProgress), errors.Is(err, storage.ErrContinueNotAllowed), errors.Is(err, storage.ErrRegenerateNotAllowed):
 		return infoEvent(convID, msg, zap.Error(err))
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return infoEvent(convID, msg)
@@ -246,6 +523,12 @@ func humanErr(err error) string {
 		return "对话未处于 active 状态，无法生成"
 	case errors.Is(err, storage.ErrNotFound):
 		return "对话不存在"
+	case errors.Is(err, storage.ErrGenerationInProgress):
+		return "当前对话正在生成中，请稍候"
+	case errors.Is(err, storage.ErrContinueNotAllowed):
+		return "当前回合不能继续叙事"
+	case errors.Is(err, storage.ErrRegenerateNotAllowed):
+		return "当前回合不能重新生成"
 	default:
 		return err.Error()
 	}

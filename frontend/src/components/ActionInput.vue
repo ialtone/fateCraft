@@ -1,23 +1,54 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NAlert, NButton, NIcon, NInput, useMessage } from 'naive-ui'
-import { ArrowUpOutline, PlayForwardOutline, RefreshOutline, StopOutline } from '@vicons/ionicons5'
+import { NAlert, NButton, NIcon, NInput, useDialog, useMessage } from 'naive-ui'
+import {
+  ArrowUpOutline,
+  FlashOutline,
+  PlayForwardOutline,
+  RefreshOutline,
+  StopOutline,
+  TimeOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
 import { useChatStore } from '@/stores/chat'
 import type { ChatMessage } from '@/stores/chat'
 import { useSocketStore } from '@/stores/socket'
+import { useContextStore } from '@/stores/context'
 import { messagesApi } from '@/api'
+import GuidanceRenderer from '@/components/GuidanceRenderer.vue'
+import { useRuntimeStore } from '@/stores/runtime'
+import { useStateStore } from '@/stores/state'
+import { useCampaignStore } from '@/stores/campaign'
+import { useRewardStore } from '@/stores/rewards'
+import type { GuidanceItem } from '@/types'
+import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
 
 const props = defineProps<{ convId: string; disabled: boolean }>()
 const chat = useChatStore()
 const socket = useSocketStore()
+const context = useContextStore()
+const runtime = useRuntimeStore()
+const state = useStateStore()
+const campaign = useCampaignStore()
+const rewards = useRewardStore()
 const message = useMessage()
+const dialog = useDialog()
 const text = ref('')
+
 
 // 断线 REST 降级期间的"等待中"标记：WS 断开时后端 202 立即返回、
 // 生成进度只经 WS 广播（本端收不到），isGenerating 不会置真。
 // 不拦截的话用户可对同一对话连点发送，触发后端生成锁竞争、多余请求全部失败。
 // 重连后交还给 WS 事件 / resync 驱动，故 connected 恢复即清除。
 const awaitingRestGen = ref(false)
+
+// 继续 / 重新生成的操作锁：保持到终态事件或快照确认，避免 REST 202
+// 与 agent.turn.started 之间、以及慢连接期间的重复提交。
+const actionPending = ref(false)
+const guidanceGroups = computed(() => runtime.presentation?.guidance?.groups ?? [])
+const campaignSnapshot = computed(() => campaign.snapshot)
+// 剧情改写是平台能力，不属于当前玩法 Runtime；玩法只能声明自己的动作。
+const rewriteCapability = computed(() => runtime.platformCapability(PLATFORM_CAPABILITY_MESSAGE_REWRITE))
 
 watch(
   () => socket.connected,
@@ -42,36 +73,117 @@ const isEmpty = computed(() => {
 })
 
 const canContinue = computed(() => {
-  // 只有最后一条消息是 assistant 类型时才能"继续"；REST 降级等待期间同样禁用
-  const lastMsg = chat.messages[chat.messages.length - 1]
-  return (
-    lastMsg &&
-    lastMsg.type === 'assistant' &&
+	return (
+	  context.activity.can_continue &&
     !chat.isGenerating &&
     !awaitingRestGen.value &&
+    !actionPending.value &&
     !props.disabled
   )
+})
+
+const canRegenerate = computed(() => {
+  const capability = rewriteCapability.value
+  if (!capability?.enabled) return false
+  const cost = context.activity.regenerate_cost_quantity ?? capability.cost_quantity ?? 0
+  const affordable =
+    !rewards.loaded || cost <= 0 || rewards.balanceFor(capability.cost_reward_key) >= cost
+  return (
+    context.activity.can_regenerate &&
+    affordable &&
+    !chat.isGenerating &&
+    !awaitingRestGen.value &&
+    !actionPending.value &&
+    !props.disabled
+  )
+})
+
+// REST 202 only acknowledges durable-run acceptance. Keep the action lock
+// until the stream reaches a terminal state (or an error path stops it), so a
+// slow WebSocket cannot turn the acknowledgement window into a double submit.
+watch(
+  () => chat.isGenerating,
+  (generating) => {
+    if (!generating) actionPending.value = false
+  },
+)
+
+const canQueue = computed(() => {
+  return chat.isGenerating && !props.disabled && socket.connected && !!text.value.trim()
+})
+
+const generationLabel = computed(() => {
+  if (context.activity.narrative === 'tool') {
+    const labels: Record<string, string> = {
+      state: '正在更新状态',
+      roll: '正在执行判定',
+      settlement: '正在结算玩法',
+      action: '正在执行行动',
+      guidance: '正在整理行动提示',
+    }
+    return labels[context.activity.tool_category || 'action'] ?? '正在执行生成工具'
+  }
+  if (context.activity.narrative === 'preparing') {
+    return '正在准备上下文'
+  }
+  return '叙事生成中'
 })
 
 // 发送用户输入：优先走 WebSocket，未连接时回退到 REST。
 // REST 失败时提示错误并回滚乐观插入的消息。
 async function dispatchUserInput(content: string) {
+  // 用户继续对话即视为已读上一轮错误，立即清掉提示横幅
+  socket.clearError()
   const tempId = chat.addOptimisticUser(content)
-  if (socket.sendUserInput(content)) return
+	chat.markGenerating()
+	const requestId = crypto.randomUUID()
+	if (socket.sendUserInput(content, requestId)) return
   // 走 REST 降级：标记"等待中"，避免断线期间对同一对话连点造成锁竞争
   awaitingRestGen.value = true
   try {
-    await messagesApi.send(props.convId, content)
+	  await messagesApi.send(props.convId, content, requestId)
   } catch (err: any) {
-    chat.removeById(tempId)
+	chat.removeById(tempId)
+	chat.stopGenerating()
     awaitingRestGen.value = false
     message.error(`发送失败：${err.message || '未知错误'}`)
   }
 }
 
+function dispatchGuidanceMessage(content: string) {
+  if (
+    !content.trim() ||
+    props.disabled ||
+    chat.isGenerating ||
+    awaitingRestGen.value ||
+    actionPending.value
+  )
+    return
+  dispatchUserInput(content)
+}
+
+function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
+  if (
+    item.mode !== 'action' ||
+    !item.action_key ||
+    props.disabled ||
+    chat.isGenerating ||
+    actionPending.value
+  )
+    return
+  campaign.execute(item.action_key, args).catch(() => {})
+}
+
 function send() {
   const content = text.value.trim()
-  if (!content || props.disabled || chat.isGenerating || awaitingRestGen.value) return
+  if (
+    !content ||
+    props.disabled ||
+    chat.isGenerating ||
+    awaitingRestGen.value ||
+    actionPending.value
+  )
+    return
   dispatchUserInput(content)
   text.value = ''
 }
@@ -87,25 +199,82 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-async function regenerate() {
+async function submitRegenerate() {
+  socket.clearError()
+  actionPending.value = true
+  chat.markGenerating()
+  const requestId = crypto.randomUUID()
   try {
-    // 先调用后端 API，等待确认删除成功
-    await messagesApi.regenerate(props.convId)
-
-    // 后端成功后，前端同步移除最后一条 assistant 消息（收编进 chat store action）
-    chat.removeLastAssistant()
+    await messagesApi.regenerate(props.convId, requestId)
   } catch (err: any) {
-    // 失败时显示错误提示，不删除消息
+    chat.stopGenerating()
     message.error(`重新生成失败：${err.message || '未知错误'}`)
   }
 }
-async function continueGen() {
-  try {
-    await messagesApi.continue(props.convId)
-  } catch (err: any) {
-    message.error(`继续生成失败：${err.message || '未知错误'}`)
+
+async function regenerate() {
+  if (!canRegenerate.value) return
+  const capability = rewriteCapability.value
+  const cost = context.activity.regenerate_cost_quantity ?? capability?.cost_quantity ?? 0
+
+  // 免费恢复失败/取消的回合，不需要确认，也不读取额度余额。
+  if (cost <= 0) {
+    await submitRegenerate()
+    return
   }
+
+  if (!rewards.loaded) {
+    try {
+      await rewards.load()
+    } catch (err: any) {
+      message.error(`读取剧情改写额度失败：${err.message || '未知错误'}`)
+      return
+    }
+  }
+  const balance = rewards.balanceFor(capability?.cost_reward_key)
+  if (balance < cost) {
+    dialog.warning({
+      title: '额度不足',
+      content: `本次重新生成需要消耗 ${cost} 次剧情改写额度，当前剩余 ${balance} 次。`,
+      positiveText: '关闭',
+    })
+    return
+  }
+
+  dialog.warning({
+    title: '重新生成',
+    content: `重新生成当前叙事。本次消耗 ${cost} 次剧情改写额度，当前剩余 ${balance} 次；确认后将剩余 ${balance - cost} 次。是否继续？`,
+    positiveText: '确认重新生成',
+    negativeText: '取消',
+    onPositiveClick: () => submitRegenerate(),
+  })
 }
+async function continueGen() {
+	if (!canContinue.value) return
+	socket.clearError()
+	actionPending.value = true
+	chat.markGenerating()
+	const requestId = crypto.randomUUID()
+	try {
+	  await messagesApi.continue(props.convId, requestId)
+	} catch (err: any) {
+	  chat.stopGenerating()
+	  message.error(`继续生成失败：${err.message || '未知错误'}`)
+	}
+}
+
+function steer() {
+  const content = text.value.trim()
+  if (!canQueue.value || !socket.steer(content, crypto.randomUUID())) return
+  text.value = ''
+}
+
+function followUp() {
+  const content = text.value.trim()
+  if (!canQueue.value || !socket.followUp(content, crypto.randomUUID())) return
+  text.value = ''
+}
+
 function cancel() {
   socket.cancel()
 }
@@ -148,11 +317,21 @@ function cancel() {
 
     <!-- 已有消息：显示正常输入框 -->
     <template v-else>
+      <GuidanceRenderer
+        :groups="guidanceGroups"
+        :state="state.state"
+        :snapshot="campaignSnapshot"
+        :placement="['composer', 'after_message']"
+        :disabled="disabled || chat.isGenerating || awaitingRestGen || actionPending"
+        :loading="campaign.acting"
+        @message="dispatchGuidanceMessage"
+        @action="dispatchGuidanceAction"
+      />
       <div class="toolbar row">
         <NButton
-          quaternary
-          size="tiny"
-          :disabled="disabled || chat.isGenerating || awaitingRestGen"
+		  quaternary
+		  size="tiny"
+		  :disabled="!canRegenerate"
           @click="regenerate"
         >
           <template #icon><NIcon :component="RefreshOutline" /></template>
@@ -162,16 +341,40 @@ function cancel() {
           <template #icon><NIcon :component="PlayForwardOutline" /></template>
           继续
         </NButton>
+        <template v-if="chat.isGenerating">
+          <NButton quaternary size="tiny" :disabled="!canQueue" @click="steer">
+            <template #icon><NIcon :component="FlashOutline" /></template>
+            插入
+          </NButton>
+          <NButton quaternary size="tiny" :disabled="!canQueue" @click="followUp">
+            <template #icon><NIcon :component="TimeOutline" /></template>
+            排队
+          </NButton>
+          <span v-if="socket.queuedCount" class="queue-count">
+            已排队 {{ socket.queuedCount }}
+          </span>
+          <NButton
+            v-if="socket.queuedCount"
+            quaternary
+            circle
+            size="tiny"
+            title="清空排队"
+            aria-label="清空排队"
+            @click="socket.clearQueue"
+          >
+            <template #icon><NIcon :component="TrashOutline" /></template>
+          </NButton>
+        </template>
         <NButton v-if="chat.isGenerating" quaternary size="tiny" type="error" @click="cancel">
           <template #icon><NIcon :component="StopOutline" /></template>
           停止
         </NButton>
-        <span v-if="chat.isGenerating" class="generating faint"
-          >叙事织就中<span class="dots"></span
-        ></span>
-        <span v-else-if="awaitingRestGen" class="generating faint"
-          >已提交，等待重连接收结果<span class="dots"></span
-        ></span>
+        <span v-if="chat.isGenerating" class="generating faint">
+          {{ generationLabel }}<span class="dots"></span>
+        </span>
+        <span v-else-if="awaitingRestGen" class="generating faint">
+          已提交，等待重连接收结果<span class="dots"></span>
+        </span>
         <span
           class="conn"
           :class="socket.connected ? 'on' : 'off'"
@@ -187,7 +390,9 @@ function cancel() {
           :placeholder="
             disabled
               ? '此对话已结束，可返回列表或新建对话。'
-              : '输入你的行动…（Enter 发送，Shift+Enter 换行）'
+              : chat.isGenerating
+                ? '输入要插入或排队的指令…'
+                : '输入你的行动…（Enter 发送，Shift+Enter 换行）'
           "
           :autosize="{ minRows: 2, maxRows: 8 }"
           @keydown="onKeydown"
@@ -195,7 +400,9 @@ function cancel() {
         <NButton
           type="primary"
           class="send"
-          :disabled="disabled || chat.isGenerating || awaitingRestGen || !text.trim()"
+          :disabled="
+            disabled || chat.isGenerating || awaitingRestGen || actionPending || !text.trim()
+          "
           @click="send"
         >
           <template #icon><NIcon :component="ArrowUpOutline" /></template>
@@ -259,6 +466,13 @@ function cancel() {
 .generating {
   font-size: 12px;
   letter-spacing: 1px;
+}
+
+.queue-count {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-left: 4px;
+  white-space: nowrap;
 }
 
 .dots::after {

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { NButton, NInput } from 'naive-ui'
+import { computed, ref, watch } from 'vue'
+import { NButton, NCollapse, NCollapseItem, NInput } from 'naive-ui'
 import { renderMarkdown } from '@/utils/markdown'
 import type { ChatMessage } from '@/stores/chat'
+import RollResultDetails from '@/components/RollResultDetails.vue'
+import { parseRollResultDetails } from '@/lib/roll'
 
 const props = defineProps<{ message: ChatMessage; editable: boolean }>()
 const emit = defineEmits<{
@@ -11,6 +13,7 @@ const emit = defineEmits<{
 
 const editing = ref(false)
 const draft = ref('')
+const reasoningExpanded = ref(props.message.reasoningExpanded === true)
 
 const html = computed(() => renderMarkdown(props.message.markdown))
 const roleLabel = computed(
@@ -27,8 +30,34 @@ const roleLabel = computed(
 const isTemp = computed(() => props.message.id.startsWith('temp-'))
 const isNarrative = computed(() => props.message.type === 'assistant')
 const isUser = computed(() => props.message.type === 'user')
-// 用户消息始终可以编辑（用于天道回溯），不受 editable 限制
-const canEdit = computed(() => !isTemp.value && isUser.value)
+const reasoningText = computed(() => props.message.reasoning?.trim() || '')
+const hasReasoning = computed(() => isNarrative.value && reasoningText.value.length > 0)
+const rollDetails = computed(() =>
+  props.message.type === 'roll_result' ? parseRollResultDetails(props.message.metadata) : null,
+)
+// 是否允许编辑由服务端公开的平台级 message_rewrite 能力决定。
+const canEdit = computed(() => props.editable && !isTemp.value && isUser.value)
+
+// 历史消息默认收起；流式 reasoning 到达时由 store 强制展开，正文开始后强制收起。
+watch(
+  () => [
+    props.message.id,
+    props.message.reasoning,
+    props.message.reasoningExpanded,
+    props.message.streaming,
+  ],
+  ([, , forced, streaming]) => {
+    if (typeof forced === 'boolean') {
+      reasoningExpanded.value = forced
+    } else if (!streaming) {
+      reasoningExpanded.value = false
+    }
+  },
+)
+
+function onReasoningToggle(names: string[]) {
+  reasoningExpanded.value = names.includes('reasoning')
+}
 
 function startEdit() {
   draft.value = props.message.markdown
@@ -55,7 +84,23 @@ function save() {
         <NButton type="primary" size="small" @click="save">保存</NButton>
       </div>
     </template>
-    <div v-else class="markdown content" v-html="html"></div>
+    <template v-else>
+      <NCollapse
+        v-if="hasReasoning"
+        class="reasoning-collapse"
+        :expanded-names="reasoningExpanded ? ['reasoning'] : []"
+        @update:expanded-names="onReasoningToggle"
+      >
+        <NCollapseItem name="reasoning" title="思考过程">
+          <div class="reasoning-text">{{ reasoningText }}</div>
+        </NCollapseItem>
+      </NCollapse>
+      <div v-if="message.streaming && !message.markdown.trim()" class="streaming-placeholder faint">
+        正在连接模型并准备上下文，请稍候…
+      </div>
+      <div v-else class="markdown content" v-html="html"></div>
+      <RollResultDetails v-if="rollDetails" :details="rollDetails" />
+    </template>
     <span v-if="message.streaming" class="cursor">▍</span>
   </article>
 </template>
@@ -156,6 +201,35 @@ function save() {
 .cursor {
   color: var(--accent);
   animation: blink 1s steps(2) infinite;
+}
+
+.streaming-placeholder {
+  min-height: 1.85em;
+  line-height: 1.85;
+}
+
+.reasoning-collapse {
+  margin: 8px 0 10px;
+  max-width: 760px;
+  color: var(--text-dim);
+}
+
+.reasoning-collapse :deep(.n-collapse-item__header) {
+  min-height: 28px;
+  padding: 4px 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.reasoning-collapse :deep(.n-collapse-item__content-inner) {
+  padding: 4px 10px 10px;
+}
+
+.reasoning-text {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 @keyframes blink {

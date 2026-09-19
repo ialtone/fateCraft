@@ -84,7 +84,7 @@ type Service struct {
 	repo       Repository
 	cfg        Config
 	httpClient *http.Client
-	cipher     *credentialCipher
+	cipher     credentialCipher
 	cipherErr  error
 	mailer     Mailer
 }

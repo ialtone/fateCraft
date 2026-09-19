@@ -1,0 +1,342 @@
+[
+  {
+    "kind": "realm", "key": "golden-core", "name": "结丹",
+    "content": {
+      "rank": 3, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 18000, "lifespan_days": 182500,
+      "max_health": 620, "max_mana": 1800, "max_spiritual_sense": 950,
+      "next_realm_key": "nascent-soul", "breakthrough_chance": 34,
+      "breakthrough_minutes": 20160, "failure_progress_loss_percent": 32, "failure_health_damage": 120
+    },
+    "tags": ["境界", "结丹"], "search_text": "结丹 金丹 天星海", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "realm", "key": "nascent-soul", "name": "元婴",
+    "content": {
+      "rank": 4, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 60000, "lifespan_days": 365000,
+      "max_health": 1400, "max_mana": 5200, "max_spiritual_sense": 3000,
+      "next_realm_key": "spirit-transformation", "breakthrough_chance": 28,
+      "breakthrough_minutes": 43200, "failure_progress_loss_percent": 35, "failure_health_damage": 280
+    },
+    "tags": ["境界", "元婴"], "search_text": "元婴 神魂 界墟", "visibility": "player", "sort_order": 50
+  },
+  {
+    "kind": "realm", "key": "spirit-transformation", "name": "化神",
+    "content": {
+      "rank": 5, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 180000, "lifespan_days": 730000,
+      "max_health": 3200, "max_mana": 15000, "max_spiritual_sense": 9000,
+      "next_realm_key": "void-refining", "breakthrough_chance": 22,
+      "breakthrough_minutes": 86400, "failure_progress_loss_percent": 38, "failure_health_damage": 650
+    },
+    "tags": ["境界", "化神"], "search_text": "化神 法则 飞升台", "visibility": "player", "sort_order": 60
+  },
+  {
+    "kind": "realm", "key": "void-refining", "name": "炼虚",
+    "content": {
+      "rank": 6, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 600000, "lifespan_days": 1825000,
+      "max_health": 7200, "max_mana": 42000, "max_spiritual_sense": 26000,
+      "next_realm_key": "body-integration", "breakthrough_chance": 18,
+      "breakthrough_minutes": 129600, "failure_progress_loss_percent": 40, "failure_health_damage": 900
+    },
+    "tags": ["境界", "炼虚"], "search_text": "炼虚 上界 法则道统", "visibility": "player", "sort_order": 70
+  },
+
+  {
+    "kind": "realm", "key": "body-integration", "name": "合体",
+    "content": {
+      "rank": 7, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 1800000, "lifespan_days": 3650000,
+      "max_health": 16000, "max_mana": 120000, "max_spiritual_sense": 75000,
+      "next_realm_key": "great-ascension", "breakthrough_chance": 16,
+      "breakthrough_minutes": 172800, "failure_progress_loss_percent": 42, "failure_health_damage": 1400
+    },
+    "tags": ["境界", "合体"], "search_text": "合体 上灵界 法身", "visibility": "player", "sort_order": 80
+  },
+  {
+    "kind": "realm", "key": "great-ascension", "name": "大乘",
+    "content": {
+      "rank": 8, "stages": ["early", "middle", "late", "perfected"], "stage_labels": ["初期", "中期", "后期", "大圆满"],
+      "cultivation_required": 5400000, "lifespan_days": 7300000,
+      "max_health": 36000, "max_mana": 300000, "max_spiritual_sense": 180000,
+      "breakthrough_chance": 12, "breakthrough_minutes": 345600,
+      "failure_progress_loss_percent": 45, "failure_health_damage": 3000,
+      "post_realm_transition": "tribulation_ascension"
+    },
+    "tags": ["境界", "大乘"], "search_text": "大乘 渡劫 飞升 天关", "visibility": "player", "sort_order": 90
+  },
+
+  {
+    "kind": "technique", "key": "star-tide-scripture", "name": "星潮归元经",
+    "content": {
+      "category": "cultivation", "max_layer": 18, "minimum_realm_rank": 2,
+      "practice_minutes": 720, "mana_cost": 18, "cultivation_gain": 110, "mastery_gain": 18, "insight_gain": 8,
+      "allowed_slots": ["primary", "secondary"], "source_item_key": "manual.star-tide-scripture",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_mana": 80, "cultivation_gain": 12}},
+        {"layer": 6, "effects": {"spiritual_attack": 35, "max_spiritual_sense": 90}},
+        {"layer": 12, "effects": {"max_health": 120, "spiritual_defense": 45}},
+        {"layer": 18, "effects": {"cultivation_gain": 60, "spiritual_attack": 80}}
+      ]
+    },
+    "tags": ["主修", "星海"], "search_text": "星潮 归元 结丹", "visibility": "player", "sort_order": 210
+  },
+  {
+    "kind": "technique", "key": "void-crossing-step", "name": "折空遁步",
+    "content": {
+      "category": "movement", "max_layer": 12, "minimum_realm_rank": 3,
+      "practice_minutes": 540, "mana_cost": 16, "combat_mana_cost": 10, "cultivation_gain": 22, "mastery_gain": 22, "insight_gain": 6,
+      "allowed_slots": ["movement"], "source_item_key": "manual.void-crossing-step",
+      "layer_effects": [
+        {"layer": 1, "effects": {"movement": 12}},
+        {"layer": 6, "effects": {"movement": 22, "physical_defense": 18}},
+        {"layer": 12, "effects": {"movement": 45, "spiritual_defense": 30}}
+      ]
+    },
+    "tags": ["身法", "虚空"], "search_text": "折空 遁步 界墟", "visibility": "player", "sort_order": 220
+  },
+  {
+    "kind": "technique", "key": "nine-law-sword", "name": "九律星锋",
+    "content": {
+      "category": "spell", "max_layer": 15, "minimum_realm_rank": 4,
+      "practice_minutes": 600, "mana_cost": 24, "combat_mana_cost": 18, "cultivation_gain": 30, "mastery_gain": 20, "insight_gain": 7,
+      "allowed_slots": ["combat"], "source_item_key": "manual.nine-law-sword",
+      "layer_effects": [
+        {"layer": 1, "effects": {"spiritual_attack": 55}},
+        {"layer": 5, "effects": {"physical_attack": 35, "spiritual_attack": 70}},
+        {"layer": 10, "effects": {"spiritual_attack": 120, "spiritual_defense": 40}},
+        {"layer": 15, "effects": {"physical_attack": 80, "spiritual_attack": 180}}
+      ]
+    },
+    "tags": ["剑诀", "法则"], "search_text": "九律 星锋 法则剑", "visibility": "player", "sort_order": 230
+  },
+  {
+    "kind": "technique", "key": "celestial-body", "name": "天关不坏身",
+    "content": {
+      "category": "body", "max_layer": 12, "minimum_realm_rank": 4,
+      "practice_minutes": 720, "mana_cost": 20, "cultivation_gain": 35, "mastery_gain": 18, "insight_gain": 5,
+      "allowed_slots": ["body"], "source_item_key": "manual.celestial-body",
+      "layer_effects": [
+        {"layer": 1, "effects": {"max_health": 180, "physical_defense": 45}},
+        {"layer": 6, "effects": {"max_health": 360, "physical_defense": 90}},
+        {"layer": 12, "effects": {"max_health": 720, "physical_attack": 100, "spiritual_defense": 75}}
+      ]
+    },
+    "tags": ["炼体", "上界"], "search_text": "天关 不坏身 炼体", "visibility": "player", "sort_order": 240
+  },
+
+  {"kind": "item", "key": "manual.star-tide-scripture", "name": "星潮归元经玉册", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 2}, "tags": ["传承"], "search_text": "星潮归元经 玉册", "visibility": "player", "sort_order": 490},
+  {"kind": "item", "key": "manual.void-crossing-step", "name": "折空遁步残卷", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 2}, "tags": ["传承"], "search_text": "折空遁步 残卷", "visibility": "player", "sort_order": 500},
+  {"kind": "item", "key": "manual.nine-law-sword", "name": "九律星锋剑谱", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 2}, "tags": ["传承"], "search_text": "九律星锋 剑谱", "visibility": "player", "sort_order": 510},
+  {"kind": "item", "key": "manual.celestial-body", "name": "天关不坏身金页", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 2}, "tags": ["传承"], "search_text": "天关不坏身 金页", "visibility": "player", "sort_order": 520},
+  {"kind": "item", "key": "abyssal-beast-core", "name": "渊兽星核", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 20}, "tags": ["高阶材料", "妖核"], "search_text": "渊兽 星核 天星海", "visibility": "player", "sort_order": 530},
+  {"kind": "item", "key": "void-crystal", "name": "界隙晶砂", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 50}, "tags": ["高阶材料", "虚空"], "search_text": "界隙 晶砂 虚空", "visibility": "player", "sort_order": 540},
+  {"kind": "item", "key": "law-fragment", "name": "法则残片", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 20}, "tags": ["法则", "终局材料"], "search_text": "法则 残片 上界", "visibility": "player", "sort_order": 550},
+  {"kind": "item", "key": "celestial-herb", "name": "天关灵芝", "content": {"stackable": true, "consumable": false, "max_grant_per_action": 30}, "tags": ["高阶灵药"], "search_text": "天关 灵芝 上界", "visibility": "player", "sort_order": 560},
+  {"kind": "item", "key": "core-forming-pill", "name": "凝丹星露", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 10, "effects": {"mana": 180, "cultivation_progress": 260}}, "tags": ["丹药", "结丹"], "search_text": "凝丹 星露 结丹", "visibility": "player", "sort_order": 570},
+  {"kind": "item", "key": "recipe-slip.core-forming-pill", "name": "凝丹星露丹方", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 2}, "tags": ["丹方"], "search_text": "凝丹星露 丹方", "visibility": "player", "sort_order": 580},
+  {"kind": "item", "key": "recipe-slip.void-compass", "name": "定界盘炼图", "content": {"stackable": true, "consumable": true, "max_grant_per_action": 2}, "tags": ["炼器图"], "search_text": "定界盘 炼图", "visibility": "player", "sort_order": 590},
+
+  {
+    "kind": "equipment", "key": "void-compass", "name": "定界盘",
+    "content": {"allowed_slots": ["accessory"], "durability_max": 260, "bonuses": {"movement": 28, "spiritual_defense": 42, "max_spiritual_sense": 120}},
+    "tags": ["法宝", "虚空"], "search_text": "定界盘 界墟 航路", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "equipment", "key": "law-edge", "name": "律光道锋",
+    "content": {"allowed_slots": ["weapon"], "durability_max": 320, "bonuses": {"physical_attack": 95, "spiritual_attack": 180, "max_mana": 240}},
+    "tags": ["法宝", "法则"], "search_text": "律光 道锋 法则", "visibility": "player", "sort_order": 120
+  },
+
+  {
+    "kind": "recipe", "key": "core-forming-pill-recipe", "name": "凝丹星露炼法",
+    "content": {
+      "craft_type": "alchemy", "source_item_key": "recipe-slip.core-forming-pill",
+      "allowed_location_keys": ["tide-star-market", "ancient-star-observatory"],
+      "inputs": [
+        {"quantity": 1, "options": [{"item_key": "abyssal-beast-core", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "celestial-herb", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["novice-pill-furnace"], "technique_key": "basic-alchemy", "min_technique_mastery": 600,
+      "min_realm_rank": 2, "mana_cost": 40, "craft_minutes": 1440, "success_chance_bps": 4600,
+      "mastery_bonus_bps": 3600, "failure_input_loss_bps": 10000,
+      "outputs": [{"kind": "item", "key": "core-forming-pill", "quantity": 1, "quality_weights": {"common": 7000, "fine": 2500, "superior": 500}}],
+      "failure_outputs": [{"kind": "item", "key": "refining-slag", "quantity": 2, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["炼丹", "结丹"], "search_text": "凝丹星露 炼丹", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "recipe", "key": "void-compass-recipe", "name": "定界盘炼法",
+    "content": {
+      "craft_type": "artifact", "source_item_key": "recipe-slip.void-compass",
+      "allowed_location_keys": ["tide-star-market", "void-crossing-gate"],
+      "inputs": [
+        {"quantity": 4, "options": [{"item_key": "void-crystal", "quality_key": "common"}]},
+        {"quantity": 2, "options": [{"item_key": "star-iron-sand", "quality_key": "common"}]}
+      ],
+      "required_equipment_keys": ["hundred-forge-hammer"], "technique_key": "basic-forging", "min_technique_mastery": 700,
+      "min_realm_rank": 3, "mana_cost": 55, "craft_minutes": 2160, "success_chance_bps": 4200,
+      "mastery_bonus_bps": 3800, "failure_input_loss_bps": 9000,
+      "outputs": [{"kind": "equipment", "key": "void-compass", "quantity": 1, "quality_weights": {"common": 7200, "fine": 2400, "superior": 400}}],
+      "failure_outputs": [{"kind": "item", "key": "refining-slag", "quantity": 2, "quality_weights": {"common": 1}}]
+    },
+    "tags": ["炼器", "虚空"], "search_text": "定界盘 炼器", "visibility": "player", "sort_order": 120
+  },
+
+  {"kind": "location", "key": "storm-sea", "name": "天星海", "content": {"node_type": "region", "parent_key": "mortal-realm", "connections": [], "initial_state": {"resource_level": 6200, "danger_level": 4300, "stability": 4200, "conflict_stage": 4, "faction_power": {"star-sail-alliance": 4200, "abyss-court": 3600}}}, "tags": ["区域", "星海"], "search_text": "天星海 星舟 海渊", "visibility": "player", "sort_order": 170},
+  {
+    "kind": "location", "key": "cloud-sail-port", "name": "云帆港",
+    "content": {"node_type": "location", "parent_key": "storm-sea", "description": "青河郡通往天星海的星舟港，只接待筑基以上修士。", "realm_layer": "foundation", "danger_rank": 2, "spiritual_energy": 85, "facilities": ["harbor", "inn"], "investigation_minutes": 240, "entry_requirements": [{"min_realm_rank": 2}], "connections": [{"location_key": "mist-cliff", "travel_minutes": 2880}, {"location_key": "tide-star-market", "travel_minutes": 360}, {"location_key": "abyssal-isle", "travel_minutes": 720}]},
+    "tags": ["港口", "跨域"], "search_text": "云帆港 星舟 天星海", "visibility": "player", "sort_order": 180
+  },
+  {
+    "kind": "location", "key": "tide-star-market", "name": "潮星坊",
+    "content": {"node_type": "location", "parent_key": "storm-sea", "description": "星舟联盟维持的中阶坊市，也是界墟航路的补给站。", "realm_layer": "golden-core", "danger_rank": 1, "spiritual_energy": 110, "facilities": ["market", "alchemy", "artifact"], "investigation_minutes": 180, "entry_requirements": [{"min_realm_rank": 2}], "connections": [{"location_key": "cloud-sail-port", "travel_minutes": 360}, {"location_key": "void-crossing-gate", "travel_minutes": 1440}]},
+    "tags": ["坊市", "星海"], "search_text": "潮星坊 星舟联盟", "visibility": "player", "sort_order": 190
+  },
+  {
+    "kind": "location", "key": "abyssal-isle", "name": "沉星岛",
+    "content": {"node_type": "location", "parent_key": "storm-sea", "description": "被渊兽潮包围的沉没古岛，岛心保留星图残碑。", "realm_layer": "golden-core", "danger_rank": 6, "spiritual_energy": 130, "facilities": ["exploration", "foraging"], "investigation_minutes": 480, "entry_requirements": [{"min_realm_rank": 3}], "gathering": {"minutes": 540, "risk_chance_bps": 4200, "risk_health_damage": 90, "entries": [{"item_key": "celestial-herb", "min_quantity": 1, "max_quantity": 2, "weight": 55}, {"item_key": "void-crystal", "min_quantity": 1, "max_quantity": 2, "weight": 45}]}, "connections": [{"location_key": "cloud-sail-port", "travel_minutes": 720}, {"location_key": "deep-star-trench", "travel_minutes": 480}]},
+    "tags": ["险地", "星海"], "search_text": "沉星岛 渊兽 星图", "visibility": "player", "sort_order": 200
+  },
+  {
+    "kind": "location", "key": "deep-star-trench", "name": "坠星海渊",
+    "content": {"node_type": "scene", "parent_key": "abyssal-isle", "description": "古星坠落形成的深海裂谷，元婴渊兽在此筑巢。", "realm_layer": "nascent-soul", "danger_rank": 8, "spiritual_energy": 180, "facilities": ["exploration"], "investigation_minutes": 600, "entry_requirements": [{"min_realm_rank": 4}], "connections": [{"location_key": "abyssal-isle", "travel_minutes": 480}]},
+    "tags": ["秘境", "海渊"], "search_text": "坠星 海渊 元婴渊兽", "visibility": "player", "sort_order": 210
+  },
+
+  {"kind": "location", "key": "boundary-ruins", "name": "界墟", "content": {"node_type": "region", "parent_key": "mortal-realm", "connections": [], "initial_state": {"resource_level": 3800, "danger_level": 6800, "stability": 2500, "conflict_stage": 7, "faction_power": {"boundary-watch": 3900, "abyss-court": 4100}}}, "tags": ["区域", "界墟"], "search_text": "界墟 空间裂隙 古遗迹", "visibility": "player", "sort_order": 220},
+  {
+    "kind": "location", "key": "void-crossing-gate", "name": "渡虚关",
+    "content": {"node_type": "location", "parent_key": "boundary-ruins", "description": "边界守望者修建的界墟前哨，结丹修士才可登记入关。", "realm_layer": "golden-core", "danger_rank": 5, "spiritual_energy": 160, "facilities": ["fortress", "artifact"], "investigation_minutes": 300, "entry_requirements": [{"min_realm_rank": 3}], "connections": [{"location_key": "tide-star-market", "travel_minutes": 1440}, {"location_key": "ancient-star-observatory", "travel_minutes": 420}, {"location_key": "rift-heart", "travel_minutes": 600}]},
+    "tags": ["关隘", "界墟"], "search_text": "渡虚关 边界守望", "visibility": "player", "sort_order": 230
+  },
+  {
+    "kind": "location", "key": "ancient-star-observatory", "name": "古星台",
+    "content": {"node_type": "location", "parent_key": "boundary-ruins", "description": "记录界域潮汐的古代观测台，残存法则刻痕可供参悟。", "realm_layer": "nascent-soul", "danger_rank": 4, "spiritual_energy": 210, "facilities": ["research", "alchemy"], "investigation_minutes": 360, "entry_requirements": [{"min_realm_rank": 4}], "gathering": {"minutes": 720, "risk_chance_bps": 3000, "risk_health_damage": 140, "entries": [{"item_key": "law-fragment", "min_quantity": 1, "max_quantity": 1, "weight": 35}, {"item_key": "void-crystal", "min_quantity": 1, "max_quantity": 3, "weight": 65}]}, "connections": [{"location_key": "void-crossing-gate", "travel_minutes": 420}]},
+    "tags": ["遗迹", "法则"], "search_text": "古星台 法则刻痕", "visibility": "player", "sort_order": 240
+  },
+  {
+    "kind": "location", "key": "rift-heart", "name": "界隙核心",
+    "content": {"node_type": "scene", "parent_key": "void-crossing-gate", "description": "两界法则交错的危险核心，只有元婴修士能承受空间潮汐。", "realm_layer": "nascent-soul", "danger_rank": 9, "spiritual_energy": 260, "facilities": ["exploration", "ascension"], "investigation_minutes": 720, "entry_requirements": [{"min_realm_rank": 4}], "connections": [{"location_key": "void-crossing-gate", "travel_minutes": 600}, {"location_key": "ascension-platform", "travel_minutes": 2880}]},
+    "tags": ["界隙", "跨界"], "search_text": "界隙核心 空间潮汐", "visibility": "player", "sort_order": 250
+  },
+
+  {"kind": "location", "key": "upper-spirit-realm", "name": "上灵界", "content": {"node_type": "realm", "connections": []}, "tags": ["界域", "上界"], "search_text": "上灵界 法则道统", "visibility": "player", "sort_order": 260},
+  {"kind": "location", "key": "nine-heavens-march", "name": "九关天陆", "content": {"node_type": "region", "parent_key": "upper-spirit-realm", "connections": [], "initial_state": {"resource_level": 7200, "danger_level": 5200, "stability": 4600, "conflict_stage": 6, "faction_power": {"nine-law-court": 5200, "boundary-watch": 2800, "abyss-court": 3300}}}, "tags": ["区域", "上界"], "search_text": "九关天陆 上灵界", "visibility": "player", "sort_order": 270},
+  {
+    "kind": "location", "key": "ascension-platform", "name": "接引台",
+    "content": {"node_type": "location", "parent_key": "nine-heavens-march", "description": "上灵界接引下界化神修士的法则平台。", "realm_layer": "spirit-transformation", "danger_rank": 3, "spiritual_energy": 420, "facilities": ["ascension", "inn"], "investigation_minutes": 360, "entry_requirements": [{"min_realm_rank": 5}], "connections": [{"location_key": "rift-heart", "travel_minutes": 2880}, {"location_key": "law-market", "travel_minutes": 480}, {"location_key": "celestial-frontier", "travel_minutes": 720}]},
+    "tags": ["上界", "接引"], "search_text": "接引台 化神 上灵界", "visibility": "player", "sort_order": 280
+  },
+  {
+    "kind": "location", "key": "law-market", "name": "万律城",
+    "content": {"node_type": "location", "parent_key": "nine-heavens-march", "description": "九律道庭主持的上界大城，法则残片与高阶传承均受严格管制。", "realm_layer": "spirit-transformation", "danger_rank": 1, "spiritual_energy": 500, "facilities": ["market", "research", "artifact"], "investigation_minutes": 300, "entry_requirements": [{"min_realm_rank": 5}], "connections": [{"location_key": "ascension-platform", "travel_minutes": 480}]},
+    "tags": ["上界", "坊市"], "search_text": "万律城 九律道庭", "visibility": "player", "sort_order": 290
+  },
+  {
+    "kind": "location", "key": "celestial-frontier", "name": "天关前线",
+    "content": {"node_type": "location", "parent_key": "nine-heavens-march", "description": "抵御界外潮汐的法则防线，也是两条终局道路的交汇处。", "realm_layer": "void-refining", "danger_rank": 10, "spiritual_energy": 560, "facilities": ["fortress", "exploration"], "investigation_minutes": 600, "entry_requirements": [{"min_realm_rank": 6}], "gathering": {"minutes": 900, "risk_chance_bps": 4800, "risk_health_damage": 420, "entries": [{"item_key": "law-fragment", "min_quantity": 1, "max_quantity": 2, "weight": 60}, {"item_key": "celestial-herb", "min_quantity": 1, "max_quantity": 2, "weight": 40}]}, "connections": [{"location_key": "ascension-platform", "travel_minutes": 720}]},
+    "tags": ["终局", "前线"], "search_text": "天关 前线 界外潮汐", "visibility": "player", "sort_order": 300
+  },
+
+  {"kind": "faction", "key": "star-sail-alliance", "name": "星舟盟", "content": {"initial_reputation": 0, "permission_thresholds": {"deep_sea_charter": 180}, "position_thresholds": {"registered_passenger": 500, "star_navigator": 4000}, "resource": "跨海星舟、潮汐星图与海市", "goal": "维持天星海航路和星图垄断"}, "tags": ["商盟", "星海"], "search_text": "星舟盟 航路 星图", "visibility": "player", "sort_order": 80},
+  {"kind": "faction", "key": "boundary-watch", "name": "守界司", "content": {"initial_reputation": 0, "permission_thresholds": {"rift_clearance": 220}, "position_thresholds": {"registered_scout": 800, "rift_warden": 5200}, "resource": "渡虚关、界隙监测阵与守界军", "goal": "封合失控界隙并阻止渊庭渗透"}, "tags": ["守界", "军府"], "search_text": "守界司 渡虚关", "visibility": "player", "sort_order": 90},
+  {"kind": "faction", "key": "nine-law-court", "name": "九律道庭", "content": {"initial_reputation": 0, "permission_thresholds": {"law_archive_access": 260}, "position_thresholds": {"outer_auditor": 1200, "law_warden": 8000}, "resource": "万律城、法则典籍与天关阵枢", "goal": "维持上灵界法则秩序并决定下界接引名额"}, "tags": ["道统", "上界"], "search_text": "九律道庭 万律城", "visibility": "player", "sort_order": 100},
+  {"kind": "faction", "key": "abyss-court", "name": "渊庭", "content": {"initial_reputation": -200, "permission_thresholds": {}, "position_thresholds": {}, "resource": "海渊兽群与界外裂隙", "goal": "借空间潮汐侵入人间与上灵界"}, "tags": ["敌对势力", "界外"], "search_text": "渊庭 渊兽 界外", "visibility": "player", "sort_order": 110},
+
+  {"kind": "npc_archetype", "key": "star-sail-navigator", "name": "沈照潮", "content": {"initial": true, "instance_key": "shen-navigator", "location_key": "cloud-sail-port", "faction_key": "star-sail-alliance", "realm_key": "golden-core", "stage_key": "early", "public_profile": {"role": "星舟盟领航使", "manner": "谨慎务实，以星图价值衡量承诺"}, "private_state": {"secret": "沉星岛星图指向一条被盟中高层隐瞒的界墟航道"}, "goals": {"primary": "恢复沉星岛航标", "chart_progress": 10}}, "tags": ["关键 NPC", "星海"], "search_text": "沈照潮 领航使", "visibility": "model", "sort_order": 160},
+  {"kind": "npc_archetype", "key": "boundary-warden", "name": "顾停渊", "content": {"initial": true, "instance_key": "gu-warden", "location_key": "void-crossing-gate", "faction_key": "boundary-watch", "realm_key": "nascent-soul", "stage_key": "middle", "public_profile": {"role": "守界司镇关使", "manner": "直接克制，只相信可审计的功绩"}, "private_state": {"secret": "界隙核心的失稳源头与上界接引阵共用同一枚古阵枢"}, "goals": {"primary": "封合界隙并查明内应", "rift_stability": 20}}, "tags": ["关键 NPC", "守界"], "search_text": "顾停渊 镇关使", "visibility": "model", "sort_order": 170},
+  {"kind": "npc_archetype", "key": "nine-law-auditor", "name": "闻九章", "content": {"initial": true, "instance_key": "wen-auditor", "location_key": "law-market", "faction_key": "nine-law-court", "realm_key": "spirit-transformation", "stage_key": "late", "public_profile": {"role": "九律道庭巡律使", "manner": "言辞冷静，将因果和证据置于人情之前"}, "private_state": {"secret": "道庭准备在天关失守时切断下界接引，代价是放弃数个凡界"}, "goals": {"primary": "选择守界者或独行求道者", "audit_progress": 0}}, "tags": ["关键 NPC", "上界"], "search_text": "闻九章 巡律使", "visibility": "model", "sort_order": 180},
+
+  {
+    "kind": "market", "key": "tide-star-exchange", "name": "潮星易所",
+    "content": {"location_key": "tide-star-market", "currency_item_key": "low-spirit-stone", "faction_key": "star-sail-alliance", "restock_interval_minutes": 10080, "price_modifier_bps": 12500, "scarcity_markup_bps": 4800, "reputation_adjustment_bps": 2200, "items": [
+      {"kind": "item", "key": "manual.star-tide-scripture", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 1200, "base_sell_price": 520},
+      {"kind": "item", "key": "manual.void-crossing-step", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 1800, "base_sell_price": 760},
+      {"kind": "item", "key": "recipe-slip.core-forming-pill", "quality_key": "common", "max_stock": 2, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 900, "base_sell_price": 380},
+      {"kind": "item", "key": "recipe-slip.void-compass", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 1400, "base_sell_price": 600},
+      {"kind": "item", "key": "celestial-herb", "quality_key": "common", "max_stock": 20, "initial_stock": 8, "restock_quantity": 4, "base_buy_price": 90, "base_sell_price": 38},
+      {"kind": "item", "key": "void-crystal", "quality_key": "common", "max_stock": 20, "initial_stock": 6, "restock_quantity": 3, "base_buy_price": 130, "base_sell_price": 55}
+    ]},
+    "tags": ["市场", "星海"], "search_text": "潮星易所 高阶交易", "visibility": "player", "sort_order": 40
+  },
+  {
+    "kind": "market", "key": "nine-law-exchange", "name": "万律宝署",
+    "content": {"location_key": "law-market", "currency_item_key": "low-spirit-stone", "faction_key": "nine-law-court", "restock_interval_minutes": 20160, "price_modifier_bps": 15000, "scarcity_markup_bps": 5200, "reputation_adjustment_bps": 2600, "items": [
+      {"kind": "item", "key": "manual.nine-law-sword", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 5200, "base_sell_price": 2100},
+      {"kind": "item", "key": "manual.celestial-body", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 4800, "base_sell_price": 1900},
+      {"kind": "item", "key": "law-fragment", "quality_key": "common", "max_stock": 10, "initial_stock": 3, "restock_quantity": 1, "base_buy_price": 900, "base_sell_price": 360},
+      {"kind": "equipment", "key": "law-edge", "quality_key": "common", "max_stock": 1, "initial_stock": 1, "restock_quantity": 0, "base_buy_price": 9000, "base_sell_price": 3600}
+    ]},
+    "tags": ["市场", "上界"], "search_text": "万律宝署 法则交易", "visibility": "player", "sort_order": 50
+  },
+
+  {
+    "kind": "world_event", "key": "star-tide-cycle", "name": "星潮涨落",
+    "content": {"region_key": "storm-sea", "initial_delay_minutes": 4320, "repeat_interval_minutes": 10080, "priority": 420, "variants": [
+      {"key": "clear-route", "weight": 55, "summary": "星潮平稳，云帆港与沉星岛之间的航标重新显现。", "effects": {"resource_delta": 380, "danger_delta": -220, "stability_delta": 160, "faction_power_deltas": {"star-sail-alliance": 120}, "market_price_modifier_deltas_bps": {"tide-star-exchange": -350}, "npc_goal_deltas": {"shen-navigator": {"chart_progress": 6}}}},
+      {"key": "abyss-surge", "weight": 45, "summary": "海渊星核躁动，渊兽群冲击外海航道。", "effects": {"resource_delta": -280, "danger_delta": 420, "stability_delta": -240, "conflict_stage": 6, "faction_power_deltas": {"abyss-court": 180, "star-sail-alliance": -100}, "market_price_modifier_deltas_bps": {"tide-star-exchange": 520}}}
+    ]},
+    "tags": ["区域事件", "星海"], "search_text": "星潮 渊兽 航路", "visibility": "player", "sort_order": 100
+  },
+  {
+    "kind": "world_event", "key": "rift-tide", "name": "界隙潮汐",
+    "content": {"region_key": "boundary-ruins", "initial_delay_minutes": 5760, "repeat_interval_minutes": 14400, "priority": 520, "variants": [
+      {"key": "temporary-seal", "weight": 48, "summary": "守界司阵师暂时压低了空间潮汐，古星台重新开放。", "effects": {"danger_delta": -360, "stability_delta": 420, "faction_power_deltas": {"boundary-watch": 160}, "npc_goal_deltas": {"gu-warden": {"rift_stability": 8}}}},
+      {"key": "rift-expands", "weight": 52, "summary": "界外侵蚀扩大，渡虚关外出现新的空间裂口。", "effects": {"resource_delta": 220, "danger_delta": 560, "stability_delta": -460, "conflict_stage": 9, "faction_power_deltas": {"abyss-court": 220, "boundary-watch": -140}, "npc_goal_deltas": {"gu-warden": {"rift_stability": -9}}}}
+    ]},
+    "tags": ["区域事件", "界墟"], "search_text": "界隙 潮汐 守界司", "visibility": "player", "sort_order": 110
+  },
+  {
+    "kind": "world_event", "key": "celestial-frontier-war", "name": "天关轮战",
+    "content": {"region_key": "nine-heavens-march", "initial_delay_minutes": 7200, "repeat_interval_minutes": 20160, "priority": 620, "variants": [
+      {"key": "law-line-holds", "weight": 50, "summary": "九律阵线守住了界外冲击，万律城秩序暂稳。", "effects": {"danger_delta": -240, "stability_delta": 360, "faction_power_deltas": {"nine-law-court": 180, "abyss-court": -120}, "market_price_modifier_deltas_bps": {"nine-law-exchange": -280}, "npc_goal_deltas": {"wen-auditor": {"audit_progress": 5}}}},
+      {"key": "frontier-breach", "weight": 50, "summary": "天关一处阵眼失守，界外潮汐逼近接引台。", "effects": {"danger_delta": 520, "stability_delta": -420, "conflict_stage": 10, "faction_power_deltas": {"nine-law-court": -160, "abyss-court": 200}, "market_price_modifier_deltas_bps": {"nine-law-exchange": 460}}}
+    ]},
+    "tags": ["区域事件", "上界"], "search_text": "天关 轮战 九律", "visibility": "player", "sort_order": 120
+  },
+
+  {"kind": "encounter", "key": "abyssal-isle-star-beast", "name": "沉星岛猎渊", "content": {"location_key": "abyssal-isle", "opponent_key": "star-abyss-beast", "opponent_name": "噬星渊兽", "opponent_realm_rank": 3, "opponent_max_health": 420, "opponent_attack": 48, "opponent_defense": 18, "player_damage_base": 12, "player_damage_scale_bps": 15000, "player_mana_cost": 8, "round_minutes": 12, "max_rounds": 24, "flee_chance_bps": 1800, "rewards": [{"item_key": "abyssal-beast-core", "quantity": 1}, {"item_key": "low-spirit-stone", "quantity": 45}]}, "tags": ["遭遇", "星海"], "search_text": "沉星岛 渊兽", "visibility": "player", "sort_order": 40},
+  {"kind": "encounter", "key": "deep-trench-leviathan", "name": "海渊镇星兽", "content": {"location_key": "deep-star-trench", "opponent_key": "trench-leviathan", "opponent_name": "镇星古兽", "opponent_realm_rank": 4, "opponent_max_health": 980, "opponent_attack": 95, "opponent_defense": 38, "player_damage_base": 18, "player_damage_scale_bps": 17000, "player_mana_cost": 14, "round_minutes": 18, "max_rounds": 30, "flee_chance_bps": 1200, "rewards": [{"item_key": "abyssal-beast-core", "quantity": 3}, {"item_key": "law-fragment", "quantity": 1}]}, "tags": ["遭遇", "海渊"], "search_text": "海渊 镇星古兽", "visibility": "player", "sort_order": 50},
+  {"kind": "encounter", "key": "rift-heart-guardian", "name": "界隙阵枢守卫", "content": {"location_key": "rift-heart", "opponent_key": "rift-array-guardian", "opponent_name": "折界傀儡", "opponent_realm_rank": 4, "opponent_max_health": 1200, "opponent_attack": 115, "opponent_defense": 52, "player_damage_base": 22, "player_damage_scale_bps": 18000, "player_mana_cost": 18, "round_minutes": 20, "max_rounds": 32, "flee_chance_bps": 900, "rewards": [{"item_key": "void-crystal", "quantity": 5}, {"item_key": "law-fragment", "quantity": 2}]}, "tags": ["遭遇", "界墟"], "search_text": "界隙 阵枢 傀儡", "visibility": "player", "sort_order": 60},
+  {"kind": "encounter", "key": "celestial-frontier-breach", "name": "天关破口", "content": {"location_key": "celestial-frontier", "opponent_key": "outer-law-devourer", "opponent_name": "噬律者", "opponent_realm_rank": 6, "opponent_max_health": 2600, "opponent_attack": 230, "opponent_defense": 100, "player_damage_base": 35, "player_damage_scale_bps": 22000, "player_mana_cost": 30, "round_minutes": 24, "max_rounds": 36, "flee_chance_bps": 600, "rewards": [{"item_key": "law-fragment", "quantity": 4}, {"item_key": "celestial-herb", "quantity": 3}]}, "tags": ["遭遇", "终局"], "search_text": "天关 噬律者", "visibility": "player", "sort_order": 70},
+
+  {
+    "kind": "quest", "key": "star-sea-charter", "name": "星海航契",
+    "content": {"quest_type": "quest", "initial": true, "starting_status": "offered", "accept_location_keys": ["mist-cliff", "cloud-sail-port"], "objectives": [{"key": "reach-cloud-sail", "type": "location", "location_key": "cloud-sail-port"}], "rewards": [{"type": "item", "item_key": "manual.star-tide-scripture", "quantity": 1}, {"type": "faction_reputation", "faction_key": "star-sail-alliance", "amount": 220}], "unlock_quest_keys": ["hunt-abyssal-isle"], "milestone_key": "entered-star-sea"},
+    "tags": ["主线", "星海"], "search_text": "星海航契 云帆港", "visibility": "player", "sort_order": 130
+  },
+  {
+    "kind": "quest", "key": "hunt-abyssal-isle", "name": "沉星猎渊",
+    "content": {"quest_type": "quest", "initial": false, "starting_status": "offered", "accept_location_keys": ["cloud-sail-port", "abyssal-isle"], "objectives": [{"key": "defeat-star-beast", "type": "encounter_win", "encounter_key": "abyssal-isle-star-beast", "quantity": 1}], "rewards": [{"type": "item", "item_key": "recipe-slip.core-forming-pill", "quantity": 1}, {"type": "faction_reputation", "faction_key": "star-sail-alliance", "amount": 180}], "unlock_quest_keys": ["cross-boundary-ruins"], "milestone_key": "star-chart-restored"},
+    "tags": ["主线", "遭遇"], "search_text": "沉星 猎渊 星图", "visibility": "player", "sort_order": 140
+  },
+  {
+    "kind": "quest", "key": "cross-boundary-ruins", "name": "渡虚关征召",
+    "content": {"quest_type": "quest", "initial": false, "starting_status": "offered", "accept_location_keys": ["tide-star-market", "void-crossing-gate"], "objectives": [{"key": "reach-void-gate", "type": "location", "location_key": "void-crossing-gate"}, {"key": "deliver-void-crystal", "type": "item", "item_key": "void-crystal", "quality_key": "common", "quantity": 3, "consume": true}], "rewards": [{"type": "item", "item_key": "manual.void-crossing-step", "quantity": 1}, {"type": "item", "item_key": "recipe-slip.void-compass", "quantity": 1}, {"type": "faction_reputation", "faction_key": "boundary-watch", "amount": 260}], "unlock_quest_keys": ["seal-rift-heart"], "milestone_key": "entered-boundary-ruins"},
+    "tags": ["主线", "界墟"], "search_text": "渡虚关 征召", "visibility": "player", "sort_order": 150
+  },
+  {
+    "kind": "quest", "key": "seal-rift-heart", "name": "封合界隙核心",
+    "content": {"quest_type": "quest", "initial": false, "starting_status": "offered", "accept_location_keys": ["void-crossing-gate", "rift-heart"], "objectives": [{"key": "defeat-rift-guardian", "type": "encounter_win", "encounter_key": "rift-heart-guardian", "quantity": 1}], "rewards": [{"type": "item", "item_key": "law-fragment", "quantity": 2}, {"type": "faction_reputation", "faction_key": "boundary-watch", "amount": 320}], "unlock_quest_keys": ["enter-upper-spirit-realm"], "milestone_key": "rift-heart-sealed"},
+    "tags": ["主线", "界墟"], "search_text": "封合 界隙核心", "visibility": "player", "sort_order": 160
+  },
+  {
+    "kind": "quest", "key": "enter-upper-spirit-realm", "name": "上灵界接引",
+    "content": {"quest_type": "quest", "initial": false, "starting_status": "offered", "accept_location_keys": ["rift-heart", "ascension-platform"], "objectives": [{"key": "reach-ascension-platform", "type": "location", "location_key": "ascension-platform"}], "rewards": [{"type": "item", "item_key": "manual.nine-law-sword", "quantity": 1}, {"type": "item", "item_key": "manual.celestial-body", "quantity": 1}, {"type": "faction_reputation", "faction_key": "nine-law-court", "amount": 300}], "unlock_quest_keys": ["warden-ending", "seeker-ending"], "milestone_key": "entered-upper-spirit-realm"},
+    "tags": ["主线", "上界"], "search_text": "上灵界 接引台", "visibility": "player", "sort_order": 170
+  },
+  {
+    "kind": "quest", "key": "warden-ending", "name": "执掌天关",
+    "content": {"quest_type": "quest", "initial": false, "starting_status": "offered", "accept_location_keys": ["celestial-frontier"], "objectives": [{"key": "defeat-law-devourer", "type": "encounter_win", "encounter_key": "celestial-frontier-breach", "quantity": 1}], "rewards": [{"type": "faction_reputation", "faction_key": "nine-law-court", "amount": 600}], "milestone_key": "celestial-frontier-held", "campaign_outcome_key": "world_warden"},
+    "tags": ["终局", "守界"], "search_text": "执掌天关 守界结局", "visibility": "player", "sort_order": 180
+  },
+  {
+    "kind": "quest", "key": "seeker-ending", "name": "携律远行",
+    "content": {"quest_type": "quest", "initial": false, "starting_status": "offered", "accept_location_keys": ["law-market", "celestial-frontier"], "objectives": [{"key": "collect-law-fragments", "type": "item", "item_key": "law-fragment", "quality_key": "common", "quantity": 6, "consume": true}, {"key": "reach-celestial-frontier", "type": "location", "location_key": "celestial-frontier"}], "rewards": [{"type": "item", "item_key": "law-fragment", "quantity": 1}], "milestone_key": "independent-law-path", "campaign_outcome_key": "law_seeker"},
+    "tags": ["终局", "求道"], "search_text": "携律远行 求道结局", "visibility": "player", "sort_order": 190
+  }
+]

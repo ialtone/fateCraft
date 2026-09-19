@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -18,6 +19,17 @@ func Open(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("连接 postgres 失败: %w", err)
 	}
+	// GORM otherwise inherits database/sql defaults, which leave the pool
+	// effectively unbounded for this workload. Keep model requests, workers
+	// and WebSocket-triggered writes within a predictable connection budget.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("读取 postgres 连接池失败: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(24)
+	sqlDB.SetMaxIdleConns(8)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 
 	return db, nil
 }

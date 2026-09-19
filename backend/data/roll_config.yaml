@@ -44,9 +44,8 @@ categories:
     base_success_rate: 50
 
 # 情境修正规则
-# 注意：advantages/disadvantages/environment 的键即是模型可用的枚举词表，
-# 启动时会注入 narrative_response.json 的 enum 约束，模型只能从词表中选取；
-# 后端按键精确查表计分。新增词条 = 在这里加一行即可。
+# 注意：advantages/disadvantages/environment 仅接受服务端玩法规则提供的枚举键，
+# 后端按键精确查表计分；模型输出协议不能直接提交这些修正。
 context_modifiers:
   # 通用修正
   advantages:

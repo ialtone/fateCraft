@@ -22,6 +22,18 @@ const router = createRouter({
       meta: { title: '登录', public: true },
     },
     {
+      path: '/s/:token',
+      name: 'shared-conversation',
+      component: () => import('@/views/SharedConversationView.vue'),
+      meta: { title: '故事分享', public: true },
+    },
+    {
+      path: '/shared/:token',
+      name: 'shared-conversation-client',
+      component: () => import('@/views/SharedConversationView.vue'),
+      meta: { title: '故事分享', public: true },
+    },
+    {
       path: '/',
       name: 'conversations',
       component: () => import('@/views/ConversationListView.vue'),
@@ -33,10 +45,22 @@ const router = createRouter({
       meta: { title: '对话' },
     },
     {
+      path: '/shares',
+      name: 'shares',
+      component: () => import('@/views/ConversationListView.vue'),
+      meta: { title: '我的分享' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
       meta: { title: '设置' },
+    },
+    {
+      path: '/rewards',
+      name: 'rewards',
+      component: () => import('@/views/RewardsView.vue'),
+      meta: { title: '我的奖励' },
     },
     {
       path: '/admin',

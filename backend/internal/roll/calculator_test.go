@@ -3,7 +3,6 @@ package roll
 import (
 	"testing"
 
-	"github.com/ialtone/fatecraft/internal/protocol"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -31,7 +30,7 @@ func rolls(results ...bool) []storage.RollHistoryEntry {
 	// 输入按"最新在前"排列，与 HistoryStore.Recent 的返回约定一致。
 	rows := make([]storage.RollHistoryEntry, 0, len(results))
 	for _, ok := range results {
-		rows = append(rows, storage.RollHistoryEntry{RollType: "探索判定", Success: ok})
+		rows = append(rows, storage.RollHistoryEntry{RollKey: "探索判定", Success: ok})
 	}
 	return rows
 }
@@ -71,17 +70,17 @@ func TestCalculateOpponentBonus(t *testing.T) {
 
 	cases := []struct {
 		name     string
-		opponent *protocol.RollOpponent
+		opponent *Opponent
 		want     int
 	}{
-		{"对手高2个境界", &protocol.RollOpponent{RealmGap: 2}, -20},
-		{"己方高1个境界", &protocol.RollOpponent{RealmGap: -1}, 10},
-		{"对手受伤", &protocol.RollOpponent{Statuses: []string{"对手受伤"}}, 15},
-		{"受伤+疲惫", &protocol.RollOpponent{Statuses: []string{"对手受伤", "对手疲惫"}}, 25},
-		{"属性克制", &protocol.RollOpponent{Element: "属性克制"}, 20},
-		{"疲惫+高1境界组合", &protocol.RollOpponent{RealmGap: 1, Statuses: []string{"对手疲惫"}}, 0},
-		{"词表外词条忽略", &protocol.RollOpponent{Statuses: []string{"未受伤"}, Element: "五行相生"}, 0},
-		{"空对手", &protocol.RollOpponent{}, 0},
+		{"对手高2个境界", &Opponent{RealmGap: 2}, -20},
+		{"己方高1个境界", &Opponent{RealmGap: -1}, 10},
+		{"对手受伤", &Opponent{Statuses: []string{"对手受伤"}}, 15},
+		{"受伤+疲惫", &Opponent{Statuses: []string{"对手受伤", "对手疲惫"}}, 25},
+		{"属性克制", &Opponent{Element: "属性克制"}, 20},
+		{"疲惫+高1境界组合", &Opponent{RealmGap: 1, Statuses: []string{"对手疲惫"}}, 0},
+		{"词表外词条忽略", &Opponent{Statuses: []string{"未受伤"}, Element: "五行相生"}, 0},
+		{"空对手", &Opponent{}, 0},
 	}
 
 	for _, c := range cases {
@@ -102,23 +101,23 @@ func TestCalculateContextBonusExactMatch(t *testing.T) {
 
 	cases := []struct {
 		name string
-		ctx  *protocol.RollContext
+		ctx  *Context
 		want int
 	}{
-		{"精确命中求和", &protocol.RollContext{
+		{"精确命中求和", &Context{
 			Advantages:    []string{"得到指点", "充分准备"},
 			Disadvantages: []string{"受伤状态"},
 			Environment:   []string{"夜晚"},
 		}, 20 + 10 - 20 - 5},
 		// 旧实现的三类问题在精确查表下不再发生：
-		{"同义改写不命中(漏报变为显式)", &protocol.RollContext{Advantages: []string{"获得高人指点"}}, 0},
-		{"否定句不误报", &protocol.RollContext{Disadvantages: []string{"并未受伤状态"}}, 0},
-		{"子串不歧义", &protocol.RollContext{Advantages: []string{"指点"}}, 0},
+		{"同义改写不命中(漏报变为显式)", &Context{Advantages: []string{"获得高人指点"}}, 0},
+		{"否定句不误报", &Context{Disadvantages: []string{"并未受伤状态"}}, 0},
+		{"子串不歧义", &Context{Advantages: []string{"指点"}}, 0},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			req := &protocol.RollRequest{Context: c.ctx}
+			req := &Request{Context: c.ctx}
 			got := calculateContextBonus(req, cfg)
 			if got != c.want {
 				t.Fatalf("calculateContextBonus = %d, want %d", got, c.want)
@@ -137,29 +136,18 @@ func TestTraitConditionsUseAllContextTokens(t *testing.T) {
 	}
 	state := map[string]any{"traits": []any{"夜行者"}}
 
-	req := &protocol.RollRequest{
+	req := &Request{
 		Category: "exploration",
-		Context:  &protocol.RollContext{Environment: []string{"夜晚"}},
+		Context:  &Context{Environment: []string{"夜晚"}},
 	}
 	if got := MatchTraits(state, req.Category, collectContextTokens(req), cfg); got != 20 {
 		t.Fatalf("夜晚条件经 environment 传入应命中, got %d", got)
 	}
 
 	// 条件不满足时不加成
-	reqNoNight := &protocol.RollRequest{Category: "exploration", Context: &protocol.RollContext{}}
+	reqNoNight := &Request{Category: "exploration", Context: &Context{}}
 	if got := MatchTraits(state, reqNoNight.Category, collectContextTokens(reqNoNight), cfg); got != 0 {
 		t.Fatalf("无夜晚词条不应命中, got %d", got)
-	}
-}
-
-func TestVocabSplitsOpponentKeys(t *testing.T) {
-	cfg := testConfig()
-	v := cfg.Vocab()
-	if len(v.OpponentStatuses) != 2 || v.OpponentStatuses[0] != "对手受伤" || v.OpponentStatuses[1] != "对手疲惫" {
-		t.Fatalf("OpponentStatuses 划分错误: %v", v.OpponentStatuses)
-	}
-	if len(v.OpponentElements) != 2 || v.OpponentElements[0] != "属性克制" || v.OpponentElements[1] != "属性被克" {
-		t.Fatalf("OpponentElements 划分错误: %v", v.OpponentElements)
 	}
 }
 

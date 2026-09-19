@@ -2,102 +2,118 @@ package state
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
-// stateRepo 是本服务消费端的状态仓储小接口（只声明实际用到的方法）。
-// storage.StateRepo 天然满足该接口，便于用 mock 脱离 Postgres 单测。
-// 注意 Transaction 的回调仍收具体 *storage.StateRepo：事务内的
-// GetForUpdate/Upsert/AddRevision 直接在该具体连接上调用（Go 函数类型不变，
-// 无法把回调参数也抽象成接口，否则具体 repo 反而不满足本接口）。
 type stateRepo interface {
 	Get(ctx context.Context, convID uuid.UUID) (*storage.ConversationState, error)
-	Upsert(ctx context.Context, s *storage.ConversationState) error
+	Upsert(ctx context.Context, state *storage.ConversationState) error
 	ListRevisions(ctx context.Context, convID uuid.UUID, limit int) ([]storage.StateRevision, error)
 	Transaction(ctx context.Context, fn func(tx *storage.StateRepo) error) error
 }
 
-// Service 负责对话结构化状态的读取、补丁应用与修订记录。
-type Service struct {
-	repo stateRepo
+type runtimeProvider interface {
+	RuntimeForConversation(ctx context.Context, convID uuid.UUID) (*gameplay.RuntimeContract, error)
 }
 
-func NewService(repo stateRepo) *Service { return &Service{repo: repo} }
+// Service applies the immutable runtime contract bound to each conversation.
+// PostgreSQL stores state values, while the challenge version owns their schema.
+type Service struct {
+	repo     stateRepo
+	runtimes runtimeProvider
+}
 
-// EnsureInit 在对话创建时初始化默认状态（已存在则跳过）。
+func NewService(repo stateRepo, providers ...runtimeProvider) *Service {
+	var runtimes runtimeProvider
+	if len(providers) > 0 {
+		runtimes = providers[0]
+	}
+	return &Service{repo: repo, runtimes: runtimes}
+}
+
+func (s *Service) contract(ctx context.Context, convID uuid.UUID) (*gameplay.RuntimeContract, error) {
+	if s.runtimes == nil {
+		return nil, errors.New("状态服务缺少玩法运行时提供者")
+	}
+	return s.runtimes.RuntimeForConversation(ctx, convID)
+}
+
 func (s *Service) EnsureInit(ctx context.Context, convID uuid.UUID) error {
 	if _, err := s.repo.Get(ctx, convID); err == nil {
 		return nil
-	} else if err != storage.ErrNotFound {
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	contract, err := s.contract(ctx, convID)
+	if err != nil {
 		return err
 	}
 	return s.repo.Upsert(ctx, &storage.ConversationState{
 		ConversationID: convID,
-		State:          storage.JSONMap(DefaultState()),
-		SchemaVersion:  1,
+		State:          storage.JSONMap(gameplay.InitialState(contract.StateSchema)),
+		SchemaVersion:  contract.StateSchema.SchemaVersion,
 		UpdatedAt:      time.Now(),
 	})
 }
 
-// Get 返回对话状态；不存在时返回默认状态（不落库）。
+// Get returns the trusted full state for internal gameplay services.
 func (s *Service) Get(ctx context.Context, convID uuid.UUID) (map[string]any, error) {
-	cs, err := s.repo.Get(ctx, convID)
-	if err == storage.ErrNotFound {
-		return DefaultState(), nil
+	stored, err := s.repo.Get(ctx, convID)
+	if errors.Is(err, storage.ErrNotFound) {
+		contract, runtimeErr := s.contract(ctx, convID)
+		if runtimeErr != nil {
+			return nil, runtimeErr
+		}
+		return gameplay.InitialState(contract.StateSchema), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return cs.State, nil
+	return stored.State, nil
 }
 
-// Apply 校验并应用一个 state_update 补丁，落库并记录修订。
-// 在事务中带行锁读改写，避免用户 PATCH 与 AI 生成并发时互相覆盖。
-// 返回应用后的新状态与被跳过的非法路径。
+func (s *Service) GetPlayer(ctx context.Context, convID uuid.UUID) (map[string]any, error) {
+	trusted, err := s.Get(ctx, convID)
+	if err != nil {
+		return nil, err
+	}
+	return s.ProjectPlayer(ctx, convID, trusted)
+}
+
+// ProjectPlayer applies the immutable runtime visibility contract to a trusted
+// state snapshot. Callers that already fixed a revision can project that exact
+// snapshot without rereading a newer conversation_state row.
+func (s *Service) ProjectPlayer(ctx context.Context, convID uuid.UUID, trusted map[string]any) (map[string]any, error) {
+	contract, err := s.contract(ctx, convID)
+	if err != nil {
+		return nil, err
+	}
+	return gameplay.PlayerState(*contract, trusted), nil
+}
+
 func (s *Service) Apply(ctx context.Context, convID uuid.UUID, patch map[string]any, source string, relatedMsgID *uuid.UUID) (map[string]any, []string, error) {
+	contract, err := s.contract(ctx, convID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := ValidatePatch(contract.StateSchema, source, patch); err != nil {
+		var validationErr *PatchValidationError
+		if errors.As(err, &validationErr) {
+			return nil, validationErr.Keys, err
+		}
+		return nil, nil, err
+	}
 	var after map[string]any
 	var skipped []string
-
-	err := s.repo.Transaction(ctx, func(tx *storage.StateRepo) error {
-		before, err := getForUpdateOrDefault(ctx, tx, convID)
-		if err != nil {
-			return err
-		}
-		if len(patch) == 0 {
-			after = before
-			return nil
-		}
-
-		var applied map[string]any
-		after, applied, skipped = ApplyPatch(before, patch)
-		now := time.Now()
-
-		if err := tx.Upsert(ctx, &storage.ConversationState{
-			ConversationID: convID,
-			State:          storage.JSONMap(after),
-			SchemaVersion:  1,
-			UpdatedAt:      now,
-		}); err != nil {
-			return err
-		}
-
-		if len(applied) > 0 {
-			_ = tx.AddRevision(ctx, &storage.StateRevision{
-				ID:               uuid.New(),
-				ConversationID:   convID,
-				Source:           source,
-				RelatedMessageID: relatedMsgID,
-				Patch:            storage.JSONMap(applied),
-				BeforeState:      storage.JSONMap(before),
-				AfterState:       storage.JSONMap(after),
-				CreatedAt:        now,
-			})
-		}
-		return nil
+	err = s.repo.Transaction(ctx, func(tx *storage.StateRepo) error {
+		return applyWithRepo(ctx, tx, convID, contract.StateSchema, patch, source, relatedMsgID, &after, &skipped)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -105,41 +121,92 @@ func (s *Service) Apply(ctx context.Context, convID uuid.UUID, patch map[string]
 	return after, skipped, nil
 }
 
-// Replace 用整份状态覆盖当前状态（管理员维护），并记录修订。
-// 非法顶层键会被过滤掉，与 Apply 走同一套白名单校验。
-func (s *Service) Replace(ctx context.Context, convID uuid.UUID, newState map[string]any, source string) (map[string]any, error) {
-	// 过滤不在白名单内的顶层键。
-	filtered := map[string]any{}
-	for k, v := range newState {
-		if _, ok := allowedTopLevels[k]; ok {
-			filtered[k] = v
+// GetInTx 在调用方已打开的事务内读取可信状态（带行锁）。schema 由调用方传入，
+// 事务内不再回查玩法版本，避免在持锁期间向连接池申请第二个连接。
+func GetInTx(ctx context.Context, repo *storage.StateRepo, convID uuid.UUID, schema gameplay.StateSchema) (map[string]any, error) {
+	if repo == nil {
+		return nil, errors.New("状态事务仓库未配置")
+	}
+	return getForUpdateOrInitial(ctx, repo, convID, schema)
+}
+
+// ApplyInTx 在调用方事务内应用状态补丁。与 GetInTx 同理，schema 由调用方提供，
+// 使可信状态、工具审计和 attempt 计数在同一事务内一起提交或回滚。
+func ApplyInTx(ctx context.Context, repo *storage.StateRepo, convID uuid.UUID, schema gameplay.StateSchema, patch map[string]any, source string, relatedMsgID *uuid.UUID) (map[string]any, []string, error) {
+	if repo == nil {
+		return nil, nil, errors.New("状态事务仓库未配置")
+	}
+	if err := ValidatePatch(schema, source, patch); err != nil {
+		var validationErr *PatchValidationError
+		if errors.As(err, &validationErr) {
+			return nil, validationErr.Keys, err
+		}
+		return nil, nil, err
+	}
+	var after map[string]any
+	var skipped []string
+	err := applyWithRepo(ctx, repo, convID, schema, patch, source, relatedMsgID, &after, &skipped)
+	if err != nil {
+		return nil, nil, err
+	}
+	return after, skipped, nil
+}
+
+func applyWithRepo(ctx context.Context, tx *storage.StateRepo, convID uuid.UUID, schema gameplay.StateSchema, patch map[string]any, source string, relatedMsgID *uuid.UUID, afterOut *map[string]any, skippedOut *[]string) error {
+	before, err := getForUpdateOrInitial(ctx, tx, convID, schema)
+	if err != nil {
+		return err
+	}
+	if len(patch) == 0 {
+		*afterOut = before
+		*skippedOut = nil
+		return nil
+	}
+	after, applied, skipped := ApplyPatch(schema, source, before, patch)
+	*afterOut = after
+	*skippedOut = skipped
+	now := time.Now()
+	if err := tx.Upsert(ctx, &storage.ConversationState{
+		ConversationID: convID, State: storage.JSONMap(after),
+		SchemaVersion: schema.SchemaVersion, UpdatedAt: now,
+	}); err != nil {
+		return err
+	}
+	if len(applied) > 0 {
+		if err := tx.AddRevision(ctx, &storage.StateRevision{
+			ID: uuid.New(), ConversationID: convID, Source: source,
+			RelatedMessageID: relatedMsgID, Patch: storage.JSONMap(applied),
+			BeforeState: storage.JSONMap(before), AfterState: storage.JSONMap(after), CreatedAt: now,
+		}); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	err := s.repo.Transaction(ctx, func(tx *storage.StateRepo) error {
-		before, err := getForUpdateOrDefault(ctx, tx, convID)
+func (s *Service) Replace(ctx context.Context, convID uuid.UUID, newState map[string]any, source string) (map[string]any, error) {
+	contract, err := s.contract(ctx, convID)
+	if err != nil {
+		return nil, err
+	}
+	filtered := FilterState(contract.StateSchema, newState)
+	err = s.repo.Transaction(ctx, func(tx *storage.StateRepo) error {
+		before, err := getForUpdateOrInitial(ctx, tx, convID, contract.StateSchema)
 		if err != nil {
 			return err
 		}
 		now := time.Now()
 		if err := tx.Upsert(ctx, &storage.ConversationState{
-			ConversationID: convID,
-			State:          storage.JSONMap(filtered),
-			SchemaVersion:  1,
-			UpdatedAt:      now,
+			ConversationID: convID, State: storage.JSONMap(filtered),
+			SchemaVersion: contract.StateSchema.SchemaVersion, UpdatedAt: now,
 		}); err != nil {
 			return err
 		}
-		_ = tx.AddRevision(ctx, &storage.StateRevision{
-			ID:             uuid.New(),
-			ConversationID: convID,
-			Source:         source,
-			Patch:          storage.JSONMap{"_replace": true},
-			BeforeState:    storage.JSONMap(before),
-			AfterState:     storage.JSONMap(filtered),
-			CreatedAt:      now,
+		return tx.AddRevision(ctx, &storage.StateRevision{
+			ID: uuid.New(), ConversationID: convID, Source: source,
+			Patch: storage.JSONMap{"_replace": true}, BeforeState: storage.JSONMap(before),
+			AfterState: storage.JSONMap(filtered), CreatedAt: now,
 		})
-		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -147,19 +214,49 @@ func (s *Service) Replace(ctx context.Context, convID uuid.UUID, newState map[st
 	return filtered, nil
 }
 
-// getForUpdateOrDefault 在事务内带行锁读取状态；不存在时返回默认状态。
-func getForUpdateOrDefault(ctx context.Context, tx *storage.StateRepo, convID uuid.UUID) (map[string]any, error) {
-	cs, err := tx.GetForUpdate(ctx, convID)
-	if err == storage.ErrNotFound {
-		return DefaultState(), nil
+func getForUpdateOrInitial(ctx context.Context, tx *storage.StateRepo, convID uuid.UUID, schema gameplay.StateSchema) (map[string]any, error) {
+	stored, err := tx.GetForUpdate(ctx, convID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return gameplay.InitialState(schema), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return cs.State, nil
+	return stored.State, nil
 }
 
-// Revisions 返回状态修订历史。
 func (s *Service) Revisions(ctx context.Context, convID uuid.UUID, limit int) ([]storage.StateRevision, error) {
 	return s.repo.ListRevisions(ctx, convID, limit)
+}
+
+// PlayerRevisions returns revision metadata with patch and snapshots projected
+// through the same visibility contract as the current player state endpoint.
+func (s *Service) PlayerRevisions(ctx context.Context, convID uuid.UUID, limit int) ([]storage.StateRevision, error) {
+	contract, err := s.contract(ctx, convID)
+	if err != nil {
+		return nil, err
+	}
+	revisions, err := s.repo.ListRevisions(ctx, convID, limit)
+	if err != nil {
+		return nil, err
+	}
+	for index := range revisions {
+		revisions[index] = projectPlayerRevision(*contract, revisions[index])
+	}
+	return revisions, nil
+}
+
+func projectPlayerRevision(contract gameplay.RuntimeContract, revision storage.StateRevision) storage.StateRevision {
+	patch := storage.JSONMap{}
+	for key, value := range revision.Patch {
+		path := strings.TrimSuffix(key, "+")
+		field, ok := gameplay.FieldForPath(contract.StateSchema, path)
+		if ok && field.Visibility == gameplay.VisibilityPlayer {
+			patch[key] = deepCopyValue(value)
+		}
+	}
+	revision.Patch = patch
+	revision.BeforeState = storage.JSONMap(gameplay.PlayerState(contract, revision.BeforeState))
+	revision.AfterState = storage.JSONMap(gameplay.PlayerState(contract, revision.AfterState))
+	return revision
 }

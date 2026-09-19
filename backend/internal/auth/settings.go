@@ -2,14 +2,9 @@ package auth
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -17,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ialtone/fatecraft/internal/storage"
+	"github.com/ialtone/fatecraft/internal/secretbox"
 )
 
 const registrationPurpose = "registration"
@@ -299,41 +295,9 @@ func normalizeInvitationCode(raw string) string {
 	return strings.NewReplacer("-", "", " ", "", "\t", "", "\r", "", "\n", "").Replace(normalized)
 }
 
-type credentialCipher struct{ aead cipher.AEAD }
-
-func newCredentialCipher(rawKey string) (*credentialCipher, error) {
-	if len(rawKey) < 32 {
-		return nil, errors.New("AUTH_DATA_ENCRYPTION_KEY 至少需要 32 个字符")
-	}
-	key := sha256.Sum256([]byte(rawKey))
-	block, err := aes.NewCipher(key[:])
-	if err != nil {
-		return nil, err
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	return &credentialCipher{aead: aead}, nil
+type credentialCipher interface {
+	Encrypt(string) (string, error)
+	Decrypt(string) (string, error)
 }
 
-func (c *credentialCipher) Encrypt(plaintext string) (string, error) {
-	nonce := make([]byte, c.aead.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-	sealed := c.aead.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.RawURLEncoding.EncodeToString(sealed), nil
-}
-
-func (c *credentialCipher) Decrypt(encoded string) (string, error) {
-	data, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(data) < c.aead.NonceSize() {
-		return "", errors.New("SMTP 密码密文无效")
-	}
-	plaintext, err := c.aead.Open(nil, data[:c.aead.NonceSize()], data[c.aead.NonceSize():], nil)
-	if err != nil {
-		return "", errors.New("无法解密 SMTP 密码，请检查 AUTH_DATA_ENCRYPTION_KEY")
-	}
-	return string(plaintext), nil
-}
+func newCredentialCipher(rawKey string) (credentialCipher, error) { return secretbox.New(rawKey) }

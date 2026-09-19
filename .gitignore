@@ -2,6 +2,8 @@
 /backend/server
 /backend/server.exe
 *.test
+/.gocache/
+/backend/cmd/dbquery_tmp/
 
 # 环境变量
 .env
@@ -15,5 +17,10 @@ npm-debug.log*
 
 # 编辑器
 .idea/
-.vscode/
+.vscode/*
+!.vscode/fatecraft.code-workspace
+!.vscode/settings.json
+!.vscode/tasks.json
 .DS_Store
+
+pi-main/

@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -10,71 +9,95 @@ import (
 	"github.com/ialtone/fatecraft/internal/tokenizer"
 )
 
-// memoryRepo 是本服务消费端的摘要仓储小接口（只声明实际用到的方法）。
-// storage.MemoryRepo 天然满足该接口，便于用 mock 脱离 Postgres 单测。
-type memoryRepo interface {
-	Create(ctx context.Context, s *storage.MemorySummary) error
-	Latest(ctx context.Context, convID uuid.UUID) (*storage.MemorySummary, error)
-	MaxVersion(ctx context.Context, convID uuid.UUID) (int, error)
-	List(ctx context.Context, convID uuid.UUID) ([]storage.MemorySummary, error)
-	Get(ctx context.Context, convID, id uuid.UUID) (*storage.MemorySummary, error)
-	UpdateContent(ctx context.Context, convID, id uuid.UUID, content string, tokenCount int) error
+const (
+	DefaultProtectedTurns = 4
+	DefaultScheduleTokens = 4000
+	TokenizerVersion      = "heuristic-v1"
+	ActivityIdle          = "idle"
+	ActivityQueued        = "queued"
+	ActivityRunning       = "running"
+)
+
+type ActivitySink func(conversationID uuid.UUID, status string)
+
+type repository interface {
+	Latest(context.Context, uuid.UUID) (*storage.ConversationMemory, error)
+	Get(context.Context, uuid.UUID, uuid.UUID) (*storage.ConversationMemory, error)
+	List(context.Context, uuid.UUID) ([]storage.ConversationMemory, error)
+	PlanningState(context.Context, uuid.UUID, int) (storage.MemoryPlanningState, error)
+	Schedule(context.Context, uuid.UUID, storage.MemoryPlanningState) (*storage.MemoryJob, error)
+	ListJobs(context.Context, uuid.UUID, int) ([]storage.MemoryJob, error)
 }
 
-// Service 负责摘要记忆的版本管理（严格按 conversation_id 隔离）。
+// Service exposes committed memory snapshots and lightweight scheduling only.
+// Model calls are owned by Worker and never happen on the narrative path.
 type Service struct {
-	repo    memoryRepo
-	counter tokenizer.Counter
+	repo     repository
+	counter  tokenizer.Counter
+	wake     func()
+	activity ActivitySink
 }
 
-func NewService(repo memoryRepo, counter tokenizer.Counter) *Service {
+func NewService(repo repository, counter tokenizer.Counter) *Service {
 	return &Service{repo: repo, counter: counter}
 }
 
-// Latest 返回最新摘要；无摘要时返回 (nil, nil)。
-func (s *Service) Latest(ctx context.Context, convID uuid.UUID) (*storage.MemorySummary, error) {
-	sum, err := s.repo.Latest(ctx, convID)
+func (s *Service) SetWake(wake func()) { s.wake = wake }
+
+func (s *Service) SetActivitySink(sink ActivitySink) { s.activity = sink }
+
+func (s *Service) Latest(ctx context.Context, conversationID uuid.UUID) (*storage.ConversationMemory, error) {
+	memory, err := s.repo.Latest(ctx, conversationID)
 	if err == storage.ErrNotFound {
 		return nil, nil
 	}
-	return sum, err
+	return memory, err
 }
 
-// List 返回所有摘要版本（版本倒序）。
-func (s *Service) List(ctx context.Context, convID uuid.UUID) ([]storage.MemorySummary, error) {
-	return s.repo.List(ctx, convID)
+func (s *Service) Get(ctx context.Context, conversationID, memoryID uuid.UUID) (*storage.ConversationMemory, error) {
+	memory, err := s.repo.Get(ctx, conversationID, memoryID)
+	if err == storage.ErrNotFound {
+		return nil, nil
+	}
+	return memory, err
 }
 
-func (s *Service) Get(ctx context.Context, convID, id uuid.UUID) (*storage.MemorySummary, error) {
-	return s.repo.Get(ctx, convID, id)
+func (s *Service) List(ctx context.Context, conversationID uuid.UUID) ([]storage.ConversationMemory, error) {
+	return s.repo.List(ctx, conversationID)
 }
 
-// CreateVersion 在当前对话上追加一个新摘要版本。
-func (s *Service) CreateVersion(ctx context.Context, convID uuid.UUID, content string, coveredUntil *uuid.UUID) (*storage.MemorySummary, error) {
-	maxV, err := s.repo.MaxVersion(ctx, convID)
+// Schedule performs bounded metadata queries and creates/merges a durable job.
+// It returns nil when there is not enough sealed history to summarize.
+func (s *Service) Schedule(ctx context.Context, conversationID uuid.UUID, force bool) (*storage.MemoryJob, error) {
+	state, err := s.repo.PlanningState(ctx, conversationID, DefaultProtectedTurns)
 	if err != nil {
 		return nil, err
 	}
-	tokens := s.counter.Count(content)
-	sum := &storage.MemorySummary{
-		ID:                    uuid.New(),
-		ConversationID:        convID,
-		Version:               maxV + 1,
-		Content:               content,
-		CoveredUntilMessageID: coveredUntil,
-		TokenCount:            &tokens,
-		CreatedAt:             time.Now(),
+	if state.TargetUntil <= state.CoveredUntil || state.TargetUntil == 0 {
+		return nil, nil
 	}
-	if err := s.repo.Create(ctx, sum); err != nil {
-		return nil, err
+	if !force && state.UncoveredTokens < DefaultScheduleTokens {
+		return nil, nil
 	}
-	return sum, nil
+	job, err := s.repo.Schedule(ctx, conversationID, state)
+	if err == nil && job != nil && s.wake != nil {
+		s.wake()
+	}
+	if err == nil && job != nil && s.activity != nil {
+		s.activity(conversationID, activityForJob(job.Status))
+	}
+	return job, err
 }
 
-// Edit 编辑某个摘要版本的正文。
-func (s *Service) Edit(ctx context.Context, convID, id uuid.UUID, content string) (*storage.MemorySummary, error) {
-	if err := s.repo.UpdateContent(ctx, convID, id, content, s.counter.Count(content)); err != nil {
-		return nil, err
+func (s *Service) Jobs(ctx context.Context, conversationID uuid.UUID, limit int) ([]storage.MemoryJob, error) {
+	return s.repo.ListJobs(ctx, conversationID, limit)
+}
+
+func (s *Service) Count(text string) int { return s.counter.Count(text) }
+
+func activityForJob(status string) string {
+	if status == storage.MemoryJobRunning {
+		return ActivityRunning
 	}
-	return s.repo.Get(ctx, convID, id)
+	return ActivityQueued
 }

@@ -1,0 +1,11 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "roll",
+      "complete_challenge"
+    ],
+    "player": [],
+    "capabilities": {}
+  }
+}

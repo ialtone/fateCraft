@@ -1,134 +1,72 @@
-# 09. 世界书与记忆设计
+# 09. 世界书与长期记忆
 
-## 两种能力的区别
+## 两种能力
 
-世界书和摘要都能向模型提供长期信息，但职责不同：
+- 世界书：ChallengeVersion 发布的规则和世界知识，跨该版本的对话共享，玩家不能修改。
+- 长期记忆：后台 Memory Agent 从单个 conversation 已封口历史生成的版本化叙事资料。
 
-- 世界书：挑战作者发布的规则与世界知识，跨对话共享内容，玩家不能修改。
-- 摘要：某个玩家某次对话的压缩历史，只属于该对话，可以产生多个版本。
+两者都可能作为 system 段进入叙事上下文，但来源、权限、生命周期和可信度不同。世界书不能被 Memory 改写；Memory 不能替代 Runtime、State、Campaign Projection 或服务端流水。
 
-二者都以 system 段进入上下文，但拥有不同来源、权限、触发方式和预算。
+## 世界书归属与发布
 
-## 世界书归属
+WorldBook 是 `challenge_assets.kind=worldbook` 的版本资产，Manifest 的 required_worldbooks 引用同版本 slug。发布校验要求 JSON 可解析、entry ID 非空且书内唯一、正文非空、priority/token 非负，非 constant 条目至少有一个关键词。
 
-WorldBook 是 `challenge_assets` 中 kind 为 `worldbook` 的版本资产。Manifest 的 `required_worldbooks` 列出运行时需要加载的 slug。
-
-发布校验确保：
-
-- 引用的世界书存在于同一版本。
-- JSON 可以解析为 WorldBook。
-- entry ID 非空且书内唯一。
-- entry content 非空、priority 与 token_count 非负。
-- 非 constant 条目至少有一个关键词。
-
-普通用户没有世界书读取、绑定、解绑和写入 API。管理员通过挑战版本草稿整体维护。
+普通用户没有世界书读写或绑定 API。管理员通过挑战版本草稿整体维护，发布后不可原地修改。
 
 ## 条目字段
 
 | 字段 | 含义 |
 | --- | --- |
-| `id` | 版本内容内稳定条目标识 |
-| `title` | 注入上下文时显示的标题 |
-| `content` | 规则或世界知识正文 |
-| `keywords` | 任一命中即可激活 |
-| `constant` | 是否无条件成为候选 |
+| `id` | 版本内容内稳定 ID |
+| `title`、`content` | 注入标题与正文 |
+| `keywords` | 不区分大小写的子串关键词 |
+| `constant` | 无条件候选 |
 | `enabled` | 是否参与扫描 |
 | `priority` | 数字越小越优先 |
-| `budget_group` | 预留分组字段，当前算法未分组配额 |
-| `token_count` | 可选预估；为空时现场计算 |
-| `notes`、`metadata` | 内容维护扩展信息 |
+| `budget_group` | 预留分组字段 |
+| `token_count` | 可选估算；缺失时在版本编译缓存构建阶段计算一次 |
+| `notes`、`metadata` | 内容维护信息；`metadata.inquiry_visible=true` 可把已启用条目显式开放给只读角色询问，不改变主叙事扫描算法 |
 
-## 扫描文本
+## 扫描与预算
 
-每次生成从当前对话构造扫描文本：
+扫描文本由最近最多 6 条未覆盖原文、当前 State 的字符串值和 attempt 固定 Memory 组成。Campaign Projection 是否参与关键词扫描由 Context Builder 的当前实现决定，不能由 Worker 预扫描。
 
-1. 最近最多 6 条未被摘要覆盖的内部消息。
-2. 当前结构化状态中递归提取的字符串值。
-3. 最新摘要正文。
+算法：
 
-状态扫描只提取字符串，不会把数字键名自动当作关键词。例如境界值“筑基期”会参与，单独的寿元数字不会。
+1. 跳过 disabled；
+2. constant 直接成为候选；
+3. 其他条目任一非空关键词命中即成为候选；
+4. constant 优先，再按 priority 和 title 稳定排序；
+5. 在独立 22% world budget 内按整条加入或跳过；
+6. 合并后的标签、标题、空行和正文再次计入总 Prompt 预算。
 
-## 激活算法
+最终内容使用 `<world_info>` 包裹。通过独立预算不保证一定进入总上下文；总预算不足时整段可跳过。实际 entry ID 写入 `context_build_logs.activated_world_entry_ids`。
 
-1. 跳过 disabled 条目。
-2. constant 条目直接成为候选。
-3. 其他条目对扫描文本做不区分大小写的子串匹配，任一非空关键词命中即成为候选。
-4. constant 候选排在关键词候选之前。
-5. 同类候选按 priority 升序，再按 title 稳定排序。
-6. 按顺序累计 token，超出世界书预算的整条跳过。
+## 编译缓存
 
-当前不是正则、分词、向量或语义匹配。关键词过短会误触发，关键词过长或同义词缺失会漏触发，内容作者应显式维护同义关键词。
+已发布或退役版本首次进入进程级缓存时，世界书按 Manifest 顺序解码一次，只保留启用条目供叙事扫描，关键词会去空白、转小写并去重，缺失的固定 Token 数使用当前启发式计数器预计算。动态扫描文本仍来自当前对话的历史、State 和固定 Memory，因此扫描结果不能跨 conversation 缓存；同一 attempt 的首次扫描结果可以固定复用。
 
-## 世界书预算
+`metadata.inquiry_visible=true` 的已启用条目在同一次编译中生成角色询问规则。叙事装配和 Inquiry 使用同一个版本缓存来源，不再各自查询、解码或维护世界书缓存。无缓存 Provider 的仓储独立测试可以直接读取 PostgreSQL，但该路径不驻留规则。
 
-世界书独立预算为总 prompt budget 的 22%。条目初筛使用 `token_count` 或对标题和正文的实时估算。
+## Memory 接入边界
 
-激活条目最终合并为：
+长期记忆由后台持久 Worker 自动产生，玩家没有生成、编辑或重试 API。最新成功版本通过 conversation 链头读取，attempt 开始时固定；被覆盖的旧消息仍保留用于审计和 evidence 校验。
 
-```text
-<world_info>
-# 条目标题
-条目正文
+`memory_policy` 与 `memory_summary` 都是 required 段。前者由服务端维护，后者是经过严格契约和 evidence 校验的模型资料。自然语言使用稳定 JSON 字符串编码，防止旧历史伪装成系统指令。
 
-</world_info>
-```
+Memory Worker 不读取世界书、动作能力目录、玩法领域原表、pending turn 或未来事件。Campaign 来源只允许已提交消息、状态修订、判定和 visibility 为 player/model 的已发生事件。
 
-合并后的标签、标题、空行和正文会再次纳入上下文总预算。因此通过世界书独立预算不保证最终一定被纳入；当总预算不足时，整个 world_info 可选段可能被跳过。
+完整任务状态机、输出契约、分支失效和故障恢复见 `18-async-memory-character-inquiry.md`。
 
-## 命中审计
+## 一致性
 
-实际激活的 entry ID 写入 `context_build_logs.activated_world_entry_ids`。上下文检查器可以结合段明细判断：
+- 没有 Memory 时使用近期原文。
+- Worker 失败时继续使用最后成功版本。
+- Memory 提交不删除消息，也不修改玩法状态。
+- rewrite/regenerate 使依赖旧分支的 Memory 失效并取消活跃任务。
+- 不同 conversation 不共享 Memory 或 evidence。
+- 世界书与 Memory 都不能作为奖励、判定、权限或结局的权威依据。
 
-- 条目是否根本没有命中。
-- 是否命中但被世界书预算跳过。
-- world_info 是否构造成功但被总预算跳过。
+## 后续边界
 
-当前日志只保存最终激活 ID，不单独持久化世界书扫描阶段的 skipped 列表；需要更细排障时可扩展日志结构。
-
-## 摘要生成
-
-玩家可以在自己的 active 对话上请求生成摘要。后端：
-
-1. 校验对话归属和 active 状态。
-2. 读取当前可见内部历史。
-3. 使用当前用户 LLM 设置，以低温度调用摘要提示。
-4. 要求保留角色关系、事件、目标、伏笔、物品、地点、世界状态和约定。
-5. 创建 `max(version) + 1` 的摘要版本。
-6. 将当时最后一条历史消息记录为 `covered_until_message_id`。
-
-当前生成摘要会把读取到的历史整体提交给模型，不是后台自动阈值触发。超长历史可能受模型窗口限制，这是后续需要改善的边界。
-
-## 摘要使用
-
-运行时只读取最新摘要。找到其 `covered_until_message_id` 后：
-
-- 该消息及以前的历史不再直接进入上下文。
-- 摘要作为 `<memory_summary>` system 段进入候选。
-- 之后的新消息正常参与最近历史填充。
-- 摘要也参与世界书关键词扫描。
-
-旧摘要版本保留用于审计和人工回看，不会同时注入。
-
-## 摘要编辑与安全边界
-
-当前用户可以编辑自己 active 对话中的摘要正文，后端会重新计算 token_count。编辑请求必须同时携带 conversation ID，并由仓储用 `(conversation_id, summary_id)` 更新，不能跨对话修改。
-
-摘要是玩家对自己历史的可维护压缩记忆，不等于平台 Prompt 或世界书。但摘要会影响后续模型上下文，因此不能用于服务端奖励资格；结算必须依赖固定奖励规则和服务端判定流水。
-
-ended 或 archived 对话不能生成或编辑摘要，只能读取。
-
-## 一致性与失败
-
-- 没有摘要时直接使用正常历史。
-- 摘要读取失败时生成流程当前按无摘要继续。
-- 覆盖消息找不到时不会删除历史，以防错误丢上下文。
-- 摘要不修改原消息，也不物理删除覆盖范围。
-- 不同对话即使内容相同，也不会共享摘要记录或命中结果。
-
-## 后续演进
-
-- 按 token 阈值自动滚动摘要。
-- 分段摘要或摘要的摘要，避免整体历史超窗。
-- 保存世界书 skipped 原因和匹配关键词。
-- 引入词边界、别名或多语言归一化。
-- 在数据量需要时引入向量记忆，但仍必须以 conversation_id 隔离并遵守版本内容边界。
+当前不使用向量数据库、Embedding、跨对话共享记忆或语义检索。将来引入时仍必须按 conversation 隔离、保留固定版本边界，并且不能绕过权威 State/Campaign 读取模型。

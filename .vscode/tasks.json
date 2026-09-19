@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Fatecraft: backend dev",
+      "type": "shell",
+      "command": "task",
+      "args": ["backend:dev"],
+      "options": {
+        "cwd": "${workspaceFolder:root}"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": false,
+        "clear": false
+      }
+    },
+    {
+      "label": "Fatecraft: frontend dev",
+      "type": "shell",
+      "command": "task",
+      "args": ["frontend:dev"],
+      "options": {
+        "cwd": "${workspaceFolder:root}"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": false,
+        "clear": false
+      }
+    },
+    {
+      "label": "Fatecraft: dev",
+      "dependsOn": [
+        "Fatecraft: backend dev",
+        "Fatecraft: frontend dev"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

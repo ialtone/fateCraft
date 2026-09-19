@@ -1,8 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NForm, NFormItem, NInput, NModal, NSelect, NSpin, NTag, useMessage } from 'naive-ui'
+import {
+  NButton,
+  NForm,
+  NFormItem,
+  NInput,
+  NModal,
+  NSelect,
+  NSpin,
+  NTag,
+  useMessage,
+} from 'naive-ui'
 import { useChallengeStore } from '@/stores/challenges'
 import { useConversationStore } from '@/stores/conversations'
+import { campaignsApi } from '@/api'
 import type { Conversation, CreateConversationInput } from '@/types'
 
 const props = defineProps<{ show: boolean; challengeSlug?: string }>()
@@ -32,17 +43,18 @@ const personaOptions = computed(() =>
     value: persona.slug,
   })),
 )
-const canCreate = computed(() => Boolean(form.value.challenge_slug && form.value.persona_slug))
+const canCreate = computed(() => Boolean(selected.value?.available && form.value.persona_slug))
 
 async function reset() {
   if (!challenges.list.length) {
     try {
       await challenges.load()
     } catch (err: any) {
-      message.error(`读取挑战失败：${err.message || '未知错误'}`)
+      message.error(`读取玩法失败：${err.message || '未知错误'}`)
     }
   }
-  const target = challenges.list.find((item) => item.slug === props.challengeSlug) ?? challenges.list[0]
+  const target =
+    challenges.list.find((item) => item.slug === props.challengeSlug) ?? challenges.list[0]
   form.value = {
     title: '',
     challenge_slug: target?.slug ?? '',
@@ -75,11 +87,16 @@ async function submit() {
       persona_slug: form.value.persona_slug,
     }
     if (form.value.title.trim()) body.title = form.value.title.trim()
-    const conv = await conversations.create(body)
+    const conv =
+      selected.value?.runtime.mode === 'campaign'
+        ? await campaignsApi
+            .create(body)
+            .then((campaign) => campaignsApi.createConversation(campaign.id))
+        : await conversations.create(body)
     emit('created', conv)
     emit('update:show', false)
   } catch (err: any) {
-    message.error(`创建挑战失败：${err.message || '未知错误'}`)
+    message.error(`创建玩法失败：${err.message || '未知错误'}`)
   } finally {
     creating.value = false
   }
@@ -90,7 +107,7 @@ async function submit() {
   <NModal
     :show="show"
     preset="dialog"
-    title="开始挑战"
+    title="开始玩法"
     :mask-closable="!creating"
     class="create-dialog"
     style="width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
@@ -98,17 +115,22 @@ async function submit() {
   >
     <NSpin :show="challenges.loading">
       <NForm label-placement="top" class="form">
-        <NFormItem label="挑战">
+        <NFormItem label="玩法">
           <NSelect v-model:value="form.challenge_slug" :options="challengeOptions" />
         </NFormItem>
 
         <div v-if="selected" class="challenge-summary">
           <div class="summary-title">
-            <span class="challenge-icon">{{ selected.icon || '◆' }}</span>
             <strong>{{ selected.name }}</strong>
+            <NTag size="small" :bordered="false" type="info">
+              {{ selected.runtime.mode === 'campaign' ? '长期世界' : '单局挑战' }}
+            </NTag>
             <NTag size="small" :bordered="false">v{{ selected.version }}</NTag>
           </div>
           <p>{{ selected.description }}</p>
+          <NTag v-if="!selected.available" size="small" type="error">
+            {{ selected.unavailable_reason || '尚未满足进入条件' }}
+          </NTag>
           <div class="reward-row">
             <NTag
               v-for="reward in selected.reward_overview"
@@ -116,7 +138,7 @@ async function submit() {
               size="small"
               type="warning"
             >
-              {{ reward.ending_title }} {{ reward.multiplier }}
+              {{ reward.outcome_title }}：{{ reward.name }}
             </NTag>
           </div>
         </div>
@@ -132,8 +154,14 @@ async function submit() {
           {{ selected.personas.find((item) => item.slug === form.persona_slug)?.description }}
         </p>
 
-        <NFormItem label="对话标题">
-          <NInput v-model:value="form.title" maxlength="80" placeholder="留空使用默认标题" />
+        <NFormItem :label="selected?.runtime.mode === 'campaign' ? '存档名称' : '对话标题'">
+          <NInput
+            v-model:value="form.title"
+            maxlength="80"
+            :placeholder="
+              selected?.runtime.mode === 'campaign' ? '留空使用玩法名称' : '留空使用默认标题'
+            "
+          />
         </NFormItem>
       </NForm>
     </NSpin>
@@ -141,7 +169,7 @@ async function submit() {
     <template #action>
       <NButton :disabled="creating" @click="emit('update:show', false)">取消</NButton>
       <NButton type="primary" :loading="creating" :disabled="!canCreate" @click="submit">
-        开始挑战
+        {{ selected?.runtime.mode === 'campaign' ? '开始旅程' : '开始试炼' }}
       </NButton>
     </template>
   </NModal>

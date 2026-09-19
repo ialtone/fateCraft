@@ -14,18 +14,21 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
+	"github.com/ialtone/fatecraft/internal/gameplay"
+	"github.com/ialtone/fatecraft/internal/gameplay/campaigngeneric"
+	"github.com/ialtone/fatecraft/internal/gameplay/cultivation"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 var (
-	ErrBuiltinNotFound = errors.New("内置挑战不存在")
-	ErrVersionConflict = errors.New("内置挑战版本冲突")
+	ErrBuiltinNotFound   = errors.New("内置挑战不存在")
+	ErrOverwriteRequired = errors.New("内置内容已存在，请显式确认覆盖")
 )
 
 const (
-	StatusAvailable = "available"
-	StatusImported  = "imported"
-	StatusConflict  = "conflict"
+	StatusAvailable       = "available"
+	StatusImported        = "imported"
+	StatusUpdateAvailable = "update_available"
 )
 
 type ImportResult struct {
@@ -33,6 +36,7 @@ type ImportResult struct {
 	Version     string `json:"version"`
 	ContentHash string `json:"content_hash"`
 	Created     bool   `json:"created"`
+	Overwritten bool   `json:"overwritten"`
 }
 
 type BootstrapResult struct {
@@ -49,15 +53,28 @@ type BuiltinInfo struct {
 	CurrentVersion string `json:"current_version,omitempty"`
 	Status         string `json:"status"`
 	Importable     bool   `json:"importable"`
+	Overwritable   bool   `json:"overwritable"`
 }
 
 type Importer struct {
-	repo    *storage.ChallengeRepository
-	dataDir string
+	repo     *storage.ChallengeRepository
+	dataDir  string
+	registry *gameplay.Registry
 }
 
-func New(repo *storage.ChallengeRepository, dataDir string) *Importer {
-	return &Importer{repo: repo, dataDir: dataDir}
+func New(repo *storage.ChallengeRepository, dataDir string, registries ...*gameplay.Registry) *Importer {
+	registry := defaultRegistry()
+	if len(registries) > 0 && registries[0] != nil {
+		registry = registries[0]
+	}
+	return &Importer{repo: repo, dataDir: dataDir, registry: registry}
+}
+
+func defaultRegistry() *gameplay.Registry {
+	registry := gameplay.NewCoreRegistry()
+	campaigngeneric.Register(registry)
+	cultivation.Register(registry)
+	return registry
 }
 
 // BootstrapBuiltins is the startup policy: import every bundled challenge in
@@ -75,7 +92,7 @@ func (i *Importer) BootstrapBuiltins(ctx context.Context) (*BootstrapResult, err
 		if count > 0 {
 			return nil
 		}
-		imports, err := New(tx, i.dataDir).importBuiltins(ctx)
+		imports, err := New(tx, i.dataDir, i.registry).importBuiltins(ctx)
 		if err != nil {
 			return err
 		}
@@ -95,7 +112,7 @@ func (i *Importer) ImportBuiltins(ctx context.Context) ([]ImportResult, error) {
 	var results []ImportResult
 	err := i.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
 		var err error
-		results, err = New(tx, i.dataDir).importBuiltins(ctx)
+		results, err = New(tx, i.dataDir, i.registry).importBuiltins(ctx)
 		return err
 	})
 	return results, err
@@ -106,7 +123,7 @@ func (i *Importer) ImportDirectory(ctx context.Context, directory string) (*Impo
 	var result *ImportResult
 	err := i.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
 		var err error
-		result, err = New(tx, i.dataDir).importDirectory(ctx, directory)
+		result, err = New(tx, i.dataDir, i.registry).importDirectory(ctx, directory, false)
 		return err
 	})
 	return result, err
@@ -115,6 +132,16 @@ func (i *Importer) ImportDirectory(ctx context.Context, directory string) (*Impo
 // ImportBuiltin imports one repository-maintained challenge selected by slug.
 // The caller cannot supply a filesystem path.
 func (i *Importer) ImportBuiltin(ctx context.Context, slug string) (*ImportResult, error) {
+	return i.importBuiltin(ctx, slug, false)
+}
+
+// OverwriteBuiltin explicitly replaces or reactivates the repository version.
+// Runtime callers cannot supply content or a filesystem path.
+func (i *Importer) OverwriteBuiltin(ctx context.Context, slug string) (*ImportResult, error) {
+	return i.importBuiltin(ctx, slug, true)
+}
+
+func (i *Importer) importBuiltin(ctx context.Context, slug string, overwrite bool) (*ImportResult, error) {
 	directory, err := i.directoryBySlug(slug)
 	if err != nil {
 		return nil, err
@@ -122,7 +149,7 @@ func (i *Importer) ImportBuiltin(ctx context.Context, slug string) (*ImportResul
 	var result *ImportResult
 	err = i.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
 		var importErr error
-		result, importErr = New(tx, i.dataDir).importDirectory(ctx, directory)
+		result, importErr = New(tx, i.dataDir, i.registry).importDirectory(ctx, directory, overwrite)
 		if importErr != nil {
 			return importErr
 		}
@@ -143,7 +170,7 @@ func (i *Importer) ListBuiltins(ctx context.Context) ([]BuiltinInfo, error) {
 	}
 	items := make([]BuiltinInfo, 0, len(directories))
 	for _, directory := range directories {
-		loaded, err := loadDirectory(directory, time.Now())
+		loaded, err := loadDirectory(directory, time.Now(), i.registry)
 		if err != nil {
 			return nil, fmt.Errorf("读取 %s: %w", directory, err)
 		}
@@ -163,7 +190,7 @@ func (i *Importer) importBuiltins(ctx context.Context) ([]ImportResult, error) {
 	}
 	results := make([]ImportResult, 0, len(directories))
 	for _, directory := range directories {
-		result, err := i.importDirectory(ctx, directory)
+		result, err := i.importDirectory(ctx, directory, false)
 		if err != nil {
 			return nil, fmt.Errorf("导入 %s: %w", directory, err)
 		}
@@ -178,7 +205,7 @@ func (i *Importer) directoryBySlug(slug string) (string, error) {
 		return "", err
 	}
 	for _, directory := range directories {
-		loaded, err := loadDirectory(directory, time.Now())
+		loaded, err := loadDirectory(directory, time.Now(), i.registry)
 		if err != nil {
 			return "", fmt.Errorf("读取 %s: %w", directory, err)
 		}
@@ -193,45 +220,55 @@ func (i *Importer) builtinInfo(ctx context.Context, loaded *loadedChallenge) (Bu
 	info := BuiltinInfo{
 		Slug: loaded.manifest.ID, Name: loaded.manifest.Name,
 		Description: loaded.manifest.Description, Version: loaded.manifest.Version,
-		ContentHash: loaded.hash, Status: StatusAvailable, Importable: true,
+		ContentHash: loaded.hash,
 	}
 	pack, err := i.repo.GetPackBySlug(ctx, loaded.manifest.ID)
 	if errors.Is(err, storage.ErrNotFound) {
+		info.Status = StatusAvailable
+		info.Importable = true
 		return info, nil
 	}
 	if err != nil {
 		return BuiltinInfo{}, err
 	}
-	currentVersion := ""
+	var current *storage.ChallengeVersion
 	if pack.CurrentVersionID != nil {
-		current, err := i.repo.GetVersion(ctx, *pack.CurrentVersionID)
+		current, err = i.repo.GetVersion(ctx, *pack.CurrentVersionID)
 		if err != nil {
 			return BuiltinInfo{}, err
 		}
 		info.CurrentVersion = current.Version
-		currentVersion = current.Version
 	}
 	existing, err := i.repo.VersionByNumber(ctx, pack.ID, loaded.manifest.Version)
 	if errors.Is(err, storage.ErrNotFound) {
-		if currentVersion != "" {
-			comparison, compareErr := compareStableVersions(loaded.manifest.Version, currentVersion)
-			if compareErr != nil || comparison <= 0 {
-				info.Status = StatusConflict
-				info.Importable = false
-			}
-		}
-		return info, nil
-	}
-	if err != nil {
+		existing = nil
+	} else if err != nil {
 		return BuiltinInfo{}, err
 	}
-	info.Importable = false
-	if existing.Status == storage.ChallengeVersionPublished && existing.ContentHash == loaded.hash {
-		info.Status = StatusImported
-	} else {
-		info.Status = StatusConflict
-	}
+	info.Status, info.Importable, info.Overwritable = classifyBuiltin(
+		loaded.manifest.Version, loaded.hash, current, existing,
+	)
 	return info, nil
+}
+
+func classifyBuiltin(
+	sourceVersion, sourceHash string,
+	current, existing *storage.ChallengeVersion,
+) (status string, importable, overwritable bool) {
+	if current == nil && existing == nil {
+		return StatusAvailable, true, false
+	}
+	if current != nil && current.Status == storage.ChallengeVersionPublished &&
+		current.Version == sourceVersion && current.ContentHash == sourceHash {
+		return StatusImported, false, false
+	}
+	if current != nil && existing == nil {
+		comparison, err := compareStableVersions(sourceVersion, current.Version)
+		if err == nil && comparison > 0 {
+			return StatusAvailable, true, false
+		}
+	}
+	return StatusUpdateAvailable, false, true
 }
 
 func builtinDirectories(dataDir string) ([]string, error) {
@@ -253,14 +290,33 @@ func builtinDirectories(dataDir string) ([]string, error) {
 	return directories, nil
 }
 
-func (i *Importer) importDirectory(ctx context.Context, directory string) (*ImportResult, error) {
+func (i *Importer) importDirectory(ctx context.Context, directory string, overwrite bool) (*ImportResult, error) {
 	now := time.Now()
-	loaded, err := loadDirectory(directory, now)
+	loaded, err := loadDirectory(directory, now, i.registry)
 	if err != nil {
 		return nil, err
 	}
 	manifest := loaded.manifest
 	document := loaded.document
+
+	// 奖励定义是跨玩法共享的实体。导入时按稳定 key 精确复用，
+	// 再把规则中的临时 UUID 替换成数据库中的真实 UUID。
+	definitionIDs := make(map[string]uuid.UUID, len(loaded.rewards))
+	for index := range loaded.rewards {
+		definition, err := i.repo.Rewards().UpsertDefinitionExact(ctx, &loaded.rewards[index])
+		if err != nil {
+			return nil, fmt.Errorf("导入奖励定义 %s: %w", loaded.rewards[index].Key, err)
+		}
+		definitionIDs[definition.Key] = definition.ID
+	}
+	for index := range document.RewardRules {
+		key := stringFromJSONMap(document.RewardRules[index].PublicSnapshot, "key")
+		definitionID, ok := definitionIDs[key]
+		if !ok {
+			return nil, fmt.Errorf("奖励规则引用了未导入的定义 %s", key)
+		}
+		document.RewardRules[index].RewardDefinitionID = definitionID
+	}
 
 	pack, err := i.repo.GetPackBySlug(ctx, manifest.ID)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -278,25 +334,52 @@ func (i *Importer) importDirectory(ctx context.Context, directory string) (*Impo
 	}
 
 	existing, err := i.repo.VersionByNumber(ctx, pack.ID, manifest.Version)
-	if err == nil {
-		if existing.Status == storage.ChallengeVersionPublished && existing.ContentHash == loaded.hash {
-			return &ImportResult{
-				Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash,
-			}, nil
-		}
-		return nil, fmt.Errorf("%w: 挑战 %s/%s 已存在且内容不同，必须使用新版本号", ErrVersionConflict, pack.Slug, manifest.Version)
-	}
-	if !errors.Is(err, storage.ErrNotFound) {
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
-	if pack.CurrentVersionID != nil {
+	if errors.Is(err, storage.ErrNotFound) {
+		existing = nil
+	}
+	if existing != nil && existing.Status == storage.ChallengeVersionPublished &&
+		existing.ContentHash == loaded.hash && pack.CurrentVersionID != nil &&
+		*pack.CurrentVersionID == existing.ID {
+		return &ImportResult{
+			Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash,
+		}, nil
+	}
+	if existing != nil && !overwrite {
+		return nil, fmt.Errorf("%w: 挑战 %s/%s 已存在", ErrOverwriteRequired, pack.Slug, manifest.Version)
+	}
+	if existing == nil && pack.CurrentVersionID != nil {
 		current, err := i.repo.GetVersion(ctx, *pack.CurrentVersionID)
 		if err != nil {
 			return nil, err
 		}
 		comparison, err := compareStableVersions(manifest.Version, current.Version)
 		if err != nil || comparison <= 0 {
-			return nil, fmt.Errorf("%w: 仓库版本 %s 不高于数据库当前版本 %s", ErrVersionConflict, manifest.Version, current.Version)
+			return nil, fmt.Errorf("%w: 仓库版本 %s 不高于数据库当前版本 %s；更新已使用内容必须提升版本号", ErrOverwriteRequired, manifest.Version, current.Version)
+		}
+	}
+
+	pack.Name = manifest.Name
+	pack.Description = manifest.Description
+	pack.UpdatedAt = now
+	if err := i.repo.SavePack(ctx, pack); err != nil {
+		return nil, err
+	}
+	overwritten := overwrite && pack.CurrentVersionID != nil
+	if existing != nil {
+		overwritten = true
+		if existing.Status == storage.ChallengeVersionPublished && existing.ContentHash == loaded.hash {
+			if err := i.repo.ActivatePublishedVersion(ctx, pack.ID, existing.ID); err != nil {
+				return nil, err
+			}
+			return &ImportResult{
+				Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash, Overwritten: true,
+			}, nil
+		}
+		if err := i.repo.DeleteVersionIfUnused(ctx, existing.ID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -311,21 +394,24 @@ func (i *Importer) importDirectory(ctx context.Context, directory string) (*Impo
 	for index := range document.RewardRules {
 		document.RewardRules[index].ChallengeVersionID = version.ID
 	}
-	pack.Name = manifest.Name
-	pack.Description = manifest.Description
-	pack.UpdatedAt = now
-	if err := i.repo.SavePack(ctx, pack); err != nil {
+	if err := i.repo.CreateDraftWithContent(
+		ctx, version, document.Runtime, document.Assets, document.Definitions, document.Outcomes, document.RewardRules,
+	); err != nil {
 		return nil, err
 	}
-	if err := i.repo.CreateDraftWithContent(ctx, version, document.Assets, document.RewardRules); err != nil {
-		return nil, err
-	}
-	published, err := challenge.NewService(i.repo).Publish(ctx, version.ID, uuid.Nil)
+	published, err := challenge.NewService(i.repo, i.registry).Publish(ctx, version.ID, uuid.Nil)
 	if err != nil {
 		return nil, err
 	}
 	return &ImportResult{
 		Slug: pack.Slug, Version: published.Version.Version,
-		ContentHash: published.Version.ContentHash, Created: true,
+		ContentHash: published.Version.ContentHash, Created: true, Overwritten: overwritten,
 	}, nil
+}
+
+func stringFromJSONMap(values storage.JSONMap, key string) string {
+	if value, ok := values[key].(string); ok {
+		return value
+	}
+	return ""
 }

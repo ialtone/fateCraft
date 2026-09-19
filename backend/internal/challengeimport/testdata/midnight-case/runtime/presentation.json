@@ -1,0 +1,44 @@
+{
+  "presentation": {
+    "state_panel_title": "调查进展",
+    "state_sections": [
+      {
+        "key": "case-progress",
+        "title": "案件",
+        "order": 10,
+        "fields": [
+          {
+            "path": "investigation.clue_integrity",
+            "label": "线索完整度",
+            "widget": "progress",
+            "unit": "%",
+            "order": 10
+          },
+          {
+            "path": "investigation.suspect",
+            "label": "当前嫌疑人",
+            "widget": "text",
+            "order": 20
+          },
+          {
+            "path": "investigation.remaining_minutes",
+            "label": "剩余时间",
+            "widget": "number",
+            "unit": "分钟",
+            "order": 30
+          }
+        ]
+      }
+    ],
+    "completion_view": {
+      "replay_label": "重新调查",
+      "back_label": "返回案件",
+      "empty_reward_text": "本次没有获得调查奖励"
+    },
+    "terminology": {
+      "challenge": "案件",
+      "outcome": "结案结果",
+      "reward": "调查奖励"
+    }
+  }
+}

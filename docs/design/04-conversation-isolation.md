@@ -11,7 +11,7 @@
 - `challenge_hash`：该版本内容哈希。
 - `character_asset_id`、`persona_asset_id`、`scenario_asset_id`：本局固定资产。
 
-消息、展示消息、状态、状态修订、摘要、上下文日志、判定流水和结算流水都通过 `conversation_id` 归属对话。
+回合、生成 attempt、消息、展示消息、状态、状态修订、长期记忆、Memory job、角色询问、上下文日志、判定流水和结算流水都通过 `conversation_id` 归属对话。
 
 ## 身份传播
 
@@ -30,7 +30,7 @@
 2. 比较 `conversation.player_id` 和当前身份。
 3. 不匹配时返回 `storage.ErrNotFound`。
 
-返回 404 而不是 403，是为了避免泄漏某个 UUID 是否真实存在。消息、摘要、状态、上下文和 WebSocket 在执行自身操作前，都必须直接或间接通过同一归属检查。
+返回 404 而不是 403，是为了避免泄漏某个 UUID 是否真实存在。消息、状态、角色询问、上下文和 WebSocket 在执行自身操作前，都必须直接或间接通过同一归属检查。Memory 没有普通玩家 API，由内部仓储始终按 conversation 工作。
 
 列表查询必须在 SQL 中带 `player_id` 条件，不能先读取全量再由前端过滤。
 
@@ -53,7 +53,7 @@ active/ended/archived -- soft delete --> deleted
 - `archived` 只由未结束的 active 对话产生，因此可以恢复。
 - `ended` 是终态，不允许归档后再恢复。
 - `deleted` 默认不出现在列表中，不提供普通恢复流程。
-- 结算会把状态设为 `ended`，写入 `ended_at` 并释放生成锁。
+- 结算会把状态设为 `ended`，写入 `ended_at`；正在运行的生成由生命周期事务标记为取消请求，待拥有该运行的 Worker 退出后才释放兼容状态。
 
 手动结束不等于挑战成功，不会写入 `challenge_run` 或发放奖励。
 
@@ -77,18 +77,24 @@ active/ended/archived -- soft delete --> deleted
 
 - 管理员发布 `1.1.0` 后，已存在的 `1.0.0` 对话仍加载 `1.0.0`。
 - 运行时允许加载 published 或 retired 的固定版本。
-- 每次装配 Bundle 都重算 Manifest、资产和奖励规则哈希。
+- 每个 attempt 首次装配时校验并缓存固定 Bundle；同一 attempt 的后续步骤复用该不可变 Bundle，状态、Campaign Projection、世界书激活和工具快照仍按步骤读取最新权威数据。
 - 版本状态不可用、记录哈希不匹配或对话哈希不匹配时停止生成。
 
 这样可以避免进行中的挑战因管理员更新内容而改变规则，也能发现直接修改数据库 JSON 的行为。
 
 ## 并发控制
 
-### 生成锁
+### Durable generation run
 
-`conversations.is_processing` 是对话级生成锁。抢锁使用带条件的原子 UPDATE，只有从 `false` 改为 `true` 的请求可以开始生成。完成、失败或取消后释放锁；服务启动时还会清理进程异常退出留下的锁。
+`conversation_generation_runs` 是生成所有权的唯一权威：每次可写生成先在锁定的 conversation 行内创建一个 `running` run，部分唯一索引保证同一对话最多一个 `running/cancel_requested` run。所有生成写入都携带 `run_id`，并在事务边界重新确认 run 仍为当前 active owner；旧任务、取消任务或生命周期已改变的任务不能继续写入消息、状态、Campaign 事实或释放新任务。
 
-生成锁只解决同一对话重复生成，不替代所有权与 active 状态检查。
+`conversations.is_processing` 仅保留为兼容性的派生忙碌指示，不参与所有权判断。完成、失败或取消只允许结束自己持有的 run。run 记录 `owner_instance_id` 与 `lease_expires_at`：生成期间持有方每 30s 心跳续期（租约 2 分钟有效），续期失败即中止本轮；新的生成请求遇到已过期的 run 会直接抢占。回收器在启动时及每 30s 把本实例遗留的、以及任何实例上已过期的 run 标记为 `abandoned/lease_expired`，再清理该派生指示；其他实例仍在心跳的 run 不受影响。
+
+每个生成请求还保存客户端提供的 `request_id`、操作类型、目标消息和 payload hash。`request_id` 全局唯一：同一请求重试只返回原 run 的回放状态，不能再次调用模型、扣奖励或替换分支；同一 ID 改变操作、目标或正文会返回冲突。新的 `request_id` 才是一次新的业务重试，仍须重新通过 active、回合能力和奖励校验。
+
+重新生成与编辑改写都在 durable run 已获取后执行原子分支事务。事务在 conversation 行锁内固定目标回合，校验当前回合和平台策略，消费平台统一的改写额度，恢复可信状态，递增 `branch_epoch`，失效旧 turn/message/memory，并创建替代 turn、attempt 和触发消息；任一步失败都回滚，旧分支仍可读。所有 Worker 写入同时校验 run、attempt、turn 和 branch epoch，旧任务即使晚退出也不能污染新分支。
+
+结束、归档和软删除先在数据库事务中切换生命周期并标记运行取消，再由内存协调器取消 context、等待 Worker 退出。恢复 active 时如果仍有 active run 会返回冲突。
 
 ### 状态更新
 
@@ -106,14 +112,21 @@ WebSocket 握手先经过会话认证。生成器开始工作前再次读取并�
 
 ## 删除语义
 
-当前删除是软删除，只修改对话状态与 `deleted_at`。关联消息和状态仍保留，用于一致性和后续审计。数据库外键的 `ON DELETE CASCADE` 只在未来执行物理删除时生效。
+当前删除是软删除，只修改对话状态与 `deleted_at`。关联回合、消息、状态、Memory 和询问仍保留，用于一致性和后续审计。分支改写同样通过 `invalidated_at` 让旧分支退出有效历史，不物理删除证据。数据库外键的 `ON DELETE CASCADE` 只在运维明确物理删除根记录时生效。
 
 ## 安全回归清单
 
-- 使用 A 用户 Cookie 请求 B 用户对话、消息、摘要和上下文，均返回 404。
+- 使用 A 用户 Cookie 请求 B 用户对话、消息、角色询问和上下文，均返回 404。
 - 直接连接 B 用户 WebSocket 被拒绝。
 - archived 对话可以恢复，ended 对话不能恢复。
-- 同一 active 对话同时发送两个生成请求，只有一个获得生成锁。
+- 同一 active 对话同时发送两个生成请求，只有一个获得 durable generation run；旧 run 结束不能清除新 run 的忙碌状态。
 - 发布新版本不会改变旧对话的 Bundle。
 - 修改已发布 JSON 后，旧对话和新建对话都不能继续使用损坏版本。
 - 两个并发成功结局只产生一条结算流水。
+## 公开分享隔离
+
+`conversation_shares` 是私有对话之外唯一允许匿名读取的数据边界。创建分享时，后端在同一事务内锁定来源对话，验证所有权、空闲状态、当前有效分支和连续范围，再通过字段允许列表生成版本化 JSON 快照。公共接口只按签名 token 读取这一行，不 join 用户、对话、消息、状态、Memory 或 Campaign 表。
+
+分享 token 是 `v1.<share_id>.<HMAC-SHA256>`，数据库只保存 share ID 和快照，不保存可直接访问的 bearer token。快照不包含来源对话 ID、用户 ID或原消息 ID；所有者列表中的内部定位字段仅由已认证接口返回。后续分支替换不会修改旧快照，重新发布会在同一事务中创建新快照并撤销旧链接。
+
+对话进入 `deleted` 状态时，生命周期事务同步撤销其全部 active 分享，避免出现对话已删除但公开链接仍可读取的中间状态。账号物理删除由外键级联删除分享。ended/archived 不自动撤销已经主动发布的快照。

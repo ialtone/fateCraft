@@ -1,0 +1,16 @@
+{
+  "$schema": "fatecraft.runtime.schema.json",
+  "runtime_contract_version": 2,
+  "engine": {
+    "key": "cultivation.campaign",
+    "version": 1
+  },
+  "mode": "campaign",
+  "includes": {
+    "campaign": "campaign.json",
+    "state_schema": "state-schema.json",
+    "actions": "actions.json",
+    "settlement": "settlement.json",
+    "presentation": "presentation.json"
+  }
+}

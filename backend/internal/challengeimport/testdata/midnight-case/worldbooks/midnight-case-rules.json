@@ -1,0 +1,20 @@
+{
+  "id": "midnight-case-rules",
+  "name": "午夜疑案规则",
+  "description": "调查时限、证据和指控规则。",
+  "entries": [
+    {
+      "id": "midnight-evidence",
+      "world_book_id": "midnight-case-rules",
+      "title": "证据规则",
+      "content": "检查、封存、交叉验证会提高线索完整度；污染现场或无依据指控会降低完整度。最终指控必须发起 key 为 investigation.final-accusation 的判定。",
+      "keywords": ["证据", "线索", "指控", "嫌疑人"],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "notes": "通用玩法验收规则",
+      "metadata": {}
+    }
+  ]
+}

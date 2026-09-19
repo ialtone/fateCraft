@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { LogOutOutline } from '@vicons/ionicons5'
+import { GiftOutline, LogOutOutline } from '@vicons/ionicons5'
 import {
   NAvatar,
   NButton,
@@ -13,21 +13,29 @@ import {
 } from 'naive-ui'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useThemeStore } from '@/stores/theme'
-import { useAccountStore } from '@/stores/account'
+import { useRewardStore } from '@/stores/rewards'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const theme = useThemeStore()
-const account = useAccountStore()
+const rewards = useRewardStore()
 const auth = useAuthStore()
 
 // 主对话页使用全屏三栏布局，不显示顶部导航。
 const isConversation = computed(() => route.name === 'conversation')
 const isAuthPage = computed(() => route.name === 'login')
+const isSharedPage = computed(
+  () => route.name === 'shared-conversation' || route.name === 'shared-conversation-client',
+)
 
 const navs = computed(() => [
-  { to: '/', label: '挑战' },
+  {
+    to: '/',
+    label: '我的对话',
+    active: route.name === 'conversations' || route.name === 'shares',
+  },
+  { to: '/rewards', label: '奖励' },
   { to: '/settings', label: '设置' },
   ...(auth.isAdmin ? [{ to: '/admin', label: '管理' }] : []),
 ])
@@ -37,8 +45,8 @@ onMounted(() => {
   watch(
     () => auth.user,
     (user) => {
-      if (user) account.load().catch(() => {})
-      else account.reset()
+      if (user) rewards.load().catch(() => {})
+      else rewards.reset()
     },
     { immediate: true },
   )
@@ -59,29 +67,41 @@ async function logout() {
     <NMessageProvider placement="top">
       <NDialogProvider>
         <div class="app">
-          <header v-if="!isConversation && !isAuthPage" class="topnav">
+          <header v-if="!isConversation && !isAuthPage && !isSharedPage" class="topnav">
             <RouterLink to="/" class="brand">
               <span class="lantern" aria-hidden="true"></span>
               <span class="brand-cn">命运茶馆</span>
               <span class="brand-en">Fatecraft</span>
             </RouterLink>
             <nav class="links">
-              <RouterLink v-for="n in navs" :key="n.to" :to="n.to" class="nav-link">
+              <RouterLink
+                v-for="n in navs"
+                :key="n.to"
+                :to="n.to"
+                class="nav-link"
+                :class="{ 'section-active': n.active }"
+              >
                 {{ n.label }}
               </RouterLink>
             </nav>
             <div class="nav-right">
-              <!-- 未加载完成时显示加载态，不展示假数据 -->
-              <div v-if="account.loaded" class="account-brief">
-                <span class="stat-item" title="累计灵石">
-                  <span class="stat-icon">💎</span>
-                  <span class="stat-value">{{ account.totalSpiritStones.toLocaleString() }}</span>
+              <RouterLink
+                v-if="rewards.loaded"
+                to="/rewards"
+                class="account-brief"
+                aria-label="查看我的奖励"
+              >
+                <span
+                  v-for="item in rewards.featured.slice(0, 2)"
+                  :key="item.definition.key"
+                  class="stat-item"
+                  :title="item.definition.description || item.definition.name"
+                >
+                  <NIcon class="stat-icon" :component="GiftOutline" />
+                  <span class="stat-name">{{ item.definition.name }}</span>
+                  <span class="stat-value">{{ item.balance.toLocaleString() }}</span>
                 </span>
-                <span class="stat-item" title="剩余天道回溯">
-                  <span class="stat-icon">🔄</span>
-                  <span class="stat-value">{{ account.rewindCount }}</span>
-                </span>
-              </div>
+              </RouterLink>
               <div v-if="auth.user" class="user-brief">
                 <NAvatar v-if="auth.user.avatar_url" round :size="28" :src="auth.user.avatar_url" />
                 <span class="user-name">{{ auth.user.display_name }}</span>
@@ -99,7 +119,7 @@ async function logout() {
               <ThemeToggle />
             </div>
           </header>
-          <main :class="{ full: isConversation, 'auth-main': isAuthPage }">
+          <main :class="{ full: isConversation || isSharedPage, 'auth-main': isAuthPage }">
             <RouterView />
           </main>
         </div>
@@ -192,11 +212,13 @@ async function logout() {
   color: var(--text);
 }
 
-.nav-link.router-link-exact-active {
+.nav-link.router-link-exact-active,
+.nav-link.section-active {
   color: var(--accent);
 }
 
-.nav-link.router-link-exact-active::after {
+.nav-link.router-link-exact-active::after,
+.nav-link.section-active::after {
   width: calc(100% - 24px);
 }
 
@@ -251,8 +273,11 @@ async function logout() {
   line-height: 1;
 }
 
+.stat-name {
+  color: var(--text-dim);
+}
+
 .stat-value {
-  font-family: 'Courier New', Consolas, monospace;
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.5px;
