@@ -53,7 +53,10 @@ func main() {
 	defer func() { _ = logger.Sync() }()
 
 	// 只连接数据库；表结构由 scripts/sql/init.sql 唯一维护。
-	db, err := storage.Open(cfg.DatabaseURL)
+	db, err := storage.Open(cfg.DatabaseURL, storage.DBPoolConfig{
+		MaxOpenConns: cfg.DBMaxOpenConns, MaxIdleConns: cfg.DBMaxIdleConns,
+		ConnMaxLifetime: cfg.DBConnMaxLifetime, ConnMaxIdleTime: cfg.DBConnMaxIdleTime,
+	})
 	if err != nil {
 		logger.Fatal("数据库连接失败", zap.Error(err))
 	}
@@ -69,6 +72,7 @@ func main() {
 	settingsRepo := storage.NewSettingsRepo(db)
 	systemSettingsRepo := storage.NewSystemSettingsRepo(db)
 	llmRequestLogRepo := storage.NewLLMRequestLogRepo(db)
+	diagnosticLogRepo := storage.NewDiagnosticLogRepo(db)
 	rewardRepo := storage.NewRewardRepository(db)
 	authRepo := storage.NewAuthRepository(db)
 	challengeRepo := storage.NewChallengeRepository(db)
@@ -287,6 +291,42 @@ func main() {
 	workerCtx, stopWorker := context.WithCancel(rootCtx)
 	go memoryWorker.Run(workerCtx)
 	memoryWorker.Wake()
+	// 诊断日志清理受管理员开关控制。每小时只处理有限批次，避免与在线
+	// 请求争抢数据库；分享治理审计不属于这项短期诊断数据。
+	go func() {
+		cleanup := func() {
+			cleanupCtx, cancel := context.WithTimeout(workerCtx, 45*time.Second)
+			defer cancel()
+			settings, err := systemSettingsRepo.Get(cleanupCtx)
+			if err != nil {
+				logger.Warn("读取诊断日志清理设置失败", zap.Error(err))
+				return
+			}
+			if !settings.DiagnosticLogCleanupEnabled {
+				return
+			}
+			cutoff := time.Now().UTC().AddDate(0, 0, -settings.DiagnosticLogRetentionDays)
+			result, err := diagnosticLogRepo.CleanupExpired(cleanupCtx, cutoff, 500, 20)
+			if err != nil {
+				logger.Warn("清理过期诊断日志失败", zap.Error(err))
+				return
+			}
+			if result.LLMRequests+result.ContextBuilds > 0 {
+				logger.Info("已清理过期诊断日志", zap.Int64("llm_request_logs", result.LLMRequests), zap.Int64("context_build_logs", result.ContextBuilds))
+			}
+		}
+		cleanup()
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-workerCtx.Done():
+				return
+			case <-ticker.C:
+				cleanup()
+			}
+		}
+	}()
 	// 租约回收器：周期略短于租约时长，保证死实例持有的对话最多在一个租约周期内解锁。
 	go func() {
 		ticker := time.NewTicker(storage.GenerationHeartbeatInterval)

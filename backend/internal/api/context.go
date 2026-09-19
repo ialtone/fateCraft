@@ -28,12 +28,12 @@ type playerContextBuildSummary struct {
 	CreatedAt                time.Time `json:"created_at"`
 }
 
-func summarizePlayerContextBuild(log *storage.ContextBuildLog) playerContextBuildSummary {
+func summarizePlayerContextBuild(log *storage.ContextBuildSummary) playerContextBuildSummary {
 	return playerContextBuildSummary{
 		ID: log.ID, ConversationID: log.ConversationID, Model: log.Model,
 		MaxContextTokens: log.MaxContextTokens, ReservedResponseTokens: log.ReservedResponseTokens,
-		UsedPromptTokens: log.UsedPromptTokens, IncludedMessageCount: len(log.IncludedMessageIDs),
-		ActivatedWorldEntryCount: len(log.ActivatedWorldEntryIDs), MemoryLag: log.MemoryLag,
+		UsedPromptTokens: log.UsedPromptTokens, IncludedMessageCount: log.IncludedMessageCount,
+		ActivatedWorldEntryCount: log.ActivatedWorldEntryCount, MemoryLag: log.MemoryLag,
 		OmittedTurnFrom: log.OmittedTurnFrom, OmittedTurnUntil: log.OmittedTurnUntil, CreatedAt: log.CreatedAt,
 	}
 }
@@ -51,7 +51,7 @@ func (s *Server) lastContext(c *gin.Context) {
 	respondLastContext(c, log, err)
 }
 
-func respondLastContext(c *gin.Context, log *storage.ContextBuildLog, err error) {
+func respondLastContext(c *gin.Context, log *storage.ContextBuildSummary, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
 		c.Status(http.StatusNoContent)
 		return
@@ -74,7 +74,7 @@ func (s *Server) getContext(c *gin.Context) {
 	if !ok {
 		return
 	}
-	log, err := s.ctxLogs.Get(c.Request.Context(), id)
+	log, err := s.ctxLogs.GetSummary(c.Request.Context(), id)
 	if err != nil {
 		fail(c, err)
 		return

@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NButton,
   NEmpty,
   NIcon,
   NInput,
-  NPagination,
   NSelect,
   NSpin,
   NTag,
@@ -30,8 +29,8 @@ const dialog = useDialog()
 const message = useMessage()
 const loading = ref(false)
 const shares = ref<ConversationShare[]>([])
-const total = ref(0)
-const page = ref(1)
+const nextCursor = ref('')
+const hasMore = ref(false)
 const pageSize = 20
 const status = ref('')
 const searchInput = ref('')
@@ -57,25 +56,21 @@ const statusPresentation: Record<
   moderated: { label: '已下架', type: 'error' },
 }
 
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
-
 onMounted(() => load())
 
-async function load() {
+async function load(append = false) {
+  if (loading.value) return
   loading.value = true
   try {
     const result = await sharesApi.listOwned({
       status: status.value || undefined,
       search: search.value || undefined,
-      page: page.value,
+      cursor: append ? nextCursor.value || undefined : undefined,
       page_size: pageSize,
     })
-    shares.value = result.shares
-    total.value = result.total
-    if (page.value > pageCount.value) {
-      page.value = pageCount.value
-      await load()
-    }
+    shares.value = append ? [...shares.value, ...result.shares] : result.shares
+    nextCursor.value = result.next_cursor || ''
+    hasMore.value = result.has_more
   } catch (error: any) {
     message.error(error?.message || '加载分享记录失败')
   } finally {
@@ -85,17 +80,12 @@ async function load() {
 
 function applyFilters() {
   search.value = searchInput.value.trim()
-  page.value = 1
+  nextCursor.value = ''
   void load()
 }
 
 function changeStatus() {
-  page.value = 1
-  void load()
-}
-
-function changePage(next: number) {
-  page.value = next
+  nextCursor.value = ''
   void load()
 }
 
@@ -167,7 +157,7 @@ const fmt = (value: string) => new Date(value).toLocaleString('zh-CN')
         <template #prefix><NIcon :component="SearchOutline" /></template>
       </NInput>
       <NButton @click="applyFilters">搜索</NButton>
-      <NButton quaternary circle aria-label="刷新分享列表" @click="load">
+      <NButton quaternary circle aria-label="刷新分享列表" @click="load()">
         <template #icon><NIcon :component="RefreshOutline" /></template>
       </NButton>
     </div>
@@ -230,13 +220,9 @@ const fmt = (value: string) => new Date(value).toLocaleString('zh-CN')
       </article>
     </section>
 
-    <NPagination
-      v-if="total > pageSize"
-      class="pagination"
-      :page="page"
-      :page-count="pageCount"
-      @update:page="changePage"
-    />
+    <div v-if="hasMore" class="pagination">
+      <NButton :loading="loading" @click="load(true)">加载更多</NButton>
+    </div>
 
     <ConversationShareDialog
       v-if="replacement"

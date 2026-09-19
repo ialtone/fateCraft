@@ -130,6 +130,10 @@ SHARE_LINK_SIGNING_KEY=replace-with-an-independent-stable-secret-at-least-32-cha
 | 变量                                             | 说明                                                                                                     |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | <code>DATABASE_URL</code>                        | PostgreSQL 连接串，支持外部数据库或 NAS                                                                  |
+| <code>DB_MAX_OPEN_CONNS</code>                   | 单个后端实例最大数据库连接数，默认 10；多实例部署时需汇总计算                                            |
+| <code>DB_MAX_IDLE_CONNS</code>                   | 单个后端实例最大空闲数据库连接数，默认 3                                                                 |
+| <code>DB_CONN_MAX_LIFETIME</code>                | 数据库连接最长复用时间，默认 `30m`                                                                       |
+| <code>DB_CONN_MAX_IDLE_TIME</code>               | 数据库空闲连接回收时间，默认 `5m`                                                                        |
 | <code>DATA_DIR</code>                            | <code>roll_config.yaml</code> 与内置玩法材料目录；从 <code>backend</code> 启动时默认是 <code>data</code> |
 | <code>AUTH_DATA_ENCRYPTION_KEY</code>            | 加密 LLM API Key 和 SMTP 密码；至少 32 字符，投入使用后不得随意更换                                      |
 | <code>SHARE_LINK_SIGNING_KEY</code>              | 签发公开分享链接；至少 32 字符，必须与数据加密密钥独立，轮换会让既有链接失效                              |
@@ -293,9 +297,9 @@ LinuxDo 回调地址示例：
 
 管理员可以开启详细 LLM 日志。开启后，<code>llm_request_logs</code> 会保存请求体、供应商原始响应、解析后的文本、状态码、耗时、模型、协议结果和关联的 conversation / attempt / memory / inquiry 标识；认证头和 API Key 不会写入。
 
-详细日志默认关闭，因为其中仍可能包含技术 Prompt、世界书、玩家文本和模型推理载荷。生产环境应按故障排查需要临时开启，并自行制定访问、保留和清理策略。
+详细日志默认关闭，因为其中仍可能包含技术 Prompt、世界书、玩家文本和模型推理载荷。生产环境应按故障排查需要临时开启。
 
-<code>context_build_logs</code> 独立记录每次上下文装配的 token 预算、分段、选入消息、世界书命中和记忆覆盖情况。两个日志入口均仅对管理员开放。
+<code>context_build_logs</code> 独立记录每次上下文装配的 token 预算、分段、选入消息、世界书命中和记忆覆盖情况。两个日志入口均仅对管理员开放。管理员可独立启用诊断日志自动清理并设置 1-3650 天保留期；默认启用并保留 30 天。清理每小时以有限批次执行，不处理分享治理审计记录。
 
 ## Docker
 

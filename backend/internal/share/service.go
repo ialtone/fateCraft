@@ -3,6 +3,7 @@ package share
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -127,7 +128,12 @@ func (s *Service) buildShare(input CreateInput, expiresAt *time.Time) storage.Sh
 	}
 }
 
-func (s *Service) ListOwned(ctx context.Context, playerID, status, search string, page, pageSize int) (*OwnedPage, error) {
+type ownedCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func (s *Service) ListOwned(ctx context.Context, playerID, status, search, cursor string, pageSize int) (*OwnedPage, error) {
 	if err := s.available(); err != nil {
 		return nil, err
 	}
@@ -140,20 +146,51 @@ func (s *Service) ListOwned(ctx context.Context, playerID, status, search string
 		return nil, ErrInvalidInput
 	}
 	search = strings.TrimSpace(search)
-	if len([]rune(search)) > 120 || page < 1 || pageSize < 1 || pageSize > 100 {
+	if len([]rune(search)) > 120 || pageSize < 1 || pageSize > 100 {
 		return nil, ErrInvalidInput
 	}
-	rows, total, err := s.repo.ListOwnedPage(ctx, ownerID, storage.OwnedShareListOptions{
-		Status: status, Search: search, Page: page, PageSize: pageSize,
+	var beforeCreatedAt *time.Time
+	var beforeID *uuid.UUID
+	if cursor != "" {
+		decoded, err := decodeOwnedCursor(cursor)
+		if err != nil {
+			return nil, ErrInvalidInput
+		}
+		beforeCreatedAt, beforeID = &decoded.CreatedAt, &decoded.ID
+	}
+	rows, err := s.repo.ListOwnedPage(ctx, ownerID, storage.OwnedShareListOptions{
+		Status: status, Search: search, BeforeCreatedAt: beforeCreatedAt, BeforeID: beforeID, Limit: pageSize + 1,
 	})
 	if err != nil {
 		return nil, err
+	}
+	hasMore := len(rows) > pageSize
+	if hasMore {
+		rows = rows[:pageSize]
 	}
 	out := make([]View, 0, len(rows))
 	for i := range rows {
 		out = append(out, s.view(&rows[i]))
 	}
-	return &OwnedPage{Shares: out, Total: total, Page: page, PageSize: pageSize}, nil
+	nextCursor := ""
+	if hasMore && len(rows) > 0 {
+		nextCursor = encodeOwnedCursor(ownedCursor{CreatedAt: rows[len(rows)-1].CreatedAt, ID: rows[len(rows)-1].ID})
+	}
+	return &OwnedPage{Shares: out, NextCursor: nextCursor, HasMore: hasMore, PageSize: pageSize}, nil
+}
+
+func encodeOwnedCursor(cursor ownedCursor) string {
+	encoded, _ := json.Marshal(cursor)
+	return base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func decodeOwnedCursor(value string) (ownedCursor, error) {
+	var cursor ownedCursor
+	decoded, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil || json.Unmarshal(decoded, &cursor) != nil || cursor.ID == uuid.Nil || cursor.CreatedAt.IsZero() {
+		return ownedCursor{}, ErrInvalidInput
+	}
+	return cursor, nil
 }
 
 func (s *Service) Revoke(ctx context.Context, playerID string, id uuid.UUID) error {

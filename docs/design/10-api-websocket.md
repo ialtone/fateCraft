@@ -241,7 +241,7 @@ POST /api/admin/challenge-versions/:id/publish
 
 认证设置响应不包含 SMTP 密码，只包含 `has_smtp_password`。PATCH 中 `smtp_password` 为空表示保留原值，`clear_smtp_password=true` 表示清除。邀请码创建响应是唯一返回完整 `code` 的时机，后续列表只返回尾号、状态、用量和有效期。
 
-`PATCH /api/admin/system-settings` 维护判定配置和默认关闭的 `detailed_llm_logging_enabled`。开启后记录每个主叙事模型步骤、Memory、Inquiry 和显式诊断的完整模型请求与原始响应，并用 purpose、attempt、Memory job/version、Inquiry snapshot branch/revision 关联，但永不记录 API Key、Authorization 头或 URL 查询参数。日志列表只返回诊断摘要，单条详情接口才返回请求与响应正文；两者都仅限管理员。
+`PATCH /api/admin/system-settings` 维护判定配置、默认关闭的 `detailed_llm_logging_enabled`，以及 `diagnostic_log_cleanup_enabled` 和 1-3650 天的 `diagnostic_log_retention_days`。详细日志开启后记录每个主叙事模型步骤、Memory、Inquiry 和显式诊断的完整模型请求与原始响应，并用 purpose、attempt、Memory job/version、Inquiry snapshot branch/revision 关联，但永不记录 API Key、Authorization 头或 URL 查询参数。日志列表只返回诊断摘要，单条详情接口才返回请求与响应正文；两者都仅限管理员。自动清理默认开启、保留 30 天，只处理模型请求与上下文构建诊断日志。
 
 上下文构建日志不受详细模型日志开关影响：管理员列表返回最近构建的预算摘要，单条详情返回 Prompt 分段、必选/裁剪结果、历史消息 ID、世界书 entry ID 和 Memory lag。普通玩家上下文接口不会返回这些技术明细。
 
@@ -353,7 +353,7 @@ DELETE /api/conversation-shares/:id
 POST   /api/conversation-shares/:id/replace
 ```
 
-列表接口接受 `status=active|expired|revoked|moderated`、`search`、`page` 和 `page_size`（最大 100），只返回当前用户的数据，并附带总数和来源对话标题。创建与 replace 接受 `scope=all|range`、可选的起止消息 ID、标题、`show_username`、`expires_in_days=0|7|30` 和客户端 UUID `request_id`。`show_username=false` 时署名固定为“匿名旅人”且不公开头像；为 true 时由后端读取当前登录账号的 `display_name` 和头像，不接受客户端自定义身份字段。range 的端点必须属于同一对话当前有效分支且顺序正确，服务端自动包含中间全部消息。
+列表接口接受 `status=active|expired|revoked|moderated`、`search`、不透明的 `cursor` 和 `page_size`（最大 100），只返回当前用户的数据，并附带 `has_more`、可选 `next_cursor` 和来源对话标题；它不执行总数统计。创建与 replace 接受 `scope=all|range`、可选的起止消息 ID、标题、`show_username`、`expires_in_days=0|7|30` 和客户端 UUID `request_id`。`show_username=false` 时署名固定为“匿名旅人”且不公开头像；为 true 时由后端读取当前登录账号的 `display_name` 和头像，不接受客户端自定义身份字段。range 的端点必须属于同一对话当前有效分支且顺序正确，服务端自动包含中间全部消息。
 
 匿名接口不读取 Cookie，也不创建 WebSocket：
 

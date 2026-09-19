@@ -513,8 +513,8 @@ export interface ConversationShare {
 
 export interface ConversationSharePage {
   shares: ConversationShare[]
-  total: number
-  page: number
+  next_cursor?: string
+  has_more: boolean
   page_size: number
 }
 
@@ -822,6 +822,8 @@ export interface AdminSystemSettings {
   roll_system_enabled: boolean
   roll_difficulty_mode: DifficultyModeEnum
   detailed_llm_logging_enabled: boolean
+  diagnostic_log_cleanup_enabled: boolean
+  diagnostic_log_retention_days: number
   llm_access_mode: 'user_managed' | 'platform_managed'
   public_llm_base_url: string
   public_llm_provider: string

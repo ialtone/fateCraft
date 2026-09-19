@@ -22,7 +22,6 @@ import { useChatStore } from '@/stores/chat'
 import { useStateStore } from '@/stores/state'
 import { useContextStore } from '@/stores/context'
 import { useSocketStore } from '@/stores/socket'
-import { useSettingsStore } from '@/stores/settings'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useRewardStore } from '@/stores/rewards'
 import { useCampaignStore } from '@/stores/campaign'
@@ -41,7 +40,6 @@ const chat = useChatStore()
 const stateStore = useStateStore()
 const context = useContextStore()
 const socket = useSocketStore()
-const settings = useSettingsStore()
 const runtime = useRuntimeStore()
 const guidance = useGuidanceStore()
 const rewards = useRewardStore()
@@ -145,7 +143,6 @@ async function open(id: string) {
 }
 
 onMounted(async () => {
-  if (!settings.settings) await settings.load().catch(() => {})
   await rewards.load().catch(() => {})
   await open(convId.value)
   activityTimer = setInterval(async () => {
@@ -234,7 +231,6 @@ async function forkConversation() {
         />
       </div>
       <div class="bar-actions row">
-        <span class="model-name faint sm mono">{{ settings.settings?.model }}</span>
         <NButton
           quaternary
           circle
@@ -369,10 +365,6 @@ async function forkConversation() {
   text-overflow: ellipsis;
 }
 
-.sm {
-  font-size: 12px;
-}
-
 .ended-banner {
   background: var(--accent-soft);
   color: var(--accent);
@@ -432,7 +424,6 @@ async function forkConversation() {
     gap: 2px;
   }
 
-  .model-name,
   .inspector-toggle {
     display: none;
   }

@@ -825,6 +825,8 @@ type SystemSettings struct {
 	RollSystemEnabled               bool      `gorm:"column:roll_system_enabled;not null;default:true" json:"roll_system_enabled"`
 	RollDifficultyMode              string    `gorm:"column:roll_difficulty_mode;size:10;not null;default:normal" json:"roll_difficulty_mode"`
 	DetailedLLMLoggingEnabled       bool      `gorm:"column:detailed_llm_logging_enabled;not null;default:false" json:"detailed_llm_logging_enabled"`
+	DiagnosticLogCleanupEnabled     bool      `gorm:"column:diagnostic_log_cleanup_enabled;not null;default:true" json:"diagnostic_log_cleanup_enabled"`
+	DiagnosticLogRetentionDays      int       `gorm:"column:diagnostic_log_retention_days;not null;default:30" json:"diagnostic_log_retention_days"`
 	LLMAccessMode                   string    `gorm:"column:llm_access_mode;size:32;not null;default:user_managed" json:"llm_access_mode"`
 	PublicLLMBaseURL                string    `gorm:"column:public_llm_base_url" json:"public_llm_base_url"`
 	PublicLLMProvider               string    `gorm:"column:public_llm_provider;size:64;not null;default:openai" json:"public_llm_provider"`
@@ -851,6 +853,7 @@ func (SystemSettings) TableName() string { return "system_settings" }
 func DefaultSystemSettings() *SystemSettings {
 	return &SystemSettings{
 		ID: 1, RollSystemEnabled: true, RollDifficultyMode: "normal",
+		DiagnosticLogCleanupEnabled: true, DiagnosticLogRetentionDays: 30,
 		PublicLLMBaseURL: "https://api.openai.com/v1",
 		LLMAccessMode:    "user_managed", PublicLLMProvider: "openai", PublicLLMProtocol: DefaultLLMProtocol,
 		PublicLLMMaxContextTokens: DefaultLLMMaxContextTokens, PublicLLMMaxResponseTokens: DefaultLLMMaxResponseTokens,

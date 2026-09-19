@@ -105,11 +105,13 @@ LinuxDo OAuth 授权过程的一次性 state 与 PKCE `code_verifier`。state �
 
 ### `llm_settings`、`system_settings` 与 `llm_request_logs`
 
-`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。`system_settings` 是主键固定为 1 的管理员单例，同时保存判定/诊断设置和平台模式公共 LLM 配置；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
+`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。`system_settings` 是主键固定为 1 的管理员单例，同时保存判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
 
 平台不持久化模型能力评分或健康状态。用户显式点击检测时执行一次无副作用请求，结果只返回当前页面，不改变生产调用路径。
 
 详细日志开启后，每个 Chat Completions 或 Responses 模型请求写入一条 `llm_request_logs`，记录 purpose、业务 attempt、Memory job/候选版本、Inquiry snapshot、请求 JSON、最终原始 HTTP/SSE 响应、合并正文、HTTP 状态、finish reason、终止事件、settings revision、输出模式、契约名称/版本/指纹、输出类型、传输成功、结构成功、稳定结构错误码、耗时和错误。响应体交付前发生的传输重试只保留在结构化服务端日志中，不伪装成独立业务 attempt；Agent Tool Loop 的每个模型步骤仍是独立逻辑请求，显式诊断以 `purpose=protocol_test` 形成独立记录。记录不包含 API Key、Authorization 头或 URL 查询参数，仅管理员 API 可读取；关闭开关不会删除已有记录。
+
+自动清理默认开启并保留 30 天，可由管理员关闭或配置 1-3650 天。清理仅覆盖 `llm_request_logs` 和 `context_build_logs`，使用有界批次和 `SKIP LOCKED`；`conversation_share_audit_events` 按治理审计策略长期保留。Schema 不为清理额外增加索引，优先复用现有访问路径并由 autovacuum 回收死元组。
 
 ## 挑战内容与运行契约
 

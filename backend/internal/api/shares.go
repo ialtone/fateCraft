@@ -59,10 +59,6 @@ func (s *Server) createConversationShare(c *gin.Context) {
 }
 
 func (s *Server) listOwnedConversationShares(c *gin.Context) {
-	page, ok := positiveShareQuery(c, "page", 1, 100000)
-	if !ok {
-		return
-	}
 	pageSize, ok := positiveShareQuery(c, "page_size", 20, 100)
 	if !ok {
 		return
@@ -72,7 +68,7 @@ func (s *Server) listOwnedConversationShares(c *gin.Context) {
 		s.identity.CurrentPlayerID(c.Request.Context()),
 		strings.TrimSpace(c.Query("status")),
 		strings.TrimSpace(c.Query("search")),
-		page,
+		strings.TrimSpace(c.Query("cursor")),
 		pageSize,
 	)
 	if err != nil {

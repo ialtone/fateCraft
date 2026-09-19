@@ -233,6 +233,8 @@ async function saveSettings() {
       roll_system_enabled: settings.value.roll_system_enabled,
       roll_difficulty_mode: settings.value.roll_difficulty_mode,
       detailed_llm_logging_enabled: settings.value.detailed_llm_logging_enabled,
+      diagnostic_log_cleanup_enabled: settings.value.diagnostic_log_cleanup_enabled,
+      diagnostic_log_retention_days: settings.value.diagnostic_log_retention_days,
       llm_access_mode: settings.value.llm_access_mode,
       public_llm_base_url: settings.value.public_llm_base_url,
       public_llm_provider: settings.value.public_llm_provider,
@@ -844,6 +846,31 @@ onMounted(() => {
                     {{ option.label }}
                   </NRadioButton>
                 </NRadioGroup>
+              </NFormItem>
+              <NFormItem>
+                <template #label>
+                  <FieldHelp label="自动清理诊断日志">
+                    <p>
+                      定期分批清理超过保留期限的模型请求日志和上下文构建日志，避免大字段长期占用数据库空间。
+                    </p>
+                    <p>分享治理审计记录不受此策略影响；关闭开关不会删除现有日志。</p>
+                  </FieldHelp>
+                </template>
+                <NSwitch v-model:value="settings.diagnostic_log_cleanup_enabled">
+                  <template #checked>已启用</template>
+                  <template #unchecked>已关闭</template>
+                </NSwitch>
+              </NFormItem>
+              <NFormItem v-if="settings.diagnostic_log_cleanup_enabled" label="诊断日志保留天数">
+                <NInputNumber
+                  v-model:value="settings.diagnostic_log_retention_days"
+                  :min="1"
+                  :max="3650"
+                  :precision="0"
+                />
+                <template #feedback>
+                  默认保留 30 天；清理任务每小时检查一次，每次只做有限批次，避免形成数据库峰值。
+                </template>
               </NFormItem>
               <NFormItem>
                 <template #label>

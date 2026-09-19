@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 
 	"github.com/ialtone/fatecraft/internal/storage"
 )
@@ -29,13 +28,10 @@ func TestRespondLastContextTreatsMissingBuildAsEmpty(t *testing.T) {
 }
 
 func TestPlayerContextSummaryDoesNotExposePromptDiagnostics(t *testing.T) {
-	log := &storage.ContextBuildLog{
+	log := &storage.ContextBuildSummary{
 		ID: uuid.New(), ConversationID: uuid.New(), Model: "test-model",
 		MaxContextTokens: 128000, ReservedResponseTokens: 16384, UsedPromptTokens: 4096,
-		Segments:               storage.JSONDoc(`[{"key":"system_policy","required":true}]`),
-		IncludedMessageIDs:     pq.StringArray{"message-1", "message-2"},
-		ActivatedWorldEntryIDs: pq.StringArray{"secret-world-entry"},
-		CreatedAt:              time.Now(),
+		IncludedMessageCount: 2, ActivatedWorldEntryCount: 1, CreatedAt: time.Now(),
 	}
 	summary := summarizePlayerContextBuild(log)
 	if summary.IncludedMessageCount != 2 || summary.ActivatedWorldEntryCount != 1 {

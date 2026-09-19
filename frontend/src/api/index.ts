@@ -151,7 +151,7 @@ export const sharesApi = {
     http
       .post<ConversationShare>(`/conversations/${conversationId}/shares`, body)
       .then((r) => r.data),
-  listOwned: (params?: { status?: string; search?: string; page?: number; page_size?: number }) =>
+  listOwned: (params?: { status?: string; search?: string; cursor?: string; page_size?: number }) =>
     http.get<ConversationSharePage>('/conversation-shares', { params }).then((r) => r.data),
   revoke: (id: string) => http.delete(`/conversation-shares/${id}`).then((r) => r.data),
   replace: (id: string, body: CreateConversationShareInput) =>
@@ -269,6 +269,8 @@ export const adminApi = {
     roll_system_enabled: boolean
     roll_difficulty_mode: string
     detailed_llm_logging_enabled?: boolean
+    diagnostic_log_cleanup_enabled?: boolean
+    diagnostic_log_retention_days?: number
     llm_access_mode?: 'user_managed' | 'platform_managed'
     public_llm_base_url?: string
     public_llm_provider?: string

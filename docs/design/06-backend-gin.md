@@ -38,7 +38,7 @@ internal/modelcapability 用户显式触发的无副作用模型诊断
 
 模型 HTTP 传输只在收到响应体之前对连接错误、429、502、503、504 和明确的临时不可用执行有限指数退避重试，并尊重 `Retry-After`。收到 2xx 流后由解析器负责一次性消费；正文、工具调用或结构化结果已经开始后不重放 Agent 步骤，避免重复领域副作用。所有 SSE JSON 解析错误、提前 EOF 和缺少协议终止事件均为失败，不得把临时文本当作最终结果。
 
-模型边界按字节限制：完整响应/累积正文最多 32 MiB，单条 SSE 行最多 1 MiB，HTTP 错误体最多 64 KiB，详细审计请求、原始响应和正文各最多 2 MiB（超出只截断审计副本并标记 `audit_truncated`，不改变真实解析结果），工具参数最多 16 KiB。普通 HTTP JSON body 默认 4 MiB，挑战版本 PUT 明确放宽到 32 MiB；WebSocket 客户端帧最多 64 KiB、生成排队最多 64 条。PostgreSQL 连接池显式限制为 24 个打开连接、8 个空闲连接，并设置连接生命周期和空闲回收。
+模型边界按字节限制：完整响应/累积正文最多 32 MiB，单条 SSE 行最多 1 MiB，HTTP 错误体最多 64 KiB，详细审计请求、原始响应和正文各最多 2 MiB（超出只截断审计副本并标记 `audit_truncated`，不改变真实解析结果），工具参数最多 16 KiB。普通 HTTP JSON body 默认 4 MiB，挑战版本 PUT 明确放宽到 32 MiB；WebSocket 客户端帧最多 64 KiB、生成排队最多 64 条。PostgreSQL 连接池默认限制为 10 个打开连接、3 个空闲连接，连接生命周期默认 30 分钟、空闲回收默认 5 分钟；四项均可通过 `DB_*` 环境变量按实例配置，多实例部署必须汇总连接预算。
 
 领域服务依赖消费端定义的小接口或专用仓储，API handler 不直接拼装 SQL。组合根在 `cmd/server/main.go` 创建仓储、服务、生成器和 Hub。
 
@@ -146,11 +146,15 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、return path 和短期�
 
 管理员难度来自 `system_settings`，不接受用户或模型覆盖。
 
+`system_settings` 是单例热读数据，仓储提供 5 秒进程内缓存；当前实例保存后立即刷新，多实例最多在 TTL 内收敛。缓存返回值始终复制，调用方不能修改共享对象，从而避免每次模型调用为了日志开关和接入模式重复查询 PostgreSQL。
+
 模型请求详细日志同样由 `system_settings` 全局控制且默认关闭。开启后，LLM Client 为每个逻辑模型请求保存最终去认证请求 JSON、原始 HTTP/SSE 响应、合并正文、结束原因、`[DONE]` 状态、输出类型、设置修订、`settings_source`、协议、模型、契约指纹、传输/结构成功状态、稳定错误码、耗时与错误，并按 purpose 关联 attempt、Memory job/预分配候选版本或 Inquiry snapshot。响应体交付前的传输重试次数只写入结构化服务端日志，不创建独立业务 attempt。主叙事一个 attempt 可以因真实工具循环产生多条 `purpose=narrative` 调用；显式模型诊断使用 `purpose=protocol_test` 单独记录。日志写入失败只记录服务端告警，不改变模型调用结果。
+
+诊断日志自动清理由独立的 `diagnostic_log_cleanup_enabled` 控制，默认保留 30 天。Worker 每小时读取最新设置，以每批 500 条、单轮最多 20 批的短事务清理 `llm_request_logs` 与 `context_build_logs`；多实例通过 `SKIP LOCKED` 避免争抢同一批记录。分享治理审计不受该短期诊断保留策略影响。
 
 Memory Worker 由进程根 context 驱动，不继承 HTTP/WS 取消，也不占用 durable generation run。它通过 PostgreSQL `SKIP LOCKED`、带 fencing token 的租约和事务 CAS 提交版本；暂时性上游错误可以按持久任务策略后台退避，单次调用不会因解析或契约错误重放，但响应体交付前的临时传输错误仍遵循统一的有限重试边界。Character Inquiry 使用独立 thread 和非流式低温 JSON Schema 调用，读取玩家状态、显式标记为公开的当前版本规则，并在 Campaign 中加入玩家 Snapshot；它不获取主生成 run，不进入主消息、Context Builder、Memory 来源或任何玩法动作 Handler。
 
-列表接口在 handler 层拒绝非法或超限 `limit`，仓储层仍保留安全上限作为纵深防御：conversation 1–100、messages 1–500、state/reward/admin logs 1–200、Campaign events 1–100。消息游标按 `(created_at, id)` 排序与比较，不存在或不属于当前 conversation 的 anchor 明确返回错误。标题搜索会转义 `%`、`_` 和反斜杠，并使用 trigram 索引。
+列表接口在 handler 层拒绝非法或超限 `limit`，仓储层仍保留安全上限作为纵深防御：conversation 1–100、messages 1–500、state/reward/admin logs 1–200、Campaign events 1–100。消息游标按 `(created_at, id)` 排序与比较，不存在或不属于当前 conversation 的 anchor 明确返回错误；“我的分享”同样使用 `(created_at, id)` 游标与 `page_size + 1` 判断 `has_more`，不执行每页 `COUNT` 或深 `OFFSET`。标题搜索会转义 `%`、`_` 和反斜杠，并使用 trigram 索引。
 
 ### 显式模型诊断
 

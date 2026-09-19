@@ -11,13 +11,17 @@ import (
 
 // Config 保存来自环境变量的运行时配置。
 type Config struct {
-	Port           string
-	GinMode        string
-	DatabaseURL    string
-	DataDir        string   // 判定配置和空库首次初始化材料的根目录
-	AllowedOrigins []string // 允许的 CORS/WebSocket 来源；为空表示全放开（仅开发用）
-	LogLevel       string   // 日志级别：debug/info/warn/error（默认 info）
-	LogFormat      string   // 日志格式：console/json（默认 console，生产建议 json）
+	Port              string
+	GinMode           string
+	DatabaseURL       string
+	DataDir           string   // 判定配置和空库首次初始化材料的根目录
+	AllowedOrigins    []string // 允许的 CORS/WebSocket 来源；为空表示全放开（仅开发用）
+	LogLevel          string   // 日志级别：debug/info/warn/error（默认 info）
+	LogFormat         string   // 日志格式：console/json（默认 console，生产建议 json）
+	DBMaxOpenConns    int      // database/sql 最大打开连接数
+	DBMaxIdleConns    int      // database/sql 最大空闲连接数
+	DBConnMaxLifetime time.Duration
+	DBConnMaxIdleTime time.Duration
 
 	// 认证策略由数据库和管理后台维护；环境变量只承载部署密钥与 OAuth 凭据。
 	LinuxDOClientID       string
@@ -58,6 +62,10 @@ func Load() Config {
 		AllowedOrigins:            getlist("ALLOWED_ORIGINS"),
 		LogLevel:                  getenv("LOG_LEVEL", "info"),
 		LogFormat:                 getenv("LOG_FORMAT", "console"),
+		DBMaxOpenConns:            getintRange("DB_MAX_OPEN_CONNS", 10, 1, 200),
+		DBMaxIdleConns:            getintRange("DB_MAX_IDLE_CONNS", 3, 0, 200),
+		DBConnMaxLifetime:         getduration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
+		DBConnMaxIdleTime:         getduration("DB_CONN_MAX_IDLE_TIME", 5*time.Minute),
 		LinuxDOClientID:           os.Getenv("LINUXDO_CLIENT_ID"),
 		LinuxDOClientSecret:       os.Getenv("LINUXDO_CLIENT_SECRET"),
 		LinuxDORedirectURI:        os.Getenv("LINUXDO_REDIRECT_URI"),
@@ -73,11 +81,23 @@ func Load() Config {
 }
 
 func getintRange(key string, fallback, minimum, maximum int) int {
-	value := getint(key, fallback)
+	value := getintAllowZero(key, fallback)
 	if value < minimum || value > maximum {
 		return fallback
 	}
 	return value
+}
+
+func getintAllowZero(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fallback
+	}
+	return n
 }
 
 func getint(key string, fallback int) int {

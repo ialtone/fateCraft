@@ -195,7 +195,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 - 未登录访问受保护路由会到登录页。
 - 普通用户看不到管理入口且直接访问 `/admin` 被守卫拦截。
-- 模型请求详细日志默认关闭；开启后管理员可按主叙事、判定续写、Memory 和角色询问辨识最近调用，并在详情关联 attempt、Memory job/版本和 Inquiry snapshot；界面不得显示 API Key。
+- 模型请求详细日志默认关闭；开启后管理员可按主叙事、判定续写、Memory 和角色询问辨识最近调用，并在详情关联 attempt、Memory job/版本和 Inquiry snapshot；界面不得显示 API Key。管理员页另提供诊断日志自动清理开关和保留天数，明确说明不影响分享治理审计。
 - 普通上下文检查器只显示可理解的占用摘要和当前活动；Prompt 分段、引用 ID 与裁剪诊断仅管理员可见。
 - LinuxDo 与邮箱按钮并列，注册作为次级入口；关闭方式提交时有明确提示。
 - 创建表单切换挑战会修正无效 Persona。
@@ -219,7 +219,7 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 
 `ConversationView` 页头是唯一的新分享入口，按需加载 `ConversationShareDialog`。对话框只负责创建或替换分享，提供“全部消息”和“选择连续片段”两种模式；连续片段通过起止选择器确定范围，预览区只显示最终选中的连续消息。公开身份使用开关控制，默认匿名，打开后显示当前账号名称和头像，不提供自由编辑署名的输入框。全部消息每批渲染 100 条，生成进行中时禁止创建或替换分享。
 
-`MySharesView` 嵌在首页对话区域，通过“我的对话 / 我的分享”小标签切换；它不出现在与奖励、设置、管理同级的顶部导航中。该视图通过服务端分页跨对话展示当前用户的分享，支持状态筛选、分享标题或来源对话标题搜索、复制、浏览、撤销和重新发布。重新发布复用 `ConversationShareDialog` 恢复原连续范围，成功后由服务端原子撤销旧链接；普通对话分享弹窗不再包含历史列表或管理标签。
+`MySharesView` 嵌在首页对话区域，通过“我的对话 / 我的分享”小标签切换；它不出现在与奖励、设置、管理同级的顶部导航中。该视图通过 `(created_at, id)` 游标跨对话加载当前用户的分享，以“加载更多”追加结果，不请求总数或使用深 OFFSET；支持状态筛选、分享标题或来源对话标题搜索、复制、浏览、撤销和重新发布。重新发布复用 `ConversationShareDialog` 恢复原连续范围，成功后由服务端原子撤销旧链接；普通对话分享弹窗不再包含历史列表或管理标签。
 
 `/s/:token` 与生产 HTML 外壳跳转使用的 `/shared/:token` 都是 public route。`SharedConversationView` 使用独立的 `shares` store、`SharedConversationContent` 和 `SharedMessageItem`，不会复用带编辑、reasoning 或私有状态的对话组件。公共路由在认证初始化之前放行，401 拦截器也排除 `/public/`，页面不创建对话 WebSocket。
 

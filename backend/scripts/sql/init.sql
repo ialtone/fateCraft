@@ -623,7 +623,6 @@ CREATE TABLE conversations (
         FOREIGN KEY (scenario_asset_id, challenge_version_id)
         REFERENCES challenge_assets(id, challenge_version_id) ON DELETE RESTRICT
 );
-CREATE INDEX idx_conversations_player_id ON conversations(player_id);
 CREATE INDEX idx_conversations_status ON conversations(status);
 CREATE INDEX idx_conversations_player_updated ON conversations(player_id, updated_at DESC);
 CREATE INDEX idx_conversations_challenge_version ON conversations(challenge_version_id);
@@ -808,7 +807,6 @@ CREATE TABLE chat_messages (
     ),
     UNIQUE (tool_invocation_id, kind)
 );
-CREATE INDEX idx_chat_messages_conversation ON chat_messages(conversation_id, message_seq);
 CREATE INDEX idx_chat_messages_active ON chat_messages(conversation_id, message_seq) WHERE invalidated_at IS NULL;
 
 CREATE TABLE campaign_events (
@@ -830,7 +828,6 @@ CREATE TABLE campaign_events (
     CONSTRAINT fk_campaign_event_turn FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE RESTRICT,
     CONSTRAINT fk_campaign_event_attempt FOREIGN KEY (attempt_id) REFERENCES generation_attempts(id) ON DELETE RESTRICT
 );
-CREATE INDEX idx_campaign_events_recent ON campaign_events(campaign_id, sequence DESC);
 CREATE INDEX idx_campaign_events_idempotency ON campaign_events(campaign_id, idempotency_key);
 
 CREATE TABLE campaign_action_commits (
@@ -872,7 +869,6 @@ CREATE TABLE display_messages (
     CONSTRAINT fk_display_message_attempt FOREIGN KEY (attempt_id) REFERENCES generation_attempts(id) ON DELETE RESTRICT
 );
 CREATE INDEX idx_display_messages_conversation ON display_messages(conversation_id, created_at);
-CREATE INDEX idx_display_messages_active ON display_messages(conversation_id, created_at) WHERE invalidated_at IS NULL;
 CREATE INDEX idx_display_messages_active_cursor
     ON display_messages(conversation_id, created_at DESC, id DESC)
     WHERE invalidated_at IS NULL;
@@ -903,7 +899,6 @@ CREATE TABLE conversation_shares (
     UNIQUE (id, player_id, conversation_id)
 );
 CREATE INDEX idx_conversation_shares_owner ON conversation_shares(player_id, conversation_id, created_at DESC, id DESC);
-CREATE INDEX idx_conversation_shares_owner_timeline ON conversation_shares(player_id, created_at DESC, id DESC);
 CREATE INDEX idx_conversation_shares_active ON conversation_shares(status, expires_at) WHERE status = 'active';
 
 CREATE TABLE conversation_share_reports (
@@ -955,7 +950,6 @@ CREATE TABLE state_revisions (
     CONSTRAINT fk_state_revision_turn FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE RESTRICT,
     CONSTRAINT fk_state_revision_attempt FOREIGN KEY (attempt_id) REFERENCES generation_attempts(id) ON DELETE RESTRICT
 );
-CREATE INDEX idx_state_revisions_conversation ON state_revisions(conversation_id, created_at DESC) WHERE invalidated_at IS NULL;
 CREATE INDEX idx_state_revisions_cursor
     ON state_revisions(conversation_id, created_at DESC, id DESC)
     WHERE invalidated_at IS NULL;
@@ -1078,6 +1072,8 @@ CREATE TABLE system_settings (
     roll_system_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     roll_difficulty_mode VARCHAR(10) NOT NULL DEFAULT 'normal' CHECK (roll_difficulty_mode IN ('easy', 'normal', 'hard')),
     detailed_llm_logging_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    diagnostic_log_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    diagnostic_log_retention_days INTEGER NOT NULL DEFAULT 30 CHECK (diagnostic_log_retention_days BETWEEN 1 AND 3650),
     llm_access_mode VARCHAR(32) NOT NULL DEFAULT 'user_managed' CHECK (llm_access_mode IN ('user_managed', 'platform_managed')),
     public_llm_base_url VARCHAR(512) NOT NULL DEFAULT 'https://api.openai.com/v1',
     public_llm_provider VARCHAR(64) NOT NULL DEFAULT 'openai',

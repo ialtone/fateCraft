@@ -34,6 +34,19 @@ func TestValidateLLMSettingsRejectsUnknownProtocol(t *testing.T) {
 	}
 }
 
+func TestValidateDiagnosticLogRetention(t *testing.T) {
+	for _, days := range []int{1, 30, 3650} {
+		if err := validateDiagnosticLogRetention(days); err != nil {
+			t.Fatalf("retention %d rejected: %v", days, err)
+		}
+	}
+	for _, days := range []int{0, 3651} {
+		if err := validateDiagnosticLogRetention(days); err == nil {
+			t.Fatalf("retention %d accepted", days)
+		}
+	}
+}
+
 func validLLMSettings() *storage.LLMSettings {
 	return &storage.LLMSettings{
 		BaseURL: "https://example.test/v1", Model: "model",

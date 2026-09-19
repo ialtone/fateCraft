@@ -453,7 +453,7 @@ func (r *MessageRepo) hydrateDisplayReasoning(ctx context.Context, displays []Di
 	default:
 		query = query.Where("turn_id IN ?", turnIDs)
 	}
-	if err := query.Order("message_seq ASC").Find(&chats).Error; err != nil {
+	if err := query.Select("id", "turn_id", "role", "message_seq", "content_blocks").Order("message_seq ASC").Find(&chats).Error; err != nil {
 		return err
 	}
 	byID := make(map[uuid.UUID]ChatMessage, len(chats))

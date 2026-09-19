@@ -76,10 +76,10 @@ type View struct {
 }
 
 type OwnedPage struct {
-	Shares   []View `json:"shares"`
-	Total    int64  `json:"total"`
-	Page     int    `json:"page"`
-	PageSize int    `json:"page_size"`
+	Shares     []View `json:"shares"`
+	NextCursor string `json:"next_cursor,omitempty"`
+	HasMore    bool   `json:"has_more"`
+	PageSize   int    `json:"page_size"`
 }
 
 type PublicView struct {

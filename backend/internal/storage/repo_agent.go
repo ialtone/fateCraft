@@ -61,7 +61,7 @@ type AgentAttemptPerformance struct {
 // while reconnects can always recover whether the model or a tool is active.
 func (r *AgentRepo) CurrentActivity(ctx context.Context, conversationID uuid.UUID) (*AgentActivity, error) {
 	var attempt GenerationAttempt
-	err := r.db.WithContext(ctx).Where("conversation_id = ? AND status = ?", conversationID, AttemptStatusRunning).
+	err := r.db.WithContext(ctx).Select("id").Where("conversation_id = ? AND status = ?", conversationID, AttemptStatusRunning).
 		Order("started_at DESC").First(&attempt).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -71,13 +71,13 @@ func (r *AgentRepo) CurrentActivity(ctx context.Context, conversationID uuid.UUI
 	}
 	activity := &AgentActivity{AttemptID: attempt.ID, Phase: "preparing"}
 	var invocation AgentToolInvocation
-	err = r.db.WithContext(ctx).Where("attempt_id = ? AND status = ?", attempt.ID, ToolInvocationReceived).
+	err = r.db.WithContext(ctx).Select("tool_name", "step_id").Where("attempt_id = ? AND status = ?", attempt.ID, ToolInvocationReceived).
 		Order("created_at DESC").First(&invocation).Error
 	if err == nil {
 		activity.Phase = "tool"
 		activity.ToolName = invocation.ToolName
 		var step AgentStep
-		if loadErr := r.db.WithContext(ctx).First(&step, "id = ?", invocation.StepID).Error; loadErr == nil {
+		if loadErr := r.db.WithContext(ctx).Select("step_no").First(&step, "id = ?", invocation.StepID).Error; loadErr == nil {
 			activity.StepNo = step.StepNo
 		}
 		return activity, nil
@@ -86,7 +86,7 @@ func (r *AgentRepo) CurrentActivity(ctx context.Context, conversationID uuid.UUI
 		return nil, err
 	}
 	var step AgentStep
-	err = r.db.WithContext(ctx).Where("attempt_id = ?", attempt.ID).Order("step_no DESC").First(&step).Error
+	err = r.db.WithContext(ctx).Select("step_no", "status").Where("attempt_id = ?", attempt.ID).Order("step_no DESC").First(&step).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return activity, nil
 	}
@@ -191,26 +191,35 @@ func (r *AgentRepo) FinishStep(ctx context.Context, stepID uuid.UUID, status, la
 // LatestAttemptPerformance returns the newest non-invalidated turn attempt and
 // its durable model/tool measurements for the player runtime panel.
 func (r *AgentRepo) LatestAttemptPerformance(ctx context.Context, conversationID uuid.UUID) (*AgentAttemptPerformance, error) {
-	var attempt GenerationAttempt
-	err := r.db.WithContext(ctx).Model(&GenerationAttempt{}).
+	type attemptProjection struct {
+		ID         uuid.UUID
+		Status     string
+		StartedAt  time.Time
+		FinishedAt *time.Time
+		ToolCalls  int64
+	}
+	var latest attemptProjection
+	result := r.db.WithContext(ctx).Table("generation_attempts").
+		Select("generation_attempts.id", "generation_attempts.status", "generation_attempts.started_at", "generation_attempts.finished_at", "(SELECT COUNT(*) FROM agent_tool_invocations WHERE agent_tool_invocations.attempt_id = generation_attempts.id) AS tool_calls").
 		Joins("JOIN conversation_turns ON conversation_turns.id = generation_attempts.turn_id").
 		Where("generation_attempts.conversation_id = ? AND conversation_turns.invalidated_at IS NULL", conversationID).
-		Order("generation_attempts.started_at DESC").First(&attempt).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+		Order("generation_attempts.started_at DESC").Limit(1).Scan(&latest)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
 	var steps []AgentStep
-	if err := r.db.WithContext(ctx).Where("attempt_id = ?", attempt.ID).Order("step_no ASC").Find(&steps).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&AgentStep{}).
+		Select("model", "prompt_tokens", "completion_tokens", "token_usage_source", "first_event_ms", "model_duration_ms", "generation_ms", "finished_at").
+		Where("attempt_id = ?", latest.ID).Order("step_no ASC").Find(&steps).Error; err != nil {
 		return nil, err
 	}
-	var toolCalls int64
-	if err := r.db.WithContext(ctx).Model(&AgentToolInvocation{}).Where("attempt_id = ?", attempt.ID).Count(&toolCalls).Error; err != nil {
-		return nil, err
+	attempt := GenerationAttempt{
+		ID: latest.ID, Status: latest.Status, StartedAt: latest.StartedAt, FinishedAt: latest.FinishedAt,
 	}
-	return &AgentAttemptPerformance{Attempt: attempt, Steps: steps, ToolCalls: toolCalls}, nil
+	return &AgentAttemptPerformance{Attempt: attempt, Steps: steps, ToolCalls: latest.ToolCalls}, nil
 }
 
 // ClaimInvocation persists a complete wire call before any domain handler is

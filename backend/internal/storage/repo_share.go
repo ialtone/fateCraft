@@ -247,13 +247,14 @@ func createShareFromConversationTx(
 }
 
 type OwnedShareListOptions struct {
-	Status   string
-	Search   string
-	Page     int
-	PageSize int
+	Status          string
+	Search          string
+	BeforeCreatedAt *time.Time
+	BeforeID        *uuid.UUID
+	Limit           int
 }
 
-func (r *ShareRepository) ListOwnedPage(ctx context.Context, playerID uuid.UUID, options OwnedShareListOptions) ([]ConversationShare, int64, error) {
+func (r *ShareRepository) ListOwnedPage(ctx context.Context, playerID uuid.UUID, options OwnedShareListOptions) ([]ConversationShare, error) {
 	query := r.db.WithContext(ctx).
 		Table("conversation_shares AS shares").
 		Joins("LEFT JOIN conversations AS conversations ON conversations.id = shares.conversation_id").
@@ -271,19 +272,16 @@ func (r *ShareRepository) ListOwnedPage(ctx context.Context, playerID uuid.UUID,
 		term := "%" + options.Search + "%"
 		query = query.Where("shares.title ILIKE ? OR conversations.title ILIKE ?", term, term)
 	}
-
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
+	if options.BeforeCreatedAt != nil && options.BeforeID != nil {
+		query = query.Where("shares.created_at < ? OR (shares.created_at = ? AND shares.id < ?)", *options.BeforeCreatedAt, *options.BeforeCreatedAt, *options.BeforeID)
 	}
 	var rows []ConversationShare
 	err := query.
 		Select("shares.id", "shares.conversation_id", "shares.branch_epoch", "shares.scope", "shares.source_start_message_id", "shares.source_end_message_id", "shares.snapshot_version", "shares.snapshot_hash", "shares.title", "shares.public_attribution", "shares.message_count", "shares.status", "shares.expires_at", "shares.created_at", "shares.revoked_at", "shares.moderated_at", "COALESCE(conversations.title, '已删除的对话') AS conversation_title").
 		Order("shares.created_at DESC, shares.id DESC").
-		Offset((options.Page - 1) * options.PageSize).
-		Limit(options.PageSize).
+		Limit(options.Limit).
 		Scan(&rows).Error
-	return rows, total, err
+	return rows, err
 }
 
 func (r *ShareRepository) GetOwned(ctx context.Context, id, playerID uuid.UUID) (*ConversationShare, error) {

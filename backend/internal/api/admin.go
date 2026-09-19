@@ -36,26 +36,28 @@ func (s *Server) getAdminSystemSettings(c *gin.Context) {
 }
 
 type adminSystemSettingsBody struct {
-	Enabled                *bool    `json:"roll_system_enabled"`
-	DifficultyMode         *string  `json:"roll_difficulty_mode"`
-	DetailedLLMLogging     *bool    `json:"detailed_llm_logging_enabled"`
-	LLMAccessMode          *string  `json:"llm_access_mode"`
-	PublicBaseURL          *string  `json:"public_llm_base_url"`
-	PublicProvider         *string  `json:"public_llm_provider"`
-	PublicProtocol         *string  `json:"public_llm_protocol"`
-	PublicAPIKey           *string  `json:"public_llm_api_key"`
-	ClearPublicAPIKey      bool     `json:"clear_public_llm_api_key"`
-	PublicModel            *string  `json:"public_llm_model"`
-	PublicMemoryModel      *string  `json:"public_llm_memory_model"`
-	PublicInquiryModel     *string  `json:"public_llm_inquiry_model"`
-	PublicMaxContext       *int     `json:"public_llm_max_context_tokens"`
-	PublicMaxResponse      *int     `json:"public_llm_max_response_tokens"`
-	PublicTemperature      *float64 `json:"public_llm_temperature"`
-	PublicTopP             *float64 `json:"public_llm_top_p"`
-	PublicStream           *bool    `json:"public_llm_stream_enabled"`
-	PublicReasoning        *string  `json:"public_llm_reasoning_effort"`
-	PublicMemoryReasoning  *string  `json:"public_llm_memory_reasoning_effort"`
-	PublicInquiryReasoning *string  `json:"public_llm_inquiry_reasoning_effort"`
+	Enabled                 *bool    `json:"roll_system_enabled"`
+	DifficultyMode          *string  `json:"roll_difficulty_mode"`
+	DetailedLLMLogging      *bool    `json:"detailed_llm_logging_enabled"`
+	DiagnosticLogCleanup    *bool    `json:"diagnostic_log_cleanup_enabled"`
+	DiagnosticRetentionDays *int     `json:"diagnostic_log_retention_days"`
+	LLMAccessMode           *string  `json:"llm_access_mode"`
+	PublicBaseURL           *string  `json:"public_llm_base_url"`
+	PublicProvider          *string  `json:"public_llm_provider"`
+	PublicProtocol          *string  `json:"public_llm_protocol"`
+	PublicAPIKey            *string  `json:"public_llm_api_key"`
+	ClearPublicAPIKey       bool     `json:"clear_public_llm_api_key"`
+	PublicModel             *string  `json:"public_llm_model"`
+	PublicMemoryModel       *string  `json:"public_llm_memory_model"`
+	PublicInquiryModel      *string  `json:"public_llm_inquiry_model"`
+	PublicMaxContext        *int     `json:"public_llm_max_context_tokens"`
+	PublicMaxResponse       *int     `json:"public_llm_max_response_tokens"`
+	PublicTemperature       *float64 `json:"public_llm_temperature"`
+	PublicTopP              *float64 `json:"public_llm_top_p"`
+	PublicStream            *bool    `json:"public_llm_stream_enabled"`
+	PublicReasoning         *string  `json:"public_llm_reasoning_effort"`
+	PublicMemoryReasoning   *string  `json:"public_llm_memory_reasoning_effort"`
+	PublicInquiryReasoning  *string  `json:"public_llm_inquiry_reasoning_effort"`
 }
 
 func (s *Server) updateAdminSystemSettings(c *gin.Context) {
@@ -81,6 +83,16 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 	}
 	if body.DetailedLLMLogging != nil {
 		settings.DetailedLLMLoggingEnabled = *body.DetailedLLMLogging
+	}
+	if body.DiagnosticLogCleanup != nil {
+		settings.DiagnosticLogCleanupEnabled = *body.DiagnosticLogCleanup
+	}
+	if body.DiagnosticRetentionDays != nil {
+		if err := validateDiagnosticLogRetention(*body.DiagnosticRetentionDays); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		settings.DiagnosticLogRetentionDays = *body.DiagnosticRetentionDays
 	}
 	if body.LLMAccessMode != nil {
 		settings.LLMAccessMode = *body.LLMAccessMode
@@ -160,6 +172,13 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, settings)
+}
+
+func validateDiagnosticLogRetention(days int) error {
+	if days < 1 || days > 3650 {
+		return fmt.Errorf("诊断日志保留天数必须在 1 到 3650 之间")
+	}
+	return nil
 }
 
 // fetchAdminPublicModels proxies the administrator's write-only public key to
