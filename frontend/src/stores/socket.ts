@@ -14,6 +14,8 @@ import { useGuidanceStore } from './guidance'
 // 自动重连参数：指数退避，1s 起步，上限 30s。
 const RECONNECT_BASE_DELAY = 1000
 const RECONNECT_MAX_DELAY = 30000
+// 带 operation 标识但只用于展示或重新加载的事件，不参与 operation 锁定。
+const NON_LOCKING_SCOPED_EVENTS = new Set(['notice', 'error', 'generation.replayed'])
 
 export const useSocketStore = defineStore('socket', () => {
   const ws = ref<WebSocket | null>(null)
@@ -30,6 +32,21 @@ export const useSocketStore = defineStore('socket', () => {
   const lastAgentSequence = new Map<string, number>()
   let activeAgentAttempt: string | null = null
   let activeOperationID: string | null = null
+  // 已收到终止事件的 operation。它迟到的 notice/error 只展示、不再重新锁定，
+  // 否则下一回合的新 operation 事件会被当作“其他操作”全部丢弃。
+  const finishedOperations = new Set<string>()
+
+  function finishActiveOperation() {
+    if (activeOperationID) {
+      finishedOperations.add(activeOperationID)
+      if (finishedOperations.size > 256) {
+        const oldest = finishedOperations.values().next().value
+        if (oldest) finishedOperations.delete(oldest)
+      }
+    }
+    activeAgentAttempt = null
+    activeOperationID = null
+  }
 
   // 切换对话时关闭旧连接并打开新连接（doc 05）。
   function connect(convId: string) {
@@ -146,6 +163,7 @@ export const useSocketStore = defineStore('socket', () => {
     lastError.value = null
     seenAgentEvents.clear()
     lastAgentSequence.clear()
+    finishedOperations.clear()
     activeAgentAttempt = null
     activeOperationID = null
     queuedCount.value = 0
@@ -216,23 +234,23 @@ export const useSocketStore = defineStore('socket', () => {
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.endStream(ev.payload.message_id)
         if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
-        activeAgentAttempt = null
-        activeOperationID = null
+        finishActiveOperation()
         break
       case 'agent.turn.partial':
         guidance.reset()
         context.setNarrative('idle')
+        // partial 回合已经提交了可信事实，重新生成要消耗改写额度；
+        // 这里不写死数量，交给平台能力和随后刷新的 inspector 决定。
         context.setTurnCapabilities({
           turn_status: 'partial',
           can_regenerate: true,
-          regenerate_cost_quantity: 0,
+          regenerate_cost_quantity: undefined,
         })
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         lastError.value = ev.payload?.message || '动作已执行，但叙事未完成。请继续叙事。'
         rewards.load().catch(() => {})
         if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
-        activeAgentAttempt = null
-        activeOperationID = null
+        finishActiveOperation()
         break
       case 'agent.turn.failed':
       case 'agent.turn.cancelled':
@@ -244,12 +262,10 @@ export const useSocketStore = defineStore('socket', () => {
           regenerate_cost_quantity: 0,
         })
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
-        // A paid regenerate is refunded after the failed/cancelled terminal
-        // state is persisted; refresh the balance after that boundary.
+        // 失败或取消后付费的重新生成会先退款，再推送终止事件；这里刷新余额。
         rewards.load().catch(() => {})
         if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
-        activeAgentAttempt = null
-        activeOperationID = null
+        finishActiveOperation()
         break
       case 'agent.queue.updated':
         queuedCount.value = Math.max(0, ev.payload?.count || 0)
@@ -356,8 +372,7 @@ export const useSocketStore = defineStore('socket', () => {
           chat.load(currentConvId.value).catch(() => {})
           context.loadActivity(currentConvId.value).catch(() => {})
         }
-        activeAgentAttempt = null
-        activeOperationID = null
+        finishActiveOperation()
         break
     }
   }
@@ -376,7 +391,14 @@ export const useSocketStore = defineStore('socket', () => {
     const operationId = typeof ev.operation_id === 'string' ? ev.operation_id : ''
     const sequence = typeof ev.sequence === 'number' ? ev.sequence : 0
     if (operationId) {
-      if (activeOperationID && activeOperationID !== operationId) return false
+      // 已结束操作的迟到 agent 事件（增量等）直接丢弃。
+      if (finishedOperations.has(operationId)) return false
+      if (activeOperationID && activeOperationID !== operationId) {
+        // 服务端对同一对话串行执行生成：新的 turn.started 说明上一次操作已经结束
+        // （即便它的终止事件丢失），允许切换锁定；其他事件仍按旧操作过滤。
+        if (ev.type !== 'agent.turn.started') return false
+        finishActiveOperation()
+      }
       activeOperationID = operationId
     }
     if (!attemptId || sequence <= 0) return true
@@ -398,14 +420,18 @@ export const useSocketStore = defineStore('socket', () => {
     return true
   }
 
-  // Fact events produced by the same generation carry the durable operation
-  // and attempt identity too. Rejecting a late event from an invalidated
-  // branch keeps state/campaign/message projections from rolling back current
-  // UI data after a regenerate or rewrite.
+  // 同一次生成产生的事实事件也携带 durable operation / attempt 标识。拒绝来自
+  // 已被替换分支的迟到事件，避免重新生成或改写后把界面上的状态、Campaign、消息
+  // 投影回滚成旧数据。
   function acceptScopedEvent(ev: any) {
+    // 提示、错误和回放通知只触发展示或重新加载，从不参与锁定：它们常常紧跟在
+    // 终止事件之后，或者属于一个早已结束的请求，锁定到它们会让下一回合的事件全部被丢弃。
+    if (NON_LOCKING_SCOPED_EVENTS.has(ev.type)) return true
     const operationId = typeof ev.operation_id === 'string' ? ev.operation_id : ''
     const attemptId = typeof ev.attempt_id === 'string' ? ev.attempt_id : ''
     if (operationId) {
+      // 已结束操作的迟到事实直接丢弃。
+      if (finishedOperations.has(operationId)) return false
       if (activeOperationID && activeOperationID !== operationId) return false
       activeOperationID = operationId
     }

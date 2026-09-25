@@ -117,10 +117,12 @@ func (g *Generator) finishGenerationRun(runID uuid.UUID, ctx context.Context) {
 	status := storage.GenerationRunCompleted
 	errorCode := ""
 	committed := false
+	mutated := false
 	if tracker, ok := ctx.Value(trackerKey{}).(*generationTracker); ok {
 		tracker.mu.Lock()
 		stage, code := tracker.stage, tracker.code
 		committed = tracker.committed
+		mutated = tracker.mutatingCommitted
 		tracker.mu.Unlock()
 		switch {
 		case committed:
@@ -145,7 +147,9 @@ func (g *Generator) finishGenerationRun(runID uuid.UUID, ctx context.Context) {
 			errorCode = "generation_setup_failed"
 		}
 	}
-	if !committed {
+	// 已提交写工具（partial）时不返还：付费改写已经替换了可信事实，
+	// 返还会让“取消 → 重新生成”变成免费重掷。
+	if !committed && !mutated {
 		g.refundRewriteReservation(ctx, runID.String())
 	}
 	if err := g.convSvc.FinishGeneration(context.WithoutCancel(ctx), runID, status, errorCode); err != nil {
@@ -154,12 +158,10 @@ func (g *Generator) finishGenerationRun(runID uuid.UUID, ctx context.Context) {
 	}
 }
 
-// refundRewriteReservation compensates a debit whenever the replacement
-// narrative did not reach the committed boundary. It is safe to call more
-// than once: the reward repository uses a deterministic idempotency key for
-// the compensating grant. Calling it before the terminal WebSocket event keeps
-// the balance shown by the client in sync with the failure notification;
-// finishGenerationRun calls it again as a crash/early-return safety net.
+// refundRewriteReservation 在替换叙事没有到达提交边界、且没有提交任何写工具时
+// 返还已扣除的改写额度。可重复调用：补偿发放使用确定性的幂等键。在发送终止
+// WebSocket 事件之前调用，客户端刷新余额时能与失败提示保持一致；
+// finishGenerationRun 会再调用一次，作为崩溃或提前返回时的兜底。
 func (g *Generator) refundRewriteReservation(ctx context.Context, source string) {
 	reservation, ok := rewriteReservationFromContext(ctx)
 	if !ok || g.rewards == nil {

@@ -69,6 +69,22 @@ func requestIDFromString(raw string) (uuid.UUID, error) {
 	return uuid.Parse(raw)
 }
 
+// respondGenerationBusy 在 Hub 判忙时区分两种情况：同一 request_id 的传输层重试
+// 命中已登记的 durable 生成，按回放返回 202，结果仍经 WebSocket 推送；
+// 只有真正的新请求才返回 409。
+func (s *Server) respondGenerationBusy(c *gin.Context, convID, requestID uuid.UUID) {
+	exists, err := s.conv.GenerationRequestExists(c.Request.Context(), convID, requestID)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	if exists {
+		c.JSON(http.StatusAccepted, gin.H{"status": "replayed"})
+		return
+	}
+	c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+}
+
 // postMessage 通过 REST 触发一次生成；结果通过该对话的 WebSocket 广播。
 func (s *Server) postMessage(c *gin.Context) {
 	id, ok := paramUUID(c, "id")
@@ -90,11 +106,11 @@ func (s *Server) postMessage(c *gin.Context) {
 		return
 	}
 	gen := s.hub.Gen()
-	// REST 入口无法判断队列状态，直接尝试启动；对话忙时返回 409，由客户端决定重试或排队。
+	// REST 入口无法判断队列状态，直接尝试启动；对话忙时按 request_id 区分回放与冲突。
 	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Generate(ctx, id, requestID, body.Content, emit)
 	}) {
-		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		s.respondGenerationBusy(c, id, requestID)
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
@@ -123,7 +139,7 @@ func (s *Server) regenerate(c *gin.Context) {
 	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Regenerate(ctx, id, requestID, emit)
 	}) {
-		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		s.respondGenerationBusy(c, id, requestID)
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
@@ -152,7 +168,7 @@ func (s *Server) continueGen(c *gin.Context) {
 	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Continue(ctx, id, requestID, emit)
 	}) {
-		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		s.respondGenerationBusy(c, id, requestID)
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
@@ -211,13 +227,12 @@ func (s *Server) editAndRegenerate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
 		return
 	}
-	// The background coordinator owns reward consumption, branch replacement,
-	// replacement attempt creation and message binding as one operation.
+	// 奖励扣除、分支替换、替换 attempt 创建和消息绑定由后台协调器作为一个操作完成。
 	gen := s.hub.Gen()
 	if !s.hub.RunDetached(c.Request.Context(), convID, func(ctx context.Context, emit realtime.EmitFunc) {
 		gen.Rewrite(ctx, convID, requestID, msgID, strings.TrimSpace(*in.Content), emit)
 	}) {
-		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		s.respondGenerationBusy(c, convID, requestID)
 		return
 	}
 

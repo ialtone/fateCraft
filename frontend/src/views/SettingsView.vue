@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
   NForm,
@@ -13,14 +14,23 @@ import {
 } from 'naive-ui'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
-import { settingsApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
+import { identityApi, settingsApi } from '@/api'
 import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
-import type { LLMCapabilityDiagnostic, LLMCapabilityRole, LLMProviderProfile } from '@/types'
+import type {
+  ExternalIdentity,
+  LLMCapabilityDiagnostic,
+  LLMCapabilityRole,
+  LLMProviderProfile,
+} from '@/types'
 
 const store = useSettingsStore()
 const theme = useThemeStore()
+const auth = useAuthStore()
 const message = useMessage()
+const route = useRoute()
+const router = useRouter()
 const form = ref<Record<string, any>>({})
 const apiKey = ref('')
 const fetchingModels = ref(false)
@@ -28,6 +38,8 @@ const availableModels = ref<string[]>([])
 const diagnostics = ref<Partial<Record<LLMCapabilityRole, LLMCapabilityDiagnostic>>>({})
 const checkingRoles = ref<Partial<Record<LLMCapabilityRole, boolean>>>({})
 const providerProfiles = ref<LLMProviderProfile[]>([])
+const identities = ref<ExternalIdentity[]>([])
+const loadingIdentities = ref(false)
 const defaultProtocol = 'responses'
 const platformManaged = computed(
   () => store.settings?.access_mode === 'platform_managed' || store.settings?.editable === false,
@@ -95,10 +107,17 @@ watch(
 )
 
 onMounted(async () => {
+  showLinuxDOBindResult()
+  loadingIdentities.value = true
   await Promise.all([
     store.load(),
     settingsApi.providers().then((value) => (providerProfiles.value = value)),
+    identityApi
+      .list()
+      .then((value) => (identities.value = value))
+      .catch(() => {}),
   ])
+  loadingIdentities.value = false
   if (store.settings) {
     form.value = {
       ...store.settings,
@@ -107,6 +126,44 @@ onMounted(async () => {
     }
   }
 })
+
+function bindLinuxDO() {
+  window.location.assign(identityApi.bindLinuxDOURL('/settings'))
+}
+
+// LinuxDo 绑定回调会带着 linuxdo_bind=ok 或 linuxdo_bind_error=原因 回到本页；
+// 展示结果后移除这些查询参数，避免刷新时重复提示。
+function showLinuxDOBindResult() {
+  const bindError = route.query.linuxdo_bind_error
+  const bindResult = route.query.linuxdo_bind
+  if (typeof bindError === 'string' && bindError) {
+    message.error(bindError)
+  } else if (bindResult === 'ok') {
+    message.success('LinuxDo 账户已绑定')
+  } else {
+    return
+  }
+  const query = { ...route.query }
+  delete query.linuxdo_bind_error
+  delete query.linuxdo_bind
+  void router.replace({ query })
+}
+
+async function unbindIdentity(identity: ExternalIdentity) {
+  if (
+    !window.confirm(
+      `确认解除 ${identity.provider} 账号「${identity.username || identity.provider_user_id}」的绑定？`,
+    )
+  )
+    return
+  try {
+    await identityApi.unbind(identity.id)
+    identities.value = identities.value.filter((item) => item.id !== identity.id)
+    message.success('第三方账户已解除绑定')
+  } catch (err: any) {
+    message.error(`解除绑定失败：${err.message || '未知错误'}`)
+  }
+}
 
 async function save() {
   if (platformManaged.value) {
@@ -397,6 +454,27 @@ async function fetchModels() {
         <NButton type="primary" @click="save">保存设置</NButton>
       </div>
     </section>
+
+    <section class="card">
+      <div class="card-head">第三方账户</div>
+      <p class="faint sm">
+        第三方账户只作为登录身份，必须绑定到已有的本地账号，不会单独创建站内用户。
+      </p>
+      <div class="identity-list">
+        <div v-if="loadingIdentities" class="faint sm">正在读取绑定状态…</div>
+        <div v-else-if="!identities.length" class="faint sm">尚未绑定第三方账户。</div>
+        <div v-for="identity in identities" :key="identity.id" class="identity-row">
+          <div>
+            <strong>{{ identity.provider === 'linuxdo' ? 'LinuxDo' : identity.provider }}</strong>
+            <span class="faint sm">{{ identity.username || identity.provider_user_id }}</span>
+          </div>
+          <NButton size="small" secondary @click="unbindIdentity(identity)">解除绑定</NButton>
+        </div>
+      </div>
+      <NButton secondary :disabled="!auth.config.linuxdo_enabled" @click="bindLinuxDO">
+        {{ auth.config.linuxdo_enabled ? '绑定 LinuxDo' : 'LinuxDo 未配置' }}
+      </NButton>
+    </section>
   </div>
 </template>
 
@@ -446,6 +524,27 @@ async function fetchModels() {
 
 .sm {
   font-size: 12px;
+}
+
+.identity-list {
+  margin: 14px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.identity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.identity-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .protocol-setting {

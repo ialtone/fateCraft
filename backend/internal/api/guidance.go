@@ -51,12 +51,12 @@ func (s *Server) selectGuidance(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	// Resolve inside BeginUserTurn, after taking the durable generation lease.
-	// This also lets retries with the same request_id replay a consumed choice.
+	// 在 BeginUserTurn 取得 durable 生成租约之后再解析选择；同一 request_id 的
+	// 重试因此可以回放已消费的选项。
 	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
 		s.hub.Gen().Generate(guidance.WithSelection(ctx, body.Selection), id, requestID, "", emit)
 	}) {
-		c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
+		s.respondGenerationBusy(c, id, requestID)
 		return
 	}
 	c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})

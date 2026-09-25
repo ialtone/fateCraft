@@ -66,6 +66,19 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
 		return
 	}
+	actorValue, _ := c.Get(authUserKey)
+	actor, _ := actorValue.(*storage.User)
+	if actor == nil || !actor.IsOwner() {
+		if body.LLMAccessMode != nil || body.PublicBaseURL != nil || body.PublicProvider != nil ||
+			body.PublicProtocol != nil || body.PublicAPIKey != nil || body.ClearPublicAPIKey ||
+			body.PublicModel != nil || body.PublicMemoryModel != nil || body.PublicInquiryModel != nil ||
+			body.PublicMaxContext != nil || body.PublicMaxResponse != nil || body.PublicTemperature != nil ||
+			body.PublicTopP != nil || body.PublicStream != nil || body.PublicReasoning != nil ||
+			body.PublicMemoryReasoning != nil || body.PublicInquiryReasoning != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "只有平台拥有者可以修改平台 LLM 设置"})
+			return
+		}
+	}
 	settings, err := s.system.Get(c.Request.Context())
 	if err != nil {
 		fail(c, err)
@@ -284,11 +297,15 @@ type adminLLMRequestLogSummary struct {
 	FinishReason               string     `json:"finish_reason,omitempty"`
 	ReceivedDone               bool       `json:"received_done"`
 	Success                    bool       `json:"success"`
-	AuditTruncated             bool       `json:"audit_truncated"`
-	Error                      string     `json:"error,omitempty"`
-	DurationMS                 int64      `json:"duration_ms"`
-	CreatedAt                  string     `json:"created_at"`
-	SettingsSource             string     `json:"settings_source"`
+	// 列表状态列依赖这三个字段判断“传输失败 / 结构失败”，必须随摘要返回。
+	TransportSuccess  bool   `json:"transport_success"`
+	StructuredSuccess bool   `json:"structured_success"`
+	OutputMode        string `json:"output_mode,omitempty"`
+	AuditTruncated    bool   `json:"audit_truncated"`
+	Error             string `json:"error,omitempty"`
+	DurationMS        int64  `json:"duration_ms"`
+	CreatedAt         string `json:"created_at"`
+	SettingsSource    string `json:"settings_source"`
 }
 
 type adminContextBuildLogSummary struct {
@@ -329,6 +346,7 @@ func summarizeAdminLLMRequestLog(row storage.LLMRequestLog) adminLLMRequestLogSu
 		InquirySnapshotBranchEpoch: row.InquirySnapshotBranchEpoch, InquirySnapshotRevision: row.InquirySnapshotRevision,
 		Model: row.Model, Stream: row.Stream, ResponseStatus: row.ResponseStatus,
 		FinishReason: row.FinishReason, ReceivedDone: row.ReceivedDone, Success: row.Success, AuditTruncated: row.AuditTruncated,
+		TransportSuccess: row.TransportSuccess, StructuredSuccess: row.StructuredSuccess, OutputMode: row.OutputMode,
 		Error: row.Error, DurationMS: row.DurationMS, CreatedAt: row.CreatedAt.Format(time.RFC3339Nano),
 		SettingsSource: row.SettingsSource,
 	}

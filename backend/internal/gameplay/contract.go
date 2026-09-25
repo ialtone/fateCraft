@@ -436,8 +436,9 @@ func ValidateContract(contract *RuntimeContract) error {
 		if rule.BaseSuccessRate < 1 || rule.BaseSuccessRate > 99 {
 			return fmt.Errorf("判定 %s 的 base_success_rate 必须在 1 到 99 之间", key)
 		}
-		if rule.Sides < 2 || rule.Sides > 1000 {
-			return fmt.Errorf("判定 %s 的 sides 必须在 2 到 1000 之间", key)
+		// 成功率以 1% 为粒度，只有 100 的倍数面才能精确表示；其他面数会扭曲概率。
+		if rule.Sides < 100 || rule.Sides > 1000 || rule.Sides%100 != 0 {
+			return fmt.Errorf("判定 %s 的 sides 必须是 100 到 1000 之间 100 的倍数", key)
 		}
 		if rule.RewardValue < 0 {
 			return fmt.Errorf("判定 %s 的 reward_value 不能为负数", key)

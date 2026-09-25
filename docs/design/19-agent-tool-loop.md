@@ -18,7 +18,9 @@
 
 普通发送、重新生成、续写和编辑改写共享一个生成操作协议。客户端为每次意图生成 `request_id`；服务端把操作类型、目标消息和 payload hash 写入 durable generation run。同一 request ID 的 HTTP/WS 重试只回放已有 run，不重复模型调用、奖励消费或工具副作用；改变正文、目标或操作类型会被拒绝。
 
-重新生成和编辑改写先在 conversation 行锁内完成目标回合解析与平台策略校验，再在同一事务中消费 `message_rewrite` 平台额度、递增 `branch_epoch`、失效旧分支并创建替代 turn/attempt/触发消息。生成 Worker 的每次消息、状态、工具和结算写入都必须同时通过 run、attempt、turn 和 branch epoch fencing。`branch.replaced` 只在事务提交后广播；前端在收到它或服务端快照前不得自行改动时间线。这样即使旧模型请求迟到、断线重连或进程重启，也不会把旧分支事实写入当前历史。
+重新生成和编辑改写先在 conversation 行锁内完成目标回合解析与平台策略校验，再在同一事务中消费 `message_rewrite` 平台额度、递增 `branch_epoch`、失效旧分支并创建替代 turn/attempt/触发消息。重新生成 completed 与 partial 回合都消耗额度（两者都已提交可信事实）；failed/cancelled 回合没有提交任何写工具，重试免费。替代 attempt 没有提交任何写工具就失败或取消时返还额度；一旦提交过写工具（partial）则保留扣费，避免“取消 → 重新生成”变成免费重掷判定。生成 Worker 的每次消息、状态、工具和结算写入都必须同时通过 run、attempt、turn 和 branch epoch fencing；对话状态必须为 active，唯一例外是本 attempt 自己完成挑战结算后对话变为 ended，此时该 attempt 仍可写入工具结果和收尾叙事。`branch.replaced` 只在事务提交后广播；前端在收到它或服务端快照前不得自行改动时间线。这样即使旧模型请求迟到、断线重连或进程重启，也不会把旧分支事实写入当前历史。
+
+REST 重试若与仍在运行的原请求使用同一 `request_id`，接口返回 `202 {"status":"replayed"}`，结果继续经 WebSocket 推送；只有不同的新请求才返回 409。
 
 ## 玩家输入信任边界
 
@@ -81,7 +83,7 @@ EOF、超时、取消、`finish_reason=length` 或 Responses `max_output_tokens`
 
 ### 多工具批次
 
-供应商可能在忽略 `parallel_tool_calls=false` 时返回多个工具调用。协调器先校验每个调用的稳定 `call_id`，拒绝重复或非法 ID；通过校验后不把多个写调用交给并发事务，而是按响应顺序逐个进入现有 Claim、领域校验、短事务提交和结果消息流程。这样既兼容供应商的并行响应，也保持状态修订、Campaign revision、随机判定和结算的顺序与幂等语义。
+供应商可能在忽略 `parallel_tool_calls=false` 时返回多个工具调用。协调器先校验每个调用的稳定 `call_id`，拒绝重复或非法 ID；通过校验后不把多个写调用交给并发事务，而是按响应顺序逐个进入现有 Claim、领域校验、短事务提交和结果消息流程。这样既兼容供应商的并行响应，也保持状态修订、Campaign revision、随机判定和结算的顺序与幂等语义。`fc_complete_challenge` 提交成功后，同一批次中排在其后的写工具不再执行；后续模型步骤不提供任何工具（包括行动提示），只写结局收尾叙事。
 
 工具快照中的 `execution_mode` 是执行策略边界。当前内置状态、判定、结算和 Campaign 工具固定为 `serial`；未来只有明确只读、无副作用且声明稳定读集的工具才可以使用 `parallel_read`，并行结果仍须按原始调用顺序写回历史。
 
@@ -120,7 +122,7 @@ Handler 返回 `rejected` 或 `failed` 时使用内部哨兵错误回滚整个�
 | `failed` | 没有可信副作用，模型或协调器失败 |
 | `cancelled` | 没有可信副作用且请求被取消 |
 
-租约回收器（启动时及每 30s）会封口所属对话已无活动租约的 running attempt，并把对应 `received` invocation 标记为 `abandoned/generation_lost`。生成 goroutine 内的 panic 由 Hub 兜住：记录堆栈、封存该对话的租约与回合、向客户端发送 `error`，进程本身继续运行。已经 committed 的领域事实不会回滚或重复执行。用户对 partial attempt 使用“继续叙事”时只允许文本续写，依据数据库中的可信事实收尾。
+租约回收器（启动时及每 30s）会封口所属对话已无活动租约的 running attempt，并把对应 `received` invocation 标记为 `abandoned/generation_lost`；新请求抢占已过期租约时，也会在同一事务里按同样规则封口该对话遗留的回合，保证抢占后立即可以开始新回合。生成 goroutine 内的 panic 由 Hub 兜住：记录堆栈、只封存本实例持有的该对话租约与回合、向客户端发送 `error`，进程本身继续运行。已经 committed 的领域事实不会回滚或重复执行。用户对 partial attempt 使用“继续叙事”时只允许文本续写，依据数据库中的可信事实收尾。
 
 `GET /api/conversations/:id/activity` 从持久行恢复 `preparing/model/tool`；流式字符本身不持久化。用户点击“继续”会创建一条普通用户消息，因此实时和刷新后的玩家时间线一致。WebSocket 连接会在服务端按同一 attempt/step/message/type 合并相邻 reasoning/text delta（约 40ms 或 4KB flush），控制与终态事件进入有限队列；队列满时立即记录告警并关闭慢连接，不在模型回调中等待。重连时前端重新拉取消息、状态、Campaign、活动和最近上下文，丢失的临时预览不恢复，以持久化快照为准。
 

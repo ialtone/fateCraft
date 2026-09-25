@@ -268,6 +268,12 @@ func classifyBuiltin(
 			return StatusAvailable, true, false
 		}
 	}
+	// 库里已存在同号版本、但与当前发布版本不同：这是已退役的旧版本。
+	// 用它覆盖会删掉旧版本、重建发布，并把较新的当前版本退役、
+	// 封存其下所有 active 对话，等同于版本回退，一律不再标为可覆盖。
+	if current != nil && existing != nil && existing.ID != current.ID {
+		return StatusUpdateAvailable, false, false
+	}
 	return StatusUpdateAvailable, false, true
 }
 
@@ -350,14 +356,19 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	if existing != nil && !overwrite {
 		return nil, fmt.Errorf("%w: 挑战 %s/%s 已存在", ErrOverwriteRequired, pack.Slug, manifest.Version)
 	}
-	if existing == nil && pack.CurrentVersionID != nil {
+	// 导入的版本号不是当前发布版本时（无论同号版本是否存在），
+	// 都要求仓库版本高于数据库当前版本：禁止用覆盖流程回退到旧版本，
+	// 否则发布会退役较新的当前版本并封存其下所有 active 对话。
+	if pack.CurrentVersionID != nil {
 		current, err := i.repo.GetVersion(ctx, *pack.CurrentVersionID)
 		if err != nil {
 			return nil, err
 		}
-		comparison, err := compareStableVersions(manifest.Version, current.Version)
-		if err != nil || comparison <= 0 {
-			return nil, fmt.Errorf("%w: 仓库版本 %s 不高于数据库当前版本 %s；更新已使用内容必须提升版本号", ErrOverwriteRequired, manifest.Version, current.Version)
+		if manifest.Version != current.Version {
+			comparison, err := compareStableVersions(manifest.Version, current.Version)
+			if err != nil || comparison <= 0 {
+				return nil, fmt.Errorf("%w: 仓库版本 %s 不高于数据库当前版本 %s；更新已使用内容必须提升版本号", ErrOverwriteRequired, manifest.Version, current.Version)
+			}
 		}
 	}
 

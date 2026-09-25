@@ -42,7 +42,8 @@ export function guidanceConditionMatches(
 ): boolean {
   if (!condition) return true
   const actual = readGuidancePath(condition.path, context)
-  if (condition.exists !== undefined) return condition.exists === (actual !== undefined && actual !== null)
+  if (condition.exists !== undefined)
+    return condition.exists === (actual !== undefined && actual !== null)
   if (condition.equals !== undefined) return String(actual) === String(condition.equals)
   if (condition.not_equals !== undefined) return String(actual) !== String(condition.not_equals)
   if (condition.operator && condition.value !== undefined) {
@@ -50,12 +51,18 @@ export function guidanceConditionMatches(
     const expected = Number(condition.value)
     if (!Number.isFinite(number) || !Number.isFinite(expected)) return false
     switch (condition.operator) {
-      case 'gte': return number >= expected
-      case 'gt': return number > expected
-      case 'lte': return number <= expected
-      case 'lt': return number < expected
-      case 'eq': return number === expected
-      default: return false
+      case 'gte':
+        return number >= expected
+      case 'gt':
+        return number > expected
+      case 'lte':
+        return number <= expected
+      case 'lt':
+        return number < expected
+      case 'eq':
+        return number === expected
+      default:
+        return false
     }
   }
   return false
@@ -86,7 +93,9 @@ export function resolveGuidanceGroups(
   return (groups ?? [])
     .filter((group) => {
       if (!placement || !group.placement) return true
-      return Array.isArray(placement) ? placement.includes(group.placement) : group.placement === placement
+      return Array.isArray(placement)
+        ? placement.includes(group.placement)
+        : group.placement === placement
     })
     .map((group) => {
       const items = group.items

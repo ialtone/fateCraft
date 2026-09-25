@@ -168,6 +168,131 @@ func TestPostgresDisplayMessageCursorIsStableForEqualTimestamps(t *testing.T) {
 	}
 }
 
+// 挑战结算会在同一工具事务里把对话改为 ended。由本 attempt 结算而结束的对话
+// 必须允许该 attempt 继续写入（工具结果、收尾叙事），其他 ended 对话一律拒绝。
+func TestPostgresSettledAttemptKeepsGenerationFence(t *testing.T) {
+	db := openGenerationTestDB(t)
+	ctx := context.Background()
+	conversationID := seedGenerationTestConversation(t, db)
+	repo := NewConversationRepo(db)
+	_, run, _, err := repo.StartGeneration(ctx, conversationID, GenerationRequest{RequestID: uuid.New(), OperationType: "user_input", PayloadHash: "settle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runCtx := operation.WithGeneration(ctx, conversationID, run.ID)
+	turn, attempt, err := NewTurnRepo(db).Begin(runCtx, conversationID, "user_input")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attemptCtx := operation.WithMetadata(runCtx, operation.Metadata{ConversationID: conversationID, TurnID: turn.ID, AttemptID: attempt.ID})
+	if err := AssertGenerationActive(attemptCtx, db, conversationID); err != nil {
+		t.Fatalf("active fence: %v", err)
+	}
+
+	if err := db.Exec(`UPDATE conversations SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = ?`, conversationID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := AssertGenerationActive(attemptCtx, db, conversationID); !errors.Is(err, ErrGenerationNotActive) {
+		t.Fatalf("ended without settlement error=%v", err)
+	}
+
+	var conversation Conversation
+	if err := db.First(&conversation, "id = ?", conversationID).Error; err != nil {
+		t.Fatal(err)
+	}
+	outcomeID := uuid.New()
+	if err := db.Exec(`INSERT INTO challenge_outcome_rules (id, challenge_version_id, outcome_key, category, title, verifier_key, verifier_config)
+		VALUES (?, ?, 'win', 'success', 'Win', 'core.always', '{}'::jsonb)`, outcomeID, conversation.ChallengeVersionID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO challenge_runs (id, conversation_id, player_id, challenge_version_id, outcome_rule_id, outcome_key, category, title_snapshot, settlement_detail, turn_id, attempt_id, settled_at)
+		VALUES (?, ?, ?, ?, ?, 'win', 'success', 'Win', '{}'::jsonb, ?, ?, CURRENT_TIMESTAMP)`,
+		uuid.New(), conversationID, conversation.PlayerID, conversation.ChallengeVersionID, outcomeID, turn.ID, attempt.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := AssertGenerationActive(attemptCtx, db, conversationID); err != nil {
+		t.Fatalf("settling attempt must keep writing: %v", err)
+	}
+	// 只有 attempt 级别的围栏放行；尚无 attempt 的 run 级写入仍要求 active。
+	if err := AssertGenerationActive(runCtx, db, conversationID); !errors.Is(err, ErrGenerationNotActive) {
+		t.Fatalf("run-level fence on ended conversation error=%v", err)
+	}
+}
+
+func TestPostgresSuccessfulRollKeysIgnoreInvalidatedBranches(t *testing.T) {
+	db := openGenerationTestDB(t)
+	conversationID := seedGenerationTestConversation(t, db)
+	if err := db.Exec(`INSERT INTO roll_history (conversation_id, roll_key, title_snapshot, success) VALUES (?, 'current', 'Roll', TRUE)`, conversationID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO roll_history (conversation_id, roll_key, title_snapshot, success, invalidated_at, invalidation_reason)
+		VALUES (?, 'replaced', 'Roll', TRUE, CURRENT_TIMESTAMP, 'regenerate')`, conversationID).Error; err != nil {
+		t.Fatal(err)
+	}
+	keys, err := NewChallengeRepository(db).SuccessfulRollKeys(context.Background(), conversationID)
+	if err != nil || len(keys) != 1 || keys[0] != "current" {
+		t.Fatalf("successful roll keys=%v err=%v", keys, err)
+	}
+}
+
+func TestPostgresLifecycleTransitionsFollowStateMachine(t *testing.T) {
+	db := openGenerationTestDB(t)
+	ctx := context.Background()
+	repo := NewConversationRepo(db)
+	conversationID := seedGenerationTestConversation(t, db)
+	now := time.Now()
+	if err := repo.TransitionLifecycle(ctx, conversationID, StatusEnded, map[string]any{"ended_at": now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.TransitionLifecycle(ctx, conversationID, StatusArchived, map[string]any{"archived_at": now}); !errors.Is(err, ErrConversationNotActive) {
+		t.Fatalf("ended -> archived error=%v", err)
+	}
+	if err := repo.TransitionLifecycle(ctx, conversationID, StatusActive, nil); !errors.Is(err, ErrConversationNotActive) {
+		t.Fatalf("ended -> active error=%v", err)
+	}
+	if err := repo.TransitionLifecycle(ctx, conversationID, StatusDeleted, map[string]any{"deleted_at": now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.TransitionLifecycle(ctx, conversationID, StatusEnded, map[string]any{"ended_at": now}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted -> ended error=%v", err)
+	}
+}
+
+func TestPostgresExpiredLeasePreemptionSealsOrphanedTurn(t *testing.T) {
+	db := openGenerationTestDB(t)
+	ctx := context.Background()
+	conversationID := seedGenerationTestConversation(t, db)
+	repo := NewConversationRepo(db)
+	turns := NewTurnRepo(db)
+	_, oldRun, _, err := repo.StartGeneration(ctx, conversationID, GenerationRequest{RequestID: uuid.New(), OperationType: "user_input", PayloadHash: "old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, attempt, err := turns.Begin(operation.WithGeneration(ctx, conversationID, oldRun.ID), conversationID, "user_input")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&ConversationGenerationRun{}).Where("id = ?", oldRun.ID).
+		Update("lease_expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, newRun, _, err := repo.StartGeneration(ctx, conversationID, GenerationRequest{RequestID: uuid.New(), OperationType: "user_input", PayloadHash: "new"})
+	if err != nil {
+		t.Fatalf("preempt expired lease: %v", err)
+	}
+	var sealedTurn ConversationTurn
+	if err := db.First(&sealedTurn, "id = ?", turn.ID).Error; err != nil || sealedTurn.Status != TurnStatusFailed {
+		t.Fatalf("orphaned turn=%+v err=%v", sealedTurn, err)
+	}
+	var sealedAttempt GenerationAttempt
+	if err := db.First(&sealedAttempt, "id = ?", attempt.ID).Error; err != nil || sealedAttempt.Status != AttemptStatusFailed {
+		t.Fatalf("orphaned attempt=%+v err=%v", sealedAttempt, err)
+	}
+	if _, _, err := turns.Begin(operation.WithGeneration(ctx, conversationID, newRun.ID), conversationID, "user_input"); err != nil {
+		t.Fatalf("new run cannot begin a turn after preemption: %v", err)
+	}
+}
+
 func openGenerationTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	databaseURL := os.Getenv("FATECRAFT_TEST_DATABASE_URL")
@@ -216,7 +341,7 @@ func seedGenerationTestConversation(t *testing.T, db *gorm.DB) uuid.UUID {
 		query string
 		args  []any
 	}{
-		{`INSERT INTO users (id, display_name) VALUES (?, 'Generation Test')`, []any{playerID}},
+		{`INSERT INTO users (id, username, display_name) VALUES (?, 'generation-test', 'Generation Test')`, []any{playerID}},
 		{`INSERT INTO challenge_packs (id, slug, name) VALUES (?, 'generation-test', 'Generation Test')`, []any{packID}},
 		{`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, []any{versionID, packID, hash}},
 		{`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash) VALUES (?, ?, 'Generation Test', ?, ?)`, []any{conversationID, playerID, versionID, hash}},

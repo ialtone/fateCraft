@@ -18,7 +18,14 @@ const props = withDefaults(
     disabled?: boolean
     loading?: boolean
   }>(),
-  { groups: () => [], state: undefined, snapshot: undefined, placement: undefined, disabled: false, loading: false },
+  {
+    groups: () => [],
+    state: undefined,
+    snapshot: undefined,
+    placement: undefined,
+    disabled: false,
+    loading: false,
+  },
 )
 
 const emit = defineEmits<{

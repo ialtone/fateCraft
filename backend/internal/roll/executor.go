@@ -8,9 +8,11 @@ import (
 )
 
 // ExecuteRoll 执行掷骰并确定结果等级。
+// 成功率以 1% 为粒度计算，只有面数是 100 的倍数时才能精确表示，其他面数直接拒绝，
+// 避免例如 6 面骰把 1% 的成功率放大成 1/6。
 func ExecuteRoll(detailedResult *DetailedResult, sides int) (*RollOutcome, error) {
-	if sides < 2 {
-		return nil, fmt.Errorf("骰子面数必须至少为 2")
+	if sides < 100 || sides%100 != 0 {
+		return nil, fmt.Errorf("骰子面数必须是 100 的倍数")
 	}
 	value, err := rand.Int(rand.Reader, big.NewInt(int64(sides)))
 	if err != nil {
@@ -26,8 +28,8 @@ func ExecuteRoll(detailedResult *DetailedResult, sides int) (*RollOutcome, error
 		Outcomes:    detailedResult.Outcomes,
 	}
 
-	// 结果区间（RangeStart/RangeEnd）以 1-100 百分比刻度定义，
-	// 需把任意面数骰子的点数等比映射到 1-100 后再比较，保证概率正确。
+	// 结果区间（RangeStart/RangeEnd）以 1-100 百分比刻度定义。面数是 100 的倍数时，
+	// 每个百分点恰好对应 sides/100 个点数，映射后的概率与计算出的成功率完全一致；
 	// sides=100 时 normalized == rolled。
 	normalized := 1 + (rolled-1)*100/sides
 

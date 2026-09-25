@@ -1,7 +1,7 @@
 package campaigncontract
 
 const (
-	ActionRenameCharacter  = "character.rename"
+	ActionRenameCharacter   = "character.rename"
 	ActionPractice          = "cultivation.practice"
 	ActionBreakthrough      = "cultivation.attempt_breakthrough"
 	ActionLearnTechnique    = "cultivation.learn_technique"

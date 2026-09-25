@@ -58,7 +58,7 @@ func matchTalent(talent string, category string, advantages []string, config *Co
 			continue
 		}
 
-		return pattern.Bonus - pattern.Penalty
+		return pattern.Bonus + pattern.Penalty
 	}
 
 	return 0
@@ -87,7 +87,7 @@ func matchTrait(trait string, category string, advantages []string, config *Conf
 			continue
 		}
 
-		return pattern.Bonus - pattern.Penalty
+		return pattern.Bonus + pattern.Penalty
 	}
 
 	return 0

@@ -25,9 +25,11 @@ const auth = useAuthStore()
 // 主对话页使用全屏三栏布局，不显示顶部导航。
 const isConversation = computed(() => route.name === 'conversation')
 const isAuthPage = computed(() => route.name === 'login')
+const isSetupPage = computed(() => route.name === 'setup')
 const isSharedPage = computed(
   () => route.name === 'shared-conversation' || route.name === 'shared-conversation-client',
 )
+const isAdminPage = computed(() => route.matched.some((record) => record.meta.admin))
 
 const navs = computed(() => [
   {
@@ -67,7 +69,10 @@ async function logout() {
     <NMessageProvider placement="top">
       <NDialogProvider>
         <div class="app">
-          <header v-if="!isConversation && !isAuthPage && !isSharedPage" class="topnav">
+          <header
+            v-if="!isConversation && !isAuthPage && !isSetupPage && !isSharedPage && !isAdminPage"
+            class="topnav"
+          >
             <RouterLink to="/" class="brand">
               <span class="lantern" aria-hidden="true"></span>
               <span class="brand-cn">命运茶馆</span>
@@ -119,7 +124,12 @@ async function logout() {
               <ThemeToggle />
             </div>
           </header>
-          <main :class="{ full: isConversation || isSharedPage, 'auth-main': isAuthPage }">
+          <main
+            :class="{
+              full: isConversation || isSharedPage,
+              'auth-main': isAuthPage || isSetupPage,
+            }"
+          >
             <RouterView />
           </main>
         </div>

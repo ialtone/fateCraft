@@ -821,34 +821,54 @@ func (LLMSettings) TableName() string { return "llm_settings" }
 
 // SystemSettings 是全局玩法配置，只能由管理员修改。
 type SystemSettings struct {
-	ID                              int       `gorm:"column:id;primaryKey" json:"id"`
-	RollSystemEnabled               bool      `gorm:"column:roll_system_enabled;not null;default:true" json:"roll_system_enabled"`
-	RollDifficultyMode              string    `gorm:"column:roll_difficulty_mode;size:10;not null;default:normal" json:"roll_difficulty_mode"`
-	DetailedLLMLoggingEnabled       bool      `gorm:"column:detailed_llm_logging_enabled;not null;default:false" json:"detailed_llm_logging_enabled"`
-	DiagnosticLogCleanupEnabled     bool      `gorm:"column:diagnostic_log_cleanup_enabled;not null;default:true" json:"diagnostic_log_cleanup_enabled"`
-	DiagnosticLogRetentionDays      int       `gorm:"column:diagnostic_log_retention_days;not null;default:30" json:"diagnostic_log_retention_days"`
-	LLMAccessMode                   string    `gorm:"column:llm_access_mode;size:32;not null;default:user_managed" json:"llm_access_mode"`
-	PublicLLMBaseURL                string    `gorm:"column:public_llm_base_url" json:"public_llm_base_url"`
-	PublicLLMProvider               string    `gorm:"column:public_llm_provider;size:64;not null;default:openai" json:"public_llm_provider"`
-	PublicLLMProtocol               string    `gorm:"column:public_llm_protocol;size:32;not null;default:responses" json:"public_llm_protocol"`
-	PublicLLMAPIKeyEncrypted        string    `gorm:"column:public_llm_api_key_encrypted" json:"-"`
-	PublicLLMHasAPIKey              bool      `gorm:"-" json:"public_llm_has_api_key"`
-	PublicLLMModel                  string    `gorm:"column:public_llm_model" json:"public_llm_model"`
-	PublicLLMMemoryModel            string    `gorm:"column:public_llm_memory_model" json:"public_llm_memory_model"`
-	PublicLLMInquiryModel           string    `gorm:"column:public_llm_inquiry_model" json:"public_llm_inquiry_model"`
-	PublicLLMMaxContextTokens       int       `gorm:"column:public_llm_max_context_tokens;not null;default:128000" json:"public_llm_max_context_tokens"`
-	PublicLLMMaxResponseTokens      int       `gorm:"column:public_llm_max_response_tokens;not null;default:16384" json:"public_llm_max_response_tokens"`
-	PublicLLMTemperature            float64   `gorm:"column:public_llm_temperature;not null;default:0.8" json:"public_llm_temperature"`
-	PublicLLMTopP                   float64   `gorm:"column:public_llm_top_p;not null;default:1" json:"public_llm_top_p"`
-	PublicLLMStreamEnabled          bool      `gorm:"column:public_llm_stream_enabled;not null;default:true" json:"public_llm_stream_enabled"`
-	PublicLLMReasoningEffort        string    `gorm:"column:public_llm_reasoning_effort" json:"public_llm_reasoning_effort"`
-	PublicLLMMemoryReasoningEffort  string    `gorm:"column:public_llm_memory_reasoning_effort" json:"public_llm_memory_reasoning_effort"`
-	PublicLLMInquiryReasoningEffort string    `gorm:"column:public_llm_inquiry_reasoning_effort" json:"public_llm_inquiry_reasoning_effort"`
-	PublicLLMSettingsRevision       int64     `gorm:"column:public_llm_settings_revision;not null;default:1" json:"public_llm_settings_revision"`
-	UpdatedAt                       time.Time `gorm:"column:updated_at" json:"updated_at"`
+	ID                              int        `gorm:"column:id;primaryKey" json:"id"`
+	InstallationCompletedAt         *time.Time `gorm:"column:installation_completed_at" json:"installation_completed_at,omitempty"`
+	RollSystemEnabled               bool       `gorm:"column:roll_system_enabled;not null;default:true" json:"roll_system_enabled"`
+	RollDifficultyMode              string     `gorm:"column:roll_difficulty_mode;size:10;not null;default:normal" json:"roll_difficulty_mode"`
+	DetailedLLMLoggingEnabled       bool       `gorm:"column:detailed_llm_logging_enabled;not null;default:false" json:"detailed_llm_logging_enabled"`
+	DiagnosticLogCleanupEnabled     bool       `gorm:"column:diagnostic_log_cleanup_enabled;not null;default:true" json:"diagnostic_log_cleanup_enabled"`
+	DiagnosticLogRetentionDays      int        `gorm:"column:diagnostic_log_retention_days;not null;default:30" json:"diagnostic_log_retention_days"`
+	LLMAccessMode                   string     `gorm:"column:llm_access_mode;size:32;not null;default:user_managed" json:"llm_access_mode"`
+	PublicLLMBaseURL                string     `gorm:"column:public_llm_base_url" json:"public_llm_base_url"`
+	PublicLLMProvider               string     `gorm:"column:public_llm_provider;size:64;not null;default:openai" json:"public_llm_provider"`
+	PublicLLMProtocol               string     `gorm:"column:public_llm_protocol;size:32;not null;default:responses" json:"public_llm_protocol"`
+	PublicLLMAPIKeyEncrypted        string     `gorm:"column:public_llm_api_key_encrypted" json:"-"`
+	PublicLLMHasAPIKey              bool       `gorm:"-" json:"public_llm_has_api_key"`
+	PublicLLMModel                  string     `gorm:"column:public_llm_model" json:"public_llm_model"`
+	PublicLLMMemoryModel            string     `gorm:"column:public_llm_memory_model" json:"public_llm_memory_model"`
+	PublicLLMInquiryModel           string     `gorm:"column:public_llm_inquiry_model" json:"public_llm_inquiry_model"`
+	PublicLLMMaxContextTokens       int        `gorm:"column:public_llm_max_context_tokens;not null;default:128000" json:"public_llm_max_context_tokens"`
+	PublicLLMMaxResponseTokens      int        `gorm:"column:public_llm_max_response_tokens;not null;default:16384" json:"public_llm_max_response_tokens"`
+	PublicLLMTemperature            float64    `gorm:"column:public_llm_temperature;not null;default:0.8" json:"public_llm_temperature"`
+	PublicLLMTopP                   float64    `gorm:"column:public_llm_top_p;not null;default:1" json:"public_llm_top_p"`
+	PublicLLMStreamEnabled          bool       `gorm:"column:public_llm_stream_enabled;not null;default:true" json:"public_llm_stream_enabled"`
+	PublicLLMReasoningEffort        string     `gorm:"column:public_llm_reasoning_effort" json:"public_llm_reasoning_effort"`
+	PublicLLMMemoryReasoningEffort  string     `gorm:"column:public_llm_memory_reasoning_effort" json:"public_llm_memory_reasoning_effort"`
+	PublicLLMInquiryReasoningEffort string     `gorm:"column:public_llm_inquiry_reasoning_effort" json:"public_llm_inquiry_reasoning_effort"`
+	PublicLLMSettingsRevision       int64      `gorm:"column:public_llm_settings_revision;not null;default:1" json:"public_llm_settings_revision"`
+	UpdatedAt                       time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (SystemSettings) TableName() string { return "system_settings" }
+
+// AdminAuditLog records security-sensitive role, installation, and account operations.
+// It intentionally contains only redacted request metadata.
+type AdminAuditLog struct {
+	ID            uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
+	ActorUserID   *uuid.UUID `gorm:"column:actor_user_id;type:uuid" json:"actor_user_id,omitempty"`
+	TargetUserID  *uuid.UUID `gorm:"column:target_user_id;type:uuid" json:"target_user_id,omitempty"`
+	Action        string     `gorm:"column:action;size:64;not null" json:"action"`
+	OldRole       *string    `gorm:"column:old_role;size:16" json:"old_role,omitempty"`
+	NewRole       *string    `gorm:"column:new_role;size:16" json:"new_role,omitempty"`
+	Result        string     `gorm:"column:result;size:16;not null" json:"result"`
+	Metadata      JSONMap    `gorm:"column:metadata;type:jsonb;not null" json:"metadata"`
+	RequestID     string     `gorm:"column:request_id;size:128" json:"request_id,omitempty"`
+	IPHash        string     `gorm:"column:ip_hash;size:64" json:"-"`
+	UserAgentHash string     `gorm:"column:user_agent_hash;size:64" json:"-"`
+	CreatedAt     time.Time  `gorm:"column:created_at;not null" json:"created_at"`
+}
+
+func (AdminAuditLog) TableName() string { return "admin_audit_logs" }
 
 func DefaultSystemSettings() *SystemSettings {
 	return &SystemSettings{

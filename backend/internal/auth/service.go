@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,16 +16,27 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 const linuxDOProvider = "linuxdo"
+
+// LinuxDOFlowTTL 是一次 LinuxDo 授权流程及其浏览器绑定 Cookie 的有效期。
+const LinuxDOFlowTTL = 10 * time.Minute
+
+// 用户名规则：去除首尾空白后 2-32 个字符，不能包含 @、空白、控制或格式字符。
+const (
+	usernameMinRunes    = 2
+	usernameMaxRunes    = 32
+	displayNameMaxRunes = 64
+	returnToMaxBytes    = 2048
+)
 
 var (
 	ErrUnauthenticated           = errors.New("未登录")
@@ -38,10 +50,17 @@ var (
 	ErrVerificationCooldown      = errors.New("验证码发送过于频繁")
 	ErrInvalidAuthSettings       = errors.New("认证设置无效")
 	ErrLinuxDONotConfigured      = errors.New("LinuxDo 登录尚未配置")
-	ErrInvalidCredentials        = errors.New("邮箱或密码错误")
-	ErrEmailInUse                = errors.New("邮箱已被注册")
-	ErrInvalidOAuthFlow          = errors.New("OAuth 登录流程已失效，请重试")
-	ErrProviderRejected          = errors.New("LinuxDo 账号不可用")
+	ErrInstallationRequired      = errors.New("请先完成首次安装")
+	ErrInvalidCredentials        = errors.New("用户名、邮箱或密码错误")
+	// ErrEmailInUse 与存储层共用同一个哨兵，唯一约束冲突和注册前检查可以统一判断。
+	ErrEmailInUse                 = storage.ErrEmailInUse
+	ErrInvalidUsername            = errors.New("用户名无效")
+	ErrInvalidDisplayName         = errors.New("昵称无效")
+	ErrInvalidOAuthFlow           = errors.New("OAuth 登录流程已失效，请重试")
+	ErrProviderRejected           = errors.New("LinuxDo 账号不可用")
+	ErrLinuxDOUnbound             = errors.New("该 LinuxDo 账户尚未绑定站内账号")
+	ErrLinuxDOCancelled           = errors.New("已取消 LinuxDo 授权")
+	ErrLinuxDOBindSessionMismatch = errors.New("绑定 LinuxDo 需要在发起绑定的账号保持登录时完成")
 )
 
 type Repository interface {
@@ -51,8 +70,13 @@ type Repository interface {
 	DeleteSession(context.Context, string) error
 	UserBySession(context.Context, string, time.Time) (*storage.User, error)
 	UserByEmail(context.Context, string) (*storage.User, error)
+	UserByIdentifier(context.Context, string) (*storage.User, error)
 	RegisterEmailUser(context.Context, *storage.User, *uuid.UUID, *string, time.Time) error
-	UpsertExternalUser(context.Context, storage.ExternalIdentityInput) (*storage.User, error)
+	ExternalUserByProviderSubject(context.Context, string, string) (*storage.User, error)
+	BindExternalIdentity(context.Context, uuid.UUID, storage.ExternalIdentityInput) (*storage.ExternalIdentitySummary, error)
+	ListExternalIdentities(context.Context, uuid.UUID) ([]storage.ExternalIdentitySummary, error)
+	ListAllExternalIdentities(context.Context, int, int) ([]storage.AdminExternalIdentitySummary, error)
+	UnbindExternalIdentity(context.Context, uuid.UUID, uuid.UUID, bool) error
 	GetAuthSettings(context.Context) (*storage.AuthSettings, error)
 	SaveAuthSettings(context.Context, *storage.AuthSettings) error
 	LatestEmailVerification(context.Context, string, string) (*storage.EmailVerificationCode, error)
@@ -63,6 +87,12 @@ type Repository interface {
 	InvitationCodeByID(context.Context, uuid.UUID) (*storage.InvitationCode, error)
 	CreateInvitationCode(context.Context, *storage.InvitationCode) error
 	UpdateInvitationCode(context.Context, *storage.InvitationCode) error
+	InstallationComplete(context.Context) (bool, error)
+	InitializeOwner(context.Context, *storage.User) (*storage.User, error)
+	ListUsers(context.Context, int, int) ([]storage.User, error)
+	UpdateUserRole(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
+	UpdateUserStatus(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
+	ListAdminAuditLogs(context.Context, int) ([]storage.AdminAuditLog, error)
 }
 
 type Config struct {
@@ -123,32 +153,78 @@ func (s *Service) PublicConfig(ctx context.Context) (PublicConfig, error) {
 	if err != nil {
 		return PublicConfig{}, err
 	}
+	initialized, err := s.repo.InstallationComplete(ctx)
+	if err != nil {
+		return PublicConfig{}, err
+	}
+	if !initialized {
+		settings.EmailRegistrationEnabled = false
+		// LinuxDo is a binding/login method after installation, never a way to
+		// create an unowned account before the first local owner exists.
+		settings.EmailAuthEnabled = false
+	}
 	return PublicConfig{
 		EmailAuthEnabled: settings.EmailAuthEnabled, EmailRegistrationEnabled: settings.EmailRegistrationEnabled,
 		EmailVerificationEnabled: settings.EmailVerificationEnabled, InvitationRequired: settings.InvitationRequired,
 		VerificationResendSeconds: settings.VerificationResendSeconds,
-		LinuxDOEnabled:            s.cfg.LinuxDOEnabled(),
+		LinuxDOEnabled:            initialized && s.cfg.LinuxDOEnabled(),
 	}, nil
 }
 
-func (s *Service) StartLinuxDO(ctx context.Context, returnTo string) (string, error) {
+// LinuxDOStart 是发起 LinuxDo 授权后需要交给浏览器的数据。
+type LinuxDOStart struct {
+	// RedirectURL 是 LinuxDo 授权页地址。
+	RedirectURL string
+	// BrowserBinding 是需要写入短期 HttpOnly Cookie 的随机 nonce；数据库只保存它的 SHA-256。
+	BrowserBinding string
+}
+
+// StartLinuxDO 发起 LinuxDo 登录流程，只能在首次安装完成后使用。
+func (s *Service) StartLinuxDO(ctx context.Context, returnTo string) (*LinuxDOStart, error) {
 	if !s.cfg.LinuxDOEnabled() {
-		return "", ErrLinuxDONotConfigured
+		return nil, ErrLinuxDONotConfigured
 	}
+	initialized, err := s.repo.InstallationComplete(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !initialized {
+		return nil, ErrInstallationRequired
+	}
+	return s.startLinuxDOFlow(ctx, storage.OAuthPurposeLogin, nil, returnTo)
+}
+
+// StartLinuxDOBind 为当前已登录用户发起 LinuxDo 绑定流程。
+func (s *Service) StartLinuxDOBind(ctx context.Context, userID uuid.UUID, returnTo string) (*LinuxDOStart, error) {
+	if !s.cfg.LinuxDOEnabled() {
+		return nil, ErrLinuxDONotConfigured
+	}
+	return s.startLinuxDOFlow(ctx, storage.OAuthPurposeBind, &userID, returnTo)
+}
+
+// startLinuxDOFlow 创建一次性授权流程：state、PKCE verifier 和浏览器绑定 nonce 都是随机值，
+// 数据库只保存 state 与 nonce 的 SHA-256。
+func (s *Service) startLinuxDOFlow(ctx context.Context, purpose string, userID *uuid.UUID, returnTo string) (*LinuxDOStart, error) {
 	state, err := randomToken(32)
 	if err != nil {
-		return "", fmt.Errorf("生成 OAuth state 失败: %w", err)
+		return nil, fmt.Errorf("生成 OAuth state 失败: %w", err)
 	}
 	verifier, err := randomToken(48)
 	if err != nil {
-		return "", fmt.Errorf("生成 PKCE verifier 失败: %w", err)
+		return nil, fmt.Errorf("生成 PKCE verifier 失败: %w", err)
 	}
+	binding, err := randomToken(32)
+	if err != nil {
+		return nil, fmt.Errorf("生成浏览器绑定 nonce 失败: %w", err)
+	}
+	now := time.Now()
 	flow := &storage.OAuthLoginFlow{
-		StateHash: sha256Hex(state), Provider: linuxDOProvider, CodeVerifier: verifier,
-		ReturnTo: safeReturnTo(returnTo), ExpiresAt: time.Now().Add(10 * time.Minute), CreatedAt: time.Now(),
+		StateHash: sha256Hex(state), Provider: linuxDOProvider, Purpose: purpose, UserID: userID,
+		CodeVerifier: verifier, BrowserBindingHash: sha256Hex(binding), ReturnTo: safeReturnTo(returnTo),
+		ExpiresAt: now.Add(LinuxDOFlowTTL), CreatedAt: now,
 	}
 	if err := s.repo.CreateOAuthFlow(ctx, flow); err != nil {
-		return "", err
+		return nil, err
 	}
 	challenge := sha256.Sum256([]byte(verifier))
 	params := url.Values{
@@ -160,53 +236,137 @@ func (s *Service) StartLinuxDO(ctx context.Context, returnTo string) (string, er
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(challenge[:])},
 		"code_challenge_method": {"S256"},
 	}
-	return s.cfg.AuthorizationURL + "?" + params.Encode(), nil
+	return &LinuxDOStart{RedirectURL: s.cfg.AuthorizationURL + "?" + params.Encode(), BrowserBinding: binding}, nil
 }
 
 type LoginResult struct {
+	// Purpose 只在 LinuxDo 回调结果中设置：login 或 bind。
+	Purpose      string
 	User         *storage.User
 	SessionToken string
 	ReturnTo     string
 }
 
-func (s *Service) CompleteLinuxDO(ctx context.Context, code, state string) (*LoginResult, error) {
-	if !s.cfg.LinuxDOEnabled() || code == "" || state == "" {
+// LinuxDOCallback 是 LinuxDo 授权回调携带的参数和发起回调的浏览器上下文。
+type LinuxDOCallback struct {
+	Code  string
+	State string
+	// BrowserBinding 是回调请求携带的浏览器绑定 Cookie 原值。
+	BrowserBinding string
+	// SessionUserID 是回调请求当前有效会话对应的用户；没有有效会话时为 nil。
+	SessionUserID *uuid.UUID
+}
+
+// LinuxDOFlowError 表示 state 已经匹配到本浏览器发起的授权流程之后发生的失败。
+// 它携带流程用途和回跳地址，调用方可以把绑定失败的原因带回发起页面。
+type LinuxDOFlowError struct {
+	Purpose  string
+	ReturnTo string
+	Err      error
+}
+
+func (e *LinuxDOFlowError) Error() string { return e.Err.Error() }
+
+func (e *LinuxDOFlowError) Unwrap() error { return e.Err }
+
+// CompleteLinuxDO 完成 LinuxDo 授权回调。流程必须由同一浏览器发起（浏览器绑定 nonce 匹配）；
+// 绑定流程还要求回调时的当前会话正是发起绑定的用户。state 匹配之后的失败都包装为 *LinuxDOFlowError。
+func (s *Service) CompleteLinuxDO(ctx context.Context, in LinuxDOCallback) (*LoginResult, error) {
+	if !s.cfg.LinuxDOEnabled() {
 		return nil, ErrInvalidOAuthFlow
 	}
-	flow, err := s.repo.ConsumeOAuthFlow(ctx, linuxDOProvider, sha256Hex(state), time.Now())
-	if err != nil || flow == nil {
-		return nil, ErrInvalidOAuthFlow
-	}
-	accessToken, err := s.exchangeCode(ctx, code, flow.CodeVerifier)
+	flow, err := s.consumeLinuxDOFlow(ctx, in.State, in.BrowserBinding)
 	if err != nil {
 		return nil, err
+	}
+	fail := func(err error) (*LoginResult, error) {
+		return nil, &LinuxDOFlowError{Purpose: flow.Purpose, ReturnTo: flow.ReturnTo, Err: err}
+	}
+	if in.Code == "" {
+		return fail(ErrInvalidOAuthFlow)
+	}
+	if flow.Purpose == storage.OAuthPurposeBind {
+		// 先校验会话再交换 code：授权链接被转交给其他浏览器或账号时不会产生任何外部调用和绑定。
+		if flow.UserID == nil || in.SessionUserID == nil || *flow.UserID != *in.SessionUserID {
+			return fail(ErrLinuxDOBindSessionMismatch)
+		}
+	}
+	accessToken, err := s.exchangeCode(ctx, in.Code, flow.CodeVerifier)
+	if err != nil {
+		return fail(err)
 	}
 	profile, err := s.fetchLinuxDOProfile(ctx, accessToken)
 	if err != nil {
-		return nil, err
+		return fail(err)
 	}
 	if profile.Active != nil && !*profile.Active {
-		return nil, ErrProviderRejected
+		return fail(ErrProviderRejected)
 	}
 	if profile.Sub == "" {
-		return nil, errors.New("LinuxDo 用户信息缺少 sub")
+		return fail(errors.New("LinuxDo 用户信息缺少 sub"))
 	}
-	user, err := s.repo.UpsertExternalUser(ctx, storage.ExternalIdentityInput{
+	identityInput := storage.ExternalIdentityInput{
 		Provider: linuxDOProvider, ProviderUserID: profile.Sub, Username: firstNonEmpty(profile.Username, profile.Login),
 		Email: normalizeOptionalEmail(profile.Email), DisplayName: firstNonEmpty(profile.Name, profile.Username, profile.Login, "LinuxDo 用户"),
 		AvatarURL: normalizeOptionalString(profile.AvatarURL), TrustLevel: profile.TrustLevel, Profile: profile.Raw,
-	})
+	}
+	if flow.Purpose == storage.OAuthPurposeBind {
+		if _, err := s.repo.BindExternalIdentity(ctx, *flow.UserID, identityInput); err != nil {
+			return fail(err)
+		}
+		return &LoginResult{Purpose: flow.Purpose, ReturnTo: flow.ReturnTo}, nil
+	}
+	user, err := s.repo.ExternalUserByProviderSubject(ctx, linuxDOProvider, profile.Sub)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, storage.ErrIdentityNotFound) {
+			return fail(ErrLinuxDOUnbound)
+		}
+		return fail(err)
 	}
 	token, err := s.createSession(ctx, user)
 	if err != nil {
-		return nil, err
+		return fail(err)
 	}
-	return &LoginResult{User: user, SessionToken: token, ReturnTo: flow.ReturnTo}, nil
+	return &LoginResult{Purpose: flow.Purpose, User: user, SessionToken: token, ReturnTo: flow.ReturnTo}, nil
 }
 
-func (s *Service) RegisterEmail(ctx context.Context, email, password, displayName, verificationCode, invitationCode string) (*LoginResult, error) {
+// AbortLinuxDO 处理授权回调携带 error 参数（例如用户拒绝授权）的情况。
+// state 能匹配到本浏览器发起的流程时，消耗该流程并返回带用途和回跳地址的 *LinuxDOFlowError；
+// 否则原样返回 cause，由调用方回落到登录页。
+func (s *Service) AbortLinuxDO(ctx context.Context, state, browserBinding string, cause error) error {
+	flow, err := s.consumeLinuxDOFlow(ctx, state, browserBinding)
+	if err != nil {
+		return cause
+	}
+	return &LinuxDOFlowError{Purpose: flow.Purpose, ReturnTo: flow.ReturnTo, Err: cause}
+}
+
+// consumeLinuxDOFlow 一次性消耗 state 对应的流程，并以常量时间比较浏览器绑定 nonce 的摘要。
+// 缺少 state 或 nonce、流程不存在或已过期、nonce 不匹配时统一返回 ErrInvalidOAuthFlow；
+// 流程无论是否匹配都会被删除，不能重放。
+func (s *Service) consumeLinuxDOFlow(ctx context.Context, state, browserBinding string) (*storage.OAuthLoginFlow, error) {
+	if state == "" || browserBinding == "" {
+		return nil, ErrInvalidOAuthFlow
+	}
+	flow, err := s.repo.ConsumeOAuthFlow(ctx, linuxDOProvider, sha256Hex(state), time.Now())
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, ErrInvalidOAuthFlow
+		}
+		return nil, err
+	}
+	if flow == nil {
+		return nil, ErrInvalidOAuthFlow
+	}
+	if subtle.ConstantTimeCompare([]byte(flow.BrowserBindingHash), []byte(sha256Hex(browserBinding))) != 1 {
+		return nil, ErrInvalidOAuthFlow
+	}
+	return flow, nil
+}
+
+// RegisterEmail 按当前服务端策略注册邮箱账号。username 是独立的登录用户名，
+// displayName 为空时默认使用用户名。
+func (s *Service) RegisterEmail(ctx context.Context, email, username, password, displayName, verificationCode, invitationCode string) (*LoginResult, error) {
 	settings, err := s.repo.GetAuthSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -218,22 +378,23 @@ func (s *Service) RegisterEmail(ctx context.Context, email, password, displayNam
 	if err != nil {
 		return nil, err
 	}
-	if len([]byte(password)) < 8 || len([]byte(password)) > 72 {
-		return nil, errors.New("密码长度必须为 8-72 字节")
+	username, err = normalizeUsername(username)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(displayName) == "" {
-		displayName = strings.Split(email, "@")[0]
+	displayName, err = normalizeDisplayName(displayName, username)
+	if err != nil {
+		return nil, err
 	}
-	displayName = strings.TrimSpace(displayName)
-	if utf8.RuneCountInString(displayName) > 128 {
-		return nil, errors.New("昵称不能超过 128 个字符")
+	if err := validatePassword(password); err != nil {
+		return nil, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 	hashString := string(hash)
-	user := &storage.User{ID: uuid.New(), Email: &email, PasswordHash: &hashString, DisplayName: displayName, Status: storage.UserStatusActive, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	user := &storage.User{ID: uuid.New(), Username: username, Email: &email, PasswordHash: &hashString, DisplayName: displayName, Status: storage.UserStatusActive, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	var verificationID *uuid.UUID
 	if settings.EmailVerificationEnabled {
 		verification, err := s.verifyRegistrationCode(ctx, email, verificationCode, time.Now())
@@ -252,17 +413,15 @@ func (s *Service) RegisterEmail(ctx context.Context, email, password, displayNam
 		invitationHash = &hash
 	}
 	if err := s.repo.RegisterEmailUser(ctx, user, verificationID, invitationHash, time.Now()); err != nil {
-		var pqErr *pq.Error
-		if (errors.As(err, &pqErr) && pqErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return nil, ErrEmailInUse
-		}
-		if errors.Is(err, storage.ErrInvalidVerificationCode) {
+		// 用户名/邮箱冲突已由存储层按唯一索引名称转换为哨兵错误，这里原样返回。
+		switch {
+		case errors.Is(err, storage.ErrInvalidVerificationCode):
 			return nil, ErrInvalidVerificationCode
-		}
-		if errors.Is(err, storage.ErrInvalidInvitationCode) {
+		case errors.Is(err, storage.ErrInvalidInvitationCode):
 			return nil, ErrInvalidInvitationCode
+		default:
+			return nil, err
 		}
-		return nil, err
 	}
 	token, err := s.createSession(ctx, user)
 	if err != nil {
@@ -271,7 +430,16 @@ func (s *Service) RegisterEmail(ctx context.Context, email, password, displayNam
 	return &LoginResult{User: user, SessionToken: token}, nil
 }
 
-func (s *Service) LoginEmail(ctx context.Context, email, password string) (*LoginResult, error) {
+// LoginEmail 使用用户名或邮箱加密码登录。含 "@" 的标识只按规范化邮箱匹配，
+// 其余按用户名大小写不敏感匹配。
+func (s *Service) LoginEmail(ctx context.Context, identifier, password string) (*LoginResult, error) {
+	initialized, err := s.repo.InstallationComplete(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !initialized {
+		return nil, ErrInstallationRequired
+	}
 	settings, err := s.repo.GetAuthSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -279,11 +447,18 @@ func (s *Service) LoginEmail(ctx context.Context, email, password string) (*Logi
 	if !settings.EmailAuthEnabled {
 		return nil, ErrEmailAuthDisabled
 	}
-	normalized, err := normalizeEmail(email)
-	if err != nil {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" || utf8.RuneCountInString(identifier) > 320 {
 		return nil, ErrInvalidCredentials
 	}
-	user, err := s.repo.UserByEmail(ctx, normalized)
+	if strings.Contains(identifier, "@") {
+		normalized, emailErr := normalizeEmail(identifier)
+		if emailErr != nil {
+			return nil, ErrInvalidCredentials
+		}
+		identifier = normalized
+	}
+	user, err := s.repo.UserByIdentifier(ctx, identifier)
 	if err != nil || user.PasswordHash == nil || user.Status != storage.UserStatusActive || bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(password)) != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -305,6 +480,99 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (*storage.U
 		return nil, ErrUnauthenticated
 	}
 	return user, nil
+}
+
+func (s *Service) InstallationComplete(ctx context.Context) (bool, error) {
+	return s.repo.InstallationComplete(ctx)
+}
+
+// InitializeOwner 在空库上创建第一个本地账号并使其成为唯一 owner。
+// 用户名规则与普通注册相同；displayName 为空时默认使用用户名。
+func (s *Service) InitializeOwner(ctx context.Context, email, username, password, displayName string) (*LoginResult, error) {
+	username, err := normalizeUsername(username)
+	if err != nil {
+		return nil, err
+	}
+	displayName, err = normalizeDisplayName(displayName, username)
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePassword(password); err != nil {
+		return nil, err
+	}
+	var emailPtr *string
+	if strings.TrimSpace(email) != "" {
+		normalizedEmail, emailErr := normalizeEmail(email)
+		if emailErr != nil {
+			return nil, emailErr
+		}
+		emailPtr = &normalizedEmail
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	user, err := s.repo.InitializeOwner(ctx, &storage.User{ID: uuid.New(), Username: username, Email: emailPtr, PasswordHash: ptrString(string(hash)), DisplayName: displayName, Status: storage.UserStatusActive, CreatedAt: now, UpdatedAt: now})
+	if err != nil {
+		// 用户名/邮箱冲突已由存储层按唯一索引名称转换为哨兵错误。
+		return nil, err
+	}
+	token, err := s.createSession(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResult{User: user, SessionToken: token}, nil
+}
+
+func (s *Service) ListExternalIdentities(ctx context.Context, userID uuid.UUID) ([]storage.ExternalIdentitySummary, error) {
+	return s.repo.ListExternalIdentities(ctx, userID)
+}
+
+// ListAllExternalIdentities 分页读取全站第三方身份的脱敏摘要；limit/offset 由调用方校验。
+func (s *Service) ListAllExternalIdentities(ctx context.Context, limit, offset int) ([]storage.AdminExternalIdentitySummary, error) {
+	return s.repo.ListAllExternalIdentities(ctx, limit, offset)
+}
+
+// UnbindExternalIdentity 解除当前用户的一个第三方身份。全站关闭密码登录时，
+// 即使账号设置了密码也不能解除最后一个第三方身份，否则账号将无法登录。
+func (s *Service) UnbindExternalIdentity(ctx context.Context, userID, identityID uuid.UUID) error {
+	settings, err := s.repo.GetAuthSettings(ctx)
+	if err != nil {
+		return err
+	}
+	return s.repo.UnbindExternalIdentity(ctx, userID, identityID, settings.EmailAuthEnabled)
+}
+
+// hasLinuxDOIdentity 判断用户是否已经绑定至少一个 LinuxDo 身份。
+func (s *Service) hasLinuxDOIdentity(ctx context.Context, userID uuid.UUID) (bool, error) {
+	identities, err := s.repo.ListExternalIdentities(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, identity := range identities {
+		if identity.Provider == linuxDOProvider {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ListUsers 分页读取用户列表；limit/offset 由调用方校验。
+func (s *Service) ListUsers(ctx context.Context, limit, offset int) ([]storage.User, error) {
+	return s.repo.ListUsers(ctx, limit, offset)
+}
+
+func (s *Service) UpdateUserRole(ctx context.Context, actorID, targetID uuid.UUID, role string) (*storage.User, error) {
+	return s.repo.UpdateUserRole(ctx, actorID, targetID, role)
+}
+
+func (s *Service) UpdateUserStatus(ctx context.Context, actorID, targetID uuid.UUID, status string) (*storage.User, error) {
+	return s.repo.UpdateUserStatus(ctx, actorID, targetID, status)
+}
+
+func (s *Service) ListAdminAuditLogs(ctx context.Context, limit int) ([]storage.AdminAuditLog, error) {
+	return s.repo.ListAdminAuditLogs(ctx, limit)
 }
 
 func (s *Service) Logout(ctx context.Context, rawToken string) error {
@@ -405,6 +673,56 @@ func normalizeEmail(raw string) (string, error) {
 	return email, nil
 }
 
+// normalizeUsername 校验并规范化登录用户名：去除首尾空白后必须为 2-32 个字符，
+// 不能包含 @（避免与邮箱标识混淆）、空白、控制字符或零宽等格式字符。大小写原样保留，
+// 唯一性由数据库按 lower(username) 保证。
+func normalizeUsername(raw string) (string, error) {
+	username := strings.TrimSpace(raw)
+	if username == "" {
+		return "", fmt.Errorf("%w：用户名不能为空", ErrInvalidUsername)
+	}
+	if !utf8.ValidString(username) {
+		return "", fmt.Errorf("%w：包含无效字符", ErrInvalidUsername)
+	}
+	if count := utf8.RuneCountInString(username); count < usernameMinRunes || count > usernameMaxRunes {
+		return "", fmt.Errorf("%w：长度必须为 %d-%d 个字符", ErrInvalidUsername, usernameMinRunes, usernameMaxRunes)
+	}
+	for _, r := range username {
+		if r == '@' {
+			return "", fmt.Errorf("%w：不能包含 @", ErrInvalidUsername)
+		}
+		if unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return "", fmt.Errorf("%w：不能包含空格或控制字符", ErrInvalidUsername)
+		}
+	}
+	return username, nil
+}
+
+// normalizeDisplayName 规范化展示昵称；为空时使用 fallback（通常是用户名）。
+func normalizeDisplayName(raw, fallback string) (string, error) {
+	displayName := strings.TrimSpace(raw)
+	if displayName == "" {
+		displayName = fallback
+	}
+	if !utf8.ValidString(displayName) || utf8.RuneCountInString(displayName) > displayNameMaxRunes {
+		return "", fmt.Errorf("%w：不能超过 %d 个字符", ErrInvalidDisplayName, displayNameMaxRunes)
+	}
+	for _, r := range displayName {
+		if unicode.IsControl(r) {
+			return "", fmt.Errorf("%w：不能包含控制字符", ErrInvalidDisplayName)
+		}
+	}
+	return displayName, nil
+}
+
+// validatePassword 校验密码长度；bcrypt 最多只使用前 72 字节。
+func validatePassword(password string) error {
+	if len(password) < 8 || len(password) > 72 {
+		return errors.New("密码长度必须为 8-72 字节")
+	}
+	return nil
+}
+
 func normalizeOptionalEmail(raw string) *string {
 	if email, err := normalizeEmail(raw); err == nil {
 		return &email
@@ -418,6 +736,8 @@ func normalizeOptionalString(raw string) *string {
 	}
 	return nil
 }
+
+func ptrString(value string) *string { return &value }
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
@@ -441,9 +761,31 @@ func sha256Hex(value string) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
+// safeReturnTo 只接受站内绝对路径（可带查询串和片段），其余一律回落到 "/"。
+// 浏览器按 WHATWG URL 规则会把 "\" 当作 "/"，并删除制表符和换行，
+// 所以先拒绝反斜杠、空白和控制字符（原文和解码后的路径都检查），
+// 再要求解析结果没有 scheme、host、userinfo 和 opaque，且路径以恰好一个 "/" 开头。
 func safeReturnTo(raw string) string {
-	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") && !strings.ContainsAny(raw, "\r\n") {
-		return raw
+	if raw == "" || len(raw) > returnToMaxBytes || !utf8.ValidString(raw) || hasUnsafeURLRune(raw) {
+		return "/"
 	}
-	return "/"
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.User != nil || parsed.Opaque != "" {
+		return "/"
+	}
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") ||
+		!strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") || hasUnsafeURLRune(parsed.Path) {
+		return "/"
+	}
+	return raw
+}
+
+// hasUnsafeURLRune 报告字符串是否包含反斜杠、空白或控制字符。
+func hasUnsafeURLRune(value string) bool {
+	for _, r := range value {
+		if r == '\\' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
 }

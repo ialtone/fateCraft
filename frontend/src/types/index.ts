@@ -1,4 +1,4 @@
-export type { AuthConfig, AuthUser } from './auth'
+export type { AuthConfig, AuthUser, ExternalIdentity } from './auth'
 
 // API 相关类型
 export type {
@@ -73,6 +73,9 @@ export type {
   AdminContextBuildLog,
   ContextBuildSegment,
   AdminAuthSettings,
+  AdminUser,
+  AdminExternalIdentity,
+  AdminAuditLog,
   SMTPSecurity,
   InvitationCode,
   CreatedInvitation,

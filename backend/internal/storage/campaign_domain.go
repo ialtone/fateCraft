@@ -536,6 +536,25 @@ func (s *CampaignActionStore) SaveMarketStock(row *CampaignMarketStock) error {
 }
 
 func (s *CampaignActionStore) DiscoverLocation(row *CampaignLocationDiscovery) error {
+	// 已有记录只更新 visited（只允许 false→true）并合并 knowledge：
+	// 旅行到已发现地点时调用方传空 knowledge，不能清空之前调查等写入的 knowledge。
+	var existing CampaignLocationDiscovery
+	if err := s.tx.Where("campaign_id = ? AND location_key = ?", row.CampaignID, row.LocationKey).First(&existing).Error; err == nil {
+		merged := existing.Knowledge
+		if merged == nil {
+			merged = JSONMap{}
+		}
+		for key, value := range row.Knowledge {
+			merged[key] = value
+		}
+		return s.tx.Model(&CampaignLocationDiscovery{}).
+			Where("campaign_id = ? AND location_key = ?", row.CampaignID, row.LocationKey).
+			Updates(map[string]any{
+				"visited": existing.Visited || row.Visited, "knowledge": merged, "updated_at": row.UpdatedAt,
+			}).Error
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
 	return s.tx.Where("campaign_id = ? AND location_key = ?", row.CampaignID, row.LocationKey).
 		Assign(map[string]any{"visited": row.Visited, "knowledge": row.Knowledge, "updated_at": row.UpdatedAt}).
 		FirstOrCreate(row).Error

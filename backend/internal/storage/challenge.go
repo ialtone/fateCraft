@@ -553,8 +553,9 @@ func (r *ChallengeRepository) Conversation(ctx context.Context, convID uuid.UUID
 
 func (r *ChallengeRepository) SuccessfulRollKeys(ctx context.Context, convID uuid.UUID) ([]string, error) {
 	var found []string
+	// 只统计当前分支仍然有效的判定；重新生成或改写作废的旧分支判定不能作为结算证据。
 	err := r.db.WithContext(ctx).Model(&RollHistoryEntry{}).Distinct("roll_key").
-		Where("conversation_id = ? AND success = ?", convID, true).
+		Where("conversation_id = ? AND success = ? AND invalidated_at IS NULL", convID, true).
 		Pluck("roll_key", &found).Error
 	return found, err
 }
@@ -569,8 +570,9 @@ func (r *ChallengeRepository) LockConversation(ctx context.Context, convID uuid.
 	return &row, err
 }
 
-// CompleteRun is called inside the settlement transaction after the
-// conversation has been locked and all trusted verification has succeeded.
+// CompleteRun 在结算事务内调用：此时对话已加行锁，所有可信校验均已通过。
+// 它只把对话标记为 ended，不触碰 is_processing：忙碌投影只能由持有生成租约的
+// Worker 在租约结束时释放，结算后同一 attempt 还会继续写收尾叙事。
 func (r *ChallengeRepository) CompleteRun(
 	ctx context.Context,
 	conv *Conversation,
@@ -624,8 +626,7 @@ func (r *ChallengeRepository) CompleteRun(
 	}
 	if err := r.db.WithContext(ctx).Model(&Conversation{}).Where("id = ?", conv.ID).
 		Updates(map[string]any{
-			"status": StatusEnded, "ended_at": run.SettledAt,
-			"is_processing": false, "updated_at": run.SettledAt,
+			"status": StatusEnded, "ended_at": run.SettledAt, "updated_at": run.SettledAt,
 		}).Error; err != nil {
 		return nil, err
 	}

@@ -263,6 +263,11 @@ func main() {
 	// 用 zap 中间件取代 gin.Default() 自带的文本 logger/recovery，
 	// 使访问日志与 panic 堆栈进入结构化日志。
 	r := gin.New()
+	// 只信任 TRUSTED_PROXIES 中的反向代理设置的 X-Forwarded-For / X-Real-IP；未配置时传 nil，
+	// 不信任任何代理，ClientIP 取直连对端地址，避免客户端伪造来源 IP 绕过限流。
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		logger.Fatal("TRUSTED_PROXIES 配置无效", zap.Strings("trusted_proxies", cfg.TrustedProxies), zap.Error(err))
+	}
 	r.Use(logging.GinLogger(), logging.GinRecovery())
 	// Bound all request bodies before any handler calls ShouldBindJSON. A full
 	// challenge version document has a separate, explicit larger boundary;

@@ -5,8 +5,8 @@
 - REST 前缀为 `/api`，WebSocket 前缀为 `/ws`。
 - 请求和响应正文使用 JSON，OAuth 跳转除外。
 - 会话通过 `fatecraft_session` HttpOnly Cookie 传递。
-- 除健康检查、认证配置、登录和 OAuth 流程外，所有路由需要登录。
-- `/api/admin/*` 还需要管理员角色。
+- 除健康检查、认证配置、首次安装初始化、登录和 OAuth 流程外，所有路由需要登录。
+- `/api/admin/*` 还需要管理员角色；角色、认证策略和平台密钥等敏感写操作还需要 `owner`。
 - UUID 格式错误返回 400；资源不存在或不属于当前用户统一返回 404。
 
 错误响应：
@@ -37,6 +37,15 @@ GET /api/health
 
 ## 认证
 
+首次安装接口：
+
+```text
+GET  /api/setup/status
+POST /api/setup/initialize
+```
+
+空库的 `setup/status` 返回 `{"initialized":false}`。首次安装页面直接提交 `username`、`password`、可选 `email` 和 `confirm=true` 到 `setup/initialize`；服务端只接受完全空库，并在一个事务中创建唯一 `owner`、初始奖励、`installation_completed_at` 和审计记录，同时签发会话。接口只能成功一次，不存在把已登录账号提升为 owner 的入口。安装完成前邮箱和 LinuxDo 登录均关闭，后续注册用户默认为普通用户。
+
 ```text
 GET  /api/auth/config
 GET  /api/auth/linuxdo/start?return_to=/
@@ -46,11 +55,17 @@ POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/logout
 GET  /api/auth/me
+GET  /api/auth/identities
+GET  /api/auth/linuxdo/bind/start?return_to=/settings
+DELETE /api/auth/identities/:id
+GET  /api/admin/auth-identities
 ```
 
-`config` 返回邮箱登录、邮箱注册、邮箱验证码、邀请码要求、验证码重发间隔和 LinuxDo 是否可用，不返回 Client Secret 或 SMTP 信息。`email-code` 只在邮箱注册和验证码均启用时发信，并按邮箱执行重发冷却。`register` 根据当前服务端策略校验 `verification_code` 和 `invitation_code`；`register` 和 `login` 成功后设置会话 Cookie 并返回 `{ "user": ... }`。
+`config` 返回邮箱登录、邮箱注册、邮箱验证码、邀请码要求、验证码重发间隔和 LinuxDo 是否可用，不返回 Client Secret 或 SMTP 信息。`email-code` 只在邮箱注册和验证码均启用时发信，并按邮箱执行重发冷却。`register` 请求体为 `email`、`username`、`password`、可选 `display_name`、`verification_code` 和 `invitation_code`；用户名 2-32 个字符，不能包含 `@`、空白或控制字符，按大小写不敏感唯一，冲突返回 409“用户名已被使用”；昵称留空时使用用户名。`register` 和 `login` 成功后设置会话 Cookie 并返回 `{ "user": ... }`。登录请求体为 `identifier` 和 `password`：含 `@` 的标识只按邮箱查找，否则按用户名（大小写不敏感）查找。第三方身份列表只返回脱敏后的绑定摘要；管理员审计接口同样不返回 profile 原文。
 
-LinuxDo start 创建 OAuth flow 后 302 跳转。callback 成功后创建本地会话并跳回已校验的 return path；失败跳转登录页并使用简化错误信息，完整上游错误只记服务端日志。
+LinuxDo 登录和绑定共用 OAuth 2.0 + PKCE，但 flow 会区分 `login` / `bind` purpose。发起授权时服务端下发只在 `/api/auth/linuxdo` 路径有效的短期 HttpOnly nonce Cookie，flow 只保存其 SHA-256；回调必须带回同一 nonce，否则拒绝，防止授权结果被其他浏览器使用（登录 CSRF）。`return_to` 只接受以单个 `/` 开头、不含反斜杠、空白和控制字符的站内路径，否则回落到 `/`。登录只允许已经绑定到站内用户的 subject，未绑定 subject 不会自动创建用户，失败时回到 `/login?error=...` 并说明需要先在设置中绑定；绑定必须由当前已登录用户发起，回调时的会话用户也必须是发起者，成功或失败都回到发起页并附带 `linuxdo_bind=ok` 或 `linuxdo_bind_error=原因`。回调只新增 `auth_identities` 记录，不替换本地用户名、密码或 owner 角色。解除绑定必须保留至少一种可用登录方式；站点关闭密码登录时，即使账号有密码也不能解除最后一个第三方身份。owner 关闭密码登录前必须已配置 LinuxDo 且自己已绑定 LinuxDo。
+
+管理员用户、第三方身份和审计日志列表支持 `limit`（1-200，默认 50）；用户和第三方身份列表另支持 `offset`（0-100000）。超出范围返回 400。
 
 ## 公开挑战投影
 
@@ -205,6 +220,17 @@ check 是用户显式触发的同步、无副作用诊断，最长使用独立�
 成功响应为 `{"settings_revision":n,"result":{...}}`。Narrative 以生产请求相同的默认工具选择语义检测真实的 Tool Call -> Tool Result -> 普通文本闭环；Memory 与 Character Inquiry 检测各自模型的原生 JSON Schema。`result.status` 为 `supported/unsupported/inconclusive/unavailable`：只有上游明确拒绝目标能力才是 `unsupported`，单次模型行为或无法归因的参数错误是 `inconclusive`。结论属于已保存的 Base URL、协议与模型组合，只代表本次诊断，不持久化、不自动重试，也不改变生产请求。保存设置不会自动探测，前端不得用未保存输入静默检测旧设置。
 
 ## 管理员设置与挑战
+
+用户与审计：
+
+```text
+GET   /api/admin/users
+PATCH /api/admin/users/:id/role
+PATCH /api/admin/users/:id/status
+GET   /api/admin/audit-logs?limit=50
+```
+
+用户列表和审计读取需要管理员；角色和账号状态变更只允许 owner。角色只能是 `user`、`admin` 或 `owner`，owner 转交与唯一 owner 保护由后端事务执行。
 
 ```text
 GET   /api/admin/system-settings

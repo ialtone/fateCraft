@@ -13,14 +13,16 @@ import {
 } from '@vicons/ionicons5'
 import { NButton, NForm, NFormItem, NIcon, NInput, NSpin, useMessage } from 'naive-ui'
 import ThemeToggle from '@/components/ThemeToggle.vue'
-import { useAuthStore } from '@/stores/auth'
+import { USERNAME_RULE_HINT, useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const message = useMessage()
 
+const identifier = ref('')
 const email = ref('')
+const username = ref('')
 const password = ref('')
 const passwordConfirm = ref('')
 const displayName = ref('')
@@ -85,6 +87,10 @@ async function submitEmail() {
   error.value = ''
   try {
     if (mode.value === 'register') {
+      if (!username.value.trim()) {
+        error.value = '请输入用户名'
+        return
+      }
       if (password.value !== passwordConfirm.value) {
         error.value = '两次输入的密码不一致'
         return
@@ -99,13 +105,14 @@ async function submitEmail() {
       }
       await auth.register(
         email.value,
+        username.value,
         password.value,
         displayName.value,
         verificationCode.value,
         invitationCode.value,
       )
     } else {
-      await auth.login(email.value, password.value)
+      await auth.login(identifier.value, password.value)
     }
     await router.replace(returnTo.value)
   } catch (err: any) {
@@ -229,20 +236,44 @@ async function startLinuxDO() {
         </div>
 
         <NForm class="auth-form" @submit.prevent="submitEmail">
-          <NFormItem v-if="mode === 'register'" label="昵称">
-            <NInput v-model:value="displayName" size="large" placeholder="你希望别人如何称呼你">
+          <NFormItem v-if="mode === 'register'" label="用户名" :feedback="USERNAME_RULE_HINT">
+            <NInput v-model:value="username" size="large" placeholder="用于登录，注册后不可重复">
               <template #prefix>
                 <NIcon><PersonOutline /></NIcon>
               </template>
             </NInput>
           </NFormItem>
-          <NFormItem label="邮箱地址">
+          <NFormItem v-if="mode === 'register'" label="昵称（可选）">
+            <NInput
+              v-model:value="displayName"
+              size="large"
+              placeholder="你希望别人如何称呼你；留空时使用用户名"
+            >
+              <template #prefix>
+                <NIcon><PersonOutline /></NIcon>
+              </template>
+            </NInput>
+          </NFormItem>
+          <NFormItem v-if="mode === 'register'" label="邮箱地址">
             <NInput
               v-model:value="email"
               size="large"
               type="text"
               inputmode="email"
               placeholder="name@example.com"
+            >
+              <template #prefix>
+                <NIcon><MailOutline /></NIcon>
+              </template>
+            </NInput>
+          </NFormItem>
+          <NFormItem v-else label="用户名或邮箱">
+            <NInput
+              v-model:value="identifier"
+              size="large"
+              type="text"
+              inputmode="email"
+              placeholder="用户名或 name@example.com"
             >
               <template #prefix>
                 <NIcon><MailOutline /></NIcon>

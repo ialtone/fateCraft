@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NIcon, useDialog } from 'naive-ui'
+import { NButton, NIcon, useDialog, useMessage } from 'naive-ui'
 import {
   ChatbubblesOutline,
   ChevronBackOutline,
@@ -35,6 +35,7 @@ const ConversationShareDialog = defineAsyncComponent(
 const route = useRoute()
 const router = useRouter()
 const dialog = useDialog()
+const message = useMessage()
 const convStore = useConversationStore()
 const chat = useChatStore()
 const stateStore = useStateStore()
@@ -122,13 +123,20 @@ async function open(id: string) {
   inquiry.reset()
   socket.disconnect()
 
-  await convStore.load(id)
+  try {
+    await convStore.load(id)
+  } catch (err: any) {
+    if (!stale(id)) message.error(`加载对话失败：${err?.message || '未知错误'}`)
+    return
+  }
   if (stale(id)) return
   // 进入正在生成的对话（刷新页面 / 从列表点入）：agent.turn.started 已经
   // 错过，不标记的话输入框不锁、也没有任何“生成中”指示。占位与增量由
   // 后续 WS 事件补齐，结束兜底见 activity 轮询。
   if (convStore.current?.is_processing) chat.markGenerating()
-  await Promise.all([
+  // 次要数据任一加载失败都不能阻断实时连接：否则页面停在断线降级状态，
+  // REST 发送后输入框会一直锁住。
+  const results = await Promise.allSettled([
     chat.load(id),
     guidance.load(id),
     stateStore.load(id),
@@ -140,11 +148,13 @@ async function open(id: string) {
   ])
   if (stale(id)) return
   socket.connect(id)
+  if (results.some((result) => result.status === 'rejected')) {
+    message.warning('部分对话数据加载失败，可稍后刷新页面重试')
+  }
 }
 
 onMounted(async () => {
-  await rewards.load().catch(() => {})
-  await open(convId.value)
+  // 轮询先于任何 await 启动：首次加载失败时仍需要它兜底解锁输入框。
   activityTimer = setInterval(async () => {
     if (disposed || !convId.value) return
     await context.loadActivity(convId.value)
@@ -163,6 +173,8 @@ onMounted(async () => {
       chat.load(convId.value).catch(() => {})
     }
   }, 5000)
+  await rewards.load().catch(() => {})
+  await open(convId.value)
 })
 
 watch(convId, (id, prev) => {

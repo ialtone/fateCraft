@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/secretbox"
+	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 const registrationPurpose = "registration"
@@ -64,7 +64,10 @@ func (s *Service) AdminSettings(ctx context.Context) (*AdminAuthSettings, error)
 	return adminSettingsView(settings), nil
 }
 
-func (s *Service) UpdateAdminSettings(ctx context.Context, in UpdateAuthSettingsInput) (*AdminAuthSettings, error) {
+// UpdateAdminSettings 由 owner（actorID）更新认证策略与发信配置。
+// 关闭密码登录前必须确认 owner 仍有其他登录方式：LinuxDo 已配置且 owner 已绑定 LinuxDo 身份，
+// 否则拒绝保存，避免把 owner 锁在站外。
+func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in UpdateAuthSettingsInput) (*AdminAuthSettings, error) {
 	current, err := s.repo.GetAuthSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -75,8 +78,17 @@ func (s *Service) UpdateAdminSettings(ctx context.Context, in UpdateAuthSettings
 	if in.EmailRegistrationEnabled && !in.EmailAuthEnabled {
 		return nil, fmt.Errorf("%w: 开启邮箱注册时必须同时开启邮箱登录", ErrInvalidAuthSettings)
 	}
-	if !in.EmailAuthEnabled && !s.cfg.LinuxDOEnabled() {
-		return nil, fmt.Errorf("%w: 至少需要保留一种可用的登录方式", ErrInvalidAuthSettings)
+	if !in.EmailAuthEnabled {
+		if !s.cfg.LinuxDOEnabled() {
+			return nil, fmt.Errorf("%w: LinuxDo 登录尚未配置，关闭密码登录后所有账号都将无法登录", ErrInvalidAuthSettings)
+		}
+		bound, err := s.hasLinuxDOIdentity(ctx, actorID)
+		if err != nil {
+			return nil, err
+		}
+		if !bound {
+			return nil, fmt.Errorf("%w: 关闭密码登录前，请先在“设置 → 第三方账户”中为当前 owner 账号绑定 LinuxDo，否则 owner 将无法登录", ErrInvalidAuthSettings)
+		}
 	}
 	current.EmailAuthEnabled = in.EmailAuthEnabled
 	current.EmailRegistrationEnabled = in.EmailRegistrationEnabled

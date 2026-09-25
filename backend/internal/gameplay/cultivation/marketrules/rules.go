@@ -141,7 +141,10 @@ func UnitPrice(market Market, entry Entry, stock, reputation int64, buying bool)
 	}
 	stock = clamp(stock, 0, entry.MaxStock)
 	scarcityBPS := int64(0)
-	if entry.MaxStock > 0 {
+	// 稀缺加价只作用于买价：整批交易按交易前库存统一定价时，
+	// 若卖价也吃稀缺加价，高声望下会在满库存买入、空库存卖出之间形成稳定价差，
+	// 导致零时间无限套利。卖价只吃声望与市场/条目系数。
+	if buying && entry.MaxStock > 0 {
 		scarcityBPS = (entry.MaxStock - stock) * market.ScarcityMarkupBPS / entry.MaxStock
 	}
 	reputation = clamp(reputation, -10000, 10000)
@@ -157,6 +160,22 @@ func UnitPrice(market Market, entry Entry, stock, reputation int64, buying bool)
 	price = multiplyBPS(price, entry.PriceModifierBPS)
 	price = multiplyBPS(price, tradeModifier)
 	return clamp(price, 1, MaxPrice), true
+}
+
+// NoArbitrage 按最坏情况检查市场是否存在零时间套利：声望 +10000、
+// 买入时满库存、卖出时零库存。此时要求每条目的卖价不高于买价，
+// 否则玩家可反复低买高卖无限刷局内货币。交易本身不推进游戏时间，
+// 价格机制必须保证该不等式成立。注意允许等于：整数截断会让 1 灵石的
+// 低价物品买卖同为 1，等价往返零利润，不构成套利。
+func NoArbitrage(market Market) bool {
+	for _, entry := range market.Entries {
+		buy, okBuy := UnitPrice(market, entry, entry.MaxStock, 10000, true)
+		sell, okSell := UnitPrice(market, entry, 0, 10000, false)
+		if !okBuy || !okSell || sell > buy {
+			return false
+		}
+	}
+	return true
 }
 
 func multiplyBPS(value, bps int64) int64 {

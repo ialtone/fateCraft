@@ -52,7 +52,9 @@ services:
     env_file:
       - ./backend.production.env
     ports:
-      - "8081:8081"
+      # 只绑定本机回环地址：公网流量必须经过 nginx（8088），后端端口不能被直接访问，
+      # 否则客户端可以伪造 X-Forwarded-For，并绕过 nginx 添加的安全响应头。
+      - "127.0.0.1:8081:8081"
     volumes:
       # 判定配置、输出 Schema 与空库首次初始化材料；运行时挑战内容从 PostgreSQL 读取
       - ../backend/data:/app/backend/data

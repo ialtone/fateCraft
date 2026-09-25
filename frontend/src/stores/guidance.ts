@@ -22,6 +22,8 @@ export const useGuidanceStore = defineStore('guidance', () => {
     }
   }
 
-  function reset() { set(null) }
+  function reset() {
+    set(null)
+  }
   return { active, set, load, reset }
 })

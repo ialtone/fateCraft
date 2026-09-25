@@ -536,7 +536,7 @@
     "kind": "npc_archetype", "key": "guild-appraiser", "name": "沈青禾",
     "content": {
       "initial": true, "instance_key": "shen-appraiser", "location_key": "bluestone-market",
-      "faction_key": "hundred-herbs-guild", "realm_key": "qi-refining", "stage_key": "middle",
+      "faction_key": "hundred-herbs-guild", "realm_key": "qi-refining", "stage_key": "layer-7",
       "public_profile": {"role": "商会鉴定师", "manner": "礼貌而精于算计"},
       "private_state": {"secret": "正在调查假丹药流入坊市"},
       "goals": {"primary": "维护商会信誉", "investigation_progress": 0}
@@ -547,7 +547,7 @@
     "kind": "npc_archetype", "key": "outer-disciple", "name": "陆沉舟",
     "content": {
       "initial": true, "instance_key": "lu-disciple", "location_key": "green-mist-gate",
-      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "early",
+      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "layer-3",
       "public_profile": {"role": "青岚门外门弟子", "manner": "守规矩但并不傲慢"},
       "private_state": {"secret": "想查明师兄在采石洞失踪的原因"},
       "goals": {"primary": "积累外门功绩"}
@@ -1279,7 +1279,7 @@
     "kind": "npc_archetype", "key": "sect-outer-elder", "name": "苏执事",
     "content": {
       "initial": true, "instance_key": "su-steward", "location_key": "outer-courtyard",
-      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "late",
+      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "layer-11",
       "public_profile": {"role": "青岚门外院执事", "manner": "严厉务实，重视履约"},
       "private_state": {"secret": "怀疑灵田虫害与地下伏流中的异动有关"},
       "goals": {"primary": "稳住外院和北麓灵田", "sect_readiness": 20}
@@ -1290,7 +1290,7 @@
     "kind": "npc_archetype", "key": "guild-alchemist", "name": "姚丹师",
     "content": {
       "initial": true, "instance_key": "yao-alchemist", "location_key": "bluestone-market",
-      "faction_key": "hundred-herbs-guild", "realm_key": "qi-refining", "stage_key": "middle",
+      "faction_key": "hundred-herbs-guild", "realm_key": "qi-refining", "stage_key": "layer-7",
       "public_profile": {"role": "百草行驻坊炼丹师", "manner": "挑剔但愿意教认真之人"},
       "private_state": {"secret": "假丹药使用了来自南沼的廉价毒囊"},
       "goals": {"primary": "恢复坊市丹药信誉", "formula_progress": 10}
@@ -1301,7 +1301,7 @@
     "kind": "npc_archetype", "key": "county-artificer", "name": "铁七",
     "content": {
       "initial": true, "instance_key": "tie-smith", "location_key": "county-town",
-      "faction_key": "loose-cultivator-association", "realm_key": "qi-refining", "stage_key": "early",
+      "faction_key": "loose-cultivator-association", "realm_key": "qi-refining", "stage_key": "layer-3",
       "public_profile": {"role": "旧街炼器匠", "manner": "爽直，开价透明"},
       "private_state": {"secret": "曾从伏流石窟带回一小袋星铁砂"},
       "goals": {"primary": "炼成一柄真正的低阶灵剑", "forge_progress": 0}
@@ -1312,7 +1312,7 @@
     "kind": "npc_archetype", "key": "sect-talisman-scribe", "name": "温如月",
     "content": {
       "initial": true, "instance_key": "wen-scribe", "location_key": "outer-courtyard",
-      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "middle",
+      "faction_key": "green-mist-sect", "realm_key": "qi-refining", "stage_key": "layer-7",
       "public_profile": {"role": "外院符师", "manner": "温和细致，不容敷衍"},
       "private_state": {"secret": "在尝试用雷纹竹稳定惊雷符"},
       "goals": {"primary": "补足山门巡守所需符箓", "talisman_progress": 0}
@@ -1323,7 +1323,7 @@
     "kind": "npc_archetype", "key": "loose-cultivator-coordinator", "name": "乔三槐",
     "content": {
       "initial": true, "instance_key": "qiao-coordinator", "location_key": "county-town",
-      "faction_key": "loose-cultivator-association", "realm_key": "qi-refining", "stage_key": "middle",
+      "faction_key": "loose-cultivator-association", "realm_key": "qi-refining", "stage_key": "layer-7",
       "public_profile": {"role": "散修会管事", "manner": "健谈，擅长撮合互利之事"},
       "private_state": {"secret": "正筹划绕开黑水盟的安全采药路线"},
       "goals": {"primary": "扩大散修会的互助网络", "route_progress": 5}
@@ -1334,7 +1334,7 @@
     "kind": "npc_archetype", "key": "blackwater-broker", "name": "莫十三",
     "content": {
       "initial": true, "instance_key": "mo-broker", "location_key": "south-marsh",
-      "faction_key": "blackwater-league", "realm_key": "qi-refining", "stage_key": "late",
+      "faction_key": "blackwater-league", "realm_key": "qi-refining", "stage_key": "layer-11",
       "public_profile": {"role": "南沼掮客", "manner": "笑脸迎人，从不白送消息"},
       "private_state": {"secret": "负责把假丹药原料运入青石坊市"},
       "goals": {"primary": "保住夜船与地下伏流两条货路", "smuggling_progress": 15}
@@ -1356,7 +1356,7 @@
     "kind": "npc_archetype", "key": "red-cloud-abbot", "name": "俞照庭",
     "content": {
       "initial": true, "instance_key": "yu-abbot", "location_key": "red-cloud-temple",
-      "faction_key": "red-cloud-temple", "realm_key": "qi-refining", "stage_key": "late",
+      "faction_key": "red-cloud-temple", "realm_key": "qi-refining", "stage_key": "layer-11",
       "public_profile": {"role": "赤霞观观主", "manner": "寡言持重，最看重根基与守诺"},
       "private_state": {"secret": "落雷崖火脉正在偏移，赤霞观的护山符阵已出现裂隙"},
       "goals": {"primary": "稳住火脉并保全赤霞观传承", "fire_vein_control": 12}
@@ -1367,7 +1367,7 @@
     "kind": "npc_archetype", "key": "lin-clan-spirit-farmer", "name": "林素禾",
     "content": {
       "initial": true, "instance_key": "lin-steward", "location_key": "lin-family-manor",
-      "faction_key": "green-river-lin-clan", "realm_key": "qi-refining", "stage_key": "early",
+      "faction_key": "green-river-lin-clan", "realm_key": "qi-refining", "stage_key": "layer-3",
       "public_profile": {"role": "林氏灵庄灵植管事", "manner": "温和精细，谈生意时寸步不让"},
       "private_state": {"secret": "灵田虫害并非天灾，地下伏流里混入了来自南沼的瘴泥"},
       "goals": {"primary": "保住北麓灵田和林氏的独立经营权", "harvest_readiness": 18}

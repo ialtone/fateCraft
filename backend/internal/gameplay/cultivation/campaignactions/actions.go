@@ -152,6 +152,12 @@ func registerAction(
 		if err != nil {
 			return storage.CampaignActionOutcome{}, err
 		}
+		// Campaign 已终局（本次提交刚终结，或提交前已不是 active）时，
+		// 不再处理状态到期与计划事件：completed 之后不应再追加任务失败等事件，
+		// 角色死亡后也不应继续推进世界事件。
+		if outcome.Status != nil || execution.Campaign.Status != storage.CampaignStatusActive {
+			return outcome, nil
+		}
 		if err := expireDueConditions(execution, &outcome); err != nil && !errors.Is(err, storage.ErrNotFound) {
 			return storage.CampaignActionOutcome{}, err
 		}

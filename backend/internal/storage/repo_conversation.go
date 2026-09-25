@@ -21,6 +21,7 @@ var (
 	ErrGenerationInProgress      = errors.New("对话已有进行中的生成任务")
 	ErrGenerationNotActive       = errors.New("生成任务已失效")
 	ErrGenerationRequestConflict = errors.New("生成请求 ID 已用于不同操作")
+	ErrAccountDisabled           = errors.New("账号已停用，无法继续生成")
 )
 
 type GenerationRequest struct {
@@ -172,6 +173,15 @@ func (r *ConversationRepo) StartGeneration(ctx context.Context, id uuid.UUID, re
 		if conversation.Status != StatusActive {
 			return ErrConversationNotActive
 		}
+		// WebSocket 只在握手时鉴权；账号被停用后，已打开的连接不能继续发起新生成
+		// （平台模型模式下会持续消耗平台 Key），因此在取得租约的事务里复查账号状态。
+		var ownerStatuses []string
+		if err := tx.Model(&User{}).Where("id = ?", conversation.PlayerID).Pluck("status", &ownerStatuses).Error; err != nil {
+			return err
+		}
+		if len(ownerStatuses) != 1 || ownerStatuses[0] != UserStatusActive {
+			return ErrAccountDisabled
+		}
 
 		var active ConversationGenerationRun
 		activeErr := tx.Where("conversation_id = ? AND status IN ?", id, activeGenerationRunStatuses()).
@@ -185,6 +195,11 @@ func (r *ConversationRepo) StartGeneration(ctx context.Context, id uuid.UUID, re
 			}
 			if err := tx.Model(&ConversationGenerationRun{}).Where("id = ?", active.ID).
 				Updates(map[string]any{"status": GenerationRunAbandoned, "error_code": "lease_expired", "finished_at": now, "last_heartbeat_at": now}).Error; err != nil {
+				return err
+			}
+			// 被抢占的 run 遗留的 pending 回合、running attempt 和未完成工具调用
+			// 必须在同一事务里封口，否则新请求会一直因 ErrTurnInProgress 失败。
+			if err := sealLostGenerationInTx(tx, id, now); err != nil {
 				return err
 			}
 		} else if !errors.Is(activeErr, gorm.ErrRecordNotFound) {
@@ -243,6 +258,14 @@ func sameOptionalUUID(left, right *uuid.UUID) bool {
 		return left == nil && right == nil
 	}
 	return *left == *right
+}
+
+// GenerationRequestExists 判断该对话是否已有使用此 request_id 的 durable 生成记录。
+func (r *ConversationRepo) GenerationRequestExists(ctx context.Context, id, requestID uuid.UUID) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&ConversationGenerationRun{}).
+		Where("conversation_id = ? AND request_id = ?", id, requestID).Count(&count).Error
+	return count > 0, err
 }
 
 // AssertNoActiveGeneration checks an already-locked conversation against the
@@ -341,6 +364,14 @@ func (r *ConversationRepo) TransitionLifecycle(ctx context.Context, id uuid.UUID
 			}
 			return err
 		}
+		// 源状态必须在行锁内按状态机校验：已删除对话一律视为不存在；ended/archived
+		// 只能来自 active，恢复只能来自 archived。锁外的检查只是快速失败。
+		if conversation.Status == StatusDeleted {
+			return ErrNotFound
+		}
+		if !lifecycleTransitionAllowed(conversation.Status, status) {
+			return ErrConversationNotActive
+		}
 		var activeCount int64
 		if err := tx.Model(&ConversationGenerationRun{}).
 			Where("conversation_id = ? AND status IN ?", id, activeGenerationRunStatuses()).Count(&activeCount).Error; err != nil {
@@ -382,6 +413,21 @@ func activeGenerationRunStatuses() []string {
 	return []string{GenerationRunRunning, GenerationRunCancelRequested}
 }
 
+// lifecycleTransitionAllowed 定义对话生命周期状态机：ended 与 archived 只能从
+// active 进入，恢复只能从 archived 回到 active，删除可以来自任何未删除状态。
+func lifecycleTransitionAllowed(from, to string) bool {
+	switch to {
+	case StatusEnded, StatusArchived:
+		return from == StatusActive
+	case StatusActive:
+		return from == StatusArchived
+	case StatusDeleted:
+		return from != StatusDeleted
+	default:
+		return false
+	}
+}
+
 func isGenerationRunActive(status string) bool {
 	return status == GenerationRunRunning || status == GenerationRunCancelRequested
 }
@@ -414,10 +460,12 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 		WHERE c.id = ? AND r.id = ? AND c.status = ? AND r.status = ?
 		FOR UPDATE`
 	args := []any{conversationID, generation.ID, StatusActive, GenerationRunRunning}
-	// Once an attempt exists, the fencing check must cover more than the durable
-	// run.  A branch rewrite can invalidate the turn/attempt while the old model
-	// request is still unwinding; requiring the attempt to remain running and
-	// pinned to the current branch prevents that stale worker from writing facts.
+	// 一旦 attempt 已存在，围栏就不能只看 durable run：分支改写可能在旧模型请求
+	// 尚未退出时作废其 turn/attempt，因此要求 attempt 仍在运行且绑定当前分支，
+	// 阻止迟到的旧任务写入事实。
+	// 本 attempt 自己完成挑战结算后，对话会在同一工具事务里变为 ended；此后
+	// 同一 attempt 仍需写入工具结果、收尾叙事和步骤记录，所以放行“由本 attempt
+	// 结算而结束”的对话，其他非 active 状态一律拒绝。
 	if metadata, hasMetadata := operation.FromContext(ctx); hasMetadata {
 		queryText = `
 			SELECT c.id
@@ -425,11 +473,15 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 			JOIN conversation_generation_runs r ON r.conversation_id = c.id
 			JOIN generation_attempts a ON a.conversation_id = c.id
 			JOIN conversation_turns t ON t.conversation_id = c.id AND t.id = a.turn_id
-			WHERE c.id = ? AND r.id = ? AND c.status = ? AND r.status = ?
+			WHERE c.id = ? AND r.id = ? AND r.status = ?
+			  AND (c.status = ? OR (c.status = ? AND EXISTS (
+			        SELECT 1 FROM challenge_runs cr
+			        WHERE cr.conversation_id = c.id AND cr.attempt_id = a.id)))
 			  AND a.id = ? AND a.status = ? AND a.branch_epoch = c.branch_epoch
 			  AND t.status = ? AND t.invalidated_at IS NULL
-			FOR UPDATE`
-		args = []any{conversationID, generation.ID, StatusActive, GenerationRunRunning,
+			FOR UPDATE OF c, r, a, t`
+		args = []any{conversationID, generation.ID, GenerationRunRunning,
+			StatusActive, StatusEnded,
 			metadata.AttemptID, AttemptStatusRunning, TurnStatusPending}
 	}
 	query := db.WithContext(ctx).Raw(queryText, args...)
@@ -442,7 +494,9 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 	return nil
 }
 
-// FailActiveGeneration 封存某对话当前活动的租约（生成 goroutine panic 后的兜底）。
+// FailActiveGeneration 封存本实例在该对话上仍处于活动状态的租约（生成 goroutine
+// panic 后的兜底）。只处理 owner_instance_id 为本实例的 run，避免多实例部署下误杀
+// 其他实例刚为同一对话启动的新生成；忙碌投影也只在不存在其他活动 run 时才清除。
 func (r *ConversationRepo) FailActiveGeneration(ctx context.Context, id uuid.UUID, errorCode string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var conversation Conversation
@@ -454,11 +508,15 @@ func (r *ConversationRepo) FailActiveGeneration(ctx context.Context, id uuid.UUI
 		}
 		now := time.Now()
 		if err := tx.Model(&ConversationGenerationRun{}).
-			Where("conversation_id = ? AND status IN ?", id, activeGenerationRunStatuses()).
+			Where("conversation_id = ? AND status IN ? AND owner_instance_id = ?", id, activeGenerationRunStatuses(), r.instanceID).
 			Updates(map[string]any{"status": GenerationRunFailed, "error_code": errorCode, "finished_at": now, "last_heartbeat_at": now}).Error; err != nil {
 			return err
 		}
-		return tx.Model(&Conversation{}).Where("id = ?", id).Update("is_processing", false).Error
+		return tx.Model(&Conversation{}).
+			Where("id = ? AND is_processing = ?", id, true).
+			Where("NOT EXISTS (?)", tx.Model(&ConversationGenerationRun{}).
+				Select("1").Where("conversation_id = ? AND status IN ?", id, activeGenerationRunStatuses())).
+			Update("is_processing", false).Error
 	})
 }
 

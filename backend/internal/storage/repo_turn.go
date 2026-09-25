@@ -84,11 +84,11 @@ func currentCapabilities(db *gorm.DB, conversationID uuid.UUID) (*TurnCapabiliti
 	if turn.Status == TurnStatusPending {
 		return result, nil
 	}
-	// A retry of a failed/partial/cancelled turn is a recovery operation and is
-	// free. Only replacing a successfully completed narrative consumes the
-	// platform rewrite credit.
+	// 失败或取消的回合没有提交任何写工具，重试属于恢复操作，免费；已完成回合和
+	// partial 回合都已经提交了可信事实（例如判定），替换它们要消耗剧情改写额度，
+	// 否则玩家可以用“取消 → 免费重新生成”无限重掷已提交的判定。
 	policy := platformcapability.MessageRewritePolicy()
-	if policy.Enabled && turn.Status == TurnStatusCompleted {
+	if policy.Enabled && (turn.Status == TurnStatusCompleted || turn.Status == TurnStatusPartial) {
 		result.RegenerateCostQuantity = policy.CostQuantity
 	}
 	result.CanRegenerate = turn.Status == TurnStatusCompleted || turn.Status == TurnStatusPartial || turn.Status == TurnStatusFailed || turn.Status == TurnStatusCancelled
@@ -243,7 +243,7 @@ func (r *TurnRepo) BeginRegenerate(ctx context.Context, in RegenerateInput) (*Re
 			return errors.New("当前未开启剧情改写")
 		}
 		costQuantity := int64(0)
-		if target.Status == TurnStatusCompleted {
+		if target.Status == TurnStatusCompleted || target.Status == TurnStatusPartial {
 			costQuantity = policy.CostQuantity
 		}
 		if costQuantity > 0 {
@@ -700,30 +700,11 @@ func (r *TurnRepo) FailOrphaned(ctx context.Context) (int64, error) {
 			return err
 		}
 		for _, attempt := range attempts {
-			attemptStatus := AttemptStatusFailed
-			turnStatus := TurnStatusFailed
-			failureStage := "generation_lost"
-			errorCode := "generation_lost"
-			if attempt.CommittedMutatingToolCount > 0 {
-				attemptStatus = AttemptStatusPartial
-				turnStatus = TurnStatusPartial
-				failureStage = "generation_lost_after_commit"
-				errorCode = "partial_after_generation_lost"
-			}
-			if err := tx.Model(&GenerationAttempt{}).Where("id = ? AND status = ?", attempt.ID, AttemptStatusRunning).
-				Updates(map[string]any{"status": attemptStatus, "failure_stage": failureStage, "error_code": errorCode, "finished_at": now}).Error; err != nil {
+			rows, err := sealLostAttemptInTx(tx, attempt, now)
+			if err != nil {
 				return err
 			}
-			if err := tx.Model(&AgentStep{}).Where("attempt_id = ? AND status = ?", attempt.ID, AgentStepRunning).
-				Updates(map[string]any{"status": AgentStepFailed, "error_code": "generation_lost", "finished_at": now}).Error; err != nil {
-				return err
-			}
-			result := tx.Model(&ConversationTurn{}).Where("id = ? AND status = ?", attempt.TurnID, TurnStatusPending).
-				Updates(map[string]any{"status": turnStatus, "failure_stage": failureStage, "sealed_at": now})
-			if result.Error != nil {
-				return result.Error
-			}
-			sealed += result.RowsAffected
+			sealed += rows
 		}
 		result := tx.Model(&ConversationTurn{}).
 			Where("status = ? AND NOT EXISTS (SELECT 1 FROM generation_attempts a WHERE a.turn_id = conversation_turns.id AND a.status = ?)", TurnStatusPending, AttemptStatusRunning).
@@ -737,4 +718,58 @@ func (r *TurnRepo) FailOrphaned(ctx context.Context) (int64, error) {
 		return nil
 	})
 	return sealed, err
+}
+
+// sealLostAttemptInTx 把一个失去生成租约的 running attempt 连同其 running step 和
+// pending turn 一起封口：已提交写工具的记为 partial，其余记为 failed。
+// 返回被封口的 turn 行数。
+func sealLostAttemptInTx(tx *gorm.DB, attempt GenerationAttempt, now time.Time) (int64, error) {
+	attemptStatus := AttemptStatusFailed
+	turnStatus := TurnStatusFailed
+	failureStage := "generation_lost"
+	errorCode := "generation_lost"
+	if attempt.CommittedMutatingToolCount > 0 {
+		attemptStatus = AttemptStatusPartial
+		turnStatus = TurnStatusPartial
+		failureStage = "generation_lost_after_commit"
+		errorCode = "partial_after_generation_lost"
+	}
+	if err := tx.Model(&GenerationAttempt{}).Where("id = ? AND status = ?", attempt.ID, AttemptStatusRunning).
+		Updates(map[string]any{"status": attemptStatus, "failure_stage": failureStage, "error_code": errorCode, "finished_at": now}).Error; err != nil {
+		return 0, err
+	}
+	if err := tx.Model(&AgentStep{}).Where("attempt_id = ? AND status = ?", attempt.ID, AgentStepRunning).
+		Updates(map[string]any{"status": AgentStepFailed, "error_code": "generation_lost", "finished_at": now}).Error; err != nil {
+		return 0, err
+	}
+	result := tx.Model(&ConversationTurn{}).Where("id = ? AND status = ?", attempt.TurnID, TurnStatusPending).
+		Updates(map[string]any{"status": turnStatus, "failure_stage": failureStage, "sealed_at": now})
+	return result.RowsAffected, result.Error
+}
+
+// sealLostGenerationInTx 在抢占过期生成租约的同一事务里，封口该对话遗留的
+// running attempt、pending turn 和仍为 received 的工具调用。调用方必须已持有对话行锁。
+func sealLostGenerationInTx(tx *gorm.DB, conversationID uuid.UUID, now time.Time) error {
+	var attempts []GenerationAttempt
+	if err := tx.Where("conversation_id = ? AND status = ?", conversationID, AttemptStatusRunning).
+		Find(&attempts).Error; err != nil {
+		return err
+	}
+	for _, attempt := range attempts {
+		if _, err := sealLostAttemptInTx(tx, attempt, now); err != nil {
+			return err
+		}
+	}
+	if err := tx.Model(&ConversationTurn{}).
+		Where("conversation_id = ? AND status = ?", conversationID, TurnStatusPending).
+		Updates(map[string]any{"status": TurnStatusFailed, "failure_stage": "generation_lost", "sealed_at": now}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&AgentToolInvocation{}).
+		Where("conversation_id = ? AND status = ?", conversationID, ToolInvocationReceived).
+		Updates(map[string]any{
+			"status": ToolInvocationAbandoned, "result_code": "generation_lost",
+			"result_json": JSONMap{"ok": false, "code": "generation_lost", "message": "工具调用所属的生成已经失效，未提交"},
+			"updated_at":  now,
+		}).Error
 }

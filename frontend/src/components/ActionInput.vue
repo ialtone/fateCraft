@@ -35,7 +35,6 @@ const message = useMessage()
 const dialog = useDialog()
 const text = ref('')
 
-
 // 断线 REST 降级期间的"等待中"标记：WS 断开时后端 202 立即返回、
 // 生成进度只经 WS 广播（本端收不到），isGenerating 不会置真。
 // 不拦截的话用户可对同一对话连点发送，触发后端生成锁竞争、多余请求全部失败。
@@ -48,7 +47,9 @@ const actionPending = ref(false)
 const guidanceGroups = computed(() => runtime.presentation?.guidance?.groups ?? [])
 const campaignSnapshot = computed(() => campaign.snapshot)
 // 剧情改写是平台能力，不属于当前玩法 Runtime；玩法只能声明自己的动作。
-const rewriteCapability = computed(() => runtime.platformCapability(PLATFORM_CAPABILITY_MESSAGE_REWRITE))
+const rewriteCapability = computed(() =>
+  runtime.platformCapability(PLATFORM_CAPABILITY_MESSAGE_REWRITE),
+)
 
 watch(
   () => socket.connected,
@@ -73,8 +74,8 @@ const isEmpty = computed(() => {
 })
 
 const canContinue = computed(() => {
-	return (
-	  context.activity.can_continue &&
+  return (
+    context.activity.can_continue &&
     !chat.isGenerating &&
     !awaitingRestGen.value &&
     !actionPending.value &&
@@ -135,16 +136,16 @@ async function dispatchUserInput(content: string) {
   // 用户继续对话即视为已读上一轮错误，立即清掉提示横幅
   socket.clearError()
   const tempId = chat.addOptimisticUser(content)
-	chat.markGenerating()
-	const requestId = crypto.randomUUID()
-	if (socket.sendUserInput(content, requestId)) return
+  chat.markGenerating()
+  const requestId = crypto.randomUUID()
+  if (socket.sendUserInput(content, requestId)) return
   // 走 REST 降级：标记"等待中"，避免断线期间对同一对话连点造成锁竞争
   awaitingRestGen.value = true
   try {
-	  await messagesApi.send(props.convId, content, requestId)
+    await messagesApi.send(props.convId, content, requestId)
   } catch (err: any) {
-	chat.removeById(tempId)
-	chat.stopGenerating()
+    chat.removeById(tempId)
+    chat.stopGenerating()
     awaitingRestGen.value = false
     message.error(`发送失败：${err.message || '未知错误'}`)
   }
@@ -250,17 +251,17 @@ async function regenerate() {
   })
 }
 async function continueGen() {
-	if (!canContinue.value) return
-	socket.clearError()
-	actionPending.value = true
-	chat.markGenerating()
-	const requestId = crypto.randomUUID()
-	try {
-	  await messagesApi.continue(props.convId, requestId)
-	} catch (err: any) {
-	  chat.stopGenerating()
-	  message.error(`继续生成失败：${err.message || '未知错误'}`)
-	}
+  if (!canContinue.value) return
+  socket.clearError()
+  actionPending.value = true
+  chat.markGenerating()
+  const requestId = crypto.randomUUID()
+  try {
+    await messagesApi.continue(props.convId, requestId)
+  } catch (err: any) {
+    chat.stopGenerating()
+    message.error(`继续生成失败：${err.message || '未知错误'}`)
+  }
 }
 
 function steer() {
@@ -328,12 +329,7 @@ function cancel() {
         @action="dispatchGuidanceAction"
       />
       <div class="toolbar row">
-        <NButton
-		  quaternary
-		  size="tiny"
-		  :disabled="!canRegenerate"
-          @click="regenerate"
-        >
+        <NButton quaternary size="tiny" :disabled="!canRegenerate" @click="regenerate">
           <template #icon><NIcon :component="RefreshOutline" /></template>
           重新生成
         </NButton>

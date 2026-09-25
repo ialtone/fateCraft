@@ -230,7 +230,9 @@ func (s *Server) reportPublicConversationShare(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	reporter := c.ClientIP() + "|" + c.GetHeader("User-Agent")
+	// 举报者身份只取 ClientIP（受 TRUSTED_PROXIES 约束），不拼接客户端可随意伪造的 User-Agent，
+	// 限流键和去重指纹都基于它。
+	reporter := c.ClientIP()
 	err := s.shares.Report(c.Request.Context(), c.Param("token"), reporter, input)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
@@ -263,7 +265,7 @@ func publicShareNotFound(c *gin.Context) {
 }
 
 func (s *Server) listAdminConversationShares(c *gin.Context) {
-	limit, ok := adminShareLimit(c)
+	limit, ok := adminListLimit(c)
 	if !ok {
 		return
 	}
@@ -298,7 +300,7 @@ func (s *Server) moderateAdminConversationShare(c *gin.Context) {
 }
 
 func (s *Server) listAdminShareReports(c *gin.Context) {
-	limit, ok := adminShareLimit(c)
+	limit, ok := adminListLimit(c)
 	if !ok {
 		return
 	}
@@ -332,7 +334,8 @@ func (s *Server) resolveAdminShareReport(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": input.Status})
 }
 
-func adminShareLimit(c *gin.Context) (int, bool) {
+// adminListLimit 读取管理列表的 limit 参数：缺省为 50，必须是 1 到 200 的整数，否则直接返回 400。
+func adminListLimit(c *gin.Context) (int, bool) {
 	limit := 50
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		parsed, err := strconv.Atoi(raw)

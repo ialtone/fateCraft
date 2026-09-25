@@ -249,6 +249,11 @@ func (s *Service) Report(ctx context.Context, token, reporter string, input Repo
 	if !s.limiter.allow(s.signer.fingerprint("report|"+token+"|"+reporter), 5, time.Hour) {
 		return ErrRateLimited
 	}
+	// 同一分享每小时最多接受 fixed 条举报：指纹是 ClientIP，去重键可被伪造，
+	// 必须再按分享 ID 设全局上限，否则换 IP+UA 就能无限写入淹没治理队列。
+	if !s.limiter.allow(s.signer.fingerprint("report-global|"+token), 20, time.Hour) {
+		return ErrRateLimited
+	}
 	id, err := s.signer.parse(token)
 	if err != nil {
 		return storage.ErrNotFound

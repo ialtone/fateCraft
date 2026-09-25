@@ -67,14 +67,16 @@ Schema 当前包含 57 张表，`init.sql` 为每张表提供 `COMMENT ON TABLE`
 
 重要约束：
 
-- `email` 可空且全局唯一，LinuxDo 用户不必拥有可登录邮箱。
+- `username` 是必填的站内登录标识（2-32 个字符，不含 `@`、空白和控制字符），由唯一索引 `idx_users_username_lower` 保证按 `lower(username)` 大小写不敏感唯一；`email` 可空且全局唯一；第三方身份的 provider_email 只属于身份快照，不等同于站内登录邮箱。
 - `password_hash` 只存 Argon2id 哈希，不存明文或可逆密文。
 - `status` 仅允许 `active/disabled`。
-- `role` 仅允许 `user/admin`，首个创建用户由后端提升为管理员。
+- `role` 仅允许 `user/admin/owner`，默认值为 `user`；普通创建流程不会自动提权。
+- 初始化完成后只允许一个 `owner`，角色转交、停用和降级由后端事务保护。
+- `users` 使用仅匹配 `role = 'owner'` 的唯一部分索引强制最多一个 owner；不建立用于普通角色筛选的低基数索引。
 
 ### `auth_identities`
 
-记录用户与外部身份提供方的绑定。`provider + provider_user_id` 唯一；LinuxDo 返回的用户名、邮箱、信任等级和原始安全资料属于身份快照，不参与玩法状态。
+记录用户与外部身份提供方的绑定。`provider + provider_user_id` 唯一；LinuxDo 返回的用户名、邮箱、信任等级和原始安全资料属于身份快照，不参与玩法状态。外部身份不能脱离本地用户单独创建账号。
 
 ### `auth_sessions`
 
@@ -82,7 +84,7 @@ Schema 当前包含 57 张表，`init.sql` 为每张表提供 `COMMENT ON TABLE`
 
 ### `oauth_login_flows`
 
-LinuxDo OAuth 授权过程的一次性 state 与 PKCE `code_verifier`。state 只保存摘要，完成或过期后不可复用。
+LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑定用户、PKCE `code_verifier` 和 `browser_binding_hash`（发起浏览器 nonce Cookie 的 SHA-256）。state 只保存摘要，完成、失败或过期后都不可复用；回调必须带回匹配的 nonce。
 
 ### `auth_settings`
 
@@ -105,7 +107,9 @@ LinuxDo OAuth 授权过程的一次性 state 与 PKCE `code_verifier`。state �
 
 ### `llm_settings`、`system_settings` 与 `llm_request_logs`
 
-`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。`system_settings` 是主键固定为 1 的管理员单例，同时保存判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
+`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。`system_settings` 是主键固定为 1 的管理员单例，同时保存 `installation_completed_at`（首次安装向导完成时间）、判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
+
+`admin_audit_logs` 保存首次安装、角色变更、账号状态变更等安全操作的脱敏记录，不保存密码、Cookie、Authorization、初始化凭证或 LLM Key。除主键外不预设低价值筛选索引，确有时间分页需求时再增加单列 `created_at` 索引。
 
 平台不持久化模型能力评分或健康状态。用户显式点击检测时执行一次无副作用请求，结果只返回当前页面，不改变生产调用路径。
 

@@ -16,11 +16,17 @@ const message = useMessage()
 const pending = ref(false)
 let retry: { selection: string; requestId: string } | null = null
 
-const groups = computed<GuidanceGroup[]>(() => guidance.active ? [{
-  key: guidance.active.id,
-  title: guidance.active.title,
-  items: guidance.active.items.map((item) => ({ ...item, mode: 'message' })),
-}] : [])
+const groups = computed<GuidanceGroup[]>(() =>
+  guidance.active
+    ? [
+        {
+          key: guidance.active.id,
+          title: guidance.active.title,
+          items: guidance.active.items.map((item) => ({ ...item, mode: 'message' })),
+        },
+      ]
+    : [],
+)
 
 async function select(item: GuidanceItem) {
   const active = guidance.active
@@ -65,8 +71,13 @@ async function select(item: GuidanceItem) {
   border-top: 1px solid var(--border-soft);
   background: var(--bg-soft);
 }
-.conversation-guidance-bar :deep(.guidance) { margin-bottom: 0; }
+.conversation-guidance-bar :deep(.guidance) {
+  margin-bottom: 0;
+}
 @media (max-width: 768px) {
-  .conversation-guidance-bar { padding: 8px 14px; max-height: 144px; }
+  .conversation-guidance-bar {
+    padding: 8px 14px;
+    max-height: 144px;
+  }
 }
 </style>

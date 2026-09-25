@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,16 @@ type fakeRepository struct {
 	invitations    []storage.InvitationCode
 	verificationID *uuid.UUID
 	invitationHash *string
+	identities     []storage.ExternalIdentitySummary
+	// registerErr 模拟注册事务失败（例如唯一索引冲突）。
+	registerErr error
+	// bindErr 模拟绑定失败；boundUserID 记录实际绑定到的用户。
+	bindErr     error
+	boundUserID *uuid.UUID
+	// lastIdentifier 记录登录时传给存储层的标识。
+	lastIdentifier string
+	// unbindPasswordLoginEnabled 记录解绑时传入的全站密码登录开关。
+	unbindPasswordLoginEnabled *bool
 }
 
 func (f *fakeRepository) CreateOAuthFlow(_ context.Context, flow *storage.OAuthLoginFlow) error {
@@ -51,17 +62,55 @@ func (f *fakeRepository) UserBySession(context.Context, string, time.Time) (*sto
 func (f *fakeRepository) UserByEmail(context.Context, string) (*storage.User, error) {
 	return nil, storage.ErrNotFound
 }
+
+// UserByIdentifier 模拟存储层规则：含 @ 只匹配邮箱，否则按用户名大小写不敏感匹配。
+func (f *fakeRepository) UserByIdentifier(_ context.Context, identifier string) (*storage.User, error) {
+	f.lastIdentifier = identifier
+	if f.user == nil {
+		return nil, storage.ErrNotFound
+	}
+	if strings.Contains(identifier, "@") {
+		if f.user.Email != nil && *f.user.Email == identifier {
+			return f.user, nil
+		}
+		return nil, storage.ErrNotFound
+	}
+	if strings.EqualFold(f.user.Username, identifier) {
+		return f.user, nil
+	}
+	return nil, storage.ErrNotFound
+}
 func (f *fakeRepository) RegisterEmailUser(_ context.Context, user *storage.User, verificationID *uuid.UUID, invitationHash *string, _ time.Time) error {
+	if f.registerErr != nil {
+		return f.registerErr
+	}
 	f.user = user
 	f.verificationID = verificationID
 	f.invitationHash = invitationHash
 	return nil
 }
-func (f *fakeRepository) UpsertExternalUser(_ context.Context, in storage.ExternalIdentityInput) (*storage.User, error) {
+func (f *fakeRepository) ExternalUserByProviderSubject(_ context.Context, _, _ string) (*storage.User, error) {
 	if f.user == nil {
-		f.user = &storage.User{ID: uuid.New(), DisplayName: in.DisplayName, Email: in.Email, Status: storage.UserStatusActive}
+		return nil, storage.ErrIdentityNotFound
 	}
 	return f.user, nil
+}
+func (f *fakeRepository) BindExternalIdentity(_ context.Context, userID uuid.UUID, in storage.ExternalIdentityInput) (*storage.ExternalIdentitySummary, error) {
+	if f.bindErr != nil {
+		return nil, f.bindErr
+	}
+	f.boundUserID = &userID
+	return &storage.ExternalIdentitySummary{ID: uuid.New(), Provider: in.Provider, ProviderUserID: in.ProviderUserID, Username: in.Username}, nil
+}
+func (f *fakeRepository) ListExternalIdentities(context.Context, uuid.UUID) ([]storage.ExternalIdentitySummary, error) {
+	return f.identities, nil
+}
+func (f *fakeRepository) ListAllExternalIdentities(context.Context, int, int) ([]storage.AdminExternalIdentitySummary, error) {
+	return nil, nil
+}
+func (f *fakeRepository) UnbindExternalIdentity(_ context.Context, _, _ uuid.UUID, passwordLoginEnabled bool) error {
+	f.unbindPasswordLoginEnabled = &passwordLoginEnabled
+	return nil
 }
 func (f *fakeRepository) GetAuthSettings(context.Context) (*storage.AuthSettings, error) {
 	if f.settings == nil {
@@ -118,37 +167,42 @@ func (f *fakeRepository) UpdateInvitationCode(_ context.Context, invitation *sto
 	}
 	return nil
 }
-
-func TestStartLinuxDOUsesPKCEAndPersistsFlow(t *testing.T) {
-	repo := &fakeRepository{}
-	svc := NewService(repo, Config{
-		LinuxDOClientID: "client-id", LinuxDOClientSecret: "secret", LinuxDORedirectURI: "http://localhost/callback",
-	})
-	redirect, err := svc.StartLinuxDO(context.Background(), "/conversations/abc")
-	if err != nil {
-		t.Fatal(err)
+func (f *fakeRepository) InstallationComplete(context.Context) (bool, error) { return true, nil }
+func (f *fakeRepository) InitializeOwner(_ context.Context, user *storage.User) (*storage.User, error) {
+	f.user = user
+	f.user.Role = storage.UserRoleOwner
+	return f.user, nil
+}
+func (f *fakeRepository) ListUsers(context.Context, int, int) ([]storage.User, error) {
+	if f.user == nil {
+		return nil, nil
 	}
-	u, err := url.Parse(redirect)
-	if err != nil {
-		t.Fatal(err)
+	return []storage.User{*f.user}, nil
+}
+func (f *fakeRepository) UpdateUserRole(_ context.Context, _, _ uuid.UUID, role string) (*storage.User, error) {
+	if f.user == nil {
+		f.user = &storage.User{ID: uuid.New(), Status: storage.UserStatusActive}
 	}
-	q := u.Query()
-	for _, key := range []string{"code_challenge", "code_challenge_method", "state", "client_id", "redirect_uri"} {
-		if q.Get(key) == "" {
-			t.Fatalf("missing OAuth query parameter %q", key)
-		}
+	f.user.Role = role
+	return f.user, nil
+}
+func (f *fakeRepository) UpdateUserStatus(_ context.Context, _, _ uuid.UUID, status string) (*storage.User, error) {
+	if f.user == nil {
+		f.user = &storage.User{ID: uuid.New(), Role: storage.UserRoleUser}
 	}
-	if q.Get("code_challenge_method") != "S256" || repo.flow == nil {
-		t.Fatalf("PKCE flow was not persisted correctly")
-	}
-	if repo.flow.ReturnTo != "/conversations/abc" {
-		t.Fatalf("unexpected return_to: %q", repo.flow.ReturnTo)
-	}
+	f.user.Status = status
+	return f.user, nil
+}
+func (f *fakeRepository) ListAdminAuditLogs(context.Context, int) ([]storage.AdminAuditLog, error) {
+	return nil, nil
 }
 
-func TestCompleteLinuxDOExchangesCodeAndCreatesSession(t *testing.T) {
-	repo := &fakeRepository{}
+// newFakeLinuxDOProvider 启动模拟的 LinuxDo token 与用户信息接口，calls 统计被调用次数。
+func newFakeLinuxDOProvider(t *testing.T) (*httptest.Server, *int32) {
+	t.Helper()
+	var calls int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
 		switch r.URL.Path {
 		case "/token":
 			if err := r.ParseForm(); err != nil || r.PostForm.Get("code") != "auth-code" || r.PostForm.Get("code_verifier") == "" {
@@ -168,20 +222,73 @@ func TestCompleteLinuxDOExchangesCodeAndCreatesSession(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer provider.Close()
+	t.Cleanup(provider.Close)
+	return provider, &calls
+}
 
-	svc := NewService(repo, Config{
-		LinuxDOClientID: "client-id", LinuxDOClientSecret: "secret", LinuxDORedirectURI: "http://localhost/callback",
-		TokenURL: provider.URL + "/token", UserInfoURL: provider.URL + "/user",
-	})
+func linuxDOTestConfig(provider *httptest.Server) Config {
+	cfg := Config{LinuxDOClientID: "client-id", LinuxDOClientSecret: "secret", LinuxDORedirectURI: "http://localhost/callback"}
+	if provider != nil {
+		cfg.TokenURL = provider.URL + "/token"
+		cfg.UserInfoURL = provider.URL + "/user"
+	}
+	return cfg
+}
+
+func stateOf(t *testing.T, start *LinuxDOStart) string {
+	t.Helper()
+	return mustParseURL(t, start.RedirectURL).Query().Get("state")
+}
+
+func TestStartLinuxDOUsesPKCEAndPersistsFlow(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo, linuxDOTestConfig(nil))
+	start, err := svc.StartLinuxDO(context.Background(), "/conversations/abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(start.RedirectURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	for _, key := range []string{"code_challenge", "code_challenge_method", "state", "client_id", "redirect_uri"} {
+		if q.Get(key) == "" {
+			t.Fatalf("missing OAuth query parameter %q", key)
+		}
+	}
+	if q.Get("code_challenge_method") != "S256" || repo.flow == nil {
+		t.Fatalf("PKCE flow was not persisted correctly")
+	}
+	if repo.flow.ReturnTo != "/conversations/abc" || repo.flow.Purpose != storage.OAuthPurposeLogin {
+		t.Fatalf("unexpected flow: return_to=%q purpose=%q", repo.flow.ReturnTo, repo.flow.Purpose)
+	}
+	// 浏览器绑定 nonce 只以摘要形式落库，原值交给调用方写入 Cookie。
+	if start.BrowserBinding == "" || repo.flow.BrowserBindingHash != sha256Hex(start.BrowserBinding) {
+		t.Fatalf("browser binding was not persisted as a hash: %+v", repo.flow)
+	}
+	if ttl := time.Until(repo.flow.ExpiresAt); ttl <= 9*time.Minute || ttl > LinuxDOFlowTTL {
+		t.Fatalf("unexpected flow TTL: %v", ttl)
+	}
+}
+
+func TestCompleteLinuxDOExchangesCodeAndCreatesSessionForBoundIdentity(t *testing.T) {
+	email := "fate@example.com"
+	repo := &fakeRepository{user: &storage.User{ID: uuid.New(), DisplayName: "Fate User", Email: &email, Status: storage.UserStatusActive}}
+	provider, _ := newFakeLinuxDOProvider(t)
+	svc := NewService(repo, linuxDOTestConfig(provider))
 	start, err := svc.StartLinuxDO(context.Background(), "/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := mustParseURL(t, start).Query().Get("state")
-	result, err := svc.CompleteLinuxDO(context.Background(), "auth-code", state)
+	result, err := svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+		Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding,
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if result.Purpose != storage.OAuthPurposeLogin || result.ReturnTo != "/" {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 	if result.User.DisplayName != "Fate User" || result.User.Email == nil || *result.User.Email != "fate@example.com" {
 		t.Fatalf("unexpected user: %+v", result.User)
@@ -194,9 +301,234 @@ func TestCompleteLinuxDOExchangesCodeAndCreatesSession(t *testing.T) {
 	}
 }
 
+// 登录 CSRF：授权回调链接被转交到没有对应 nonce Cookie 的浏览器时必须拒绝，且不交换 code。
+func TestCompleteLinuxDORejectsMissingOrForeignBrowserBinding(t *testing.T) {
+	email := "fate@example.com"
+	for _, test := range []struct {
+		name    string
+		binding func(start *LinuxDOStart) string
+	}{
+		{name: "missing", binding: func(*LinuxDOStart) string { return "" }},
+		{name: "foreign", binding: func(*LinuxDOStart) string { return "attacker-or-other-browser-nonce" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &fakeRepository{user: &storage.User{ID: uuid.New(), Email: &email, Status: storage.UserStatusActive}}
+			provider, calls := newFakeLinuxDOProvider(t)
+			svc := NewService(repo, linuxDOTestConfig(provider))
+			start, err := svc.StartLinuxDO(context.Background(), "/")
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+				Code: "auth-code", State: stateOf(t, start), BrowserBinding: test.binding(start),
+			})
+			if !errors.Is(err, ErrInvalidOAuthFlow) || result != nil {
+				t.Fatalf("expected ErrInvalidOAuthFlow, got result=%+v err=%v", result, err)
+			}
+			var flowErr *LinuxDOFlowError
+			if errors.As(err, &flowErr) {
+				t.Fatal("unbound browser must not learn the flow return_to")
+			}
+			if atomic.LoadInt32(calls) != 0 || repo.session != nil {
+				t.Fatalf("code must not be exchanged: calls=%d session=%v", atomic.LoadInt32(calls), repo.session)
+			}
+		})
+	}
+}
+
+// 绑定 CSRF：即使浏览器 nonce 匹配，回调时的当前会话也必须是发起绑定的用户。
+func TestCompleteLinuxDOBindRequiresInitiatingSession(t *testing.T) {
+	owner := uuid.New()
+	other := uuid.New()
+	for _, test := range []struct {
+		name    string
+		session *uuid.UUID
+	}{
+		{name: "no_session", session: nil},
+		{name: "other_user", session: &other},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &fakeRepository{}
+			provider, calls := newFakeLinuxDOProvider(t)
+			svc := NewService(repo, linuxDOTestConfig(provider))
+			start, err := svc.StartLinuxDOBind(context.Background(), owner, "/settings")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+				Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding, SessionUserID: test.session,
+			})
+			var flowErr *LinuxDOFlowError
+			if !errors.As(err, &flowErr) || !errors.Is(err, ErrLinuxDOBindSessionMismatch) {
+				t.Fatalf("expected bind session mismatch flow error, got %v", err)
+			}
+			if flowErr.Purpose != storage.OAuthPurposeBind || flowErr.ReturnTo != "/settings" {
+				t.Fatalf("flow error must carry purpose and return_to: %+v", flowErr)
+			}
+			if atomic.LoadInt32(calls) != 0 || repo.boundUserID != nil {
+				t.Fatalf("bind must stop before exchanging code: calls=%d bound=%v", atomic.LoadInt32(calls), repo.boundUserID)
+			}
+		})
+	}
+}
+
+func TestCompleteLinuxDOBindSucceedsForInitiatingSession(t *testing.T) {
+	owner := uuid.New()
+	repo := &fakeRepository{}
+	provider, _ := newFakeLinuxDOProvider(t)
+	svc := NewService(repo, linuxDOTestConfig(provider))
+	start, err := svc.StartLinuxDOBind(context.Background(), owner, "/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.flow.Purpose != storage.OAuthPurposeBind || repo.flow.UserID == nil || *repo.flow.UserID != owner {
+		t.Fatalf("bind flow was not persisted correctly: %+v", repo.flow)
+	}
+	session := owner
+	result, err := svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+		Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding, SessionUserID: &session,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Purpose != storage.OAuthPurposeBind || result.ReturnTo != "/settings" || result.SessionToken != "" {
+		t.Fatalf("unexpected bind result: %+v", result)
+	}
+	if repo.boundUserID == nil || *repo.boundUserID != owner {
+		t.Fatalf("identity bound to %v, want %v", repo.boundUserID, owner)
+	}
+}
+
+func TestCompleteLinuxDOFailuresCarryFlowPurpose(t *testing.T) {
+	owner := uuid.New()
+	t.Run("bind_identity_owned_by_other_user", func(t *testing.T) {
+		repo := &fakeRepository{bindErr: storage.ErrIdentityAlreadyBound}
+		provider, _ := newFakeLinuxDOProvider(t)
+		svc := NewService(repo, linuxDOTestConfig(provider))
+		start, err := svc.StartLinuxDOBind(context.Background(), owner, "/settings?tab=identity")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+			Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding, SessionUserID: &owner,
+		})
+		var flowErr *LinuxDOFlowError
+		if !errors.As(err, &flowErr) || !errors.Is(err, storage.ErrIdentityAlreadyBound) {
+			t.Fatalf("expected already-bound flow error, got %v", err)
+		}
+		if flowErr.Purpose != storage.OAuthPurposeBind || flowErr.ReturnTo != "/settings?tab=identity" {
+			t.Fatalf("unexpected flow error: %+v", flowErr)
+		}
+	})
+	t.Run("login_unbound_identity", func(t *testing.T) {
+		repo := &fakeRepository{}
+		provider, _ := newFakeLinuxDOProvider(t)
+		svc := NewService(repo, linuxDOTestConfig(provider))
+		start, err := svc.StartLinuxDO(context.Background(), "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+			Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding,
+		})
+		var flowErr *LinuxDOFlowError
+		if !errors.As(err, &flowErr) || !errors.Is(err, ErrLinuxDOUnbound) || flowErr.Purpose != storage.OAuthPurposeLogin {
+			t.Fatalf("expected unbound login flow error, got %v", err)
+		}
+		if repo.session != nil {
+			t.Fatal("unbound identity must not create a session")
+		}
+	})
+}
+
+func TestAbortLinuxDOConsumesMatchingFlow(t *testing.T) {
+	owner := uuid.New()
+	repo := &fakeRepository{}
+	svc := NewService(repo, linuxDOTestConfig(nil))
+	start, err := svc.StartLinuxDOBind(context.Background(), owner, "/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = svc.AbortLinuxDO(context.Background(), stateOf(t, start), start.BrowserBinding, ErrLinuxDOCancelled)
+	var flowErr *LinuxDOFlowError
+	if !errors.As(err, &flowErr) || !errors.Is(err, ErrLinuxDOCancelled) {
+		t.Fatalf("expected cancelled flow error, got %v", err)
+	}
+	if flowErr.Purpose != storage.OAuthPurposeBind || flowErr.ReturnTo != "/settings" || repo.flow != nil {
+		t.Fatalf("flow was not consumed into a bind error: %+v flow=%v", flowErr, repo.flow)
+	}
+
+	// 没有可用 state 时原样返回原因，由调用方回落到登录页。
+	err = svc.AbortLinuxDO(context.Background(), "unknown-state", start.BrowserBinding, ErrLinuxDOCancelled)
+	if !errors.Is(err, ErrLinuxDOCancelled) || errors.As(err, &flowErr) {
+		t.Fatalf("unknown state must fall back to the plain cause, got %v", err)
+	}
+}
+
+func TestSafeReturnTo(t *testing.T) {
+	for _, test := range []struct {
+		raw  string
+		want string
+	}{
+		{raw: "/settings", want: "/settings"},
+		{raw: "/ok?x=1", want: "/ok?x=1"},
+		{raw: "/conversations/abc#latest", want: "/conversations/abc#latest"},
+		{raw: `/\evil.example`, want: "/"},
+		{raw: "/\t/evil.example", want: "/"},
+		{raw: "//evil.example", want: "/"},
+		{raw: "///evil.example", want: "/"},
+		{raw: "https://evil.example", want: "/"},
+		{raw: "javascript:alert(1)", want: "/"},
+		{raw: "evil.example", want: "/"},
+		{raw: "", want: "/"},
+		{raw: " /settings", want: "/"},
+		{raw: "/settings\r\nSet-Cookie: x=1", want: "/"},
+		{raw: "/%5Cevil.example", want: "/"},
+		{raw: "/%2F/evil.example", want: "/"},
+		{raw: "/" + strings.Repeat("a", returnToMaxBytes), want: "/"},
+	} {
+		if got := safeReturnTo(test.raw); got != test.want {
+			t.Errorf("safeReturnTo(%q) = %q, want %q", test.raw, got, test.want)
+		}
+	}
+}
+
+func TestNormalizeUsername(t *testing.T) {
+	for _, test := range []struct {
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{raw: "alice", want: "alice"},
+		{raw: "  Alice_01  ", want: "Alice_01"},
+		{raw: "张三", want: "张三"},
+		{raw: strings.Repeat("甲", 32), want: strings.Repeat("甲", 32)},
+		{raw: "a", wantErr: true},
+		{raw: "   ", wantErr: true},
+		{raw: strings.Repeat("a", 33), wantErr: true},
+		{raw: "alice@example.com", wantErr: true},
+		{raw: "alice smith", wantErr: true},
+		{raw: "alice\tsmith", wantErr: true},
+		{raw: "alice" + string(rune(0x3000)) + "smith", wantErr: true}, // 全角空格
+		{raw: "alice\u0000", wantErr: true},
+		{raw: "ali" + string(rune(0x200b)) + "ce", wantErr: true}, // 零宽空格（格式字符）
+	} {
+		got, err := normalizeUsername(test.raw)
+		if test.wantErr {
+			if !errors.Is(err, ErrInvalidUsername) {
+				t.Errorf("normalizeUsername(%q) err = %v, want ErrInvalidUsername", test.raw, err)
+			}
+			continue
+		}
+		if err != nil || got != test.want {
+			t.Errorf("normalizeUsername(%q) = %q, %v; want %q", test.raw, got, err, test.want)
+		}
+	}
+}
+
 func TestEmailAuthDisabledByDefault(t *testing.T) {
 	svc := NewService(&fakeRepository{}, Config{})
-	if _, err := svc.RegisterEmail(context.Background(), "user@example.com", "password123", "User", "", ""); err != ErrEmailRegistrationDisabled {
+	if _, err := svc.RegisterEmail(context.Background(), "user@example.com", "user", "password123", "User", "", ""); err != ErrEmailRegistrationDisabled {
 		t.Fatalf("expected disabled error, got %v", err)
 	}
 	config, err := svc.PublicConfig(context.Background())
@@ -205,6 +537,101 @@ func TestEmailAuthDisabledByDefault(t *testing.T) {
 	}
 	if config.EmailRegistrationEnabled {
 		t.Fatal("email registration must be disabled by default")
+	}
+}
+
+// 用户名与昵称分开保存：同一邮箱前缀或同名昵称不会互相冲突。
+func TestRegisterEmailUsesExplicitUsername(t *testing.T) {
+	newRepo := func() *fakeRepository {
+		repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
+		repo.settings.EmailRegistrationEnabled = true
+		repo.settings.EmailVerificationEnabled = false
+		return repo
+	}
+
+	repo := newRepo()
+	svc := NewService(repo, Config{})
+	result, err := svc.RegisterEmail(context.Background(), "Alice@QQ.com", " alice_qq ", "password123", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.User.Username != "alice_qq" || result.User.DisplayName != "alice_qq" || *result.User.Email != "alice@qq.com" {
+		t.Fatalf("display name must default to the username: %+v", result.User)
+	}
+
+	repo = newRepo()
+	svc = NewService(repo, Config{})
+	result, err = svc.RegisterEmail(context.Background(), "zhang@example.com", "zhang01", "password123", " 张三 ", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.User.Username != "zhang01" || result.User.DisplayName != "张三" {
+		t.Fatalf("username and display name must be stored separately: %+v", result.User)
+	}
+
+	for _, username := range []string{"", "a", "alice@example.com", "alice smith"} {
+		if _, err := NewService(newRepo(), Config{}).RegisterEmail(context.Background(), "a@example.com", username, "password123", "Alice", "", ""); !errors.Is(err, ErrInvalidUsername) {
+			t.Fatalf("username %q: expected ErrInvalidUsername, got %v", username, err)
+		}
+	}
+
+	repo = newRepo()
+	repo.registerErr = storage.ErrUsernameInUse
+	if _, err := NewService(repo, Config{}).RegisterEmail(context.Background(), "b@example.com", "taken", "password123", "", "", ""); !errors.Is(err, storage.ErrUsernameInUse) {
+		t.Fatalf("expected username conflict, got %v", err)
+	}
+	repo = newRepo()
+	repo.registerErr = storage.ErrEmailInUse
+	if _, err := NewService(repo, Config{}).RegisterEmail(context.Background(), "b@example.com", "fresh", "password123", "", "", ""); !errors.Is(err, ErrEmailInUse) {
+		t.Fatalf("expected email conflict, got %v", err)
+	}
+}
+
+// 含 @ 的登录标识只按规范化邮箱查找，其余按用户名查找。
+func TestLoginEmailRoutesIdentifierByAtSign(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashString := string(hash)
+	email := "alice@example.com"
+	repo := &fakeRepository{user: &storage.User{
+		ID: uuid.New(), Username: "Alice", Email: &email, PasswordHash: &hashString, Status: storage.UserStatusActive,
+	}}
+	svc := NewService(repo, Config{})
+
+	if _, err := svc.LoginEmail(context.Background(), "  ALICE@Example.com ", "password123"); err != nil {
+		t.Fatalf("email login failed: %v", err)
+	}
+	if repo.lastIdentifier != "alice@example.com" {
+		t.Fatalf("email identifier was not normalized: %q", repo.lastIdentifier)
+	}
+	if _, err := svc.LoginEmail(context.Background(), " alice ", "password123"); err != nil {
+		t.Fatalf("username login failed: %v", err)
+	}
+	if repo.lastIdentifier != "alice" {
+		t.Fatalf("username identifier = %q", repo.lastIdentifier)
+	}
+	repo.lastIdentifier = ""
+	if _, err := svc.LoginEmail(context.Background(), "alice@", "password123"); !errors.Is(err, ErrInvalidCredentials) || repo.lastIdentifier != "" {
+		t.Fatalf("malformed email must fail before lookup: err=%v identifier=%q", err, repo.lastIdentifier)
+	}
+	if _, err := svc.LoginEmail(context.Background(), "alice", "wrong-password"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expected invalid credentials, got %v", err)
+	}
+}
+
+func TestInitializeOwnerUsesUsernameRules(t *testing.T) {
+	if _, err := NewService(&fakeRepository{}, Config{}).InitializeOwner(context.Background(), "", "owner@example.com", "password123", ""); !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("expected ErrInvalidUsername, got %v", err)
+	}
+	repo := &fakeRepository{}
+	result, err := NewService(repo, Config{}).InitializeOwner(context.Background(), "", " 掌柜 ", "password123", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.User.Username != "掌柜" || result.User.DisplayName != "掌柜" || result.User.Role != storage.UserRoleOwner || result.User.Email != nil {
+		t.Fatalf("unexpected owner: %+v", result.User)
 	}
 }
 
@@ -236,7 +663,7 @@ func TestRegistrationCodeAndInvitationAreRequiredByRuntimeSettings(t *testing.T)
 		t.Fatalf("verification code missing from body: %q", mailer.message.Body)
 	}
 	result, err := svc.RegisterEmail(
-		context.Background(), "user@example.com", "password123", "User", code, "FC-ABCD-EFGH-IJKL-MNOP",
+		context.Background(), "user@example.com", "user01", "password123", "User", code, "FC-ABCD-EFGH-IJKL-MNOP",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +689,7 @@ func TestInvalidVerificationCodeIncrementsAttemptCount(t *testing.T) {
 		},
 	}
 	svc := NewService(repo, Config{})
-	_, err = svc.RegisterEmail(context.Background(), "user@example.com", "password123", "User", "000000", "")
+	_, err = svc.RegisterEmail(context.Background(), "user@example.com", "user01", "password123", "User", "000000", "")
 	if !errors.Is(err, ErrInvalidVerificationCode) {
 		t.Fatalf("expected invalid verification error, got %v", err)
 	}
@@ -271,15 +698,21 @@ func TestInvalidVerificationCodeIncrementsAttemptCount(t *testing.T) {
 	}
 }
 
+func validSettingsInput(emailAuthEnabled bool) UpdateAuthSettingsInput {
+	return UpdateAuthSettingsInput{
+		EmailAuthEnabled: emailAuthEnabled, SMTPHost: "smtp.example.com", SMTPPort: 587, SMTPSecurity: "starttls",
+		SenderEmail: "noreply@example.com", SenderName: "Fatecraft", VerificationSubject: "验证码",
+		VerificationTemplate: "验证码：{{code}}", VerificationCodeTTLMinutes: 10, VerificationResendSeconds: 60,
+	}
+}
+
 func TestSMTPPasswordIsEncryptedAndNeverReturned(t *testing.T) {
 	repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
 	svc := NewService(repo, Config{DataEncryptionKey: strings.Repeat("secret", 6)})
-	view, err := svc.UpdateAdminSettings(context.Background(), UpdateAuthSettingsInput{
-		EmailAuthEnabled: true, SMTPHost: "smtp.example.com", SMTPPort: 587, SMTPSecurity: "starttls",
-		SMTPUsername: "mailer", SMTPPassword: "plain-password", SenderEmail: "noreply@example.com",
-		SenderName: "Fatecraft", VerificationSubject: "验证码", VerificationTemplate: "验证码：{{code}}",
-		VerificationCodeTTLMinutes: 10, VerificationResendSeconds: 60,
-	})
+	input := validSettingsInput(true)
+	input.SMTPUsername = "mailer"
+	input.SMTPPassword = "plain-password"
+	view, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,6 +722,58 @@ func TestSMTPPasswordIsEncryptedAndNeverReturned(t *testing.T) {
 	decrypted, err := svc.decryptSMTPPassword(repo.settings)
 	if err != nil || decrypted != "plain-password" {
 		t.Fatalf("decrypt password: value=%q err=%v", decrypted, err)
+	}
+}
+
+// 关闭密码登录前，owner 必须已绑定可用的 LinuxDo 身份，否则会把 owner 锁在站外。
+func TestUpdateAdminSettingsPreventsOwnerLockout(t *testing.T) {
+	owner := uuid.New()
+	linuxDOIdentity := []storage.ExternalIdentitySummary{{ID: uuid.New(), Provider: linuxDOProvider, ProviderUserID: "linuxdo-42"}}
+	for _, test := range []struct {
+		name       string
+		cfg        Config
+		identities []storage.ExternalIdentitySummary
+		wantErr    bool
+	}{
+		{name: "linuxdo_not_configured", cfg: Config{}, identities: linuxDOIdentity, wantErr: true},
+		{name: "owner_without_linuxdo", cfg: linuxDOTestConfig(nil), wantErr: true},
+		{name: "owner_with_other_provider_only", cfg: linuxDOTestConfig(nil), identities: []storage.ExternalIdentitySummary{{ID: uuid.New(), Provider: "github"}}, wantErr: true},
+		{name: "owner_with_linuxdo", cfg: linuxDOTestConfig(nil), identities: linuxDOIdentity},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &fakeRepository{settings: storage.DefaultAuthSettings(), identities: test.identities}
+			svc := NewService(repo, test.cfg)
+			_, err := svc.UpdateAdminSettings(context.Background(), owner, validSettingsInput(false))
+			if test.wantErr {
+				if !errors.Is(err, ErrInvalidAuthSettings) {
+					t.Fatalf("expected ErrInvalidAuthSettings, got %v", err)
+				}
+				if !repo.settings.EmailAuthEnabled {
+					t.Fatal("rejected update must not disable password login")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if repo.settings.EmailAuthEnabled {
+				t.Fatal("password login should be disabled")
+			}
+		})
+	}
+}
+
+// 全站关闭密码登录时，解绑必须把该策略交给存储层，禁止移除最后一个第三方身份。
+func TestUnbindExternalIdentityPassesPasswordLoginPolicy(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
+		repo.settings.EmailAuthEnabled = enabled
+		if err := NewService(repo, Config{}).UnbindExternalIdentity(context.Background(), uuid.New(), uuid.New()); err != nil {
+			t.Fatal(err)
+		}
+		if repo.unbindPasswordLoginEnabled == nil || *repo.unbindPasswordLoginEnabled != enabled {
+			t.Fatalf("password login policy = %v, want %v", repo.unbindPasswordLoginEnabled, enabled)
+		}
 	}
 }
 

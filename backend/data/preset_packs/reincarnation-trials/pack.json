@@ -106,19 +106,19 @@
       "outcome_key": "orthodox_ascension",
       "reward_key": "reincarnation-trials.spirit-stone",
       "calculator_key": "core.state_multiplier",
-      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 30000}
+      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 30000, "max_amount": 60000}
     },
     {
       "outcome_key": "void_ascension",
       "reward_key": "reincarnation-trials.spirit-stone",
       "calculator_key": "core.state_multiplier",
-      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 20000}
+      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 20000, "max_amount": 40000}
     },
     {
       "outcome_key": "affinity_ascension",
       "reward_key": "reincarnation-trials.spirit-stone",
       "calculator_key": "core.state_multiplier",
-      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 15000}
+      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 15000, "max_amount": 30000}
     }
   ],
   "quick_start_guide": "选择一种修士身份开启新的一世。叙述者会生成完整角色和眼前机缘；你需要在事件、修炼、交易与探索中积累修为和资源，通过真实判定突破境界，并在寿元耗尽前选择正统渡劫、穿越虚空裂缝或寻找仙缘传送。",

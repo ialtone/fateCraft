@@ -790,6 +790,11 @@ func (s *Service) evaluateSettlement(
 		if err != nil {
 			return nil, fmt.Errorf("%w: 奖励计算失败: %v", ErrSettlementDenied, err)
 		}
+		// 奖励数量为 0 是合法结果（例如灵石为 0）：跳过该项、不写账本，
+		// 结算照常完成，避免零资产玩家永远无法结算。
+		if amount <= 0 {
+			continue
+		}
 		definition, err := repo.RewardDefinition(ctx, rule.RewardDefinitionID)
 		if err != nil {
 			return nil, err
@@ -1304,8 +1309,14 @@ func validateDefinitionShape(definition storage.GameplayDefinition) error {
 			return fmt.Errorf("配方结构、数值边界或品质权重无效")
 		}
 	case storage.DefinitionMarket:
-		if _, ok := marketrules.Parse(map[string]any(content)); !ok {
+		market, ok := marketrules.Parse(map[string]any(content))
+		if !ok {
 			return fmt.Errorf("市场结构、库存、补货或价格边界无效")
+		}
+		// 最坏情况（声望 +10000、满库存买入、零库存卖出）下卖价必须不高于买价，
+		// 否则市场可被零时间无限套利。见 marketrules.NoArbitrage。
+		if !marketrules.NoArbitrage(market) {
+			return fmt.Errorf("市场存在套利空间：最坏情况下卖价不低于买价")
 		}
 	case storage.DefinitionEncounter:
 		if _, ok := encounterrules.Parse(map[string]any(content)); !ok {
@@ -1666,6 +1677,15 @@ func validateCampaignDefinitionReferences(
 				}
 			} else if requireRealm {
 				return fmt.Errorf("%w: npc_archetype:%s 引用了未知 realm_key", ErrInvalidChallenge, definition.Key)
+			}
+			// stage_key 必须属于其 realm 声明的 stages：跨境界的 stage
+			//（例如练气期 archetype 配筑基层的 early/middle/late）一律拒绝。
+			if stageKey, _ := definition.Content["stage_key"].(string); stageKey != "" && realmKey != "" {
+				realm := catalog[storage.DefinitionRealm+":"+realmKey]
+				stages, ok := stringList(realm.Content["stages"])
+				if !ok || !containsString(stages, stageKey) {
+					return fmt.Errorf("%w: npc_archetype:%s 的 stage_key %s 不属于 realm:%s 的 stages", ErrInvalidChallenge, definition.Key, stageKey, realmKey)
+				}
 			}
 			if factionKey, _ := definition.Content["faction_key"].(string); factionKey != "" {
 				if _, ok := catalog[storage.DefinitionFaction+":"+factionKey]; !ok {

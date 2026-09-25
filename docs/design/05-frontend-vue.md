@@ -14,11 +14,13 @@
 
 ## 应用启动
 
-应用启动后首先加载公开认证配置，再调用 `/api/auth/me` 恢复会话。路由守卫根据三种状态决定跳转：
+应用启动后加载公开认证配置、`/api/auth/me` 和 `/api/setup/status`。路由守卫根据认证与安装状态决定跳转：
 
 - 未确认身份：等待认证 Store 初始化。
 - 未登录：除 `/login` 外跳转登录页。
 - 已登录：访问 `/login` 时回到首页。
+- 实例未初始化：所有非公开页面跳转 `/setup`；安装页直接创建第一个本地账号（用户名、密码、可选邮箱）并使其成为唯一 owner。
+- 已初始化：再次访问 `/setup` 回到首页。
 - 非管理员：访问带 `meta.admin` 的路由时回到首页。
 
 Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转换为统一错误消息。401 应使认证 Store 清理本地用户状态。
@@ -27,19 +29,29 @@ Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转�
 
 | 路由 | 页面 | 主要职责 |
 | --- | --- | --- |
-| `/login` | LoginView | 邮箱登录/注册、LinuxDo 登录、禁用方式提示 |
+| `/login` | LoginView | 用户名或邮箱登录/注册、已绑定 LinuxDo 登录、禁用方式提示 |
+| `/setup` | SetupView | 空库直接创建本地用户名/密码、确认唯一 owner、关闭安装入口 |
 | `/` | ConversationListView | 已发布挑战、我的对话、筛选与创建入口 |
 | `/conversations/:id` | ConversationView | 消息、生成、状态、判定、结局和上下文 |
 | `/shares` | ConversationListView + MySharesView | 首页“我的分享”小标签；跨对话检索、分页与管理 |
 | `/rewards` | RewardsView | 奖励余额、徽章/藏品与不可变奖励流水 |
-| `/settings` | SettingsView | 当前用户 LLM 配置 |
-| `/admin` | AdminView | 全局设置、模型请求诊断、玩法能力、认证、内置内容和挑战版本管理 |
+| `/settings` | SettingsView | 当前用户 LLM 配置、第三方账户绑定 |
+| `/admin/identities` | AdminView | 管理员只读审计站内账号与第三方身份绑定关系 |
+| `/admin` | AdminLayout + AdminDashboardView | 管理后台总览；与普通用户端分离 |
+| `/admin/users` | AdminView(section=users) | 用户角色、账号状态和 owner 转交 |
+| `/admin/settings` | AdminView(section=settings) | 判定系统、平台 LLM 和诊断策略 |
+| `/admin/auth` | AdminView(section=auth) | 登录注册策略、SMTP 和邀请码 |
+| `/admin/logs` | AdminView(section=logs) | 模型请求和上下文构建诊断 |
+| `/admin/gameplay` | AdminView(section=gameplay) | 可信玩法模块和奖励定义 |
+| `/admin/content` | AdminView(section=content) | 仓库内置挑战导入 |
+| `/admin/challenges` | AdminView(section=challenges) | 挑战包、草稿和发布版本 |
+| `/admin/shares` | AdminView(section=sharing) | 公开分享和举报治理 |
 
 Character、WorldBook 和 Prompt 不再拥有普通用户独立路由。旧页面、Store、组件和 API 均应删除，不能只从导航隐藏。
 
 ## 主导航
 
-已登录用户固定显示首页、奖励和设置；`auth.isAdmin` 为真时额外显示管理入口。顶栏可以展示奖励定义中标记为 featured 的少量余额，但不能写死灵石、回溯次数等题材字段。用户菜单展示当前名称并提供退出登录。
+已登录用户固定显示首页、奖励和设置；`auth.isAdmin` 为真时额外显示管理入口。进入 `/admin/*` 后隐藏普通用户顶栏，使用独立的 `AdminLayout` 侧栏导航。顶栏可以展示奖励定义中标记为 featured 的少量余额，但不能写死灵石、回溯次数等题材字段。用户菜单展示当前名称并提供退出登录。
 
 导航不读取或缓存角色权限以外的管理数据。管理员身份仍以 `/auth/me` 返回的服务端用户为准。
 
@@ -92,7 +104,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ### `auth`
 
-保存公开认证配置、当前用户、初始化和登录状态；提供 `isAdmin` 派生值及邮箱、LinuxDo、退出流程。
+保存公开认证配置、当前用户、首次安装状态和登录状态；提供 `isAdmin`（`admin`/`owner`）与 `isOwner` 派生值，以及邮箱、已绑定 LinuxDo、首次安装完成和退出流程。
 
 ### `challenges`
 
@@ -194,10 +206,10 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 ## 前端回归清单
 
 - 未登录访问受保护路由会到登录页。
-- 普通用户看不到管理入口且直接访问 `/admin` 被守卫拦截。
+- 普通用户看不到管理入口且直接访问 `/admin` 或任意 `/admin/*` 子路由被守卫拦截；子页面只加载对应管理数据。
 - 模型请求详细日志默认关闭；开启后管理员可按主叙事、判定续写、Memory 和角色询问辨识最近调用，并在详情关联 attempt、Memory job/版本和 Inquiry snapshot；界面不得显示 API Key。管理员页另提供诊断日志自动清理开关和保留天数，明确说明不影响分享治理审计。
 - 普通上下文检查器只显示可理解的占用摘要和当前活动；Prompt 分段、引用 ID 与裁剪诊断仅管理员可见。
-- LinuxDo 与邮箱按钮并列，注册作为次级入口；关闭方式提交时有明确提示。
+- LinuxDo 登录只用于已绑定身份；首次安装直接在 `/setup` 创建本地账号，第三方绑定从设置页发起，注册作为次级入口；关闭方式提交时有明确提示。
 - 创建表单切换挑战会修正无效 Persona。
 - ended 对话没有输入、归档或恢复按钮。
 - 状态面板由当前玩法的中文标签和展示契约驱动，不泄漏 internal/model 字段。

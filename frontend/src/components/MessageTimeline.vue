@@ -70,7 +70,6 @@ function onScroll() {
   stickToBottom.value = isNearBottom(el)
 }
 
-
 // 新消息或流式增量到达时，仅当用户已在底部附近才滚动到底部。
 // 通知由 Chat Store 在实际写入内容时发出，避免 watch 整个 messages 数组。
 function onChatContentChanged() {
@@ -130,15 +129,15 @@ async function onEdit(id: string, content: string) {
     positiveText: '确认改写',
     negativeText: '取消',
     onPositiveClick: async () => {
-	  const edited = chat.messages.find((m) => m.id === id)
-	  if (edited && edited.type === 'user') {
-		chat.markGenerating()
-		const requestId = crypto.randomUUID()
-		try {
-		  await messagesApi.editAndRegenerate(id, content, requestId)
-		  await rewards.load().catch(() => {})
-		} catch (err: any) {
-		  chat.stopGenerating()
+      const edited = chat.messages.find((m) => m.id === id)
+      if (edited && edited.type === 'user') {
+        chat.markGenerating()
+        const requestId = crypto.randomUUID()
+        try {
+          await messagesApi.editAndRegenerate(id, content, requestId)
+          await rewards.load().catch(() => {})
+        } catch (err: any) {
+          chat.stopGenerating()
           const status = err.response?.status
           if (status === 409 || status === 400) {
             message.error(err.message || '改写额度不足')
@@ -146,7 +145,7 @@ async function onEdit(id: string, content: string) {
             message.error(`编辑消息失败：${err.message || '未知错误'}`)
           }
           await rewards.load().catch(() => {})
-		}
+        }
       }
     },
   })

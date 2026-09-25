@@ -132,7 +132,7 @@ func seedAgentTransactionTest(t *testing.T, db *gorm.DB) (context.Context, agent
 		query string
 		args  []any
 	}{
-		{`INSERT INTO users (id, display_name) VALUES (?, 'Agent Test')`, []any{playerID}},
+		{`INSERT INTO users (id, username, display_name) VALUES (?, 'agent-test', 'Agent Test')`, []any{playerID}},
 		{`INSERT INTO challenge_packs (id, slug, name) VALUES (?, 'agent-test', 'Agent Test')`, []any{packID}},
 		{`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, []any{versionID, packID, hash}},
 		{`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash) VALUES (?, ?, 'Agent Test', ?, ?)`, []any{ids.conversationID, playerID, versionID, hash}},

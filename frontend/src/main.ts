@@ -31,6 +31,10 @@ http.interceptors.response.use(
 )
 
 router.beforeEach(async (to) => {
+  if (to.name === 'setup') {
+    await auth.initialize()
+    return auth.installationInitialized === false ? true : { name: 'conversations' }
+  }
   if (to.meta.public) {
     if (to.name !== 'login') return true
     await auth.initialize()
@@ -41,10 +45,15 @@ router.beforeEach(async (to) => {
     return true
   }
   await auth.initialize()
+  if (auth.installationInitialized === false) {
+    return { name: 'setup' }
+  }
   if (!auth.authenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.admin && !auth.isAdmin) {
+  // Admin is inherited from the /admin parent, but inspect every matched record
+  // so nested routes cannot accidentally bypass the role gate.
+  if (to.matched.some((record) => record.meta.admin) && !auth.isAdmin) {
     return { name: 'conversations' }
   }
   return true

@@ -65,7 +65,9 @@ Handler 负责 HTTP 语义，不实现业务授权。领域服务不能相信请
 
 邮箱认证策略和 SMTP 配置来自单行 `auth_settings`，每次登录、发码或注册都读取服务端设置。验证码只保存 bcrypt 摘要并限制有效期、重发和尝试次数；邀请码只保存 SHA-256 摘要。注册事务负责消费验证码与邀请码、创建用户，并在平台定义了初始奖励时写入奖励余额和账本；任何一步失败都会整体回滚。SMTP 密码通过部署环境变量 `AUTH_DATA_ENCRYPTION_KEY` 加密，管理 API 只暴露是否已经配置。
 
-LinuxDo 流程保存哈希后的 state、PKCE verifier、return path 和短期过期时间。回调必须同时验证 state、code、provider 和过期时间，再交换 token。Client Secret、上游 token 和数据库连接串不得写入日志或 API 响应。
+用户角色固定为 `owner`、`admin`、`user`。空库通过 `/setup` 首次安装向导直接提交本地用户名、邮箱和密码，服务端在事务中创建唯一 `owner`，同时写入 `system_settings.installation_completed_at`、初始奖励和管理员审计记录；安装完成前邮箱和 LinuxDo 登录关闭，完成后普通注册开放且后续用户默认都是 `user`。`requireAdmin` 允许 owner/admin 访问日常运营接口，`requireOwner` 保护角色、认证策略和平台密钥等最高权限接口。认证中间件每次从数据库读取当前用户状态和角色，因此停用或降权会立即使旧会话失去对应权限。
+
+LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户、return path 和短期过期时间。LinuxDo 只能作为 `auth_identities` 中绑定到本地用户的外部身份；未绑定的 subject 不会自动创建站内用户。绑定回调要求发起时已有本地会话，解除绑定要求保留密码或其他身份。回调必须同时验证 state、code、provider 和过期时间，再交换 token。Client Secret、上游 token 和数据库连接串不得写入日志或 API 响应。管理员的 `/admin/auth-identities` 仅返回脱敏绑定摘要。
 
 `requireAdmin` 必须位于 `requireAuth` 之后，并只信任已加载的 `storage.User.Role`。
 

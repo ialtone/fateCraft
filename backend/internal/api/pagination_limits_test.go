@@ -28,6 +28,14 @@ func TestListHandlersRejectOversizedLimits(t *testing.T) {
 		{name: "llm logs", target: "/api/admin/llm-request-logs?limit=201", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminLLMRequestLogs(c) }},
 		{name: "context logs", target: "/api/admin/context-build-logs?limit=201", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminContextBuildLogs(c) }},
 		{name: "owned shares", target: "/api/conversation-shares?page_size=101", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listOwnedConversationShares(c) }},
+		{name: "admin users limit", target: "/api/admin/users?limit=201", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminUsers(c) }},
+		{name: "admin users zero limit", target: "/api/admin/users?limit=0", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminUsers(c) }},
+		{name: "admin users offset", target: "/api/admin/users?offset=-1", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminUsers(c) }},
+		{name: "admin identities limit", target: "/api/admin/auth-identities?limit=201", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminAuthIdentities(c) }},
+		{name: "admin identities offset", target: "/api/admin/auth-identities?offset=100001", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminAuthIdentities(c) }},
+		{name: "admin identities invalid offset", target: "/api/admin/auth-identities?offset=abc", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminAuthIdentities(c) }},
+		{name: "admin audit logs", target: "/api/admin/audit-logs?limit=201", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminAuditLogs(c) }},
+		{name: "admin audit logs invalid", target: "/api/admin/audit-logs?limit=abc", server: &Server{}, handler: func(s *Server, c *gin.Context) { s.listAdminAuditLogs(c) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

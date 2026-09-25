@@ -59,7 +59,7 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	outcomeID, rewardRuleID, extractedRuleID, valuedRuleID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	extractedItemID, valuedItemID := uuid.New(), uuid.New()
 	hash := strings.Repeat("0", 64)
-	if err := db.Exec(`INSERT INTO users (id, display_name) VALUES (?, 'Test Player')`, playerID).Error; err != nil {
+	if err := db.Exec(`INSERT INTO users (id, username, display_name) VALUES (?, 'test-player', 'Test Player')`, playerID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO challenge_packs (id, slug, name) VALUES (?, 'integration-campaign', 'Integration Campaign')`, packID).Error; err != nil {

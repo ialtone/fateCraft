@@ -55,7 +55,7 @@ func (r *SystemSettingsRepo) Save(ctx context.Context, settings *SystemSettings)
 	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"roll_system_enabled", "roll_difficulty_mode", "detailed_llm_logging_enabled",
+			"installation_completed_at", "roll_system_enabled", "roll_difficulty_mode", "detailed_llm_logging_enabled",
 			"diagnostic_log_cleanup_enabled", "diagnostic_log_retention_days",
 			"llm_access_mode", "public_llm_base_url", "public_llm_provider", "public_llm_protocol", "public_llm_api_key_encrypted",
 			"public_llm_model", "public_llm_memory_model", "public_llm_inquiry_model",
@@ -69,6 +69,15 @@ func (r *SystemSettingsRepo) Save(ctx context.Context, settings *SystemSettings)
 		r.storeCached(settings, time.Now())
 	}
 	return err
+}
+
+// InvalidateCache makes an externally committed installation/role state visible
+// immediately without waiting for the short settings cache TTL.
+func (r *SystemSettingsRepo) InvalidateCache() {
+	r.mu.Lock()
+	r.cached = nil
+	r.cachedAt = time.Time{}
+	r.mu.Unlock()
 }
 
 const systemSettingsCacheTTL = 5 * time.Second

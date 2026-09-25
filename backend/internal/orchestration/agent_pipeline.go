@@ -113,8 +113,14 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 	}
 
 	mutatingCount := 0
+	// settled 表示本 attempt 已提交挑战结算：对话已结束，后续步骤只允许写收尾叙事。
+	settled := false
 	pinned := false
 	assembleCache := &attemptAssembleCache{}
+	// 回合级耗时累计：成功时随“Agent 回合完成”一次输出，用于拆分
+	// LLM / DB（含 assemble 与工具事务）/ 上下文构建（CPU+分词）占比。
+	var turnAssembleMS, turnBuildMS, turnStepPersistMS, turnModelMS, turnToolMS, turnPersistMS int64
+	var turnPromptTokens, turnCompletionTokens int
 	var visibleReasoning strings.Builder
 	var pendingGuidance *guidance.Proposal
 	for stepNo := 1; stepNo <= maxAgentModelSteps; stepNo++ {
@@ -143,14 +149,14 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				)
 			}
 		}
-		snapshot, err := buildAgentToolSnapshot(contract, in.CampaignProjection, outcomeKeys, platformSettings.RollSystemEnabled, metadata.TextOnly)
+		snapshot, err := buildAgentToolSnapshot(contract, in.CampaignProjection, outcomeKeys, platformSettings.RollSystemEnabled, metadata.TextOnly || settled)
 		if err != nil {
 			markGenerationFailure(ctx, "tool_snapshot", "tool_snapshot_invalid")
 			g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 			return
 		}
 		snapshot.CatalogVersion = fmt.Sprintf("%s:%s@%d", agentToolCatalogVersion, contract.Engine.Key, contract.Engine.Version)
-		if pendingGuidance != nil || stepNo == maxAgentModelSteps {
+		if pendingGuidance != nil || stepNo == maxAgentModelSteps || settled {
 			delete(snapshot.Bindings, guidance.ToolName)
 			snapshot.Definitions = nil
 			snapshot, err = finalizeAgentToolSnapshot(snapshot)
@@ -158,7 +164,11 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 				return
 			}
-			in.OutputContract += "\n本步骤不提供行动提示工具；请完成普通叙事，不要在正文中输出选项 JSON。"
+			if settled {
+				in.OutputContract += "\n挑战已经完成结算，本步骤不提供任何工具；请依据工具结果写出结局收尾叙事，不要再提出行动选项。"
+			} else {
+				in.OutputContract += "\n本步骤不提供行动提示工具；请完成普通叙事，不要在正文中输出选项 JSON。"
+			}
 		}
 		if !pinned {
 			if err := g.agents.PinAttempt(attemptCtx, metadata.AttemptID, snapshot.CatalogVersion, conv.ChallengeHash); err != nil {
@@ -168,6 +178,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			}
 			pinned = true
 		}
+		// assemble 段止于此：输入装配 + 工具快照 + attempt 钉选，以 DB 读取为主。
+		assembleDoneAt := time.Now()
 
 		definitionsJSON, _ := json.Marshal(snapshot.Definitions)
 		toolTokens := g.counter.Count(string(definitionsJSON))
@@ -179,6 +191,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 			return
 		}
+		// build 段止于此：纯 CPU 的预算裁剪与分词计数，不碰 DB。
+		buildDoneAt := time.Now()
 		built.Segments = append(built.Segments, contextbuilder.SegmentInfo{
 			Key: "tool_definitions", Role: "system", Tokens: toolTokens,
 			Required: len(snapshot.Definitions) > 0, Included: true, BudgetKey: "tools",
@@ -290,7 +304,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			ModelDurationMS: modelDurationMS, GenerationMS: generationMS,
 		}
 		if callErr != nil {
-			logAgentStepTiming(convID, metadata.AttemptID, stepNo, stepStartedAt, modelStartedAt,
+			logAgentStepTiming(convID, metadata.AttemptID, stepNo, stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt,
 				firstEventMS, firstTextMS, firstToolMS, lane, built.UsedPromptTokens, completionTokens,
 				len(toolCalls), callErr)
 			status := storage.AgentStepFailed
@@ -303,10 +317,20 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			return
 		}
 		lane = resolveAgentLane(result)
-		logAgentStepTiming(convID, metadata.AttemptID, stepNo, stepStartedAt, modelStartedAt,
+		logAgentStepTiming(convID, metadata.AttemptID, stepNo, stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt,
 			firstEventMS, firstTextMS, firstToolMS, lane, built.UsedPromptTokens, completionTokens,
 			len(toolCalls), nil)
-		if err := g.agents.FinishStep(attemptCtx, step.ID, storage.AgentStepCompleted, lane, result.FinishReason, "", metrics); err != nil {
+		turnAssembleMS += assembleDoneAt.Sub(stepStartedAt).Milliseconds()
+		turnBuildMS += buildDoneAt.Sub(assembleDoneAt).Milliseconds()
+		// build 之后到模型调用前：CreateStep（首步另含 logContextBuild），以 DB 写为主。
+		turnStepPersistMS += modelStartedAt.Sub(buildDoneAt).Milliseconds()
+		turnModelMS += modelDurationMS
+		turnPromptTokens += promptTokens
+		turnCompletionTokens += completionTokens
+		finishStepStartedAt := time.Now()
+		finishStepErr := g.agents.FinishStep(attemptCtx, step.ID, storage.AgentStepCompleted, lane, result.FinishReason, "", metrics)
+		turnStepPersistMS += time.Since(finishStepStartedAt).Milliseconds()
+		if err := finishStepErr; err != nil {
 			markGenerationFailure(ctx, "agent_step", "step_finish_failed")
 			g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 			return
@@ -346,7 +370,9 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				return
 			}
 			tokens := g.counter.Count(text)
+			persistStartedAt := time.Now()
 			_, display, err := g.chatSvc.AppendAssistantWithIDAndBlocks(attemptCtx, convID, displayID, text, text, meta, &tokens, contentBlocks)
+			turnPersistMS += time.Since(persistStartedAt).Milliseconds()
 			if err != nil {
 				markGenerationFailure(ctx, "finalize", "assistant_persist_failed")
 				g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
@@ -369,12 +395,27 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			}
 			runtimeEvents.send(realtime.TypeGuidanceUpdated, stepNo, map[string]any{"guidance": activeGuidance})
 			runtimeEvents.send(realtime.TypeAgentTurnCompleted, stepNo, map[string]any{"message_id": displayID.String()})
+			totalMS := time.Since(turnStartedAt).Milliseconds()
 			logging.Named("performance").Info("Agent 回合完成",
 				zap.String("conversation_id", convID.String()),
 				zap.String("attempt_id", metadata.AttemptID.String()),
 				zap.Int("steps", stepNo),
 				zap.Int("mutating_tools", mutatingCount),
-				zap.Int64("total_ms", time.Since(turnStartedAt).Milliseconds()),
+				zap.Int64("total_ms", totalMS),
+				// 分段累计：assemble（DB 读）、build（CPU/分词）、step_persist（步骤
+				// 记录 DB 写）、model（LLM）、tool（含工具事务 DB 写）、persist（收尾落库）；
+				// other 为 total 减去各段之和的残差（事件推送、guidance 等）。
+				zap.Int64("assemble_ms", turnAssembleMS),
+				zap.Int64("build_ms", turnBuildMS),
+				zap.Int64("step_persist_ms", turnStepPersistMS),
+				zap.Int64("model_ms", turnModelMS),
+				zap.Int64("tool_ms", turnToolMS),
+				zap.Int64("persist_ms", turnPersistMS),
+				zap.Int64("other_ms", totalMS-turnAssembleMS-turnBuildMS-turnStepPersistMS-turnModelMS-turnToolMS-turnPersistMS),
+				// 每步都会重发完整上下文，这里是各步输入 token 之和（即计费输入量），
+				// 不是单次上下文大小。
+				zap.Int("prompt_tokens_sum", turnPromptTokens),
+				zap.Int("completion_tokens", turnCompletionTokens),
 			)
 			_ = g.convSvc.Touch(attemptCtx, convID)
 			return
@@ -395,9 +436,10 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				if index == 0 {
 					blocks = contentBlocks
 				}
+				// 同一批次里排在结算之后的写工具不再执行：对话已经结束。
 				outcome, err := g.processAgentToolCall(
 					attemptCtx, conv, contract, platformSettings, step, snapshot, call,
-					mutatingCount < maxAgentMutatingTools, blocks, runtimeEvents, emit,
+					mutatingCount < maxAgentMutatingTools && !settled, blocks, runtimeEvents, emit,
 				)
 				if err != nil {
 					logAgentToolTiming(convID, metadata.AttemptID, stepNo, call.Name, toolStartedAt, err)
@@ -407,9 +449,13 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				}
 				logAgentToolTiming(convID, metadata.AttemptID, stepNo, call.Name, toolStartedAt, nil,
 					zap.String("status", outcome.Status), zap.String("code", outcome.Code))
+				turnToolMS += time.Since(toolStartedAt).Milliseconds()
 				if outcome.Mutating && outcome.Status == storage.ToolInvocationCommitted {
 					mutatingCount++
 					pendingGuidance = nil
+				}
+				if outcome.Status == storage.ToolInvocationCommitted && snapshot.Bindings[call.Name].Kind == agentToolCompletion {
+					settled = true
 				}
 				if call.Name == guidance.ToolName && outcome.Status == storage.ToolInvocationCommitted {
 					raw, marshalErr := json.Marshal(outcome.Result["data"])
@@ -592,7 +638,7 @@ func (g *Generator) processAgentToolCall(
 func logAgentStepTiming(
 	conversationID, attemptID uuid.UUID,
 	stepNo int,
-	stepStartedAt, modelStartedAt time.Time,
+	stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt time.Time,
 	firstEventMS, firstTextMS, firstToolMS int64,
 	lane string,
 	promptTokens, completionTokens, toolCalls int,
@@ -604,6 +650,9 @@ func logAgentStepTiming(
 		zap.Int("step_no", stepNo),
 		zap.Int64("step_ms", time.Since(stepStartedAt).Milliseconds()),
 		zap.Int64("context_ms", modelStartedAt.Sub(stepStartedAt).Milliseconds()),
+		// 上下文段拆分：assemble 以 DB 读取为主，build 为纯 CPU（预算裁剪+分词）。
+		zap.Int64("assemble_ms", assembleDoneAt.Sub(stepStartedAt).Milliseconds()),
+		zap.Int64("build_ms", buildDoneAt.Sub(assembleDoneAt).Milliseconds()),
 		zap.Int64("model_ms", time.Since(modelStartedAt).Milliseconds()),
 		zap.Int64("first_event_ms", firstEventMS),
 		zap.Int64("first_text_ms", firstTextMS),
@@ -741,11 +790,12 @@ func (g *Generator) finishAgentFailure(
 	err error,
 	emit realtime.EmitFunc,
 ) {
-	// Refund a previously reserved rewrite credit before publishing the
-	// terminal failure event, so the UI can refresh the authoritative balance
-	// without racing the compensation transaction. The outer generation-run
-	// finalizer repeats this idempotently for preflight/crash paths.
-	g.refundRewriteReservation(ctx, "agent_failure")
+	// 在发送终止事件之前返还改写额度，界面刷新余额时不会与补偿事务竞争；
+	// 外层的生成租约收尾会幂等地再执行一次，覆盖预检失败和崩溃路径。
+	// 已提交写工具（partial）时保留扣费，避免用取消来免费重掷已提交的判定。
+	if !mutated {
+		g.refundRewriteReservation(ctx, "agent_failure")
+	}
 	kind := realtime.TypeAgentTurnFailed
 	message := "模型请求失败: " + err.Error()
 	if mutated {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { NButton, NCollapse, NCollapseItem, NInput } from 'naive-ui'
 import { renderMarkdown } from '@/utils/markdown'
 import type { ChatMessage } from '@/stores/chat'
@@ -15,7 +15,44 @@ const editing = ref(false)
 const draft = ref('')
 const reasoningExpanded = ref(props.message.reasoningExpanded === true)
 
-const html = computed(() => renderMarkdown(props.message.markdown))
+// 流式渲染节流：appendDelta 每个 chunk 都会拼接 markdown，若每次都全量
+// marked + DOMPurify，单条回复的解析成本是 O(n²)。流式期间最多每 150ms
+// 刷新一次解析结果；非流式消息与流结束时立即渲染，保证最终内容完整。
+const STREAM_RENDER_THROTTLE_MS = 150
+const displayedMarkdown = ref(props.message.markdown)
+let renderTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushRendered() {
+  if (renderTimer) {
+    clearTimeout(renderTimer)
+    renderTimer = null
+  }
+  displayedMarkdown.value = props.message.markdown
+}
+
+watch(
+  () => props.message.markdown,
+  () => {
+    if (!props.message.streaming) {
+      flushRendered()
+      return
+    }
+    if (renderTimer) return
+    renderTimer = setTimeout(flushRendered, STREAM_RENDER_THROTTLE_MS)
+  },
+)
+watch(
+  () => props.message.streaming,
+  (streaming) => {
+    if (!streaming) flushRendered()
+  },
+)
+
+onBeforeUnmount(() => {
+  if (renderTimer) clearTimeout(renderTimer)
+})
+
+const html = computed(() => renderMarkdown(displayedMarkdown.value))
 const roleLabel = computed(
   () =>
     ({
@@ -95,7 +132,10 @@ function save() {
           <div class="reasoning-text">{{ reasoningText }}</div>
         </NCollapseItem>
       </NCollapse>
-      <div v-if="message.streaming && !message.markdown.trim()" class="streaming-placeholder faint">
+      <div
+        v-if="message.streaming && !displayedMarkdown.trim()"
+        class="streaming-placeholder faint"
+      >
         正在连接模型并准备上下文，请稍候…
       </div>
       <div v-else class="markdown content" v-html="html"></div>
@@ -110,6 +150,10 @@ function save() {
   position: relative;
   margin-bottom: 18px;
   max-width: 100%; /* 全宽显示 */
+  /* 长列表渲染窗口：反复“加载更早”累积上千条后，视口外条目跳过渲染与布局，
+     只保留估计高度；进入视口时再真实渲染。首屏 200 条内几乎无影响。 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
 }
 
 /* 叙事：书页式，无气泡，衬线正文 + 左侧饰线 */

@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { NAvatar, NButton, NIcon, NInput, NModal, NCard, NSelect, NSpin, useMessage } from 'naive-ui'
+import {
+  NAvatar,
+  NButton,
+  NIcon,
+  NInput,
+  NModal,
+  NCard,
+  NSelect,
+  NSpin,
+  useMessage,
+} from 'naive-ui'
 import { ArrowUpOutline, CopyOutline, FlagOutline } from '@vicons/ionicons5'
 import SharedConversationContent from '@/components/SharedConversationContent.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'

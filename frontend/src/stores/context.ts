@@ -14,6 +14,8 @@ export const useContextStore = defineStore('context', () => {
   })
   const runtimeInspector = ref<RuntimeInspector | null>(null)
   let activityRequestVersion = 0
+  // 运行面板请求代际：切换对话或 reset 后，迟到的旧响应直接丢弃。
+  let inspectorRequestVersion = 0
 
   async function loadLast(convId: string) {
     try {
@@ -38,7 +40,13 @@ export const useContextStore = defineStore('context', () => {
       if (version === activityRequestVersion) activity.value = next
     } catch {
       if (version === activityRequestVersion) {
-        activity.value = { narrative: 'idle', memory: 'idle', can_continue: false, can_regenerate: false, regenerate_cost_quantity: 0 }
+        activity.value = {
+          narrative: 'idle',
+          memory: 'idle',
+          can_continue: false,
+          can_regenerate: false,
+          regenerate_cost_quantity: 0,
+        }
       }
     }
   }
@@ -61,22 +69,57 @@ export const useContextStore = defineStore('context', () => {
     }
   }
   async function loadRuntimeInspector(convId: string) {
-    try { runtimeInspector.value = await runtimeInspectorApi.get(convId); activity.value = runtimeInspector.value.activity; lastBuild.value = runtimeInspector.value.request || null } catch { /* panel is non-blocking */ }
+    const version = ++inspectorRequestVersion
+    const activityVersion = activityRequestVersion
+    try {
+      const next = await runtimeInspectorApi.get(convId)
+      if (version !== inspectorRequestVersion) return
+      runtimeInspector.value = next
+      lastBuild.value = next.request || null
+      // 请求期间若已有更新的实时活动状态，就不用这次响应覆盖它。
+      if (activityVersion === activityRequestVersion) activity.value = next.activity
+    } catch {
+      // 运行面板不阻塞对话。
+    }
   }
 
-  // Terminal agent events arrive before the follow-up activity request. Set
-  // the recovery capability immediately so a failed/cancelled turn can never
-  // briefly open the paid confirmation dialog from stale completed-turn data.
-  function setTurnCapabilities(details: Pick<ConversationActivity, 'turn_status' | 'can_regenerate' | 'regenerate_cost_quantity'>) {
+  // 终止类 agent 事件先于后续的 activity 请求到达。这里立即写入恢复能力，
+  // 避免失败或取消的回合短暂沿用上一轮已完成回合的数据、误弹付费确认框。
+  function setTurnCapabilities(
+    details: Pick<
+      ConversationActivity,
+      'turn_status' | 'can_regenerate' | 'regenerate_cost_quantity'
+    >,
+  ) {
     activityRequestVersion++
     activity.value = { ...activity.value, ...details }
   }
 
   function reset() {
     activityRequestVersion++
-    lastBuild.value = null; runtimeInspector.value = null
-    activity.value = { narrative: 'idle', memory: 'idle', can_continue: false, can_regenerate: false, regenerate_cost_quantity: 0 }
+    inspectorRequestVersion++
+    lastBuild.value = null
+    runtimeInspector.value = null
+    activity.value = {
+      narrative: 'idle',
+      memory: 'idle',
+      can_continue: false,
+      can_regenerate: false,
+      regenerate_cost_quantity: 0,
+    }
   }
 
-  return { lastBuild, activity, runtimeInspector, loadLast, loadById, loadActivity, loadRuntimeInspector, setActivity, setNarrative, setTurnCapabilities, reset }
+  return {
+    lastBuild,
+    activity,
+    runtimeInspector,
+    loadLast,
+    loadById,
+    loadActivity,
+    loadRuntimeInspector,
+    setActivity,
+    setNarrative,
+    setTurnCapabilities,
+    reset,
+  }
 })

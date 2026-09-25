@@ -16,6 +16,7 @@ type Config struct {
 	DatabaseURL       string
 	DataDir           string   // 判定配置和空库首次初始化材料的根目录
 	AllowedOrigins    []string // 允许的 CORS/WebSocket 来源；为空表示全放开（仅开发用）
+	TrustedProxies    []string // 允许设置 X-Forwarded-For/X-Real-IP 的反向代理 IP 或 CIDR；为空时不信任任何代理，ClientIP 取直连对端地址
 	LogLevel          string   // 日志级别：debug/info/warn/error（默认 info）
 	LogFormat         string   // 日志格式：console/json（默认 console，生产建议 json）
 	DBMaxOpenConns    int      // database/sql 最大打开连接数
@@ -60,6 +61,7 @@ func Load() Config {
 		DatabaseURL:               getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/fatecraft?sslmode=disable"),
 		DataDir:                   getenv("DATA_DIR", "data"),
 		AllowedOrigins:            getlist("ALLOWED_ORIGINS"),
+		TrustedProxies:            getlist("TRUSTED_PROXIES"),
 		LogLevel:                  getenv("LOG_LEVEL", "info"),
 		LogFormat:                 getenv("LOG_FORMAT", "console"),
 		DBMaxOpenConns:            getintRange("DB_MAX_OPEN_CONNS", 10, 1, 200),

@@ -36,7 +36,7 @@ func MessageRewritePolicy() Capability {
 	return Capability{
 		Enabled:       true,
 		Label:         "剧情改写",
-		Description:   "重新生成当前回复或改写一条玩家消息，并从该处继续推演；失败或取消不会消耗额度。",
+		Description:   "重新生成当前回复或改写一条玩家消息，并从该处继续推演；没有提交任何动作就失败或取消时会返还额度。",
 		CostRewardKey: MessageRewriteRewardKey,
 		CostQuantity:  MessageRewriteCostQuantity,
 	}

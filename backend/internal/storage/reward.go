@@ -69,12 +69,12 @@ type RewardMutationResult struct {
 // original consume ledger entry exists, so a failed preflight cannot create
 // free credits.
 type RewardRefund struct {
-	PlayerID             uuid.UUID
-	RewardKey            string
+	PlayerID              uuid.UUID
+	RewardKey             string
 	ConsumeIdempotencyKey string
 	RefundIdempotencyKey  string
-	SourceID             string
-	Metadata             JSONMap
+	SourceID              string
+	Metadata              JSONMap
 }
 
 type RewardRepository struct{ db *gorm.DB }

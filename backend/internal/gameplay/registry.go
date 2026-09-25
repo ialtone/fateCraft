@@ -488,7 +488,9 @@ func validateConditionPaths(schema StateSchema, config storage.JSONMap) error {
 
 func validateFixedConfig(config storage.JSONMap) error {
 	amount, ok := numberValue(config["amount"])
-	if !ok || amount <= 0 || amount > math.MaxInt64 {
+	// amount 必须是正整数：小数会在运行时被截断（例如 1.5 变成 1），
+	// 这类配置必须在发布时直接拒绝。
+	if !ok || amount <= 0 || amount != math.Trunc(amount) || amount > math.MaxInt64 {
 		return fmt.Errorf("core.fixed.amount 必须是正整数")
 	}
 	return nil
@@ -525,12 +527,14 @@ func validateStateMultiplierConfig(config storage.JSONMap) error {
 		return fmt.Errorf("core.state_multiplier.state_path 不能为空")
 	}
 	bps, ok := numberValue(config["multiplier_bps"])
-	if !ok || bps <= 0 || bps > math.MaxInt64 {
+	if !ok || bps <= 0 || bps != math.Trunc(bps) || bps > math.MaxInt64 {
 		return fmt.Errorf("core.state_multiplier.multiplier_bps 无效")
 	}
 	if raw, exists := config["max_amount"]; exists && raw != nil {
 		maxAmount, ok := numberValue(raw)
-		if !ok || maxAmount < 0 {
+		// max_amount 为 0 会把所有奖励截断为 0，必须是正整数（M-8 之后 0 值会被跳过，
+		// 配置 0 等同于发不出奖励，属于误配，发布时拒绝）。
+		if !ok || maxAmount <= 0 || maxAmount != math.Trunc(maxAmount) {
 			return fmt.Errorf("core.state_multiplier.max_amount 无效")
 		}
 	}
@@ -558,8 +562,10 @@ func calculateStateMultiplier(evidence Evidence, config storage.JSONMap) (int64,
 			amount = int64(maxValue)
 		}
 	}
+	// 奖励基数为 0 是合法的对局状态（例如灵石花光）：返回 0 由调用方跳过该项，
+	// 结算照常完成，而不是把整个结算拒绝掉。
 	if amount <= 0 {
-		return 0, fmt.Errorf("奖励计算结果必须大于 0")
+		return 0, nil
 	}
 	return amount, nil
 }

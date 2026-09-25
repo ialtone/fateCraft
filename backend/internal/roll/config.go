@@ -51,7 +51,8 @@ type TraitPattern struct {
 	AppliesTo  []string `yaml:"applies_to"`
 	Conditions []string `yaml:"conditions,omitempty"`
 	Bonus      int      `yaml:"bonus,omitempty"`
-	Penalty    int      `yaml:"penalty,omitempty"`
+	// Penalty 按负数书写（例如 -20），与 Bonus 直接相加；与 lucky_streak_penalty 的约定一致。
+	Penalty int `yaml:"penalty,omitempty"`
 }
 
 type HistoryAdjustment struct {

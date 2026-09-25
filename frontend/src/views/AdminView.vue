@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   NButton,
   NAlert,
@@ -22,12 +22,15 @@ import {
   useMessage,
 } from 'naive-ui'
 import { adminApi, settingsApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import ChallengeVersionEditor from '@/components/ChallengeVersionEditor.vue'
 import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
+import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
 import type {
   AdminBuiltinChallenge,
   AdminAuthSettings,
+  AdminExternalIdentity,
   AdminChallengePack,
   AdminLLMRequestLog,
   AdminLLMRequestLogSummary,
@@ -47,7 +50,42 @@ import type {
   ConversationShareReport,
 } from '@/types'
 
+const props = withDefaults(
+  defineProps<{
+    /** When set, render only the matching admin area. The default keeps the legacy all-in-one view. */
+    section?: string
+  }>(),
+  { section: 'all' },
+)
+
 const message = useMessage()
+const auth = useAuthStore()
+const activeTab = ref('settings')
+
+function tabNameForSection(section: string) {
+  if (section === 'all') return 'settings'
+  if (section === 'content') return 'builtins'
+  return section
+}
+
+const sectionTitle = computed(
+  () =>
+    ({
+      users: '用户与权限',
+      settings: '全局设置',
+      logs: '诊断日志',
+      auth: '账号与注册',
+      identities: '第三方账户',
+      gameplay: '玩法能力',
+      content: '内置内容',
+      challenges: '挑战内容',
+      sharing: '分享治理',
+    })[props.section] || '管理',
+)
+
+function sectionVisible(name: string) {
+  return props.section === 'all' || props.section === name
+}
 const settings = ref<AdminSystemSettings | null>(null)
 const publicLLMKey = ref('')
 const clearPublicLLMKey = ref(false)
@@ -72,6 +110,7 @@ const selectedLLMLog = ref<AdminLLMRequestLog | null>(null)
 const contextLogs = ref<AdminContextBuildLogSummary[]>([])
 const selectedContextLog = ref<AdminContextBuildLog | null>(null)
 const authSettings = ref<AdminAuthSettings | null>(null)
+const authIdentities = ref<AdminExternalIdentity[]>([])
 const smtpPassword = ref('')
 const clearSMTPPassword = ref(false)
 const testEmail = ref('')
@@ -86,6 +125,7 @@ const loadingSettings = ref(false)
 const loadingLLMLogs = ref(false)
 const loadingContextLogs = ref(false)
 const loadingAuthSettings = ref(false)
+const loadingAuthIdentities = ref(false)
 const loadingInvitations = ref(false)
 const loadingChallenges = ref(false)
 const loadingBuiltins = ref(false)
@@ -235,28 +275,34 @@ async function saveSettings() {
       detailed_llm_logging_enabled: settings.value.detailed_llm_logging_enabled,
       diagnostic_log_cleanup_enabled: settings.value.diagnostic_log_cleanup_enabled,
       diagnostic_log_retention_days: settings.value.diagnostic_log_retention_days,
-      llm_access_mode: settings.value.llm_access_mode,
-      public_llm_base_url: settings.value.public_llm_base_url,
-      public_llm_provider: settings.value.public_llm_provider,
-      public_llm_protocol: settings.value.public_llm_protocol,
-      public_llm_model: settings.value.public_llm_model,
-      public_llm_memory_model: settings.value.public_llm_memory_model,
-      public_llm_inquiry_model: settings.value.public_llm_inquiry_model,
-      public_llm_max_context_tokens: settings.value.public_llm_max_context_tokens,
-      public_llm_max_response_tokens: settings.value.public_llm_max_response_tokens,
-      public_llm_temperature: settings.value.public_llm_temperature,
-      public_llm_top_p: settings.value.public_llm_top_p,
-      public_llm_stream_enabled: settings.value.public_llm_stream_enabled,
-      public_llm_reasoning_effort: String(settings.value.public_llm_reasoning_effort ?? '').trim(),
-      public_llm_memory_reasoning_effort: String(
-        settings.value.public_llm_memory_reasoning_effort ?? '',
-      ).trim(),
-      public_llm_inquiry_reasoning_effort: String(
-        settings.value.public_llm_inquiry_reasoning_effort ?? '',
-      ).trim(),
     }
-    if (publicLLMKey.value.trim()) body.public_llm_api_key = publicLLMKey.value.trim()
-    if (clearPublicLLMKey.value) body.clear_public_llm_api_key = true
+    if (auth.isOwner) {
+      Object.assign(body, {
+        llm_access_mode: settings.value.llm_access_mode,
+        public_llm_base_url: settings.value.public_llm_base_url,
+        public_llm_provider: settings.value.public_llm_provider,
+        public_llm_protocol: settings.value.public_llm_protocol,
+        public_llm_model: settings.value.public_llm_model,
+        public_llm_memory_model: settings.value.public_llm_memory_model,
+        public_llm_inquiry_model: settings.value.public_llm_inquiry_model,
+        public_llm_max_context_tokens: settings.value.public_llm_max_context_tokens,
+        public_llm_max_response_tokens: settings.value.public_llm_max_response_tokens,
+        public_llm_temperature: settings.value.public_llm_temperature,
+        public_llm_top_p: settings.value.public_llm_top_p,
+        public_llm_stream_enabled: settings.value.public_llm_stream_enabled,
+        public_llm_reasoning_effort: String(
+          settings.value.public_llm_reasoning_effort ?? '',
+        ).trim(),
+        public_llm_memory_reasoning_effort: String(
+          settings.value.public_llm_memory_reasoning_effort ?? '',
+        ).trim(),
+        public_llm_inquiry_reasoning_effort: String(
+          settings.value.public_llm_inquiry_reasoning_effort ?? '',
+        ).trim(),
+      })
+      if (publicLLMKey.value.trim()) body.public_llm_api_key = publicLLMKey.value.trim()
+      if (clearPublicLLMKey.value) body.clear_public_llm_api_key = true
+    }
     settings.value = await adminApi.updateSystemSettings(body as any)
     syncPublicLLMExpansion()
     publicLLMKey.value = ''
@@ -295,6 +341,10 @@ async function checkPublicCapability(role: LLMCapabilityRole) {
 }
 
 async function fetchPublicModels() {
+  if (!auth.isOwner) {
+    message.warning('只有平台拥有者可以获取公共模型列表')
+    return
+  }
   if (!settings.value?.public_llm_base_url?.trim()) {
     message.warning('请先填写公共模型 Base URL')
     return
@@ -441,7 +491,22 @@ async function loadAuthSettings() {
   }
 }
 
+async function loadAuthIdentities() {
+  loadingAuthIdentities.value = true
+  try {
+    authIdentities.value = await adminApi.listAuthIdentities()
+  } catch (err: any) {
+    message.error(`读取第三方账户失败：${err.message || '未知错误'}`)
+  } finally {
+    loadingAuthIdentities.value = false
+  }
+}
+
 async function saveAuthSettings() {
+  if (!auth.isOwner) {
+    message.warning('只有平台拥有者可以修改认证设置')
+    return
+  }
   if (!authSettings.value) return
   savingAuthSettings.value = true
   try {
@@ -471,6 +536,10 @@ function markSMTPPasswordForClearing() {
 }
 
 async function sendTestEmail() {
+  if (!auth.isOwner) {
+    message.warning('只有平台拥有者可以测试发信设置')
+    return
+  }
   if (!testEmail.value.trim()) {
     message.warning('请填写测试收件邮箱')
     return
@@ -789,30 +858,48 @@ async function createRewardDefinition() {
   }
 }
 
-onMounted(() => {
-  void loadSettings()
-  void loadLLMLogs()
-  void loadContextLogs()
-  void loadAuthSettings()
-  void loadInvitations()
-  void loadChallenges()
-  void loadBuiltins()
-  void loadGameplayCatalog()
-  void loadShareGovernance()
-})
+watch(
+  () => props.section,
+  (section) => {
+    activeTab.value = tabNameForSection(section)
+    if (section === 'all' || section === 'settings') void loadSettings()
+    if (section === 'all' || section === 'logs') {
+      void loadLLMLogs()
+      void loadContextLogs()
+    }
+    if (section === 'all' || section === 'auth') {
+      void loadAuthSettings()
+      void loadInvitations()
+    }
+    if (section === 'all' || section === 'identities') void loadAuthIdentities()
+    if (section === 'all' || section === 'challenges') void loadChallenges()
+    if (section === 'all' || section === 'content') void loadBuiltins()
+    if (section === 'all' || section === 'gameplay') void loadGameplayCatalog()
+    if (section === 'all' || section === 'sharing') void loadShareGovernance()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="page">
     <div class="page-title">
-      <h2>管理</h2>
+      <h2>{{ section === 'all' ? '管理' : sectionTitle }}</h2>
       <span class="ornament">◆</span>
     </div>
     <p class="page-sub">平台规则与挑战内容都由管理员发布，已发布版本不可原地修改。</p>
 
-    <NTabs type="line" animated>
-      <NTabPane name="settings" tab="全局设置">
-        <section class="admin-section">
+    <NTabs
+      v-model:value="activeTab"
+      type="line"
+      animated
+      :class="{ 'single-section-tabs': section !== 'all' }"
+    >
+      <NTabPane v-if="sectionVisible('users')" name="users" tab="用户与权限">
+        <AdminUsersPanel />
+      </NTabPane>
+      <NTabPane v-if="sectionVisible('settings')" name="settings" tab="全局设置">
+        <section v-if="sectionVisible('settings')" class="admin-section">
           <h3>
             <FieldHelp label="天命判定">
               <p>
@@ -896,6 +983,7 @@ onMounted(() => {
                 </template>
                 <NSwitch
                   :value="settings.llm_access_mode === 'platform_managed'"
+                  :disabled="!auth.isOwner"
                   @update:value="setPlatformLLMEnabled"
                 >
                   <template #checked>已启用</template>
@@ -923,7 +1011,7 @@ onMounted(() => {
                 <NTag v-if="settings.public_llm_has_api_key" type="success">已配置 Key</NTag>
               </template>
               <div class="public-llm-content">
-                <NForm label-placement="top" size="small">
+                <NForm label-placement="top" size="small" :disabled="!auth.isOwner">
                   <NFormItem label="公共 Provider">
                     <NSelect
                       v-model:value="settings.public_llm_provider"
@@ -992,6 +1080,7 @@ onMounted(() => {
                           text
                           type="primary"
                           size="tiny"
+                          :disabled="!auth.isOwner"
                           :loading="fetchingPublicModels"
                           @click="fetchPublicModels"
                         >
@@ -1111,7 +1200,9 @@ onMounted(() => {
             >
           </div>
         </section>
+      </NTabPane>
 
+      <NTabPane v-if="sectionVisible('logs')" name="logs" tab="诊断日志">
         <section class="admin-section">
           <div class="section-toolbar">
             <div>
@@ -1180,7 +1271,7 @@ onMounted(() => {
         </section>
       </NTabPane>
 
-      <NTabPane name="gameplay" tab="玩法能力">
+      <NTabPane v-if="sectionVisible('gameplay')" name="gameplay" tab="玩法能力">
         <NSpin :show="loadingGameplay">
           <section class="admin-section">
             <div class="section-toolbar">
@@ -1238,7 +1329,7 @@ onMounted(() => {
         </NSpin>
       </NTabPane>
 
-      <NTabPane name="auth" tab="账号与注册">
+      <NTabPane v-if="sectionVisible('auth')" name="auth" tab="账号与注册">
         <NSpin :show="loadingAuthSettings">
           <template v-if="authSettings">
             <section class="admin-section">
@@ -1247,8 +1338,8 @@ onMounted(() => {
               <div class="setting-list">
                 <div class="setting-row">
                   <div>
-                    <strong>邮箱登录</strong>
-                    <span class="muted">允许已有邮箱账号使用密码登录</span>
+                    <strong>本地密码登录</strong>
+                    <span class="muted">允许已有用户名或邮箱账号使用密码登录</span>
                   </div>
                   <NSwitch v-model:value="authSettings.email_auth_enabled" />
                 </div>
@@ -1279,7 +1370,7 @@ onMounted(() => {
             <section class="admin-section">
               <h3>发信邮箱</h3>
               <p class="section-sub">SMTP 密码以密文保存，读取页面时不会回显。</p>
-              <NForm class="auth-settings-form" label-placement="top">
+              <NForm class="auth-settings-form" label-placement="top" :disabled="!auth.isOwner">
                 <div class="form-grid three-columns">
                   <NFormItem label="SMTP 主机">
                     <NInput v-model:value="authSettings.smtp_host" placeholder="smtp.example.com" />
@@ -1342,7 +1433,7 @@ onMounted(() => {
 
             <section class="admin-section">
               <h3>验证码邮件</h3>
-              <NForm class="auth-settings-form" label-placement="top">
+              <NForm class="auth-settings-form" label-placement="top" :disabled="!auth.isOwner">
                 <NFormItem label="邮件主题">
                   <NInput v-model:value="authSettings.verification_subject" />
                 </NFormItem>
@@ -1378,11 +1469,20 @@ onMounted(() => {
               <div class="section-toolbar auth-actions">
                 <div class="test-email-row">
                   <NInput v-model:value="testEmail" inputmode="email" placeholder="测试收件邮箱" />
-                  <NButton secondary :loading="testingEmail" @click="sendTestEmail"
+                  <NButton
+                    secondary
+                    :disabled="!auth.isOwner"
+                    :loading="testingEmail"
+                    @click="sendTestEmail"
                     >发送测试邮件</NButton
                   >
                 </div>
-                <NButton type="primary" :loading="savingAuthSettings" @click="saveAuthSettings">
+                <NButton
+                  type="primary"
+                  :disabled="!auth.isOwner"
+                  :loading="savingAuthSettings"
+                  @click="saveAuthSettings"
+                >
                   保存账号设置
                 </NButton>
               </div>
@@ -1429,7 +1529,41 @@ onMounted(() => {
         </section>
       </NTabPane>
 
-      <NTabPane name="builtins" tab="内置内容">
+      <NTabPane v-if="sectionVisible('identities')" name="identities" tab="第三方账户">
+        <section class="admin-section">
+          <div class="section-toolbar">
+            <div>
+              <h3>第三方账户</h3>
+              <p class="section-sub">
+                这里只审计站内账号与第三方身份的绑定关系；绑定和解绑由用户本人完成。
+              </p>
+            </div>
+            <NButton secondary :loading="loadingAuthIdentities" @click="loadAuthIdentities"
+              >刷新</NButton
+            >
+          </div>
+          <NSpin :show="loadingAuthIdentities">
+            <div v-if="!authIdentities.length" class="empty-copy">暂时没有第三方账户绑定。</div>
+            <div v-for="identity in authIdentities" :key="identity.id" class="invitation-row">
+              <div class="invitation-main">
+                <div class="invitation-title">
+                  <strong>{{ identity.user_name }}</strong>
+                  <NTag size="small" type="info">{{
+                    identity.provider === 'linuxdo' ? 'LinuxDo' : identity.provider
+                  }}</NTag>
+                </div>
+                <span class="muted">
+                  站内账号 {{ identity.user_email || identity.user_id }} · 第三方账号
+                  {{ identity.username || identity.provider_user_id }}
+                </span>
+              </div>
+              <span class="muted">{{ new Date(identity.created_at).toLocaleString() }}</span>
+            </div>
+          </NSpin>
+        </section>
+      </NTabPane>
+
+      <NTabPane v-if="sectionVisible('content')" name="builtins" tab="内置内容">
         <section class="admin-section">
           <div class="section-toolbar">
             <div>
@@ -1476,7 +1610,7 @@ onMounted(() => {
         </section>
       </NTabPane>
 
-      <NTabPane name="challenges" tab="挑战内容">
+      <NTabPane v-if="sectionVisible('challenges')" name="challenges" tab="挑战内容">
         <section class="admin-section challenge-admin">
           <div class="section-toolbar">
             <div>
@@ -1554,7 +1688,7 @@ onMounted(() => {
           </p>
         </section>
       </NTabPane>
-      <NTabPane name="sharing" tab="分享治理">
+      <NTabPane v-if="sectionVisible('sharing')" name="sharing" tab="分享治理">
         <NSpin :show="loadingShareGovernance">
           <section class="admin-section">
             <div class="section-toolbar">

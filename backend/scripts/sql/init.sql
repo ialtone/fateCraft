@@ -8,18 +8,22 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
 CREATE TABLE users (
     id UUID PRIMARY KEY,
+    username VARCHAR(32) NOT NULL,
     email VARCHAR(320) UNIQUE,
     password_hash TEXT,
     display_name VARCHAR(128) NOT NULL,
     avatar_url TEXT,
     status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-    role VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    role VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin', 'owner')),
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_users_status ON users(status);
-CREATE INDEX idx_users_role ON users(role);
+-- 用户名大小写不敏感唯一，登录按 lower(username) 查询；后端按索引名识别用户名冲突，改名需同步 storage/auth.go。
+CREATE UNIQUE INDEX idx_users_username_lower ON users (lower(username));
+-- 必要的安全约束：初始化完成后 owner 只能有一个；这不是用于查询的普通角色索引。
+CREATE UNIQUE INDEX idx_users_single_owner ON users ((role)) WHERE role = 'owner';
 
 CREATE TABLE auth_identities (
     id UUID PRIMARY KEY,
@@ -49,6 +53,9 @@ CREATE TABLE oauth_login_flows (
     state_hash CHAR(64) PRIMARY KEY,
     provider VARCHAR(32) NOT NULL,
     code_verifier VARCHAR(128) NOT NULL,
+    purpose VARCHAR(16) NOT NULL DEFAULT 'login' CHECK (purpose IN ('login', 'bind')),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    browser_binding_hash CHAR(64) NOT NULL,
     return_to TEXT NOT NULL DEFAULT '/',
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -1069,6 +1076,7 @@ CREATE TABLE llm_settings (
 
 CREATE TABLE system_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
+    installation_completed_at TIMESTAMPTZ,
     roll_system_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     roll_difficulty_mode VARCHAR(10) NOT NULL DEFAULT 'normal' CHECK (roll_difficulty_mode IN ('easy', 'normal', 'hard')),
     detailed_llm_logging_enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -1094,6 +1102,21 @@ CREATE TABLE system_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 INSERT INTO system_settings (id) VALUES (1);
+
+CREATE TABLE admin_audit_logs (
+    id UUID PRIMARY KEY,
+    actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    target_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(64) NOT NULL,
+    old_role VARCHAR(16),
+    new_role VARCHAR(16),
+    result VARCHAR(16) NOT NULL CHECK (result IN ('success', 'rejected', 'failed')),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata) = 'object'),
+    request_id VARCHAR(128),
+    ip_hash CHAR(64),
+    user_agent_hash CHAR(64),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE llm_request_logs (
     id UUID PRIMARY KEY,
@@ -1290,9 +1313,9 @@ CREATE TABLE challenge_run_rewards (
 );
 
 COMMENT ON TABLE users IS '平台用户主记录，仅保存登录无关的展示资料与平台权限，不保存任何玩法角色或状态';
-COMMENT ON TABLE auth_identities IS '用户与 Linux DO 等外部身份提供方的绑定记录';
+COMMENT ON TABLE auth_identities IS '用户与 Linux DO 等外部身份提供方的绑定记录；外部身份不能单独创建站内用户';
 COMMENT ON TABLE auth_sessions IS '登录会话，只保存随机令牌的 SHA-256 摘要和失效时间';
-COMMENT ON TABLE oauth_login_flows IS 'OAuth 授权过程使用的一次性 state 与 PKCE 验证信息';
+COMMENT ON TABLE oauth_login_flows IS 'OAuth 授权过程使用的一次性 state、purpose、绑定用户、PKCE 验证信息与发起浏览器的 nonce 摘要';
 COMMENT ON TABLE auth_settings IS '管理员维护的邮箱认证策略、SMTP 与验证码模板；SMTP 密码仅保存应用层密文';
 COMMENT ON TABLE email_verification_codes IS '短期邮箱验证码，仅保存 bcrypt 摘要并限制尝试次数';
 COMMENT ON TABLE invitation_codes IS '管理员创建的邀请码，仅保存高熵邀请码的 SHA-256 摘要';
@@ -1336,6 +1359,7 @@ COMMENT ON TABLE memory_jobs IS '异步长期记忆持久任务、租约、退�
 COMMENT ON TABLE context_build_logs IS '每次模型上下文装配的预算、分段和引用审计';
 COMMENT ON TABLE llm_settings IS '玩家自己的模型连接和生成参数；API Key 仅以 AES-GCM 密文保存且不对外返回';
 COMMENT ON TABLE system_settings IS '管理员维护的平台全局玩法设置与公共模型配置（单例）';
+COMMENT ON TABLE admin_audit_logs IS '首次安装、角色变更和账号状态变更的脱敏管理员审计记录';
 COMMENT ON TABLE llm_request_logs IS '管理员按需开启的模型请求详细诊断记录；不保存认证头或 API Key';
 COMMENT ON TABLE character_inquiry_threads IS '与主叙事隔离的角色状态只读问答线程';
 COMMENT ON TABLE character_inquiry_messages IS '只读角色问答消息、固定快照版本与公开来源引用';
@@ -1351,6 +1375,10 @@ COMMENT ON COLUMN campaigns.revision IS '每次成功领域动作递增一次，
 COMMENT ON COLUMN campaigns.event_sequence IS 'Campaign 事件序列游标，与动作 revision 分开维护';
 COMMENT ON COLUMN campaigns.random_seed IS '服务端生成的存档随机种子，不通过普通 API 暴露';
 COMMENT ON COLUMN users.password_hash IS '邮箱密码的 bcrypt 摘要，永不保存明文密码';
+COMMENT ON COLUMN users.username IS '站内登录用户名：2-32 个字符，不含 @、空白和控制字符；按 lower(username) 大小写不敏感唯一，与展示昵称 display_name 分开保存';
+COMMENT ON COLUMN users.role IS '平台角色：user、admin 或唯一的 owner；普通注册不会自动提权';
+COMMENT ON COLUMN oauth_login_flows.browser_binding_hash IS '发起授权时下发给浏览器的 HttpOnly nonce Cookie 的 SHA-256；回调必须带回同一 nonce，防止授权结果被其他浏览器使用';
+COMMENT ON COLUMN system_settings.installation_completed_at IS '首次安装向导完成时间；为空表示实例尚未初始化';
 COMMENT ON COLUMN llm_settings.api_key_encrypted IS '玩家模型 API Key 的 AES-GCM 密文，明文只存在于单次服务端调用内存';
 COMMENT ON COLUMN llm_settings.reasoning_effort IS '叙事思考强度；空串表示跟随供应商默认，非空时原样透传（如 low/medium/high/ultra）；记忆与问答分别使用 memory/inquiry_reasoning_effort，互相独立';
 COMMENT ON COLUMN system_settings.public_llm_api_key_encrypted IS '平台公共模型 API Key 的 AES-GCM 密文，永不通过 API 返回';

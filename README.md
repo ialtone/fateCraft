@@ -92,7 +92,7 @@ PostgreSQL 和后端领域服务是玩法事实的权威来源。浏览器、玩
 
 - Go 1.25。
 - Node.js 20+ 和 npm。
-- 一个可访问的 PostgreSQL 数据库；可以是本机、Docker、NAS 或其他独立数据库。
+- 一个可访问的 PostgreSQL 数据库；可以是本机、Docker 或其他独立数据库。
 - 可选：Go Task，用于执行仓库根目录的快捷任务。
 
 ### 1. 初始化数据库
@@ -103,7 +103,7 @@ Fatecraft 不使用 AutoMigrate，也没有旧表兼容或自动迁移旁路。�
 psql "$DATABASE_URL" -f backend/scripts/sql/init.sql
 ```
 
-没有本机 <code>psql</code> 时，可以使用 Navicat、DBeaver 或 NAS 自带的 PostgreSQL 管理工具连接目标数据库并执行同一脚本。
+没有本机 <code>psql</code> 时，可以使用 Navicat、DBeaver 等数据库管理工具连接目标数据库并执行同一脚本。
 
 请勿对已有 Fatecraft schema 重复执行 <code>init.sql</code>。结构升级必须显式维护 SQL 和数据迁移，而不是依赖服务启动时猜测数据库状态。
 
@@ -129,7 +129,7 @@ SHARE_LINK_SIGNING_KEY=replace-with-an-independent-stable-secret-at-least-32-cha
 
 | 变量                                             | 说明                                                                                                     |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| <code>DATABASE_URL</code>                        | PostgreSQL 连接串，支持外部数据库或 NAS                                                                  |
+| <code>DATABASE_URL</code>                        | PostgreSQL 连接串，支持外部数据库                                                                        |
 | <code>DB_MAX_OPEN_CONNS</code>                   | 单个后端实例最大数据库连接数，默认 10；多实例部署时需汇总计算                                            |
 | <code>DB_MAX_IDLE_CONNS</code>                   | 单个后端实例最大空闲数据库连接数，默认 3                                                                 |
 | <code>DB_CONN_MAX_LIFETIME</code>                | 数据库连接最长复用时间，默认 `30m`                                                                       |
@@ -138,6 +138,7 @@ SHARE_LINK_SIGNING_KEY=replace-with-an-independent-stable-secret-at-least-32-cha
 | <code>AUTH_DATA_ENCRYPTION_KEY</code>            | 加密 LLM API Key 和 SMTP 密码；至少 32 字符，投入使用后不得随意更换                                      |
 | <code>SHARE_LINK_SIGNING_KEY</code>              | 签发公开分享链接；至少 32 字符，必须与数据加密密钥独立，轮换会让既有链接失效                              |
 | <code>ALLOWED_ORIGINS</code>                     | 允许访问 API 与 WebSocket 的前端来源，生产环境必须明确配置                                               |
+| <code>TRUSTED_PROXIES</code>                     | 允许设置 <code>X-Forwarded-For</code> 的反向代理 IP/CIDR；留空时不信任任何代理，后端端口不得对公网开放 |
 | <code>AUTH_COOKIE_SECURE</code>                  | HTTPS 部署时设为 <code>true</code>                                                                       |
 | <code>AUTH_SESSION_TTL</code>                    | 登录会话有效期，默认示例为 <code>336h</code>                                                             |
 | <code>LINUXDO_CLIENT_ID</code>                   | LinuxDo Connect 客户端 ID                                                                                |
@@ -189,7 +190,9 @@ Vite 开发服务器会把 <code>/api</code> 和 <code>/ws</code> 代理到后�
 
 ### 5. 完成首次配置
 
-首个创建的用户自动成为管理员，后续用户默认为普通用户。登录后需要完成以下配置：
+空数据库首次打开时会进入网页安装向导。部署者直接在向导中设置本地用户名和密码，并可选填写邮箱作为联系地址；明确确认后该账号成为唯一的 `owner`。用户名是正式登录标识，有邮箱时邮箱也可用于登录。安装完成前邮箱和 LinuxDo 登录不会开放，完成后安装入口关闭，后续用户一律默认为普通用户。LinuxDo 只能在已有本地账号的设置中绑定，不能通过 OAuth 自动创建站内用户；管理员可在“管理 -> 第三方账户”审计绑定关系。`owner` 可在“管理 -> 用户与权限”中授予或撤销 `admin`。
+
+登录后需要完成以下配置：
 
 1. 在“设置”中填写用户自己的 LLM Base URL、API Key、协议与叙事模型；或者由管理员启用平台统一模型。
 2. 分别检测叙事模型的 Agent Tool Loop 能力，以及长期记忆和角色问答模型的原生 JSON Schema 能力。
@@ -271,9 +274,12 @@ worldbooks/
 
 ## 认证与安全
 
-- 首个创建的用户自动成为管理员。
+- 用户角色为 `owner`、`admin`、`user`；普通注册创建 `user`，LinuxDo 只登录已绑定的本地账号，不自动创建站内用户。
+- 空库必须通过 `/setup` 首次安装向导明确设置唯一 `owner`，不能由第一个访问者自动获得管理员权限。
+- `owner` 可以管理 `admin`、认证策略和平台密钥；`admin` 负责日常运营，不能修改或转移 `owner`。
+- 初始化完成后必须始终保留唯一的 `owner`，后端事务阻止其被禁用、删除或降级。
 - 服务端会话使用随机令牌，数据库只保存令牌哈希。
-- LinuxDo Connect 使用 OAuth 2.0 + PKCE。
+- LinuxDo Connect 使用 OAuth 2.0 + PKCE；绑定入口位于账号设置的“第三方账户”，绑定和解绑均由服务端校验。
 - 邮箱注册、验证码、邀请码和 SMTP 由管理员配置；邮箱注册默认关闭。
 - 验证码只保存 bcrypt 摘要，限制尝试次数且只能消费一次。
 - 邀请码数据库只保存 SHA-256 摘要，原文仅在创建后展示一次。

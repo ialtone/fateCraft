@@ -964,6 +964,43 @@ export interface AdminAuthSettings {
   updated_at: string
 }
 
+export interface AdminUser {
+  id: string
+  username: string
+  email?: string
+  display_name: string
+  avatar_url?: string
+  status: 'active' | 'disabled' | string
+  role: 'owner' | 'admin' | 'user' | string
+  last_login_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminExternalIdentity {
+  id: string
+  user_id: string
+  provider: string
+  provider_user_id: string
+  username: string
+  provider_email?: string
+  user_name: string
+  user_email?: string
+  created_at: string
+}
+
+export interface AdminAuditLog {
+  id: string
+  actor_user_id?: string
+  target_user_id?: string
+  action: string
+  old_role?: string
+  new_role?: string
+  result: 'success' | 'rejected' | 'failed' | string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 export interface InvitationCode {
   id: string
   code_hint: string

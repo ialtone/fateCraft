@@ -45,8 +45,11 @@ import type {
   CreateConversationShareInput,
   PublicConversationShare,
   ConversationShareReport,
+  AdminUser,
+  AdminExternalIdentity,
+  AdminAuditLog,
 } from '@/types'
-import type { AuthConfig, AuthUser } from '@/types'
+import type { AuthConfig, AuthUser, ExternalIdentity } from '@/types'
 
 const http = axios.create({ baseURL: '/api', timeout: 30000, withCredentials: true })
 
@@ -263,6 +266,21 @@ export const settingsApi = {
 
 // 管理员全局玩法设置
 export const adminApi = {
+  // 用户与第三方身份列表由后端限制为每页最多 200 条。
+  listUsers: (params: { limit?: number; offset?: number } = { limit: 200 }) =>
+    http.get<{ users: AdminUser[] }>('/admin/users', { params }).then((r) => r.data.users),
+  listAuthIdentities: (params: { limit?: number; offset?: number } = { limit: 200 }) =>
+    http
+      .get<{ identities: AdminExternalIdentity[] }>('/admin/auth-identities', { params })
+      .then((r) => r.data.identities),
+  updateUserRole: (id: string, role: AdminUser['role']) =>
+    http.patch<AdminUser>(`/admin/users/${id}/role`, { role }).then((r) => r.data),
+  updateUserStatus: (id: string, status: AdminUser['status']) =>
+    http.patch<AdminUser>(`/admin/users/${id}/status`, { status }).then((r) => r.data),
+  listAuditLogs: (limit = 50) =>
+    http
+      .get<{ logs: AdminAuditLog[] }>('/admin/audit-logs', { params: { limit } })
+      .then((r) => r.data.logs),
   getSystemSettings: () =>
     http.get<AdminSystemSettings>('/admin/system-settings').then((r) => r.data),
   updateSystemSettings: (body: {
@@ -380,18 +398,35 @@ export const adminApi = {
 export const authApi = {
   config: () => http.get<AuthConfig>('/auth/config').then((r) => r.data),
   me: () => http.get<{ user: AuthUser }>('/auth/me').then((r) => r.data.user),
-  login: (body: { email: string; password: string }) =>
+  login: (body: { identifier: string; password: string }) =>
     http.post<{ user: AuthUser }>('/auth/login', body).then((r) => r.data.user),
   sendRegistrationCode: (email: string) =>
     http.post('/auth/email-code', { email }).then((r) => r.data),
   register: (body: {
     email: string
+    username: string
     password: string
     display_name: string
     verification_code?: string
     invitation_code?: string
   }) => http.post<{ user: AuthUser }>('/auth/register', body).then((r) => r.data.user),
   logout: () => http.post('/auth/logout').then((r) => r.data),
+}
+
+export const setupApi = {
+  status: () => http.get<{ initialized: boolean }>('/setup/status').then((r) => r.data),
+  initialize: (body: { email: string; password: string; username: string; confirm: boolean }) =>
+    http
+      .post<{ initialized: boolean; user: AuthUser }>('/setup/initialize', body)
+      .then((r) => r.data),
+}
+
+export const identityApi = {
+  list: () =>
+    http.get<{ identities: ExternalIdentity[] }>('/auth/identities').then((r) => r.data.identities),
+  bindLinuxDOURL: (returnTo = '/settings') =>
+    `/api/auth/linuxdo/bind/start?${new URLSearchParams({ return_to: returnTo }).toString()}`,
+  unbind: (id: string) => http.delete(`/auth/identities/${id}`).then((r) => r.data),
 }
 
 export default http

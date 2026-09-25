@@ -26,7 +26,14 @@ func (s *Server) updateAdminAuthSettings(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
 		return
 	}
-	settings, err := s.auth.UpdateAdminSettings(c.Request.Context(), body)
+	// 路由已由 requireOwner 保护；关闭密码登录前需要确认当前 owner 自己仍有其他登录方式。
+	value, _ := c.Get(authUserKey)
+	owner, ok := value.(*storage.User)
+	if !ok || owner == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	settings, err := s.auth.UpdateAdminSettings(c.Request.Context(), owner.ID, body)
 	if err != nil {
 		if errors.Is(err, authservice.ErrInvalidAuthSettings) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

@@ -324,12 +324,14 @@ function guidanceGroupsForSection(section: CampaignViewSection): GuidanceGroup[]
     }
   }
   if (!items.length) return []
-  return [{
-    key: `campaign-actions:${section.key}`,
-    title: '行动',
-    placement: 'campaign_panel',
-    items,
-  }]
+  return [
+    {
+      key: `campaign-actions:${section.key}`,
+      title: '行动',
+      placement: 'campaign_panel',
+      items,
+    },
+  ]
 }
 
 function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {

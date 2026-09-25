@@ -47,6 +47,7 @@ type conversationRepo interface {
 	FailActiveGeneration(ctx context.Context, id uuid.UUID, errorCode string) error
 	CancelGeneration(ctx context.Context, id uuid.UUID, reason string) error
 	TransitionLifecycle(ctx context.Context, id uuid.UUID, status string, fields map[string]any) error
+	GenerationRequestExists(ctx context.Context, id, requestID uuid.UUID) (bool, error)
 }
 
 // messageSeeder 是本服务写入开场/触发消息所需的消息仓储小接口。
@@ -326,10 +327,18 @@ func (s *Service) Touch(ctx context.Context, id uuid.UUID) error {
 	return s.repo.UpdateFields(ctx, id, map[string]any{"updated_at": time.Now()})
 }
 
-// End 结束对话：置为 ended 并解除生成锁。
+// End 结束对话：置为 ended 并解除生成锁。只有 active 对话可以结束，
+// 仓储会在行锁内再次按状态机校验。
 func (s *Service) End(ctx context.Context, id uuid.UUID) (*storage.Conversation, error) {
-	if _, err := s.GetOwned(ctx, id); err != nil {
+	conv, err := s.GetOwned(ctx, id)
+	if err != nil {
 		return nil, err
+	}
+	if conv.Status == storage.StatusDeleted {
+		return nil, storage.ErrNotFound
+	}
+	if conv.Status != storage.StatusActive {
+		return nil, ErrNotActive
 	}
 	now := time.Now()
 	if err := s.repo.TransitionLifecycle(ctx, id, storage.StatusEnded, map[string]any{
@@ -426,6 +435,12 @@ func (s *Service) HeartbeatGeneration(ctx context.Context, runID uuid.UUID) erro
 // FailActiveGeneration 封存对话当前的活动租约（生成 goroutine panic 后的兜底）。
 func (s *Service) FailActiveGeneration(ctx context.Context, id uuid.UUID, errorCode string) error {
 	return s.repo.FailActiveGeneration(ctx, id, errorCode)
+}
+
+// GenerationRequestExists 判断该对话是否已登记过使用此 request_id 的生成。
+// REST 重试在 Hub 判忙时据此把“同一请求的重试”当作回放处理。
+func (s *Service) GenerationRequestExists(ctx context.Context, id, requestID uuid.UUID) (bool, error) {
+	return s.repo.GenerationRequestExists(ctx, id, requestID)
 }
 
 // CancelGeneration records a cancellation request while retaining ownership

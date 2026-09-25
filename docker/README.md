@@ -28,6 +28,8 @@
 - 确保二进制与前端产物已生成：`task backend:build && task frontend:build`
 - 启动全部服务（含前端站点）：`docker compose -f docker-compose.prod.yml up --build -d`
 - 访问入口：前端 `http://<host>:8088`（nginx 同时反代 `/api` 与 `/ws`，无需直连 8081）
+- 后端端口在生产 compose 中只绑定 `127.0.0.1:8081`，公网流量必须经过 nginx；`TRUSTED_PROXIES` 默认信任 Docker 网络内的 nginx，用于从 `X-Forwarded-For` 取真实客户端 IP。若改成对外暴露后端端口，必须同时收紧 `TRUSTED_PROXIES`，否则客户端可以伪造来源 IP 绕过限流
+- nginx 请求体上限为 `33m`，与后端挑战版本保存的 32 MiB 上限对齐
 - 生产前必须替换 `SHARE_LINK_SIGNING_KEY`；它至少 32 字符、独立于 `AUTH_DATA_ENCRYPTION_KEY`，且所有后端实例必须一致
 
 ## 数据与初始化
