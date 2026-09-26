@@ -376,6 +376,8 @@ export const adminApi = {
     http
       .post<ChallengeVersionDocument>(`/admin/challenge-versions/${id}/publish`)
       .then((r) => r.data),
+  deleteChallengeVersion: (id: string) =>
+    http.delete(`/admin/challenge-versions/${id}`).then(() => undefined),
   listGameplayModules: () =>
     http
       .get<{ modules: GameplayModuleDescriptor[] }>('/admin/gameplay-modules')

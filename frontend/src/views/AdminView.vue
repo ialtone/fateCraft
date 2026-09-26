@@ -138,6 +138,7 @@ const creatingInvitation = ref(false)
 const updatingInvitation = ref('')
 const savingVersion = ref(false)
 const publishingVersion = ref(false)
+const deletingVersion = ref(false)
 const importingBuiltin = ref('')
 const versionDoc = ref<ChallengeVersionDocument | null>(null)
 const versionPayload = ref<SaveChallengeVersionInput | null>(null)
@@ -716,6 +717,25 @@ async function publishVersion() {
     message.error(`发布失败：${err.message || '未知错误'}`)
   } finally {
     publishingVersion.value = false
+  }
+}
+
+async function deleteVersion() {
+  if (!versionDoc.value) return
+  const label = `${versionDoc.value.version.version}（${versionDoc.value.version.status}）`
+  if (!window.confirm(`删除版本 ${label}？仅当没有任何对话或存档引用它时才能删除。`)) return
+  deletingVersion.value = true
+  try {
+    await adminApi.deleteChallengeVersion(versionDoc.value.version.id)
+    versionDoc.value = null
+    versionPayload.value = null
+    selectedVersionId.value = ''
+    await loadChallenges()
+    message.success('版本已删除')
+  } catch (err: any) {
+    message.error(`删除失败：${err.message || '未知错误'}`)
+  } finally {
+    deletingVersion.value = false
   }
 }
 
@@ -1345,6 +1365,13 @@ watch(
                 </div>
                 <div class="setting-row">
                   <div>
+                    <strong>LinuxDo 登录</strong>
+                    <span class="muted">允许使用已绑定的 LinuxDo 账号登录</span>
+                  </div>
+                  <NSwitch v-model:value="authSettings.linuxdo_login_enabled" />
+                </div>
+                <div class="setting-row">
+                  <div>
                     <strong>邮箱注册</strong>
                     <span class="muted">允许访客创建新的邮箱账号</span>
                   </div>
@@ -1673,6 +1700,9 @@ watch(
                 :loading="publishingVersion"
                 @click="publishVersion"
                 >校验并发布</NButton
+              >
+              <NButton type="error" :loading="deletingVersion" @click="deleteVersion"
+                >删除版本</NButton
               >
             </div>
           </div>

@@ -50,6 +50,7 @@ var (
 	ErrVerificationCooldown      = errors.New("验证码发送过于频繁")
 	ErrInvalidAuthSettings       = errors.New("认证设置无效")
 	ErrLinuxDONotConfigured      = errors.New("LinuxDo 登录尚未配置")
+	ErrLinuxDOLoginDisabled      = errors.New("LinuxDo 登录未启用")
 	ErrInstallationRequired      = errors.New("请先完成首次安装")
 	ErrInvalidCredentials        = errors.New("用户名、邮箱或密码错误")
 	// ErrEmailInUse 与存储层共用同一个哨兵，唯一约束冲突和注册前检查可以统一判断。
@@ -167,8 +168,14 @@ func (s *Service) PublicConfig(ctx context.Context) (PublicConfig, error) {
 		EmailAuthEnabled: settings.EmailAuthEnabled, EmailRegistrationEnabled: settings.EmailRegistrationEnabled,
 		EmailVerificationEnabled: settings.EmailVerificationEnabled, InvitationRequired: settings.InvitationRequired,
 		VerificationResendSeconds: settings.VerificationResendSeconds,
-		LinuxDOEnabled:            initialized && s.cfg.LinuxDOEnabled(),
+		LinuxDOEnabled:            initialized && s.linuxDOLoginEnabled(settings),
 	}, nil
+}
+
+// linuxDOLoginEnabled 是 LinuxDo 登录的实际可用性：部署配置齐全（环境变量）
+// 且管理员未在管理后台关闭该开关。绑定流程只看部署配置，不受开关影响。
+func (s *Service) linuxDOLoginEnabled(settings *storage.AuthSettings) bool {
+	return s.cfg.LinuxDOEnabled() && settings.LinuxDOLoginEnabled
 }
 
 // LinuxDOStart 是发起 LinuxDo 授权后需要交给浏览器的数据。
@@ -190,6 +197,13 @@ func (s *Service) StartLinuxDO(ctx context.Context, returnTo string) (*LinuxDOSt
 	}
 	if !initialized {
 		return nil, ErrInstallationRequired
+	}
+	settings, err := s.repo.GetAuthSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !settings.LinuxDOLoginEnabled {
+		return nil, ErrLinuxDOLoginDisabled
 	}
 	return s.startLinuxDOFlow(ctx, storage.OAuthPurposeLogin, nil, returnTo)
 }
@@ -281,6 +295,16 @@ func (s *Service) CompleteLinuxDO(ctx context.Context, in LinuxDOCallback) (*Log
 	}
 	fail := func(err error) (*LoginResult, error) {
 		return nil, &LinuxDOFlowError{Purpose: flow.Purpose, ReturnTo: flow.ReturnTo, Err: err}
+	}
+	if flow.Purpose == storage.OAuthPurposeLogin {
+		// 管理员关闭 LinuxDo 登录后，已发起的登录流程也不得完成；绑定流程不受影响。
+		settings, err := s.repo.GetAuthSettings(ctx)
+		if err != nil {
+			return fail(err)
+		}
+		if !settings.LinuxDOLoginEnabled {
+			return fail(ErrLinuxDOLoginDisabled)
+		}
 	}
 	if in.Code == "" {
 		return fail(ErrInvalidOAuthFlow)

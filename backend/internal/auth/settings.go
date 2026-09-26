@@ -20,6 +20,7 @@ const registrationPurpose = "registration"
 type AdminAuthSettings struct {
 	ID                         int       `json:"id"`
 	EmailAuthEnabled           bool      `json:"email_auth_enabled"`
+	LinuxDOLoginEnabled        bool      `json:"linuxdo_login_enabled"`
 	EmailRegistrationEnabled   bool      `json:"email_registration_enabled"`
 	EmailVerificationEnabled   bool      `json:"email_verification_enabled"`
 	InvitationRequired         bool      `json:"invitation_required"`
@@ -39,6 +40,7 @@ type AdminAuthSettings struct {
 
 type UpdateAuthSettingsInput struct {
 	EmailAuthEnabled           bool   `json:"email_auth_enabled"`
+	LinuxDOLoginEnabled        bool   `json:"linuxdo_login_enabled"`
 	EmailRegistrationEnabled   bool   `json:"email_registration_enabled"`
 	EmailVerificationEnabled   bool   `json:"email_verification_enabled"`
 	InvitationRequired         bool   `json:"invitation_required"`
@@ -65,8 +67,10 @@ func (s *Service) AdminSettings(ctx context.Context) (*AdminAuthSettings, error)
 }
 
 // UpdateAdminSettings 由 owner（actorID）更新认证策略与发信配置。
-// 关闭密码登录前必须确认 owner 仍有其他登录方式：LinuxDo 已配置且 owner 已绑定 LinuxDo 身份，
-// 否则拒绝保存，避免把 owner 锁在站外。
+// 关闭密码登录前必须确认 owner 仍有其他登录方式：LinuxDo 已配置、开关开启
+// 且 owner 已绑定 LinuxDo 身份，否则拒绝保存，避免把 owner 锁在站外。
+// 注意：本站允许同时关闭两种登录方式（之后无人能登录，已有会话过期前仍有效），
+// 仅关闭密码登录时才做上述检查。
 func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in UpdateAuthSettingsInput) (*AdminAuthSettings, error) {
 	current, err := s.repo.GetAuthSettings(ctx)
 	if err != nil {
@@ -78,7 +82,8 @@ func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in
 	if in.EmailRegistrationEnabled && !in.EmailAuthEnabled {
 		return nil, fmt.Errorf("%w: 开启邮箱注册时必须同时开启邮箱登录", ErrInvalidAuthSettings)
 	}
-	if !in.EmailAuthEnabled {
+	// 仅当 LinuxDo 登录保持开启时才检查：双关全灭是管理员的明确选择，不做控制。
+	if !in.EmailAuthEnabled && in.LinuxDOLoginEnabled {
 		if !s.cfg.LinuxDOEnabled() {
 			return nil, fmt.Errorf("%w: LinuxDo 登录尚未配置，关闭密码登录后所有账号都将无法登录", ErrInvalidAuthSettings)
 		}
@@ -91,6 +96,7 @@ func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in
 		}
 	}
 	current.EmailAuthEnabled = in.EmailAuthEnabled
+	current.LinuxDOLoginEnabled = in.LinuxDOLoginEnabled
 	current.EmailRegistrationEnabled = in.EmailRegistrationEnabled
 	current.EmailVerificationEnabled = in.EmailVerificationEnabled
 	current.InvitationRequired = in.InvitationRequired
@@ -240,7 +246,7 @@ func (s *Service) decryptSMTPPassword(settings *storage.AuthSettings) (string, e
 
 func adminSettingsView(s *storage.AuthSettings) *AdminAuthSettings {
 	return &AdminAuthSettings{
-		ID: s.ID, EmailAuthEnabled: s.EmailAuthEnabled, EmailRegistrationEnabled: s.EmailRegistrationEnabled,
+		ID: s.ID, EmailAuthEnabled: s.EmailAuthEnabled, LinuxDOLoginEnabled: s.LinuxDOLoginEnabled, EmailRegistrationEnabled: s.EmailRegistrationEnabled,
 		EmailVerificationEnabled: s.EmailVerificationEnabled, InvitationRequired: s.InvitationRequired,
 		SMTPHost: s.SMTPHost, SMTPPort: s.SMTPPort, SMTPSecurity: s.SMTPSecurity, SMTPUsername: s.SMTPUsername,
 		HasSMTPPassword: s.SMTPPasswordEncrypted != "", SenderEmail: s.SenderEmail, SenderName: s.SenderName,

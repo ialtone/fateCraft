@@ -671,7 +671,7 @@ function clearDeviceKey() {
         </div>
       </div>
       <NButton secondary :disabled="!auth.config.linuxdo_enabled" @click="bindLinuxDO">
-        {{ auth.config.linuxdo_enabled ? '绑定 LinuxDo' : 'LinuxDo 未配置' }}
+        {{ auth.config.linuxdo_enabled ? '绑定 LinuxDo' : 'LinuxDo 不可用' }}
       </NButton>
     </section>
   </div>

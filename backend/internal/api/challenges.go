@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
+	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 func (s *Server) listChallenges(c *gin.Context) {
@@ -138,6 +139,22 @@ func (s *Server) publishAdminChallengeVersion(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, doc)
+}
+
+func (s *Server) deleteAdminChallengeVersion(c *gin.Context) {
+	id, ok := paramUUID(c, "id")
+	if !ok {
+		return
+	}
+	if err := s.challenges.DeleteVersion(c.Request.Context(), id); err != nil {
+		if errors.Is(err, storage.ErrVersionInUse) {
+			c.JSON(http.StatusConflict, gin.H{"error": "该版本已有对话或存档引用，无法删除"})
+			return
+		}
+		fail(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func challengeFailureStatus(err error) bool {

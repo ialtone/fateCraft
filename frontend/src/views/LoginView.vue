@@ -156,7 +156,7 @@ async function sendCode() {
 async function startLinuxDO() {
   await auth.initialize()
   if (!auth.config.linuxdo_enabled) {
-    message.warning('LinuxDo 登录尚未配置')
+    message.warning('LinuxDo 登录不可用')
     return
   }
   window.location.assign(auth.linuxDOLoginURL(returnTo.value))
@@ -378,6 +378,7 @@ async function startLinuxDO() {
               </template>
             </NButton>
             <NButton
+              v-if="auth.config.linuxdo_enabled"
               class="linuxdo-button"
               type="primary"
               secondary

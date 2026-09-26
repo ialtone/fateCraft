@@ -151,6 +151,8 @@ func linuxDOLoginErrorMessage(err error) string {
 		return "该 LinuxDo 账户尚未绑定站内账号，请先用用户名或邮箱登录，再到“设置 → 第三方账户”中绑定"
 	case errors.Is(err, authservice.ErrLinuxDOCancelled):
 		return "已取消 LinuxDo 授权"
+	case errors.Is(err, authservice.ErrLinuxDOLoginDisabled):
+		return "LinuxDo 登录未启用"
 	case errors.Is(err, authservice.ErrProviderRejected):
 		return "该 LinuxDo 账号当前不可用"
 	case errors.Is(err, authservice.ErrInvalidOAuthFlow):
@@ -418,7 +420,7 @@ func authFail(c *gin.Context, err error) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": authservice.ErrEmailSendFailed.Error()})
 	case errors.Is(err, authservice.ErrEncryptionNotConfigured):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "发信服务尚未配置"})
-	case errors.Is(err, authservice.ErrLinuxDONotConfigured):
+	case errors.Is(err, authservice.ErrLinuxDONotConfigured), errors.Is(err, authservice.ErrLinuxDOLoginDisabled):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, authservice.ErrInstallationRequired):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})

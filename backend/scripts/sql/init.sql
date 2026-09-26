@@ -65,6 +65,7 @@ CREATE INDEX idx_oauth_login_flows_expires ON oauth_login_flows(expires_at);
 CREATE TABLE auth_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     email_auth_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    linuxdo_login_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     email_registration_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     email_verification_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     invitation_required BOOLEAN NOT NULL DEFAULT FALSE,

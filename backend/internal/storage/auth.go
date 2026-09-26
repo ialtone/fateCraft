@@ -117,6 +117,7 @@ func (OAuthLoginFlow) TableName() string { return "oauth_login_flows" }
 type AuthSettings struct {
 	ID                         int       `gorm:"column:id;primaryKey" json:"id"`
 	EmailAuthEnabled           bool      `gorm:"column:email_auth_enabled;not null;default:true" json:"email_auth_enabled"`
+	LinuxDOLoginEnabled        bool      `gorm:"column:linuxdo_login_enabled;not null;default:true" json:"linuxdo_login_enabled"`
 	EmailRegistrationEnabled   bool      `gorm:"column:email_registration_enabled;not null;default:false" json:"email_registration_enabled"`
 	EmailVerificationEnabled   bool      `gorm:"column:email_verification_enabled;not null;default:true" json:"email_verification_enabled"`
 	InvitationRequired         bool      `gorm:"column:invitation_required;not null;default:false" json:"invitation_required"`
@@ -138,7 +139,7 @@ func (AuthSettings) TableName() string { return "auth_settings" }
 
 func DefaultAuthSettings() *AuthSettings {
 	return &AuthSettings{
-		ID: 1, EmailAuthEnabled: true, EmailVerificationEnabled: true,
+		ID: 1, EmailAuthEnabled: true, LinuxDOLoginEnabled: true, EmailVerificationEnabled: true,
 		SMTPPort: 587, SMTPSecurity: "starttls", SenderName: "Fatecraft",
 		VerificationSubject:        "【Fatecraft】邮箱验证码",
 		VerificationTemplate:       "你的验证码是：{{code}}\n\n验证码将在 {{expires_minutes}} 分钟后失效。如非本人操作，请忽略此邮件。",
@@ -412,7 +413,7 @@ func (r *AuthRepository) SaveAuthSettings(ctx context.Context, settings *AuthSet
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"email_auth_enabled", "email_registration_enabled", "email_verification_enabled", "invitation_required",
+			"email_auth_enabled", "linuxdo_login_enabled", "email_registration_enabled", "email_verification_enabled", "invitation_required",
 			"smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_password_encrypted",
 			"sender_email", "sender_name", "verification_subject", "verification_template",
 			"verification_code_ttl_minutes", "verification_resend_seconds", "updated_at",

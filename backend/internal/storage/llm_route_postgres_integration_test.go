@@ -68,7 +68,9 @@ func TestPostgresReleaseClaimKeepsJobPending(t *testing.T) {
 	ctx := context.Background()
 	conversationID := seedGenerationTestConversation(t, db)
 	jobID := uuid.New()
-	if err := db.Exec(`INSERT INTO memory_jobs (id, conversation_id, source_branch_epoch, target_until_turn_seq, status, max_executions) VALUES (?, ?, 0, 1, 'pending', 4)`, jobID, conversationID).Error; err != nil {
+	// available_at 显式写成库时钟的过去时刻：种子行若用 DEFAULT CURRENT_TIMESTAMP，
+	// 在应用与数据库有时钟偏差时会落在应用时钟的未来，导致 Claim 扫不到（flaky）。
+	if err := db.Exec(`INSERT INTO memory_jobs (id, conversation_id, source_branch_epoch, target_until_turn_seq, status, max_executions, available_at) VALUES (?, ?, 0, 1, 'pending', 4, CURRENT_TIMESTAMP - INTERVAL '1 minute')`, jobID, conversationID).Error; err != nil {
 		t.Fatalf("seed memory job: %v", err)
 	}
 	repo := NewMemoryRepo(db)

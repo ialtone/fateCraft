@@ -255,6 +255,7 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.GET("/admin/challenge-versions/:id", s.requireAdmin, s.getAdminChallengeVersion)
 	protected.PUT("/admin/challenge-versions/:id", s.requireAdmin, s.saveAdminChallengeVersion)
 	protected.POST("/admin/challenge-versions/:id/publish", s.requireAdmin, s.publishAdminChallengeVersion)
+	protected.DELETE("/admin/challenge-versions/:id", s.requireAdmin, s.deleteAdminChallengeVersion)
 
 	// WebSocket
 	r.GET("/ws/conversations/:id", s.requireAuth, s.serveWS)

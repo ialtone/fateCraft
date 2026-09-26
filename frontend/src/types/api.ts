@@ -957,6 +957,7 @@ export type SMTPSecurity = 'none' | 'starttls' | 'tls'
 export interface AdminAuthSettings {
   id: number
   email_auth_enabled: boolean
+  linuxdo_login_enabled: boolean
   email_registration_enabled: boolean
   email_verification_enabled: boolean
   invitation_required: boolean

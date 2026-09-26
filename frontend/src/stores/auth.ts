@@ -6,6 +6,7 @@ import type { AuthConfig, AuthUser } from '@/types'
 
 const defaultConfig: AuthConfig = {
   email_auth_enabled: false,
+  linuxdo_login_enabled: false,
   email_registration_enabled: false,
   email_verification_enabled: false,
   invitation_required: false,

@@ -37,6 +37,10 @@ func newOAuthTestRepo() *oauthTestRepo {
 
 func (r *oauthTestRepo) InstallationComplete(context.Context) (bool, error) { return true, nil }
 
+func (r *oauthTestRepo) GetAuthSettings(context.Context) (*storage.AuthSettings, error) {
+	return &storage.AuthSettings{LinuxDOLoginEnabled: true}, nil
+}
+
 func (r *oauthTestRepo) CreateOAuthFlow(_ context.Context, flow *storage.OAuthLoginFlow) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

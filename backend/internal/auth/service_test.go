@@ -272,6 +272,45 @@ func TestStartLinuxDOUsesPKCEAndPersistsFlow(t *testing.T) {
 	}
 }
 
+// 管理员关闭 LinuxDo 登录开关后，发起与完成登录流程都被拒绝；绑定流程不受影响。
+func TestLinuxDOLoginDisabledToggle(t *testing.T) {
+	repo := &fakeRepository{settings: &storage.AuthSettings{LinuxDOLoginEnabled: false}}
+	svc := NewService(repo, linuxDOTestConfig(nil))
+	if _, err := svc.StartLinuxDO(context.Background(), "/"); !errors.Is(err, ErrLinuxDOLoginDisabled) {
+		t.Fatalf("StartLinuxDO error = %v, want ErrLinuxDOLoginDisabled", err)
+	}
+
+	// 开关开着时发起，关闭后再回调：登录用途拒绝完成。
+	repo.settings.LinuxDOLoginEnabled = true
+	provider, _ := newFakeLinuxDOProvider(t)
+	svc = NewService(repo, linuxDOTestConfig(provider))
+	start, err := svc.StartLinuxDO(context.Background(), "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.settings.LinuxDOLoginEnabled = false
+	_, err = svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+		Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding,
+	})
+	var flowErr *LinuxDOFlowError
+	if !errors.As(err, &flowErr) || !errors.Is(err, ErrLinuxDOLoginDisabled) {
+		t.Fatalf("CompleteLinuxDO error = %v, want LinuxDOFlowError wrapping ErrLinuxDOLoginDisabled", err)
+	}
+
+	// 绑定用途不受开关影响。
+	binder := uuid.New()
+	bindStart, err := svc.StartLinuxDOBind(context.Background(), binder, "/settings")
+	if err != nil {
+		t.Fatalf("StartLinuxDOBind with login disabled: %v", err)
+	}
+	if _, err := svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+		Code: "auth-code", State: stateOf(t, bindStart), BrowserBinding: bindStart.BrowserBinding,
+		SessionUserID: &binder,
+	}); err != nil {
+		t.Fatalf("bind with login disabled: %v", err)
+	}
+}
+
 func TestCompleteLinuxDOExchangesCodeAndCreatesSessionForBoundIdentity(t *testing.T) {
 	email := "fate@example.com"
 	repo := &fakeRepository{user: &storage.User{ID: uuid.New(), DisplayName: "Fate User", Email: &email, Status: storage.UserStatusActive}}
@@ -700,7 +739,7 @@ func TestInvalidVerificationCodeIncrementsAttemptCount(t *testing.T) {
 
 func validSettingsInput(emailAuthEnabled bool) UpdateAuthSettingsInput {
 	return UpdateAuthSettingsInput{
-		EmailAuthEnabled: emailAuthEnabled, SMTPHost: "smtp.example.com", SMTPPort: 587, SMTPSecurity: "starttls",
+		EmailAuthEnabled: emailAuthEnabled, LinuxDOLoginEnabled: true, SMTPHost: "smtp.example.com", SMTPPort: 587, SMTPSecurity: "starttls",
 		SenderEmail: "noreply@example.com", SenderName: "Fatecraft", VerificationSubject: "验证码",
 		VerificationTemplate: "验证码：{{code}}", VerificationCodeTTLMinutes: 10, VerificationResendSeconds: 60,
 	}
@@ -725,7 +764,8 @@ func TestSMTPPasswordIsEncryptedAndNeverReturned(t *testing.T) {
 	}
 }
 
-// 关闭密码登录前，owner 必须已绑定可用的 LinuxDo 身份，否则会把 owner 锁在站外。
+// 关闭密码登录前（且 LinuxDo 登录保持开启时），owner 必须已绑定可用的 LinuxDo 身份，
+// 否则会把 owner 锁在站外。双关全灭是允许的，不在这里控制。
 func TestUpdateAdminSettingsPreventsOwnerLockout(t *testing.T) {
 	owner := uuid.New()
 	linuxDOIdentity := []storage.ExternalIdentitySummary{{ID: uuid.New(), Provider: linuxDOProvider, ProviderUserID: "linuxdo-42"}}
@@ -760,6 +800,34 @@ func TestUpdateAdminSettingsPreventsOwnerLockout(t *testing.T) {
 				t.Fatal("password login should be disabled")
 			}
 		})
+	}
+}
+
+// 关 LinuxDo 登录时密码登录开着：合法，直接保存；双关全灭是允许的明确选择，不做控制。
+func TestUpdateAdminSettingsLinuxDOToggle(t *testing.T) {
+	repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
+	svc := NewService(repo, linuxDOTestConfig(nil))
+	input := validSettingsInput(true)
+	input.LinuxDOLoginEnabled = false
+	view, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.LinuxDOLoginEnabled || !view.EmailAuthEnabled {
+		t.Fatalf("unexpected view: %+v", view)
+	}
+	if repo.settings.LinuxDOLoginEnabled {
+		t.Fatal("linuxdo login should be disabled")
+	}
+
+	// 双关全灭：允许保存（之后无人能再登录），不检查 owner 绑定。
+	input = validSettingsInput(false)
+	input.LinuxDOLoginEnabled = false
+	if _, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input); err != nil {
+		t.Fatalf("disabling both logins error = %v, want nil", err)
+	}
+	if repo.settings.EmailAuthEnabled || repo.settings.LinuxDOLoginEnabled {
+		t.Fatalf("both logins should be disabled: %+v", repo.settings)
 	}
 }
 

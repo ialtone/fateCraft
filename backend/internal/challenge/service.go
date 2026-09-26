@@ -537,6 +537,12 @@ func (s *Service) Publish(ctx context.Context, versionID, publisherID uuid.UUID)
 	return s.VersionDocument(ctx, versionID)
 }
 
+// DeleteVersion 删除无任何对话或存档引用的版本（草稿、已发布、退役均可，
+// 只要没被用过）。被引用时返回包装后的 storage.ErrVersionInUse。
+func (s *Service) DeleteVersion(ctx context.Context, versionID uuid.UUID) error {
+	return s.repo.DeleteVersionIfUnused(ctx, versionID)
+}
+
 func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, versionName string) (*VersionDocument, error) {
 	versionName = strings.TrimSpace(versionName)
 	if versionName == "" {
