@@ -31,6 +31,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/inquiry"
 	"github.com/ialtone/fatecraft/internal/llm"
+	"github.com/ialtone/fatecraft/internal/llmrelay"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/memory"
@@ -129,6 +130,9 @@ func main() {
 	llmClient := llm.NewClient()
 	llmSettingsSvc := llmsettings.New(settingsRepo, systemSettingsRepo, cfg.AuthDataEncryptionKey)
 	capabilitySvc := modelcapability.New(llmClient)
+	// Relay 注册表：client 路由的模型请求经浏览器执行；准入要求有效路由为 client。
+	relayRegistry := llmrelay.NewRegistry(llmSettingsSvc.EffectiveRoute, cfg.AllowedOrigins)
+	capabilitySvc.SetRelayTransport(relayRegistry.For)
 	auditWriter := llm.NewAsyncRequestAuditWriter(func(ctx context.Context, audit llm.RequestAudit) error {
 		row := &storage.LLMRequestLog{
 			ID: uuid.New(), Model: audit.Model, BaseURL: audit.BaseURL, Stream: audit.Stream,
@@ -203,9 +207,12 @@ func main() {
 	stateSvc := state.NewService(stateRepo, challengeSvc)
 	convSvc := conversation.NewService(convRepo, stateSvc, msgRepo, challengeSvc, requestIdentity)
 	convSvc.SetTurnRepo(turnRepo)
+	convSvc.SetRouteResolver(llmSettingsSvc)
 	chatSvc := chat.NewService(msgRepo)
 	memSvc := memory.NewService(memRepo, counter)
 	memoryWorker := memory.NewWorker(memRepo, llmSettingsSvc, llmClient, counter, memory.WorkerConfig{Concurrency: cfg.MemoryWorkerConcurrency})
+	memoryWorker.SetRelayAvailability(relayRegistry.HasActive)
+	memoryWorker.SetRelayTransport(relayRegistry.For)
 	memSvc.SetWake(memoryWorker.Wake)
 	memoryWorker.SetScheduler(func(ctx context.Context, conversationID uuid.UUID) {
 		if _, err := memSvc.Schedule(ctx, conversationID, false); err != nil {
@@ -223,10 +230,12 @@ func main() {
 	logger.Info("判定系统配置已加载")
 	campaignSvc := campaign.NewService(campaignRepo, challengeSvc, convSvc, requestIdentity, gameplayRegistry)
 	campaignSvc.SetRollServices(rollSvc, systemSettingsRepo)
+	campaignSvc.SetRouteResolver(llmSettingsSvc)
 	campaignactions.Register(campaignSvc)
 	campaignSvc.RegisterProjection(campaigngeneric.ProjectionHandler, campaignview.Provider{})
 	campaignSvc.RegisterProjection(cultivation.CampaignProjectionHandler, campaignview.Provider{})
 	inquirySvc := inquiry.NewService(inquiryRepo, campaignSvc, stateSvc, llmSettingsSvc, requestIdentity, llmClient, counter)
+	inquirySvc.SetRelayTransport(relayRegistry.For)
 	shareSvc := shareapp.New(shareRepo, cfg.ShareLinkSigningKey)
 
 	// 生成编排 + WebSocket Hub。
@@ -236,6 +245,7 @@ func main() {
 		ToolTx:    orchestration.NewAgentToolTransaction(db, challengeSvc),
 		Challenge: challengeSvc, Campaign: campaignSvc,
 		Settings: llmSettingsSvc, System: systemSettingsRepo, CtxLogs: ctxRepo, LLM: llmClient, Counter: counter,
+		Routes: llmSettingsSvc, Relays: relayRegistry.For,
 		Roll: rollSvc, RollCommitter: orchestration.NewRollCommitter(db),
 		Completion: orchestration.NewCompletionHandler(chatSvc, stateSvc, challengeSvc, requestIdentity),
 		Identity:   requestIdentity,
@@ -256,7 +266,7 @@ func main() {
 		Conv: convSvc, Campaigns: campaignSvc, Chat: chatSvc, State: stateSvc, Challenges: challengeSvc, Builtins: builtinImporter,
 		Memory: memSvc, Inquiries: inquirySvc, Settings: settingsRepo, LLMSettings: llmSettingsSvc, System: systemSettingsRepo, CtxLogs: ctxRepo, Messages: msgRepo, Agents: agentRepo,
 		Rewards: rewardRepo, LLMRequestLogs: llmRequestLogRepo, Turns: turnRepo,
-		Hub: hub, LLMClient: llmClient, Capabilities: capabilitySvc, Shares: shareSvc, Counter: counter,
+		Hub: hub, LLMClient: llmClient, Capabilities: capabilitySvc, Shares: shareSvc, Relays: relayRegistry, Counter: counter,
 		Identity: requestIdentity, Auth: authSvc, CookieSecure: cfg.AuthCookieSecure,
 	})
 

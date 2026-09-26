@@ -341,6 +341,7 @@ export const useSocketStore = defineStore('socket', () => {
             rewards: ev.reward_grants ?? [],
             metrics: ev.metrics ?? [],
             nextActions: ev.next_actions ?? [],
+            rewardsDisabledReason: ev.outcome.rewards_disabled_reason,
           })
         }
         rewards.load().catch(() => {})

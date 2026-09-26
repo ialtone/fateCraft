@@ -37,6 +37,7 @@ type workerRepository interface {
 	SetJobSource(context.Context, uuid.UUID, string, uuid.UUID, string, string) error
 	Commit(context.Context, storage.MemoryCommitInput) error
 	FailJob(context.Context, uuid.UUID, string, uuid.UUID, string, string, *time.Time) error
+	ReleaseClaim(context.Context, uuid.UUID, string, uuid.UUID, time.Duration) error
 }
 
 type settingsProvider interface {
@@ -63,6 +64,11 @@ type Worker struct {
 	wg       sync.WaitGroup
 	schedule func(context.Context, uuid.UUID)
 	activity ActivitySink
+	// relayAvailable 报告玩家当前是否有可用的 Relay 连接；为 nil 时视为无连接。
+	// 阶段 3 由 llmrelay.Registry 注入。
+	relayAvailable func(playerID string) bool
+	// relayFor 返回该玩家的 Relay 传输；阶段 3 由 llmrelay.Registry.For 注入。
+	relayFor func(playerID string) llm.RelayTransport
 }
 
 func NewWorker(repo workerRepository, settings settingsProvider, client *llm.Client, counter tokenizer.Counter, config WorkerConfig) *Worker {
@@ -94,6 +100,28 @@ func (w *Worker) Wake() {
 func (w *Worker) SetScheduler(schedule func(context.Context, uuid.UUID)) { w.schedule = schedule }
 
 func (w *Worker) SetActivitySink(sink ActivitySink) { w.activity = sink }
+
+// SetRelayAvailability 注入 Relay 连接可用性判断；client 路由的任务只在有连接时领取执行。
+func (w *Worker) SetRelayAvailability(available func(playerID string) bool) {
+	w.relayAvailable = available
+}
+
+// SetRelayTransport 注入 Relay 传输构造；client 路由的模型调用经它执行。
+func (w *Worker) SetRelayTransport(forTransport func(playerID string) llm.RelayTransport) {
+	w.relayFor = forTransport
+}
+
+func (w *Worker) hasRelay(playerID string) bool {
+	return w.relayAvailable != nil && w.relayAvailable(playerID)
+}
+
+// relayForRoute 返回 client 路由设置对应的 Relay 传输，否则返回 nil。
+func (w *Worker) relayForRoute(settings *storage.LLMSettings, playerID string) llm.RelayTransport {
+	if settings.LLMRoute != storage.LLMRouteClient || w.relayFor == nil {
+		return nil
+	}
+	return w.relayFor(playerID)
+}
 
 // Run 启动 Concurrency 个消费循环。每个循环独立领取任务，一个慢模型只会
 // 占住一个槽位，不会让其他对话的记忆整理排队等待。
@@ -147,6 +175,17 @@ func (w *Worker) drain(ctx context.Context) {
 	}
 }
 
+// releaseClaim 把任务放回 pending，不计失败次数，30s 后可再次被领取。
+func (w *Worker) releaseClaim(ctx context.Context, job *storage.MemoryJob) {
+	if job.LeaseToken == nil {
+		return
+	}
+	if err := w.repo.ReleaseClaim(ctx, job.ID, w.config.WorkerID, *job.LeaseToken, 30*time.Second); err != nil {
+		logging.Named("memory").Warn("记忆任务放回队列失败",
+			zap.String("job_id", job.ID.String()), zap.Error(err))
+	}
+}
+
 // executeGuarded 兜住单个任务的 panic：只让这一个任务失败并释放租约，
 // 不能让整个记忆 Worker 乃至进程退出。
 func (w *Worker) executeGuarded(ctx context.Context, job *storage.MemoryJob) {
@@ -188,8 +227,22 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 		w.finishFailure(root, job, "settings_unavailable", err, true)
 		return
 	}
+	// 路由闸门：对象路由与有效路由不一致，或 client 路由暂无 Relay 连接时，
+	// 把任务放回 pending，不计失败次数，30s 后可再次被领取。
+	if routeErr := storage.CheckLLMRoute(source.Conversation.LLMRoute, settings.LLMRoute); routeErr != nil {
+		log.Debug("记忆任务路由不匹配，放回队列",
+			zap.String("job_id", job.ID.String()), zap.String("conversation_id", job.ConversationID.String()))
+		w.releaseClaim(root, job)
+		return
+	}
+	if settings.LLMRoute == storage.LLMRouteClient && !w.hasRelay(source.Conversation.PlayerID) {
+		log.Debug("记忆任务等待 Relay 连接，放回队列",
+			zap.String("job_id", job.ID.String()), zap.String("conversation_id", job.ConversationID.String()))
+		w.releaseClaim(root, job)
+		return
+	}
 	apiKey := settings.APIKey
-	if apiKey == "" {
+	if apiKey == "" && settings.LLMRoute != storage.LLMRouteClient {
 		w.finishFailure(root, job, "missing_api_key", errors.New("未配置 LLM API Key"), true)
 		return
 	}
@@ -218,6 +271,7 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 	result, err := w.llm.CompleteStructured(ctx, llm.Params{
 		BaseURL: settings.BaseURL, Provider: settings.Provider, APIKey: apiKey, Model: model, Protocol: protocol,
 		Temperature: 0.2, TopP: 1, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort,
+		Relay:            w.relayForRoute(settings, source.Conversation.PlayerID),
 		SettingsRevision: settings.SettingsRevision,
 		SettingsSource:   settings.Source,
 		ContractName:     "memory_archive_v1", ContractVersion: "1", ContractFingerprint: llm.SchemaFingerprint(outputSchema),
@@ -364,6 +418,10 @@ func classifyLLMError(err error) string {
 		return "timeout"
 	case errors.Is(err, llm.ErrTruncated):
 		return "response_truncated"
+	case errors.Is(err, llm.ErrRelayUnavailable):
+		return "relay_unavailable"
+	case errors.Is(err, llm.ErrRelayLost):
+		return "relay_lost"
 	case errors.As(err, &httpErr):
 		return fmt.Sprintf("upstream_%d", httpErr.StatusCode)
 	default:
@@ -376,6 +434,10 @@ func isRetryableLLMError(err error) bool {
 		return false
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// Relay 执行中连接丢失按暂时性网络失败处理：任务可重试，不计入契约失败。
+	if errors.Is(err, llm.ErrRelayUnavailable) || errors.Is(err, llm.ErrRelayLost) {
 		return true
 	}
 	if errors.Is(err, llm.ErrTruncated) {

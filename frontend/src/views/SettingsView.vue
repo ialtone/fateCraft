@@ -2,19 +2,25 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  NAlert,
   NButton,
   NForm,
   NFormItem,
   NInput,
   NInputNumber,
+  NRadioButton,
+  NRadioGroup,
   NSelect,
   NSlider,
   NSwitch,
+  useDialog,
   useMessage,
 } from 'naive-ui'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
+import { useLlmRelayStore } from '@/stores/llmRelay'
+import { getLocalKey, setLocalKey, clearLocalKey } from '@/llm/localKey'
 import { identityApi, settingsApi } from '@/api'
 import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
@@ -28,11 +34,19 @@ import type {
 const store = useSettingsStore()
 const theme = useThemeStore()
 const auth = useAuthStore()
+const relay = useLlmRelayStore()
 const message = useMessage()
+const dialog = useDialog()
 const route = useRoute()
 const router = useRouter()
 const form = ref<Record<string, any>>({})
 const apiKey = ref('')
+// 请求路由（user_managed 下可选）：server=服务端转发，client=本设备直连。
+const llmRoute = ref<'server' | 'client'>('server')
+// 本设备 Key：只存浏览器，绝不随设置提交。
+const localApiKey = ref('')
+const testingConnection = ref(false)
+const connectionResult = ref<{ ok: boolean; text: string } | null>(null)
 const fetchingModels = ref(false)
 const availableModels = ref<string[]>([])
 const diagnostics = ref<Partial<Record<LLMCapabilityRole, LLMCapabilityDiagnostic>>>({})
@@ -44,6 +58,25 @@ const defaultProtocol = 'responses'
 const platformManaged = computed(
   () => store.settings?.access_mode === 'platform_managed' || store.settings?.editable === false,
 )
+const clientRoute = computed(() => !platformManaged.value && llmRoute.value === 'client')
+// 保存过的路由：切换对比与脏检查的基准。
+const savedRoute = computed<'server' | 'client'>(() =>
+  store.settings?.llm_route === 'client' ? 'client' : 'server',
+)
+// https 页面配 http 非回环地址时，浏览器会拦截混合内容，直连必然失败。
+const mixedContentHint = computed(() => {
+  if (window.location.protocol !== 'https:') return ''
+  const raw = String(form.value.base_url || '').trim()
+  if (!/^http:\/\//i.test(raw)) return ''
+  let host = ''
+  try {
+    host = new URL(raw).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return ''
+  return '当前为 https 页面，该地址为 http 非回环地址，浏览器会拦截混合内容请求，直连不可用。'
+})
 
 const providerOptions = computed(() =>
   providerProfiles.value.map((profile) => ({ label: profile.id, value: profile.id })),
@@ -68,7 +101,9 @@ const capabilitySettingsDirty = computed(() => {
   const saved = store.settings
   if (!saved) return true
   return (
-    apiKey.value.trim() !== '' ||
+    // 服务端 Key 需先保存；本设备 Key 直接生效，不参与脏检查。
+    (!clientRoute.value && apiKey.value.trim() !== '') ||
+    llmRoute.value !== savedRoute.value ||
     String(form.value.base_url || '').trim() !== String(saved.base_url || '').trim() ||
     String(form.value.provider || 'openai') !== String(saved.provider || 'openai') ||
     String(form.value.protocol || defaultProtocol) !== String(saved.protocol || defaultProtocol) ||
@@ -89,6 +124,8 @@ const capabilityConfigKey = computed(() =>
     form.value.inquiry_model,
     form.value.stream_enabled,
     apiKey.value.trim() !== '',
+    localApiKey.value.trim() !== '',
+    llmRoute.value,
   ]),
 )
 
@@ -124,7 +161,9 @@ onMounted(async () => {
       provider: store.settings.provider || 'openai',
       protocol: store.settings.protocol || defaultProtocol,
     }
+    llmRoute.value = store.settings.llm_route === 'client' ? 'client' : 'server'
   }
+  if (auth.user) localApiKey.value = getLocalKey(auth.user.id)
 })
 
 function bindLinuxDO() {
@@ -165,6 +204,27 @@ async function unbindIdentity(identity: ExternalIdentity) {
   }
 }
 
+// 切换请求路由时弹确认框：列出不可逆后果，取消则保持原值。
+function onRouteChange(next: 'server' | 'client') {
+  if (next === llmRoute.value) return
+  if (next === savedRoute.value) {
+    llmRoute.value = next
+    return
+  }
+  const toClient = next === 'client'
+  dialog.warning({
+    title: toClient ? '切换到客户端直连？' : '切回服务端转发？',
+    content: toClient
+      ? '1. 另一模式（服务端转发）下创建的对话将无法继续生成，需新建对话；\n2. 切到客户端直连会删除服务器上保存的 Key；\n3. 此模式下挑战与 Campaign 不发放奖励，重新生成不消耗额度。'
+      : '1. 客户端直连模式下创建的对话将无法继续生成，需新建对话；\n2. 切回服务端需要重新填写 Key。',
+    positiveText: '确认切换',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      llmRoute.value = next
+    },
+  })
+}
+
 async function save() {
   if (platformManaged.value) {
     message.info('当前由平台统一提供 LLM 配置')
@@ -178,6 +238,7 @@ async function save() {
     provider: form.value.provider || 'openai',
     base_url: form.value.base_url,
     protocol: form.value.protocol || defaultProtocol,
+    llm_route: llmRoute.value,
     model: form.value.model,
     memory_model: form.value.memory_model || '',
     inquiry_model: form.value.inquiry_model || '',
@@ -190,13 +251,21 @@ async function save() {
     memory_reasoning_effort: String(form.value.memory_reasoning_effort ?? '').trim(),
     inquiry_reasoning_effort: String(form.value.inquiry_reasoning_effort ?? '').trim(),
   }
-  // 仅当填写了新 key 时才提交，避免清空已有密钥。
-  if (apiKey.value) body.api_key = apiKey.value
+  if (llmRoute.value === 'client') {
+    // 客户端直连：Key 只写本设备，不随设置提交；顺手清掉服务端输入框。
+    if (auth.user && localApiKey.value.trim()) setLocalKey(auth.user.id, localApiKey.value)
+    apiKey.value = ''
+  } else {
+    // 仅当填写了新 key 时才提交，避免清空已有密钥。
+    if (apiKey.value) body.api_key = apiKey.value
+  }
   try {
     await store.update(body)
     apiKey.value = ''
     message.success('设置已保存')
     diagnostics.value = {}
+    connectionResult.value = null
+    relay.refresh()
   } catch (err: any) {
     message.error(`保存设置失败：${err.message || '未知错误'}`)
   }
@@ -221,6 +290,19 @@ async function checkCapability(role: LLMCapabilityRole) {
 async function fetchModels() {
   if (!form.value.base_url) {
     message.warning('请先填写 Base URL')
+    return
+  }
+  // 客户端直连：服务端 409，由浏览器直接请求。
+  if (clientRoute.value) {
+    fetchingModels.value = true
+    try {
+      await fetchModelsDirect(false)
+    } catch (err: any) {
+      message.error(`获取模型列表失败：${err.message}`)
+      availableModels.value = []
+    } finally {
+      fetchingModels.value = false
+    }
     return
   }
 
@@ -262,6 +344,75 @@ async function fetchModels() {
     fetchingModels.value = false
   }
 }
+
+// 浏览器直接请求 {base_url}/models。Key 只发往本地 base_url。
+async function fetchModelsDirect(report: boolean): Promise<string[]> {
+  const baseUrl = String(form.value.base_url || '')
+    .trim()
+    .replace(/\/+$/, '')
+  const key = localApiKey.value.trim()
+  if (!baseUrl) throw new Error('请先填写 Base URL')
+  if (!key) throw new Error('请先填写本设备 API Key')
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${key}` },
+    })
+  } catch (err: any) {
+    throw new Error(`浏览器无法访问该地址（跨域限制、网络或混合内容）：${err?.message || ''}`)
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('鉴权失败：API Key 无效或无权限')
+  }
+  if (!response.ok) {
+    throw new Error(`模型服务返回 ${response.status}`)
+  }
+  const data: any = await response.json()
+  const models = Array.isArray(data?.data)
+    ? data.data.map((item: any) => String(item?.id || '')).filter(Boolean)
+    : []
+  if (!report) {
+    if (!models.length) {
+      message.warning('未找到可用模型')
+      availableModels.value = []
+      return models
+    }
+    availableModels.value = models
+    form.value.model = models[0]
+    if (form.value.memory_model && !models.includes(form.value.memory_model)) {
+      form.value.memory_model = ''
+    }
+    if (form.value.inquiry_model && !models.includes(form.value.inquiry_model)) {
+      form.value.inquiry_model = ''
+    }
+    message.success(`获取到 ${models.length} 个模型`)
+  }
+  return models
+}
+
+// 测试连接（仅客户端直连）：区分鉴权失败 / 跨域或网络失败 / 成功。
+async function testConnection() {
+  if (mixedContentHint.value) {
+    connectionResult.value = { ok: false, text: mixedContentHint.value }
+    return
+  }
+  testingConnection.value = true
+  connectionResult.value = null
+  try {
+    const models = await fetchModelsDirect(true)
+    connectionResult.value = { ok: true, text: `连接成功，找到 ${models.length} 个模型` }
+  } catch (err: any) {
+    connectionResult.value = { ok: false, text: err?.message || '连接失败' }
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+function clearDeviceKey() {
+  if (auth.user) clearLocalKey(auth.user.id)
+  localApiKey.value = ''
+  message.success('本设备 Key 已清除')
+}
 </script>
 
 <template>
@@ -295,6 +446,25 @@ async function fetchModels() {
         <p class="managed-state-hint">如需调整模型服务，请联系管理员。</p>
       </div>
       <NForm v-else label-placement="top" size="small">
+        <NFormItem label="请求路由">
+          <NRadioGroup :value="llmRoute" size="medium" @update:value="onRouteChange">
+            <NRadioButton value="server">服务端转发（推荐）</NRadioButton>
+            <NRadioButton value="client">客户端直连</NRadioButton>
+          </NRadioGroup>
+          <template #feedback>
+            <span class="faint sm">
+              {{
+                llmRoute === 'client'
+                  ? '由本设备浏览器直接请求模型，API Key 只保存在本设备'
+                  : '由服务器请求模型，完整享有奖励与挑战记录'
+              }}
+            </span>
+          </template>
+        </NFormItem>
+        <NAlert v-if="clientRoute" type="warning" :show-icon="false" class="route-note">
+          此模式下，服务端无法校验模型输出：挑战与 Campaign
+          不发放奖励，重新生成不消耗额度；发给模型的完整提示词（含隐藏剧情信息）可在浏览器中查看。该模式只用于体验对话玩法。
+        </NAlert>
         <NFormItem label="Provider">
           <NSelect
             v-model:value="form.provider"
@@ -319,6 +489,7 @@ async function fetchModels() {
           </div>
         </NFormItem>
         <NFormItem
+          v-if="!clientRoute"
           :label="`API Key${store.settings?.has_api_key ? '（已配置，留空则保持不变）' : ''}`"
         >
           <NInput
@@ -328,6 +499,34 @@ async function fetchModels() {
             placeholder="sk-…"
           />
         </NFormItem>
+        <template v-else>
+          <NFormItem label="本设备 API Key（只保存在本设备，不会发送到服务器）">
+            <NInput
+              v-model:value="localApiKey"
+              type="password"
+              show-password-on="click"
+              placeholder="sk-…"
+            />
+          </NFormItem>
+          <NAlert v-if="mixedContentHint" type="error" :show-icon="false" class="route-note">
+            {{ mixedContentHint }}
+          </NAlert>
+          <div class="row device-key-row">
+            <NButton secondary size="small" :loading="testingConnection" @click="testConnection">
+              测试连接
+            </NButton>
+            <NButton secondary size="small" @click="clearDeviceKey">清除本设备 Key</NButton>
+            <span class="faint sm">Relay 状态：{{ relay.connected ? '已连接' : '未连接' }}</span>
+          </div>
+          <NAlert
+            v-if="connectionResult"
+            :type="connectionResult.ok ? 'success' : 'error'"
+            :show-icon="false"
+            class="route-note"
+          >
+            {{ connectionResult.text }}
+          </NAlert>
+        </template>
         <div class="model-setting-list">
           <LLMModelSetting
             v-model="form.model"
@@ -639,6 +838,16 @@ async function fetchModels() {
   min-width: 200px;
   border-radius: 999px;
   box-shadow: var(--shadow-card);
+}
+
+.route-note {
+  margin-bottom: 14px;
+}
+
+.device-key-row {
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 @media (max-width: 560px) {

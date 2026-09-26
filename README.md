@@ -207,6 +207,8 @@ Vite 开发服务器会把 <code>/api</code> 和 <code>/ws</code> 代理到后�
 
 API Key 使用 <code>AUTH_DATA_ENCRYPTION_KEY</code> 经 AES-GCM 加密后写入数据库，运行时才在内存中解密；API 响应和诊断日志不会返回密钥。
 
+<code>user_managed</code> 下用户还可以在设置里选择请求路由：<code>server</code>（服务端转发，默认，完整享有奖励）或 <code>client</code>（浏览器用本设备 Key 直连模型，只体验对话玩法，不发放奖励、不扣改写额度）。`client` 的 Key 只存浏览器本设备（登出清除），服务端不保存；路由在对话创建时固化，切换设置后旧对话只读，需新建对话。
+
 ### 模型角色
 
 | 角色         | 用途                                 | 模型留空行为 | 思考强度留空行为                     |

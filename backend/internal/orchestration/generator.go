@@ -51,6 +51,12 @@ type Generator struct {
 	settings  interface {
 		Get(context.Context, string) (*storage.LLMSettings, error)
 	}
+	// routes 解析当前用户的有效路由；为 nil 时默认 server（仅测试路径）。
+	routes interface {
+		EffectiveRoute(ctx context.Context, playerID string) (string, error)
+	}
+	// relays 返回该玩家的 Relay 传输；为 nil 时 client 路由无可用传输。
+	relays         func(playerID string) llm.RelayTransport
 	systemSettings *storage.SystemSettingsRepo
 	ctxRepo        *storage.ContextRepo
 	llmClient      *llm.Client
@@ -76,6 +82,13 @@ type GeneratorDeps struct {
 	Settings  interface {
 		Get(context.Context, string) (*storage.LLMSettings, error)
 	}
+	// Routes 解析当前用户的有效路由；为 nil 时默认 server（仅测试路径）。
+	Routes interface {
+		EffectiveRoute(ctx context.Context, playerID string) (string, error)
+	}
+	// Relays 返回该玩家的 Relay 传输；client 路由的模型调用经它执行。
+	// 为 nil 时 client 路由无可用传输（仅测试路径）。
+	Relays  func(playerID string) llm.RelayTransport
 	System  *storage.SystemSettingsRepo
 	CtxLogs *storage.ContextRepo
 	LLM     *llm.Client
@@ -99,6 +112,7 @@ func NewGenerator(d GeneratorDeps) *Generator {
 		turns: d.Turns, agents: d.Agents, toolTx: d.ToolTx,
 		challenge: d.Challenge, campaign: d.Campaign,
 		settings: d.Settings, systemSettings: d.System, ctxRepo: d.CtxLogs,
+		routes: d.Routes, relays: d.Relays,
 		llmClient: d.LLM, counter: d.Counter,
 		roll: d.Roll, rollCommitter: d.RollCommitter, completion: d.Completion,
 		identity: d.Identity,
@@ -224,6 +238,45 @@ func (g *Generator) runLeaseHeartbeat(ctx context.Context, cancel context.Cancel
 	}
 }
 
+// relayForRoute 返回 client 路由设置对应的 Relay 传输，否则返回 nil。
+// 无可用传输时返回 nil，doRaw 将报 llm_relay_unavailable。
+func (g *Generator) relayForRoute(ctx context.Context, settings *storage.LLMSettings) llm.RelayTransport {
+	if settings.LLMRoute != storage.LLMRouteClient || g.relays == nil {
+		return nil
+	}
+	return g.relays(g.identity.CurrentPlayerID(ctx))
+}
+
+// checkLLMRouteGate 在创建任何生成记录之前校验对话路由：对象固化路由必须
+// 等于当前有效路由。返回对话、对象路由与有效路由；不匹配时 err 为 ErrLLMRouteMismatch。
+func (g *Generator) checkLLMRouteGate(ctx context.Context, convID uuid.UUID) (conv *storage.Conversation, objectRoute, effectiveRoute string, err error) {
+	conv, err = g.convSvc.GetOwned(ctx, convID)
+	if err != nil {
+		return nil, "", "", err
+	}
+	objectRoute = conv.LLMRoute
+	effectiveRoute = storage.LLMRouteServer
+	if g.routes != nil {
+		effectiveRoute, err = g.routes.EffectiveRoute(ctx, g.identity.CurrentPlayerID(ctx))
+		if err != nil {
+			return nil, "", "", err
+		}
+	}
+	if err = storage.CheckLLMRoute(objectRoute, effectiveRoute); err != nil {
+		return nil, objectRoute, effectiveRoute, err
+	}
+	return conv, objectRoute, effectiveRoute, nil
+}
+
+// emitRouteGateError 按入口输出路由闸门失败：WS 入口发 notice，不创建 run/turn/attempt、不扣额度。
+func emitRouteGateError(convID uuid.UUID, objectRoute, effectiveRoute string, err error, emit realtime.EmitFunc) {
+	if errors.Is(err, storage.ErrLLMRouteMismatch) {
+		emit(infoEvent(convID, storage.LLMRouteMismatchMessage(objectRoute, effectiveRoute)))
+		return
+	}
+	emit(domainEvent(convID, err))
+}
+
 // Generate 处理一次用户输入：保存用户消息并生成 AI 回复。
 func (g *Generator) Generate(ctx context.Context, convID, requestID uuid.UUID, userContent string, emit realtime.EmitFunc) {
 	request := generationRequest(requestID, "user_input", nil, userContent)
@@ -234,6 +287,11 @@ func (g *Generator) Generate(ctx context.Context, convID, requestID uuid.UUID, u
 			return
 		}
 		request = generationRequest(requestID, "user_input", &target, selection.ID+":"+selection.Key)
+	}
+	// 路由闸门：StartGeneration 之前校验，不匹配时只发 notice，不创建任何记录、不扣额度。
+	if _, objectRoute, effectiveRoute, gateErr := g.checkLLMRouteGate(ctx, convID); gateErr != nil {
+		emitRouteGateError(convID, objectRoute, effectiveRoute, gateErr, emit)
+		return
 	}
 	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, request)
 	if err != nil {
@@ -270,6 +328,10 @@ func (g *Generator) Generate(ctx context.Context, convID, requestID uuid.UUID, u
 
 // Regenerate 删除最近一条 AI 回复后重新生成。
 func (g *Generator) Regenerate(ctx context.Context, convID, requestID uuid.UUID, emit realtime.EmitFunc) {
+	if _, objectRoute, effectiveRoute, gateErr := g.checkLLMRouteGate(ctx, convID); gateErr != nil {
+		emitRouteGateError(convID, objectRoute, effectiveRoute, gateErr, emit)
+		return
+	}
 	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "regenerate", nil, "regenerate"))
 	if err != nil {
 		emit(domainEvent(convID, err))
@@ -340,6 +402,10 @@ func (g *Generator) Regenerate(ctx context.Context, convID, requestID uuid.UUID,
 // the replacement turn/attempt and edited trigger message are committed by one
 // storage transaction after the durable generation lease is acquired.
 func (g *Generator) Rewrite(ctx context.Context, convID, requestID, messageID uuid.UUID, content string, emit realtime.EmitFunc) {
+	if _, objectRoute, effectiveRoute, gateErr := g.checkLLMRouteGate(ctx, convID); gateErr != nil {
+		emitRouteGateError(convID, objectRoute, effectiveRoute, gateErr, emit)
+		return
+	}
 	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "rewrite", &messageID, content))
 	if err != nil {
 		emit(domainEvent(convID, err))
@@ -420,6 +486,10 @@ func branchReplacedEvent(ctx context.Context, convID uuid.UUID, invalidated []uu
 // 该消息既进入模型上下文，也进入玩家时间线，保证实时页面与刷新后的
 // display_messages 保持一致。
 func (g *Generator) Continue(ctx context.Context, convID, requestID uuid.UUID, emit realtime.EmitFunc) {
+	if _, objectRoute, effectiveRoute, gateErr := g.checkLLMRouteGate(ctx, convID); gateErr != nil {
+		emitRouteGateError(convID, objectRoute, effectiveRoute, gateErr, emit)
+		return
+	}
 	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "continue", nil, "continue"))
 	if err != nil {
 		emit(domainEvent(convID, err))

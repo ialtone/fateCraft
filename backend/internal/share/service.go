@@ -111,6 +111,7 @@ func (s *Service) buildShare(input CreateInput, expiresAt *time.Time) storage.Sh
 			SchemaVersion: SnapshotVersion, Title: title, Attribution: input.PublicAttribution,
 			ShowUsername: input.ShowUsername, AvatarURL: input.PublicAvatarURL,
 			Challenge: ChallengeSnapshot{Slug: source.Challenge.Slug, Name: source.Challenge.Name, Version: source.Challenge.Version},
+			LLMRoute:  source.Conversation.LLMRoute,
 			CreatedAt: time.Now().UTC(), Messages: messages,
 		}
 		encoded, err := json.Marshal(snapshot)

@@ -72,6 +72,9 @@ type Service struct {
 	processing  map[uuid.UUID]activeInquiry
 	activeUsers map[uuid.UUID]int
 	slots       chan struct{}
+	// relayFor 返回该玩家的 Relay 传输；阶段 3 注入。client 路由的问答经它执行，
+	// 无连接时 doRaw 返回 llm_relay_unavailable，API 层映射为 409。
+	relayFor func(playerID string) llm.RelayTransport
 }
 
 type activeInquiry struct {
@@ -111,6 +114,19 @@ func NewService(repo repository, campaigns campaignSnapshotter, states playerSta
 		llm: client, counter: counter,
 		processing: map[uuid.UUID]activeInquiry{}, activeUsers: map[uuid.UUID]int{}, slots: make(chan struct{}, maxConcurrentInquiries),
 	}
+}
+
+// SetRelayTransport 注入 Relay 传输构造。
+func (s *Service) SetRelayTransport(forTransport func(playerID string) llm.RelayTransport) {
+	s.relayFor = forTransport
+}
+
+// relayForRoute 返回 client 路由设置对应的 Relay 传输，否则返回 nil。
+func (s *Service) relayForRoute(settings *storage.LLMSettings, playerID uuid.UUID) llm.RelayTransport {
+	if settings.LLMRoute != storage.LLMRouteClient || s.relayFor == nil {
+		return nil
+	}
+	return s.relayFor(playerID.String())
 }
 
 func (s *Service) History(ctx context.Context, conversationID uuid.UUID) (*ThreadResult, error) {
@@ -199,6 +215,11 @@ func (s *Service) Ask(ctx context.Context, conversationID uuid.UUID, question st
 	if err != nil {
 		return nil, err
 	}
+	// 路由闸门：对象路由与有效路由不一致时拒绝，API 层映射为 409。
+	// 放在限流消费之前，不匹配不消耗问答额度。
+	if routeErr := storage.CheckLLMRoute(snapshot.Conversation.LLMRoute, settings.LLMRoute); routeErr != nil {
+		return nil, fmt.Errorf("%w：%s", routeErr, storage.LLMRouteMismatchMessage(snapshot.Conversation.LLMRoute, settings.LLMRoute))
+	}
 	allowed, err := s.repo.ConsumeRateLimit(ctx, playerID, time.Now(), time.Minute, maxQuestionsPerMinute)
 	if err != nil {
 		return nil, err
@@ -264,6 +285,7 @@ func (s *Service) Ask(ctx context.Context, conversationID uuid.UUID, question st
 		BaseURL: settings.BaseURL, Provider: settings.Provider, APIKey: apiKey, Model: model, Protocol: llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol),
 		Temperature: 0.1, TopP: 1, MaxTokens: minPositive(settings.MaxResponseTokens, 2048),
 		ReasoningEffort:  reasoningEffort,
+		Relay:            s.relayForRoute(settings, playerID),
 		SettingsRevision: settings.SettingsRevision,
 		SettingsSource:   settings.Source,
 		ContractName:     "character_inquiry_v1", ContractVersion: "1", ContractFingerprint: llm.SchemaFingerprint(outputSchema),

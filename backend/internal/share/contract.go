@@ -38,8 +38,10 @@ type Snapshot struct {
 	ShowUsername  bool              `json:"show_username"`
 	AvatarURL     string            `json:"avatar_url,omitempty"`
 	Challenge     ChallengeSnapshot `json:"challenge"`
-	CreatedAt     time.Time         `json:"created_at"`
-	Messages      []MessageSnapshot `json:"messages"`
+	// LLMRoute 为来源对话固化的请求路由；client 表示内容未经服务端校验。
+	LLMRoute  string            `json:"llm_route"`
+	CreatedAt time.Time         `json:"created_at"`
+	Messages  []MessageSnapshot `json:"messages"`
 }
 
 type CreateInput struct {

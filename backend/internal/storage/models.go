@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -406,11 +407,59 @@ type Campaign struct {
 	Revision            int64      `gorm:"column:revision;not null" json:"revision"`
 	EventSequence       int64      `gorm:"column:event_sequence;not null" json:"event_sequence"`
 	RandomSeed          int64      `gorm:"column:random_seed;not null" json:"-"`
-	CreatedAt           time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt           time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	// LLMRoute 创建时固化，之后不可修改；client 路由对象不产生任何账号收益。
+	LLMRoute  string    `gorm:"column:llm_route;not null" json:"llm_route"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (Campaign) TableName() string { return "campaigns" }
+
+// LLM 请求路由：server=服务端转发（默认），client=浏览器直连。
+// 常量集中放 storage，供编排、放权分支与审计共用。
+const (
+	LLMRouteServer = "server"
+	LLMRouteClient = "client"
+)
+
+// RewardsDisabledReasonKey 是结算明细中标记未发放奖励原因的键；
+// RewardsDisabledReasonClientRoute 表示因 client 路由关闭奖励。
+const (
+	RewardsDisabledReasonKey         = "rewards_disabled_reason"
+	RewardsDisabledReasonClientRoute = "client_llm_route"
+)
+
+// ErrLLMRouteMismatch 表示对象固化的路由与当前有效路由不一致，禁止任何模型调用。
+var ErrLLMRouteMismatch = errors.New("对话路由与当前设置不一致，无法继续生成")
+
+// CheckLLMRoute 校验对象路由与有效路由：不一致时拒绝模型调用。
+// 空对象路由视为 server（历史默认值缺失时的宽容路径，正常写入不应出现）。
+func CheckLLMRoute(objectRoute, effectiveRoute string) error {
+	if objectRoute == "" {
+		objectRoute = LLMRouteServer
+	}
+	if effectiveRoute == "" {
+		effectiveRoute = LLMRouteServer
+	}
+	if objectRoute != effectiveRoute {
+		return ErrLLMRouteMismatch
+	}
+	return nil
+}
+
+// LLMRouteDisplayName 返回路由的展示名，用于错误文案。
+func LLMRouteDisplayName(route string) string {
+	if route == LLMRouteClient {
+		return "客户端直连"
+	}
+	return "服务端转发"
+}
+
+// LLMRouteMismatchMessage 返回路由不匹配时展示给用户的完整文案。
+func LLMRouteMismatchMessage(objectRoute, effectiveRoute string) string {
+	return "此对话使用「" + LLMRouteDisplayName(objectRoute) + "」模式创建，当前设置为「" +
+		LLMRouteDisplayName(effectiveRoute) + "」，无法继续生成。请切回原设置或新建对话。"
+}
 
 // CampaignEvent 是只追加的领域事实审计记录。一次动作可以产生多条事件，
 // 因此 sequence 与 Campaign revision 分开维护。
@@ -466,11 +515,13 @@ type Conversation struct {
 	NextTurnSeq        int64      `gorm:"column:next_turn_seq;not null;default:1" json:"-"`
 	NextMessageSeq     int64      `gorm:"column:next_message_seq;not null;default:1" json:"-"`
 	CurrentMemoryID    *uuid.UUID `gorm:"column:current_memory_id;type:uuid" json:"current_memory_id,omitempty"`
-	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt          time.Time  `gorm:"column:updated_at" json:"updated_at"`
-	EndedAt            *time.Time `gorm:"column:ended_at" json:"ended_at,omitempty"`
-	ArchivedAt         *time.Time `gorm:"column:archived_at" json:"archived_at,omitempty"`
-	DeletedAt          *time.Time `gorm:"column:deleted_at" json:"deleted_at,omitempty"`
+	// LLMRoute 创建时固化，不可修改；必须等于所属 Campaign 路由（复合外键兜底）。
+	LLMRoute   string     `gorm:"column:llm_route;not null" json:"llm_route"`
+	CreatedAt  time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt  time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	EndedAt    *time.Time `gorm:"column:ended_at" json:"ended_at,omitempty"`
+	ArchivedAt *time.Time `gorm:"column:archived_at" json:"archived_at,omitempty"`
+	DeletedAt  *time.Time `gorm:"column:deleted_at" json:"deleted_at,omitempty"`
 }
 
 func (Conversation) TableName() string { return "conversations" }
@@ -810,11 +861,13 @@ type LLMSettings struct {
 	StreamEnabled     bool    `gorm:"column:stream_enabled" json:"stream_enabled"`
 	// ReasoningEffort 为空表示不传思考强度；非空时原样透传给叙事请求。
 	// 记忆和问答的专用字段为空时继承 ReasoningEffort。
-	ReasoningEffort        string    `gorm:"column:reasoning_effort" json:"reasoning_effort"`
-	MemoryReasoningEffort  string    `gorm:"column:memory_reasoning_effort" json:"memory_reasoning_effort"`
-	InquiryReasoningEffort string    `gorm:"column:inquiry_reasoning_effort" json:"inquiry_reasoning_effort"`
-	SettingsRevision       int64     `gorm:"column:settings_revision;not null" json:"settings_revision"`
-	UpdatedAt              time.Time `gorm:"column:updated_at" json:"updated_at"`
+	ReasoningEffort        string `gorm:"column:reasoning_effort" json:"reasoning_effort"`
+	MemoryReasoningEffort  string `gorm:"column:memory_reasoning_effort" json:"memory_reasoning_effort"`
+	InquiryReasoningEffort string `gorm:"column:inquiry_reasoning_effort" json:"inquiry_reasoning_effort"`
+	SettingsRevision       int64  `gorm:"column:settings_revision;not null" json:"settings_revision"`
+	// LLMRoute 为有效路由（platform_managed 时恒为 server）；client 时服务端不保存 Key。
+	LLMRoute  string    `gorm:"column:llm_route;not null;default:server" json:"llm_route"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (LLMSettings) TableName() string { return "llm_settings" }

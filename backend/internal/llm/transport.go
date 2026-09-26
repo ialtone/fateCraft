@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/ialtone/fatecraft/internal/logging"
@@ -20,22 +21,13 @@ import (
 // transport owns HTTP construction, provider status errors, audit decoration
 // and SSE framing. Protocol adapters only build payloads and parse events.
 func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []byte, stream bool) (*http.Response, error) {
-	if p.APIKey == "" {
+	if p.Relay == nil && p.APIKey == "" {
 		return nil, fmt.Errorf("未配置 LLM API Key")
 	}
 	requestURL := strings.TrimRight(p.BaseURL, "/") + endpoint
 	policy := effectiveRetryPolicy(p.RetryPolicy)
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+p.APIKey)
-		if stream {
-			req.Header.Set("Accept", "text/event-stream")
-		}
-		resp, err := c.http.Do(req)
+		resp, err := c.roundTrip(ctx, p, requestURL, endpoint, body, stream)
 		if err == nil && !retryableStatus(resp.StatusCode) {
 			// 响应头已到达;后续读取由空闲看门狗与调用方 ctx 共同约束,
 			// 不再有覆盖整个流的固定总超时。
@@ -73,6 +65,32 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 	return nil, fmt.Errorf("模型请求重试耗尽")
 }
 
+// roundTrip 执行一次 HTTP 调用：Relay 为空时直连，
+// 非空时把已构建的请求交给浏览器执行并返回原始响应。
+// Relay 模式下不设置 Authorization（APIKey 本来为空）。
+func (c *Client) roundTrip(ctx context.Context, p Params, requestURL, endpoint string, body []byte, stream bool) (*http.Response, error) {
+	if p.Relay != nil {
+		var conversationID uuid.UUID
+		if parsed, err := uuid.Parse(p.ConversationID); err == nil {
+			conversationID = parsed
+		}
+		return p.Relay.Do(ctx, RelayRequest{
+			Endpoint: endpoint, Body: body, Stream: stream,
+			Purpose: p.Purpose, ConversationID: conversationID,
+		})
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
+	return c.http.Do(req)
+}
+
 func effectiveRetryPolicy(policy *RetryPolicy) RetryPolicy {
 	if policy == nil {
 		return RetryPolicy{MaxAttempts: 3, BaseDelay: 250 * time.Millisecond, MaxDelay: 4 * time.Second}
@@ -106,7 +124,21 @@ func retryableTransportError(err error, resp *http.Response) bool {
 	if resp != nil {
 		return retryableStatus(resp.StatusCode)
 	}
-	return err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	// Relay 错误分类：只有“无可用连接”可重试；head 之后断开、浏览器网络失败、
+	// 本设备无 Key 都不可重试（重试也只会得到相同结果）。
+	if errors.Is(err, ErrRelayUnavailable) {
+		return true
+	}
+	if errors.Is(err, ErrRelayLost) || errors.Is(err, ErrRelayNetwork) || errors.Is(err, ErrRelayNoKey) {
+		return false
+	}
+	return true
 }
 
 func retryReason(err error, resp *http.Response) string {

@@ -13,6 +13,8 @@ import {
 } from 'naive-ui'
 import { useChallengeStore } from '@/stores/challenges'
 import { useConversationStore } from '@/stores/conversations'
+import { useSettingsStore } from '@/stores/settings'
+import { RouterLink } from 'vue-router'
 import { campaignsApi } from '@/api'
 import type { Conversation, CreateConversationInput } from '@/types'
 
@@ -25,8 +27,14 @@ const emit = defineEmits<{
 const message = useMessage()
 const challenges = useChallengeStore()
 const conversations = useConversationStore()
+const settings = useSettingsStore()
 const creating = ref(false)
 const form = ref({ title: '', challenge_slug: '', persona_slug: '' })
+
+// 本次创建将固化的路由（只读展示）：user_managed 下取用户设置，平台托管恒为转发。
+const pendingRoute = computed<'server' | 'client'>(() =>
+  settings.effectiveRoute === 'client' ? 'client' : 'server',
+)
 
 const selected = computed(() =>
   challenges.list.find((challenge) => challenge.slug === form.value.challenge_slug),
@@ -52,6 +60,11 @@ async function reset() {
     } catch (err: any) {
       message.error(`读取玩法失败：${err.message || '未知错误'}`)
     }
+  }
+  try {
+    await settings.load()
+  } catch {
+    // 设置读取失败时按服务端转发展示，后端创建时仍以有效路由为准。
   }
   const target =
     challenges.list.find((item) => item.slug === props.challengeSlug) ?? challenges.list[0]
@@ -163,6 +176,10 @@ async function submit() {
             "
           />
         </NFormItem>
+        <p class="faint sm route-hint">
+          本对话将使用：{{ pendingRoute === 'client' ? '客户端直连（不计奖励）' : '服务端转发' }}
+          <RouterLink to="/settings">去设置修改</RouterLink>
+        </p>
       </NForm>
     </NSpin>
 
@@ -209,6 +226,10 @@ async function submit() {
 
 .persona-description {
   margin: -14px 0 18px;
+}
+
+.route-hint {
+  margin: -6px 0 6px;
 }
 
 .create-dialog :deep(.n-dialog__content) {

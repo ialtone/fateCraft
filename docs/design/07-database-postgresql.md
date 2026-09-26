@@ -342,3 +342,11 @@ go vet ./...
 - `conversation_share_audit_events`：保存管理员下架、解决举报和驳回举报事件；关联对象或管理员物理删除后外键置空，审计事件本身保留。
 
 快照是匿名读取的唯一正文来源，数据库不保存完整分享 token。`conversation_shares.player_id` 和 `conversation_id` 随账号或对话物理删除级联清理；对话日常使用软删除，因此仓储还会在删除生命周期事务中把 active 分享标记为 revoked。表结构只由 `backend/scripts/sql/init.sql` 管理，不使用 AutoMigrate。
+
+## LLM 请求路由列
+
+- `llm_settings.llm_route`（`server`/`client`，默认 `server`）+ 约束 `chk_llm_settings_client_no_key`（`client` 时 `api_key_encrypted` 必须为空串或 NULL；Go 空串按 `''` 存库，与 `HasAPIKey = APIKeyEncrypted != ""` 约定一致）。
+- `campaigns.llm_route`（无默认值，创建显式写入）+ UNIQUE 扩展为 `(id, player_id, challenge_version_id, challenge_hash, llm_route)`。
+- `conversations.llm_route`（无默认值）+ `fk_conversations_campaign` 扩展为含 `llm_route` 的复合外键，保证对话路由等于所属 Campaign 路由。
+- `trg_conversations_llm_route_immutable` / `trg_campaigns_llm_route_immutable`：`BEFORE UPDATE` 触发器，路由变化直接报错。
+- `llm_request_logs.settings_source` 扩展为 `('user', 'platform', 'client')`，`client` 表示原始响应由浏览器回传。

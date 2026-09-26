@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/contextbuilder"
 	"github.com/ialtone/fatecraft/internal/llm"
@@ -52,11 +53,13 @@ func (s *Server) listLLMProviderProfiles(c *gin.Context) {
 }
 
 // llmSettingsBody 更新 LLM 设置。api_key 为 nil 时保留原值，避免置空。
+// llm_route 为 nil 时保持当前路由；client 路由的 api_key 只写浏览器，不提交服务端。
 type llmSettingsBody struct {
 	Provider          *string  `json:"provider"`
 	BaseURL           *string  `json:"base_url"`
 	Protocol          *string  `json:"protocol"`
 	APIKey            *string  `json:"api_key"`
+	LLMRoute          *string  `json:"llm_route"`
 	Model             *string  `json:"model"`
 	MemoryModel       *string  `json:"memory_model"`
 	InquiryModel      *string  `json:"inquiry_model"`
@@ -158,13 +161,17 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 	}
 	cur.UpdatedAt = time.Now()
 	if s.llmSettings != nil {
-		updated, err := s.llmSettings.UpdateUser(c.Request.Context(), playerID, cur, apiKey)
+		route := cur.LLMRoute
+		if b.LLMRoute != nil {
+			route = *b.LLMRoute
+		}
+		updated, err := s.llmSettings.UpdateUser(c.Request.Context(), playerID, cur, apiKey, route)
 		if err != nil {
 			if err == llmsettings.ErrUserSettingsDisabled {
 				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 				return
 			}
-			if err == llmsettings.ErrMissingAPIKey {
+			if err == llmsettings.ErrMissingAPIKey || err == llmsettings.ErrInvalidLLMRoute {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
@@ -174,6 +181,10 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 			}
 			fail(c, err)
 			return
+		}
+		// 切离 client 路由时主动关闭该玩家的 Relay 连接，在途请求按连接断开处理。
+		if s.relays != nil && updated.LLMRoute != storage.LLMRouteClient {
+			s.relays.ClosePlayer(playerID)
 		}
 		c.JSON(http.StatusOK, updated)
 		return
@@ -217,7 +228,12 @@ func (s *Server) checkLLMCapabilities(c *gin.Context) {
 	}
 	checkCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
 	defer cancel()
-	result := s.capabilities.Check(checkCtx, settings, body.Role)
+	playerUUID, err := uuid.Parse(playerID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "当前用户身份无效"})
+		return
+	}
+	result := s.capabilities.Check(checkCtx, playerUUID, settings, body.Role)
 	c.JSON(http.StatusOK, gin.H{"settings_revision": settings.SettingsRevision, "result": result})
 }
 
@@ -265,6 +281,7 @@ type fetchModelsBody struct {
 }
 
 // fetchModels 代理请求 LLM 服务商的 /models 接口。
+// client 路由返回 409，由前端在浏览器直接请求 /models（Key 不上服务端）。
 func (s *Server) fetchModels(c *gin.Context) {
 	if s.llmSettings != nil {
 		mode, err := s.llmSettings.AccessMode(c.Request.Context())
@@ -274,6 +291,15 @@ func (s *Server) fetchModels(c *gin.Context) {
 		}
 		if mode != llmsettings.AccessModeUserManaged {
 			c.JSON(http.StatusForbidden, gin.H{"error": "平台统一提供模型配置，用户不能修改或获取个人模型列表"})
+			return
+		}
+		route, err := s.llmSettings.EffectiveRoute(c.Request.Context(), s.identity.CurrentPlayerID(c.Request.Context()))
+		if err != nil {
+			fail(c, err)
+			return
+		}
+		if route == storage.LLMRouteClient {
+			c.JSON(http.StatusConflict, gin.H{"error": "客户端直连模式请在浏览器直接获取模型列表", "code": "llm_route_client"})
 			return
 		}
 	}

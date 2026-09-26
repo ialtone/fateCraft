@@ -307,7 +307,9 @@ CREATE TABLE campaigns (
     random_seed BIGINT NOT NULL CHECK (random_seed >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (id, player_id, challenge_version_id, challenge_hash),
+    -- 创建时固化的 LLM 请求路由，之后不可修改（触发器兜底）；client 路由对象不产生任何账号收益。
+    llm_route VARCHAR(16) NOT NULL CHECK (llm_route IN ('server', 'client')),
+    UNIQUE (id, player_id, challenge_version_id, challenge_hash, llm_route),
     CONSTRAINT fk_campaigns_character_version
         FOREIGN KEY (character_asset_id, challenge_version_id)
         REFERENCES challenge_assets(id, challenge_version_id) ON DELETE RESTRICT,
@@ -616,10 +618,12 @@ CREATE TABLE conversations (
     ended_at TIMESTAMPTZ,
     archived_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
+    -- 创建时固化的 LLM 请求路由，不可修改（触发器兜底）；必须等于所属 Campaign 路由（复合外键兜底）。
+    llm_route VARCHAR(16) NOT NULL CHECK (llm_route IN ('server', 'client')),
     UNIQUE (id, player_id, challenge_version_id),
     CONSTRAINT fk_conversations_campaign
-        FOREIGN KEY (campaign_id, player_id, challenge_version_id, challenge_hash)
-        REFERENCES campaigns(id, player_id, challenge_version_id, challenge_hash) ON DELETE RESTRICT,
+        FOREIGN KEY (campaign_id, player_id, challenge_version_id, challenge_hash, llm_route)
+        REFERENCES campaigns(id, player_id, challenge_version_id, challenge_hash, llm_route) ON DELETE RESTRICT,
     CONSTRAINT fk_conversations_character_version
         FOREIGN KEY (character_asset_id, challenge_version_id)
         REFERENCES challenge_assets(id, challenge_version_id) ON DELETE RESTRICT,
@@ -643,7 +647,7 @@ CREATE TABLE conversation_generation_runs (
 	request_id UUID NOT NULL UNIQUE,
 	operation_type VARCHAR(32) NOT NULL CHECK (operation_type IN ('user_input', 'regenerate', 'continue', 'rewrite')),
 	target_message_id UUID,
-	payload_hash CHAR(64) NOT NULL,
+	payload_hash VARCHAR(64) NOT NULL,
     conversation_revision BIGINT NOT NULL CHECK (conversation_revision >= 0),
     status VARCHAR(24) NOT NULL CHECK (status IN (
         'running', 'cancel_requested', 'completed', 'failed', 'cancelled', 'abandoned'
@@ -1071,7 +1075,10 @@ CREATE TABLE llm_settings (
     memory_reasoning_effort VARCHAR(32) NOT NULL DEFAULT '',
     inquiry_reasoning_effort VARCHAR(32) NOT NULL DEFAULT '',
 	settings_revision BIGINT NOT NULL DEFAULT 1 CHECK (settings_revision > 0),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 用户自行配置 LLM 时的请求路由；client 路由的 Key 只存浏览器，服务端绝不保存。
+    llm_route VARCHAR(16) NOT NULL DEFAULT 'server' CHECK (llm_route IN ('server', 'client')),
+    CONSTRAINT chk_llm_settings_client_no_key CHECK (llm_route <> 'client' OR COALESCE(api_key_encrypted, '') = '')
 );
 
 CREATE TABLE system_settings (
@@ -1144,7 +1151,7 @@ CREATE TABLE llm_request_logs (
     error TEXT,
     duration_ms BIGINT NOT NULL CHECK (duration_ms >= 0),
 	settings_revision BIGINT NOT NULL DEFAULT 0,
-	settings_source VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (settings_source IN ('user', 'platform')),
+	settings_source VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (settings_source IN ('user', 'platform', 'client')),
 	output_mode VARCHAR(32) NOT NULL DEFAULT '',
 	contract_name VARCHAR(64) NOT NULL DEFAULT '',
 	contract_version VARCHAR(32) NOT NULL DEFAULT '',
@@ -1298,6 +1305,23 @@ $$;
 CREATE TRIGGER trg_campaign_action_commits_append_only
     BEFORE UPDATE OR DELETE ON campaign_action_commits
     FOR EACH ROW EXECUTE FUNCTION reject_campaign_action_commit_mutation();
+
+-- 对话与 Campaign 的 llm_route 创建后不可修改；路由切换必须新建对象。
+CREATE FUNCTION reject_llm_route_change() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.llm_route IS DISTINCT FROM OLD.llm_route THEN
+        RAISE EXCEPTION 'llm_route is immutable, create a new conversation or campaign instead';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_conversations_llm_route_immutable
+    BEFORE UPDATE ON conversations
+    FOR EACH ROW EXECUTE FUNCTION reject_llm_route_change();
+CREATE TRIGGER trg_campaigns_llm_route_immutable
+    BEFORE UPDATE ON campaigns
+    FOR EACH ROW EXECUTE FUNCTION reject_llm_route_change();
 
 CREATE TABLE challenge_run_rewards (
     challenge_run_id UUID NOT NULL REFERENCES challenge_runs(id) ON DELETE RESTRICT,

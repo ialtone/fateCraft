@@ -699,10 +699,16 @@ func (g *Generator) executeAgentToolInTx(
 			}
 			return fail("settlement_failed", err)
 		}
-		outcome := success("settlement_committed", "玩法已结算", map[string]any{"outcome_key": result.Outcome.Key, "rewards": result.Rewards})
+		outcomePayload := map[string]any{"outcome_key": result.Outcome.Key, "rewards": result.Rewards}
+		outcomeMap := map[string]any{"key": result.Outcome.Key, "category": result.Outcome.Category, "title": result.Outcome.Title, "summary": result.Run.Summary, "tone": result.Outcome.Tone}
+		if result.RewardsDisabledReason != "" {
+			outcomePayload["rewards_disabled_reason"] = result.RewardsDisabledReason
+			outcomeMap["rewards_disabled_reason"] = result.RewardsDisabledReason
+		}
+		outcome := success("settlement_committed", "玩法已结算", outcomePayload)
 		outcome.Events = append(outcome.Events, realtime.Event{
 			Type: realtime.TypeChallengeCompleted, ConversationID: conv.ID.String(), RunID: result.Run.ID.String(),
-			Outcome:      map[string]any{"key": result.Outcome.Key, "category": result.Outcome.Category, "title": result.Outcome.Title, "summary": result.Run.Summary, "tone": result.Outcome.Tone},
+			Outcome:      outcomeMap,
 			RewardGrants: result.Rewards, NextActions: []string{"replay", "back_to_challenges"},
 		})
 		return outcome

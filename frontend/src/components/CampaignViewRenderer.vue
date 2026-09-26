@@ -22,6 +22,11 @@ const snapshot = computed<Record<string, unknown> | null>(() => {
 })
 const view = computed(() => runtime.presentation?.campaign_view)
 const activeSection = ref('')
+// client 路由终局不发放奖励：后端快照带 rewards_disabled_reason，前端显示替代文案。
+const rewardsDisabledReason = computed(() => {
+  const value = snapshot.value?.['rewards_disabled_reason']
+  return typeof value === 'string' && value ? value : ''
+})
 
 const sections = computed(() =>
   [...(view.value?.sections ?? [])]
@@ -365,6 +370,9 @@ function emptyText(section: CampaignViewSection): string {
     </header>
     <div class="body scroll">
       <NAlert v-if="campaign.error" type="error" :bordered="false">{{ campaign.error }}</NAlert>
+      <NAlert v-if="rewardsDisabledReason" type="warning" :bordered="false">
+        客户端直连模式不发放奖励
+      </NAlert>
       <template v-if="campaign.loading && !snapshot">
         <NSkeleton v-for="index in 5" :key="index" text :repeat="2" />
       </template>

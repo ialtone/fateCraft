@@ -177,6 +177,10 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 			c.JSON(status, gin.H{"error": updateErr.Error()})
 			return
 		}
+		// 切到 platform_managed 后有效路由恒为 server，关闭全部 Relay 连接。
+		if s.relays != nil && updated.LLMAccessMode == llmsettings.AccessModePlatformManaged {
+			s.relays.CloseAll()
+		}
 		c.JSON(http.StatusOK, updated)
 		return
 	}

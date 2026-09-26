@@ -19,6 +19,8 @@ export interface CompletionInfo {
   rewards: ChallengeRunReward[]
   metrics: CompletionMetric[]
   nextActions: Array<'replay' | 'back_to_challenges'>
+  /** 非空表示未发放奖励的原因（客户端直连为 client_llm_route）。 */
+  rewardsDisabledReason?: string
 }
 
 export const useConversationStore = defineStore('conversation', () => {

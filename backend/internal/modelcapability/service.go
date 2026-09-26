@@ -37,6 +37,8 @@ type DiagnosticResult struct {
 
 type Service struct {
 	client *llm.Client
+	// relayFor 返回该玩家的 Relay 传输；client 路由的诊断经它执行。
+	relayFor func(playerID string) llm.RelayTransport
 }
 
 var errDiagnosticInconclusive = errors.New("模型诊断结果不确定")
@@ -47,9 +49,14 @@ func New(client *llm.Client, _ ...string) *Service {
 	return &Service{client: client}
 }
 
+// SetRelayTransport 注入 Relay 传输构造。
+func (s *Service) SetRelayTransport(forTransport func(playerID string) llm.RelayTransport) {
+	s.relayFor = forTransport
+}
+
 // Check performs one explicit, side-effect-free diagnostic. It never retries,
 // persists health scores or changes production request behavior.
-func (s *Service) Check(ctx context.Context, settings *storage.LLMSettings, role Role) DiagnosticResult {
+func (s *Service) Check(ctx context.Context, playerID uuid.UUID, settings *storage.LLMSettings, role Role) DiagnosticResult {
 	if s == nil || s.client == nil || settings == nil {
 		return DiagnosticResult{
 			Role: role, Status: "unavailable", ErrorCode: "diagnostic_unavailable",
@@ -64,10 +71,10 @@ func (s *Service) Check(ctx context.Context, settings *storage.LLMSettings, role
 	var err error
 	if role == RoleNarrative {
 		result.Feature = "agent_tools"
-		err = s.checkAgentTools(ctx, settings, result.Model)
+		err = s.checkAgentTools(ctx, playerID, settings, result.Model)
 	} else {
 		result.Feature = "json_schema"
-		err = s.checkJSONSchema(ctx, settings, result.Model, role)
+		err = s.checkJSONSchema(ctx, playerID, settings, result.Model, role)
 	}
 	if err == nil {
 		result.Status = "supported"
@@ -78,7 +85,7 @@ func (s *Service) Check(ctx context.Context, settings *storage.LLMSettings, role
 	return result
 }
 
-func (s *Service) checkAgentTools(ctx context.Context, settings *storage.LLMSettings, model string) error {
+func (s *Service) checkAgentTools(ctx context.Context, playerID uuid.UUID, settings *storage.LLMSettings, model string) error {
 	nonce := uuid.NewString()
 	tool := llm.ToolDefinition{
 		Name: "fc_diagnostic_echo", Description: "Echo a diagnostic nonce without side effects.",
@@ -87,7 +94,7 @@ func (s *Service) checkAgentTools(ctx context.Context, settings *storage.LLMSett
 			"properties": map[string]any{"nonce": map[string]any{"type": "string", "const": nonce}},
 		},
 	}
-	params := s.params(settings, model, RoleNarrative)
+	params := s.params(playerID, settings, model, RoleNarrative)
 	params.MaxTokens = settings.MaxResponseTokens
 	first, err := s.client.AgentStep(ctx, params, []llm.Message{
 		{Role: storage.RoleSystem, Content: "Call the supplied diagnostic tool exactly once. Do not answer with text."},
@@ -124,13 +131,13 @@ func (s *Service) checkAgentTools(ctx context.Context, settings *storage.LLMSett
 	return nil
 }
 
-func (s *Service) checkJSONSchema(ctx context.Context, settings *storage.LLMSettings, model string, role Role) error {
+func (s *Service) checkJSONSchema(ctx context.Context, playerID uuid.UUID, settings *storage.LLMSettings, model string, role Role) error {
 	nonce := uuid.NewString()
 	schema := &llm.JSONSchema{Name: "fatecraft_json_schema_diagnostic", Strict: true, Schema: map[string]any{
 		"type": "object", "additionalProperties": false, "required": []string{"nonce"},
 		"properties": map[string]any{"nonce": map[string]any{"type": "string", "const": nonce}},
 	}}
-	params := s.params(settings, model, role)
+	params := s.params(playerID, settings, model, role)
 	params.MaxTokens = settings.MaxResponseTokens
 	params.ContractName = schema.Name
 	params.ContractVersion = "1"
@@ -146,17 +153,26 @@ func (s *Service) checkJSONSchema(ctx context.Context, settings *storage.LLMSett
 	return err
 }
 
-func (s *Service) params(settings *storage.LLMSettings, model string, role Role) llm.Params {
+func (s *Service) params(playerID uuid.UUID, settings *storage.LLMSettings, model string, role Role) llm.Params {
 	apiKey := settings.APIKey
 	return llm.Params{
 		BaseURL: settings.BaseURL, Provider: settings.Provider, APIKey: apiKey, Model: model,
 		Protocol: llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol), Temperature: 0, TopP: 1,
 		ReasoningEffort: effortForRole(settings, role),
+		Relay:           s.relayForRoute(playerID, settings),
 		// A diagnostic is an explicit one-shot probe. The production transport
 		// retry policy must not turn a button click into multiple provider calls.
 		RetryPolicy: &llm.RetryPolicy{MaxAttempts: 1},
 		Purpose:     "protocol_test", SettingsRevision: settings.SettingsRevision, SettingsSource: settings.Source,
 	}
+}
+
+// relayForRoute 返回 client 路由设置对应的 Relay 传输，否则返回 nil。
+func (s *Service) relayForRoute(playerID uuid.UUID, settings *storage.LLMSettings) llm.RelayTransport {
+	if settings.LLMRoute != storage.LLMRouteClient || s.relayFor == nil {
+		return nil
+	}
+	return s.relayFor(playerID.String())
 }
 
 // effortForRole 返回角色实际使用的思考强度；记忆和问答留空时继承叙事设置。

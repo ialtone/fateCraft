@@ -248,3 +248,10 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 `GET /s/:token` 输出服务端 HTML 外壳，只在 Open Graph 中放经过转义的标题与最多 160 个字符的公开摘要，不写入消息全文；浏览器随后进入 `/shared/:token` 的 Vue 只读页。结构化访问日志会把 `/s/*` 和公共 API 中的 token 段整体替换为 `[REDACTED]`。
 
 2026-09-18 在 Windows amd64、Intel i5-14600KF 上以 25 次串行迭代执行公开投影加 JSON 编码基准：50 条约 60 us/op，200 条约 238 us/op，500 条约 550 us/op。该数字只用于识别线性增长和回归，不代表生产吞吐量，也没有执行并发压测。
+
+## 客户端直连后端
+
+- 切点在 `llm` 包 `doRaw` 的 HTTP 层（`transport.go` 的 `roundTrip`）：`Params.Relay != nil` 时用 `RelayTransport.Do` 替代直连，重试策略、空闲超时、大小上限与审计原样生效；Relay 下不设 `Authorization`。错误哨兵 `ErrRelayUnavailable`（可重试）/`ErrRelayLost`/`ErrRelayNetwork`/`ErrRelayNoKey`（不可重试）。
+- 新包 `internal/llmrelay`：用户级 Relay 连接注册表（同玩家多标签页取最新存活连接作主、旧连接候补；每玩家并发上限 4，超限排队）。`Do` 发 `relay.request`、等 head 最长 120s，以 `io.Pipe` 组装 `*http.Response` 交给现有解析器；head 到达后仍监听 ctx，取消时发 `relay.cancel` 并以 ctx 错误关闭 pipe；seq 乱序、`relay_id` 未知等协议违规按规则终止；chunk 队列（64 帧）满时终结本请求、不阻塞同连接其他请求。投递与终结在同一互斥下串行化，避免向已关闭队列发送。入站单帧 256KiB，出站 body 8MiB；心跳沿用 Hub 参数；握手要求有效路由为 client，切回 server/platform 时主动关闭。
+- 调用方统一在 `client` 路由且 `Settings.LLMRoute` 为 client 时注入传输：主叙事（Generator）、Memory Worker（无连接不领取，执行中丢失按暂时性失败重试）、角色问答（无连接 409）、能力诊断。`fetchModels` 在 client 路由返回 409，由浏览器直接请求。
+- 路由闸门：`storage.CheckLLMRoute` + `ErrLLMRouteMismatch`；创建入口固化路由；生成/问答/记忆入口校验；`GET /ws/llm-relay`（`requireAuth` + 路由准入）。

@@ -344,7 +344,7 @@ func seedGenerationTestConversation(t *testing.T, db *gorm.DB) uuid.UUID {
 		{`INSERT INTO users (id, username, display_name) VALUES (?, 'generation-test', 'Generation Test')`, []any{playerID}},
 		{`INSERT INTO challenge_packs (id, slug, name) VALUES (?, 'generation-test', 'Generation Test')`, []any{packID}},
 		{`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, []any{versionID, packID, hash}},
-		{`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash) VALUES (?, ?, 'Generation Test', ?, ?)`, []any{conversationID, playerID, versionID, hash}},
+		{`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash, llm_route) VALUES (?, ?, 'Generation Test', ?, ?, 'server')`, []any{conversationID, playerID, versionID, hash}},
 	}
 	for _, statement := range statements {
 		if err := db.Exec(statement.query, statement.args...).Error; err != nil {

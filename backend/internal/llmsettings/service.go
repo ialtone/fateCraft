@@ -16,6 +16,8 @@ const (
 	AccessModePlatformManaged = "platform_managed"
 	SourceUser                = "user"
 	SourcePlatform            = "platform"
+	// SourceClient 表示原始响应由浏览器经 Relay 回传、未经服务端直连获取。
+	SourceClient = "client"
 )
 
 var (
@@ -24,6 +26,7 @@ var (
 	ErrMissingAPIKey         = errors.New("API Key 不能为空")
 	ErrInvalidAccessMode     = errors.New("llm_access_mode 必须是 user_managed 或 platform_managed")
 	ErrPlatformIncomplete    = errors.New("平台模型模式需要完整配置 Base URL、API Key 和叙事模型")
+	ErrInvalidLLMRoute       = errors.New("llm_route 必须是 server 或 client")
 )
 
 type userRepository interface {
@@ -60,6 +63,23 @@ func (s *Service) AccessMode(ctx context.Context) (string, error) {
 	return mode, nil
 }
 
+// EffectiveRoute 返回该玩家的有效路由：platform_managed 时恒为 server，
+// 否则为 llm_settings.llm_route（未配置时默认为 server）。
+func (s *Service) EffectiveRoute(ctx context.Context, playerID string) (string, error) {
+	mode, err := s.AccessMode(ctx)
+	if err != nil {
+		return "", err
+	}
+	if mode == AccessModePlatformManaged {
+		return storage.LLMRouteServer, nil
+	}
+	stored, err := s.users.Get(ctx, playerID)
+	if err != nil {
+		return "", err
+	}
+	return normalizeLLMRoute(stored.LLMRoute), nil
+}
+
 // Get returns a runtime-ready configuration. APIKey is populated only in
 // memory and must never be serialized or logged.
 func (s *Service) Get(ctx context.Context, playerID string) (*storage.LLMSettings, error) {
@@ -87,6 +107,17 @@ func (s *Service) Get(ctx context.Context, playerID string) (*storage.LLMSetting
 	if err != nil {
 		return nil, err
 	}
+	out.LLMRoute = normalizeLLMRoute(out.LLMRoute)
+	// client 路由的 Key 只存浏览器：服务端不解密、不要求 Key，APIKey 为空。
+	if out.LLMRoute == storage.LLMRouteClient {
+		out.APIKey = ""
+		out.APIKeyEncrypted = ""
+		out.HasAPIKey = false
+		out.AccessMode = AccessModeUserManaged
+		out.Source = SourceClient
+		out.Editable = true
+		return out, nil
+	}
 	out.APIKey, err = s.decrypt(out.APIKeyEncrypted)
 	if err != nil {
 		return nil, err
@@ -111,7 +142,9 @@ func (s *Service) UserView(ctx context.Context, playerID string) (*storage.LLMSe
 
 // UpdateUser preserves the existing key when apiKey is nil. A supplied empty
 // key is rejected because user-managed mode cannot operate without one.
-func (s *Service) UpdateUser(ctx context.Context, playerID string, next *storage.LLMSettings, apiKey *string) (*storage.LLMSettings, error) {
+// route 为新的 llm_route：切到 client 时忽略 apiKey 并在同一事务中清除服务端 Key
+// （切回 server 需重新填写）；client 路由不触发 ErrMissingAPIKey；路由变化递增 revision。
+func (s *Service) UpdateUser(ctx context.Context, playerID string, next *storage.LLMSettings, apiKey *string, route string) (*storage.LLMSettings, error) {
 	mode, err := s.AccessMode(ctx)
 	if err != nil {
 		return nil, err
@@ -119,23 +152,32 @@ func (s *Service) UpdateUser(ctx context.Context, playerID string, next *storage
 	if mode != AccessModeUserManaged {
 		return nil, ErrUserSettingsDisabled
 	}
+	route = normalizeLLMRoute(route)
+	if !ValidLLMRoute(route) {
+		return nil, ErrInvalidLLMRoute
+	}
 	current, err := s.users.Get(ctx, playerID)
 	if err != nil {
 		return nil, err
 	}
-	next.APIKeyEncrypted = current.APIKeyEncrypted
-	if apiKey != nil {
-		plain := strings.TrimSpace(*apiKey)
-		if plain == "" {
+	next.LLMRoute = route
+	if route == storage.LLMRouteClient {
+		next.APIKeyEncrypted = ""
+	} else {
+		next.APIKeyEncrypted = current.APIKeyEncrypted
+		if apiKey != nil {
+			plain := strings.TrimSpace(*apiKey)
+			if plain == "" {
+				return nil, ErrMissingAPIKey
+			}
+			next.APIKeyEncrypted, err = s.encrypt(plain)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if next.APIKeyEncrypted == "" {
 			return nil, ErrMissingAPIKey
 		}
-		next.APIKeyEncrypted, err = s.encrypt(plain)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if next.APIKeyEncrypted == "" {
-		return nil, ErrMissingAPIKey
 	}
 	next.APIKey = ""
 	if err := s.users.Save(ctx, playerID, next); err != nil {
@@ -230,6 +272,20 @@ func ValidAccessMode(mode string) bool {
 	return mode == AccessModeUserManaged || mode == AccessModePlatformManaged
 }
 
+// ValidLLMRoute 报告路由取值是否合法。
+func ValidLLMRoute(route string) bool {
+	return route == storage.LLMRouteServer || route == storage.LLMRouteClient
+}
+
+// normalizeLLMRoute 清洗路由取值，空值默认为 server。
+func normalizeLLMRoute(route string) string {
+	route = strings.TrimSpace(route)
+	if route == "" {
+		return storage.LLMRouteServer
+	}
+	return route
+}
+
 func normalizeAccessMode(mode string) string {
 	mode = strings.TrimSpace(mode)
 	if mode == "" {
@@ -246,7 +302,8 @@ func platformSettings(s *storage.SystemSettings, apiKey string) *storage.LLMSett
 	return &storage.LLMSettings{
 		Provider: provider, BaseURL: s.PublicLLMBaseURL, Protocol: s.PublicLLMProtocol, APIKey: apiKey, HasAPIKey: apiKey != "",
 		AccessMode: AccessModePlatformManaged, Source: SourcePlatform, Editable: false,
-		Model: s.PublicLLMModel, MemoryModel: s.PublicLLMMemoryModel, InquiryModel: s.PublicLLMInquiryModel,
+		LLMRoute: storage.LLMRouteServer,
+		Model:    s.PublicLLMModel, MemoryModel: s.PublicLLMMemoryModel, InquiryModel: s.PublicLLMInquiryModel,
 		MaxContextTokens: s.PublicLLMMaxContextTokens, MaxResponseTokens: s.PublicLLMMaxResponseTokens,
 		Temperature: s.PublicLLMTemperature, TopP: s.PublicLLMTopP, StreamEnabled: s.PublicLLMStreamEnabled,
 		ReasoningEffort:        s.PublicLLMReasoningEffort,

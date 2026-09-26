@@ -177,4 +177,6 @@ type SettlementResult struct {
 	Run     storage.ChallengeRun         `json:"run"`
 	Outcome OutcomeView                  `json:"outcome"`
 	Rewards []storage.ChallengeRunReward `json:"rewards"`
+	// RewardsDisabledReason 非空表示本结算未发放奖励的原因（client 路由为 "client_llm_route"）。
+	RewardsDisabledReason string `json:"rewards_disabled_reason,omitempty"`
 }

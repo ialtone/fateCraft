@@ -197,6 +197,12 @@ func (r *TurnRepo) BeginRegenerate(ctx context.Context, in RegenerateInput) (*Re
 		if err := AssertGenerationActive(ctx, tx, in.ConversationID); err != nil {
 			return err
 		}
+		// client 路由不扣费：路由取自事务内行锁定的对话行。
+		var conv Conversation
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conv, "id = ?", in.ConversationID).Error; err != nil {
+			return err
+		}
+		clientRoute := conv.LLMRoute == LLMRouteClient
 		var target ConversationTurn
 		if err := tx.Where("conversation_id = ? AND invalidated_at IS NULL", in.ConversationID).
 			Order("turn_seq DESC, id DESC").First(&target).Error; err != nil {
@@ -243,7 +249,7 @@ func (r *TurnRepo) BeginRegenerate(ctx context.Context, in RegenerateInput) (*Re
 			return errors.New("当前未开启剧情改写")
 		}
 		costQuantity := int64(0)
-		if target.Status == TurnStatusCompleted || target.Status == TurnStatusPartial {
+		if !clientRoute && (target.Status == TurnStatusCompleted || target.Status == TurnStatusPartial) {
 			costQuantity = policy.CostQuantity
 		}
 		if costQuantity > 0 {
@@ -336,6 +342,12 @@ func (r *TurnRepo) BeginRewrite(ctx context.Context, in RewriteUserMessageInput)
 		if err := AssertGenerationActive(ctx, tx, in.ConversationID); err != nil {
 			return err
 		}
+		// client 路由不扣费：路由取自事务内行锁定的对话行。
+		var conv Conversation
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conv, "id = ?", in.ConversationID).Error; err != nil {
+			return err
+		}
+		clientRoute := conv.LLMRoute == LLMRouteClient
 		var anchor DisplayMessage
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&anchor,
 			"id = ? AND conversation_id = ? AND invalidated_at IS NULL", in.MessageID, in.ConversationID).Error; err != nil {
@@ -363,7 +375,7 @@ func (r *TurnRepo) BeginRewrite(ctx context.Context, in RewriteUserMessageInput)
 			return errors.New("当前未开启剧情改写")
 		}
 		rewardConsumed := false
-		if policy.CostQuantity > 0 {
+		if policy.CostQuantity > 0 && !clientRoute {
 			result, err := NewRewardRepository(tx).ConsumeInCurrentTx(ctx, RewardMutation{
 				PlayerID: in.PlayerID, RewardKey: policy.CostRewardKey, Quantity: policy.CostQuantity,
 				SourceType: "message_rewrite", SourceID: in.MessageID.String(), IdempotencyKey: in.IdempotencyKey,

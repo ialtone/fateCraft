@@ -49,7 +49,8 @@ func (s *Server) getRuntimeInspector(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+	owned, err := s.conv.GetOwned(c.Request.Context(), id)
+	if err != nil {
 		fail(c, err)
 		return
 	}
@@ -61,6 +62,10 @@ func (s *Server) getRuntimeInspector(c *gin.Context) {
 			act.CanRegenerate = cap.CanRegenerate
 			act.RegenerateCostQuantity = cap.RegenerateCostQuantity
 		}
+	}
+	// client 路由不扣费：展示的改写额度恒为 0。
+	if owned.LLMRoute == storage.LLMRouteClient {
+		act.RegenerateCostQuantity = 0
 	}
 	if s.agents != nil {
 		if a, err := s.agents.CurrentActivity(c.Request.Context(), id); err == nil && a != nil {

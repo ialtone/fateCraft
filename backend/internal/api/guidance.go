@@ -51,6 +51,10 @@ func (s *Server) selectGuidance(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	// 路由不匹配时与其他生成入口一致返回 409（不创建 run、不扣额度）。
+	if !s.requireLLMRoute(c, id) {
+		return
+	}
 	// 在 BeginUserTurn 取得 durable 生成租约之后再解析选择；同一 request_id 的
 	// 重试因此可以回放已消费的选项。
 	if !s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {

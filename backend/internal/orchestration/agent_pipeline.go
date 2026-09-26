@@ -98,6 +98,14 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 	turnStartedAt := time.Now()
 	runtimeEvents.messageID = displayID.String()
 	runtimeEvents.send(realtime.TypeAgentTurnStarted, 0, map[string]any{"message_id": displayID.String()})
+	// 路由二次校验：StartGeneration 与本轮第一步之间用户改了设置时拒绝继续，
+	// 错误码 llm_route_mismatch。此时 run/turn/attempt 已创建但无任何模型调用与扣费。
+	if routeErr := storage.CheckLLMRoute(conv.LLMRoute, settings.LLMRoute); routeErr != nil {
+		markGenerationFailure(ctx, "llm_route", "llm_route_mismatch")
+		g.finishAgentFailure(ctx, runtimeEvents, convID, 1, false,
+			fmt.Errorf("%w：%s", routeErr, storage.LLMRouteMismatchMessage(conv.LLMRoute, settings.LLMRoute)), emit)
+		return
+	}
 
 	// 平台设置在回合开始读取一次并整回合固定：工具目录的判定开关与判定
 	// 工具执行的难度模式使用同一份读数，管理员修改从下一回合生效。
@@ -229,6 +237,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			TopP: settings.TopP, MaxTokens: settings.MaxResponseTokens, ReasoningEffort: settings.ReasoningEffort,
 			ConversationID: convID.String(), MessageID: displayID.String(), Purpose: "narrative",
 			AttemptID: metadata.AttemptID.String(), SettingsRevision: settings.SettingsRevision, SettingsSource: settings.Source,
+			Relay: g.relayForRoute(attemptCtx, settings),
 		}
 		if metadata.MemoryID != nil {
 			params.MemoryID = metadata.MemoryID.String()
@@ -772,6 +781,8 @@ func agentErrorCode(err error) string {
 		return "output_truncated"
 	case errors.Is(err, llm.ErrToolReplayInvalidHistory):
 		return "tool_replay_invalid_history"
+	case errors.Is(err, storage.ErrLLMRouteMismatch):
+		return "llm_route_mismatch"
 	default:
 		return "agent_step_failed"
 	}

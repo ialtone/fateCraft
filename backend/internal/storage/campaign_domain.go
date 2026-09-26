@@ -710,6 +710,11 @@ func (s *CampaignActionStore) EncounterWinCount(campaignID uuid.UUID, encounterK
 }
 
 func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, campaign Campaign, outcomeKey string) ([]CampaignOutcomeReward, error) {
+	// client 路由：任务与 Campaign 照常完成，不计算奖励、不扣来源物、不写账本。
+	// 路由在事务内直接取执行中的 Campaign 行，不在调用方判断，保证所有入口一致。
+	if campaign.LLMRoute == LLMRouteClient {
+		return []CampaignOutcomeReward{}, nil
+	}
 	var outcome ChallengeOutcomeRule
 	if err := s.tx.WithContext(ctx).
 		First(&outcome, "challenge_version_id = ? AND outcome_key = ? AND enabled = ?", campaign.ChallengeVersionID, outcomeKey, true).Error; err != nil {

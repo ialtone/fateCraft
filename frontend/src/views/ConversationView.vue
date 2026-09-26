@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NIcon, useDialog, useMessage } from 'naive-ui'
+import { NButton, NIcon, NTooltip, useDialog, useMessage } from 'naive-ui'
 import {
   ChatbubblesOutline,
   ChevronBackOutline,
@@ -18,6 +18,9 @@ import { useGuidanceStore } from '@/stores/guidance'
 import ConversationStatusBadge from '@/components/ConversationStatusBadge.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useConversationStore } from '@/stores/conversations'
+import { useSettingsStore } from '@/stores/settings'
+import { useLlmRelayStore } from '@/stores/llmRelay'
+import LlmRouteTag from '@/components/LlmRouteTag.vue'
 import { useChatStore } from '@/stores/chat'
 import { useStateStore } from '@/stores/state'
 import { useContextStore } from '@/stores/context'
@@ -46,6 +49,8 @@ const guidance = useGuidanceStore()
 const rewards = useRewardStore()
 const campaign = useCampaignStore()
 const inquiry = useInquiryStore()
+const settings = useSettingsStore()
+const relay = useLlmRelayStore()
 const forking = ref(false)
 const showShare = ref(false)
 
@@ -53,6 +58,26 @@ const showInspector = ref(true)
 const mobilePane = ref<'state' | 'chat' | 'context'>('chat')
 const convId = computed(() => route.params.id as string)
 const editable = computed(() => convStore.current?.status === 'active')
+// 路由不匹配：对话固化路由 ≠ 当前有效路由时禁用全部生成入口。
+// 设置未加载完成前不误判，后端闸门兜底。
+const routeMismatch = computed(() => {
+  const conv = convStore.current
+  if (!conv || !settings.settings) return false
+  return conv.llm_route !== settings.effectiveRoute
+})
+const mismatchText = computed(() => {
+  const conv = convStore.current
+  const name = (route?: string) => (route === 'client' ? '客户端直连' : '服务端转发')
+  return `此对话使用「${name(conv?.llm_route)}」模式创建，当前设置为「${name(settings.effectiveRoute)}」，无法继续生成。请切回原设置或新建对话。`
+})
+// 客户端直连且路由一致，但 Relay 未连接时不能发送。
+const relayNotReady = computed(
+  () =>
+    convStore.current?.llm_route === 'client' &&
+    settings.effectiveRoute === 'client' &&
+    !relay.connected,
+)
+const inputDisabled = computed(() => !editable.value || routeMismatch.value || relayNotReady.value)
 
 watch(
   () => convStore.completion,
@@ -70,7 +95,11 @@ function showCompletion(completion: CompletionInfo) {
   )
   const details = [
     completion.summary,
-    rewardLines.length ? `获得奖励\n${rewardLines.join('\n')}` : presentation?.empty_reward_text,
+    completion.rewardsDisabledReason
+      ? '客户端直连模式不发放奖励'
+      : rewardLines.length
+        ? `获得奖励\n${rewardLines.join('\n')}`
+        : presentation?.empty_reward_text,
     metricLines.length ? metricLines.join('\n') : '',
   ].filter(Boolean)
   const replay = completion.nextActions.includes('replay')
@@ -174,6 +203,8 @@ onMounted(async () => {
     }
   }, 5000)
   await rewards.load().catch(() => {})
+  // 设置决定路由匹配判断与直连徽标；失败时不阻断页面，后端闸门兜底。
+  await settings.load().catch(() => {})
   await open(convId.value)
 })
 
@@ -241,6 +272,13 @@ async function forkConversation() {
           class="conversation-status"
           :status="convStore.current.status"
         />
+        <LlmRouteTag v-if="convStore.current" :route="convStore.current.llm_route" />
+        <NTooltip v-if="convStore.current?.llm_route === 'client'">
+          <template #trigger>
+            <span class="relay-dot" :class="{ on: relay.connected }" />
+          </template>
+          {{ relay.connected ? '客户端直连：Relay 已连接' : '客户端直连：Relay 未连接' }}
+        </NTooltip>
       </div>
       <div class="bar-actions row">
         <NButton
@@ -292,6 +330,17 @@ async function forkConversation() {
       :disabled="convStore.current.is_processing"
     />
 
+    <div v-if="routeMismatch && convStore.current" class="route-banner">
+      <span>{{ mismatchText }}</span>
+      <span class="route-banner-actions">
+        <NButton size="small" secondary @click="router.push('/?action=new')">新建对话</NButton>
+        <NButton size="small" secondary @click="router.push('/settings')">前往设置</NButton>
+      </span>
+    </div>
+    <div v-else-if="relayNotReady" class="route-banner faint-banner">
+      <span>客户端直连未就绪，请保持页面打开并检查网络后重新生成。</span>
+    </div>
+
     <div v-if="!editable && convStore.current" class="ended-banner">
       {{
         convStore.current.status === 'archived'
@@ -332,9 +381,9 @@ async function forkConversation() {
         :campaign="Boolean(convStore.current?.campaign_id)"
       />
       <div class="center pane-chat">
-        <MessageTimeline :editable="editable" />
-        <ConversationGuidanceBar :conv-id="convId" :disabled="!editable" />
-        <ActionInput :conv-id="convId" :disabled="!editable" />
+        <MessageTimeline :editable="editable && !routeMismatch" />
+        <ConversationGuidanceBar :conv-id="convId" :disabled="!editable || routeMismatch" />
+        <ActionInput :conv-id="convId" :disabled="inputDisabled" />
       </div>
       <ContextInspector class="pane-context" />
     </div>
@@ -377,6 +426,20 @@ async function forkConversation() {
   text-overflow: ellipsis;
 }
 
+/* 客户端直连 Relay 状态点：绿=已连接，灰=未连接。 */
+.relay-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.relay-dot.on {
+  background: #52c41a;
+  box-shadow: 0 0 6px 1px rgb(82 196 26 / 50%);
+}
+
 .ended-banner {
   background: var(--accent-soft);
   color: var(--accent);
@@ -385,6 +448,30 @@ async function forkConversation() {
   font-size: 13px;
   letter-spacing: 2px;
   flex-shrink: 0;
+}
+
+.route-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-align: center;
+  padding: 7px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.route-banner-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.faint-banner {
+  background: var(--bg-soft);
+  color: var(--text-dim);
 }
 
 .three-pane {

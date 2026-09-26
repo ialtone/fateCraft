@@ -236,3 +236,12 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 `/s/:token` 与生产 HTML 外壳跳转使用的 `/shared/:token` 都是 public route。`SharedConversationView` 使用独立的 `shares` store、`SharedConversationContent` 和 `SharedMessageItem`，不会复用带编辑、reasoning 或私有状态的对话组件。公共路由在认证初始化之前放行，401 拦截器也排除 `/public/`，页面不创建对话 WebSocket。
 
 公开 Markdown 经过专用净化：移除远程图片、iframe 和 style，危险 URL 不生成可点击链接，外链统一使用 `noopener noreferrer`。页面设置 `noindex,nofollow` 与 `no-referrer`。非匿名模式直接读取快照中的受信任 LinuxDo 头像地址，读取失败时回退为名称首字头像。
+
+## 客户端直连前端
+
+- `src/llm/localKey.ts`：本设备 Key 的 get/set/clear（`localStorage`，按用户隔离），不经过 pinia，不进日志；登出时清除。
+- `src/stores/settings.ts`：账号设置；App.vue 按 `auth.user?.id` 监听，切换账号（含登出/会话过期）时先重置设置并断开 Relay，再加载新账号设置，防止新账号沿用旧账号的 `base_url` 与路由判断。
+- `src/stores/llmRelay.ts`：应用级用户 WebSocket（`/ws/llm-relay`），满足“已登录 && user_managed && 路由为 client”时连接（App.vue 监听启停，1s→30s 指数退避）。`relay.request` 只接受白名单 endpoint，URL 由**本地** base_url 拼接；无 Key 回 `no_key`；SSE 按 UTF-8 字节 32KiB/50ms 合并回传（50ms 兜底定时器防尾部滞留），单次读取过大时拆成多个 ≤64KiB 帧、seq 连续；`bufferedAmount > 1MiB` 时背压暂停；`relay.cancel` 中止 fetch 并回 `aborted`。
+- `SettingsView`：user_managed 下的路由二选一（服务端转发/客户端直连）+ 常驻放权说明 + 切换确认框；client 模式 Key 只写本设备、可浏览器获取模型列表、可测试连接（区分鉴权失败/跨域网络失败/成功，https 配 http 非回环给混合内容提示）、可清除本设备 Key；能力诊断走同一接口（服务端经 Relay 执行）。
+- 会话页：页头路由徽标（`LlmRouteTag`）+ client 路由 Relay 状态点；路由不匹配时输入/重生成/续写/改写/guidance 全禁用并给横幅（新建对话、前往设置）；client 未连接时发送禁用；`challenge_completed` 带 `rewards_disabled_reason` 时显示“客户端直连模式不发放奖励”，Campaign 快照带该字段时同样在视图顶部显示替代横幅。列表页同样徽标；创建弹窗只读展示本次固化路由；分享公开页对 client 快照显示未校验标记。
+- 今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效。

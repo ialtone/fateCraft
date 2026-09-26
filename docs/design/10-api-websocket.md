@@ -213,7 +213,7 @@ POST  /api/settings/fetch-models
 POST  /api/settings/llm/capabilities/check
 ```
 
-设置由管理员接入模式控制。`GET /api/settings/llm` 返回当前有效配置、`access_mode`、`source` 和 `editable`；`user_managed` 时来自当前用户行，`platform_managed` 时来自 `system_settings` 公共配置。GET 不返回 API Key，只返回 `has_api_key`。平台模式下用户 PATCH 和 `/api/settings/fetch-models` 返回 403，能力检测仍使用当前有效公共配置。管理员通过 `GET/PATCH /api/admin/system-settings` 维护模式和公共配置，Key 只写入不回显，并通过 `POST /api/admin/system-settings/fetch-models` 获取公共模型列表。
+设置由管理员接入模式控制。`GET /api/settings/llm` 返回当前有效配置、`access_mode`、`source`、`editable` 和 `llm_route`；`user_managed` 时来自当前用户行，`platform_managed` 时来自 `system_settings` 公共配置（有效路由恒为 `server`）。GET 不返回 API Key，只返回 `has_api_key`。`client` 路由的运行时配置不解密、不要求 Key，`source` 为 `client`。PATCH 支持 `llm_route`：切到 `client` 会忽略请求中的 `api_key` 并清空服务端 Key（切回需重填），路由变化递增 `settings_revision`；切离 `client` 时服务端主动关闭该玩家 Relay 连接。平台模式下用户 PATCH 和 `/api/settings/fetch-models` 返回 403；`client` 路由下 `/api/settings/fetch-models` 返回 409（浏览器直接请求 `/models`）。管理员通过 `GET/PATCH /api/admin/system-settings` 维护模式和公共配置，Key 只写入不回显，并通过 `POST /api/admin/system-settings/fetch-models` 获取公共模型列表；切到 `platform_managed` 时关闭全部 Relay 连接。
 
 check 是用户显式触发的同步、无副作用诊断，最长使用独立的 3 分钟请求超时。请求体只能是 `{"role":"narrative"}`、`{"role":"memory"}` 或 `{"role":"character_inquiry"}`；接口不接受 URL、密钥或模型参数，而是读取当前已保存设置。
 
@@ -296,6 +296,7 @@ gameplay-modules 返回服务端已经安装的 engine、动作、verifier、cal
 
 ```text
 GET /ws/conversations/:id
+GET /ws/llm-relay
 ```
 
 升级前经过 `requireAuth`，handler 还会校验对话归属。浏览器 Origin 必须位于 `ALLOWED_ORIGINS`；空白配置只用于开发。
@@ -341,7 +342,7 @@ GET /ws/conversations/:id
 | `context_built` | `context_build_id` | 上下文日志可读取 |
 | `activity_updated` | `activity`, `status` | 后台活动变化；当前仅 Memory 使用 `queued/running/idle` |
 | `conversation_ended` | conversation ID | 手动结束或状态变更 |
-| `challenge_completed` | `run_id`, `outcome`, `reward_grants`, `metrics`, `next_actions` | 通用挑战结算成功 |
+| `challenge_completed` | `run_id`, `outcome`, `reward_grants`, `metrics`, `next_actions` | 通用挑战结算成功；`client` 路由时 `outcome.rewards_disabled_reason=client_llm_route` 且无奖励 |
 | `error` | `error` | 生成、权限或持久化错误 |
 
 每个 `agent.*` 事件都带 `event_id`、`conversation_id`、`operation_id`、`turn_id`、`attempt_id`、`step_no`、attempt 内递增的 `sequence`、`occurred_at` 和按类型变化的 `payload`。`message_created`、`message_updated`、`branch.replaced`、`state_update`、`campaign_updated`、`context_built` 和 `challenge_completed` 若由生成操作产生，也带同一 `operation_id/attempt_id`。客户端按 event ID 去重并拒绝旧 operation/attempt；检测到间隙时重新读取消息、状态、Campaign、activity 和最近上下文。
@@ -401,3 +402,23 @@ POST /api/admin/share-reports/:id/resolve
 ```
 
 管理员列表返回治理摘要而非未发布私有内容；下架与举报处理写入 `conversation_share_audit_events`。
+
+## 客户端直连 Relay（`/ws/llm-relay`）
+
+用户级 WebSocket，专门承载模型请求转发。升级前经过 `requireAuth`，且当前有效路由必须为 `client`，否则拒绝升级（403）。心跳沿用 Hub 参数（30s ping / 60s read），入站单帧上限 256KiB（独立于会话 WS 的 64KiB）。
+
+服务端 → 客户端（JSON 文本帧）：
+
+- `relay.request`：`relay_id`、`endpoint`（仅 `/chat/completions` 或 `/responses`）、`stream`、`purpose`、`conversation_id`、`body`（请求体 JSON 字符串，原样透传）。body 最大 8MiB，超限直接失败不发送。
+- `relay.cancel`：`relay_id`，取消在途请求。
+
+客户端 → 服务端：
+
+- `relay.response.head`：`relay_id`、`status`、`content_type`、`retry_after`。
+- `relay.response.chunk`：`relay_id`、`seq`（从 1 连续递增）、`data`（原始响应文本片段）。
+- `relay.response.end`：`relay_id`、`seq`（等于 chunk 总数）。
+- `relay.response.error`：`relay_id`、`code`（`network`|`no_key`|`aborted`|`invalid_request`）、`message`。
+
+语义：`head` 前断开/超时（120s）可重试；`head` 后断开、`seq` 乱序、未知 `relay_id` 的后续帧按中断处理（不可重试）；`no_key`/`network` 不可重试。同玩家多连接时请求只派发给最新存活连接，旧连接作候补；每玩家并发上限 4，超限排队（受 ctx 约束）。
+
+错误码：`llm_route_mismatch`（对象路由 ≠ 当前有效路由，REST 409 / WS `notice`）、`llm_relay_unavailable`（无 Relay 连接，问答等同步接口 409）、`llm_relay_lost`、`llm_relay_network`、`llm_relay_no_key`。`POST /api/settings/fetch-models` 在 `client` 路由返回 409（`code=llm_route_client`）。

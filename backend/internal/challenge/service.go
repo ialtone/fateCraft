@@ -660,15 +660,16 @@ func (s *Service) Settle(ctx context.Context, in SettlementInput) (*SettlementRe
 	var settled storage.ChallengeRun
 	var rewards []storage.ChallengeRunReward
 	var settledOutcome OutcomeView
+	var disabledReason string
 	err := s.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
 		var err error
-		settled, rewards, settledOutcome, err = s.settleInRepo(ctx, tx, in)
+		settled, rewards, settledOutcome, disabledReason, err = s.settleInRepo(ctx, tx, in)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &SettlementResult{Run: settled, Outcome: settledOutcome, Rewards: rewards}, nil
+	return &SettlementResult{Run: settled, Outcome: settledOutcome, Rewards: rewards, RewardsDisabledReason: disabledReason}, nil
 }
 
 // SettleWithRepository runs settlement on a repository bound to an existing
@@ -680,24 +681,30 @@ func (s *Service) SettleWithRepository(ctx context.Context, repo *storage.Challe
 	if err := validateSettlementInput(in); err != nil {
 		return nil, err
 	}
-	settled, rewards, outcome, err := s.settleInRepo(ctx, repo, in)
+	settled, rewards, outcome, disabledReason, err := s.settleInRepo(ctx, repo, in)
 	if err != nil {
 		return nil, err
 	}
-	return &SettlementResult{Run: settled, Outcome: outcome, Rewards: rewards}, nil
+	return &SettlementResult{Run: settled, Outcome: outcome, Rewards: rewards, RewardsDisabledReason: disabledReason}, nil
 }
 
-func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeRepository, in SettlementInput) (storage.ChallengeRun, []storage.ChallengeRunReward, OutcomeView, error) {
+func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeRepository, in SettlementInput) (storage.ChallengeRun, []storage.ChallengeRunReward, OutcomeView, string, error) {
 	if err := validateSettlementInput(in); err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, err
+		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
 	}
 	conv, err := tx.LockConversation(ctx, in.ConversationID)
 	if err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, err
+		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
 	}
 	evaluation, err := s.evaluateSettlement(ctx, tx, conv, in)
 	if err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, err
+		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
+	}
+	// client 路由：照常校验结局、写 challenge_runs 并结束对话，但跳过全部奖励授予。
+	rewardsDisabledReason := ""
+	if conv.LLMRoute == storage.LLMRouteClient {
+		rewardsDisabledReason = storage.RewardsDisabledReasonClientRoute
+		evaluation.detail[storage.RewardsDisabledReasonKey] = rewardsDisabledReason
 	}
 	settled := storage.ChallengeRun{
 		ID: uuid.New(), ConversationID: conv.ID, PlayerID: in.PlayerID,
@@ -717,9 +724,9 @@ func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeReposit
 	}
 	rewards, err := tx.CompleteRun(ctx, conv, &settled, evaluation.grants)
 	if err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, err
+		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
 	}
-	return settled, rewards, settledOutcome, nil
+	return settled, rewards, settledOutcome, rewardsDisabledReason, nil
 }
 
 func validateSettlementInput(in SettlementInput) error {

@@ -596,33 +596,37 @@ func (r *ChallengeRepository) CompleteRun(
 		return nil, fmt.Errorf("玩家 ID 无效: %w", err)
 	}
 	rewards := make([]ChallengeRunReward, 0, len(grants))
-	for _, grant := range grants {
-		result, err := r.Rewards().GrantInCurrentTx(ctx, RewardMutation{
-			PlayerID: playerID, RewardKey: grant.Definition.Key, Quantity: grant.Quantity,
-			SourceType: "challenge_run", SourceID: run.ID.String(),
-			IdempotencyKey: "challenge_run:" + run.ID.String() + ":" + grant.Definition.Key,
-			ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey},
-		})
-		if err != nil {
-			return nil, err
+	// client 路由：结局校验、challenge_runs 写入与对话结束照常，只跳过奖励授予。
+	// 路由在事务内直接取自已加行锁的对话行，不在调用方判断，保证所有入口一致。
+	if conv.LLMRoute != LLMRouteClient {
+		for _, grant := range grants {
+			result, err := r.Rewards().GrantInCurrentTx(ctx, RewardMutation{
+				PlayerID: playerID, RewardKey: grant.Definition.Key, Quantity: grant.Quantity,
+				SourceType: "challenge_run", SourceID: run.ID.String(),
+				IdempotencyKey: "challenge_run:" + run.ID.String() + ":" + grant.Definition.Key,
+				ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey},
+			})
+			if err != nil {
+				return nil, err
+			}
+			if !result.Applied || result.Ledger == nil {
+				continue
+			}
+			snapshot := grant.Snapshot
+			row := ChallengeRunReward{
+				ChallengeRunID: run.ID, RewardDefinitionID: grant.Definition.ID,
+				LedgerID: result.Ledger.ID, Quantity: grant.Quantity,
+				RewardKeySnapshot: grant.Definition.Key,
+				NameSnapshot:      stringFromMap(snapshot, "name", grant.Definition.Name),
+				UnitSnapshot:      stringFromMap(snapshot, "unit", grant.Definition.Unit),
+				IconSnapshot:      stringFromMap(snapshot, "icon", grant.Definition.Icon),
+				BalanceAfter:      result.Balance,
+			}
+			if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
+				return nil, err
+			}
+			rewards = append(rewards, row)
 		}
-		if !result.Applied || result.Ledger == nil {
-			continue
-		}
-		snapshot := grant.Snapshot
-		row := ChallengeRunReward{
-			ChallengeRunID: run.ID, RewardDefinitionID: grant.Definition.ID,
-			LedgerID: result.Ledger.ID, Quantity: grant.Quantity,
-			RewardKeySnapshot: grant.Definition.Key,
-			NameSnapshot:      stringFromMap(snapshot, "name", grant.Definition.Name),
-			UnitSnapshot:      stringFromMap(snapshot, "unit", grant.Definition.Unit),
-			IconSnapshot:      stringFromMap(snapshot, "icon", grant.Definition.Icon),
-			BalanceAfter:      result.Balance,
-		}
-		if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-			return nil, err
-		}
-		rewards = append(rewards, row)
 	}
 	if err := r.db.WithContext(ctx).Model(&Conversation{}).Where("id = ?", conv.ID).
 		Updates(map[string]any{

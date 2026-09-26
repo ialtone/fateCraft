@@ -17,6 +17,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/inquiry"
 	"github.com/ialtone/fatecraft/internal/llm"
+	"github.com/ialtone/fatecraft/internal/llmrelay"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/memory"
 	"github.com/ialtone/fatecraft/internal/modelcapability"
@@ -56,6 +57,7 @@ type Server struct {
 	llmClient      *llm.Client
 	capabilities   *modelcapability.Service
 	shares         *shareapp.Service
+	relays         *llmrelay.Registry
 	counter        tokenizer.Counter
 	identity       identity.Provider // 当前玩家身份来源（由认证中间件写入 context）
 	auth           *authservice.Service
@@ -85,6 +87,7 @@ type Deps struct {
 	LLMClient      *llm.Client
 	Capabilities   *modelcapability.Service
 	Shares         *shareapp.Service
+	Relays         *llmrelay.Registry
 	Counter        tokenizer.Counter
 	Identity       identity.Provider // 当前玩家身份来源（由认证中间件写入 context）
 	Auth           *authservice.Service
@@ -123,7 +126,7 @@ func NewServer(d Deps) *Server {
 		memory: d.Memory, inquiries: d.Inquiries,
 		settings: d.Settings, llmSettings: d.LLMSettings, system: d.System, ctxLogs: d.CtxLogs, messages: d.Messages, agents: d.Agents, rewards: d.Rewards,
 		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns,
-		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, counter: d.Counter, identity: d.Identity,
+		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, relays: d.Relays, counter: d.Counter, identity: d.Identity,
 		auth: d.Auth, cookieSecure: d.CookieSecure,
 	}
 }
@@ -255,6 +258,7 @@ func (s *Server) Router(r *gin.Engine) {
 
 	// WebSocket
 	r.GET("/ws/conversations/:id", s.requireAuth, s.serveWS)
+	r.GET("/ws/llm-relay", s.requireAuth, s.serveLLMRelay)
 }
 
 // --- 通用辅助 ---
@@ -309,6 +313,10 @@ func fail(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, storage.ErrGenerationRequestConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, storage.ErrLLMRouteMismatch):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "llm_route_mismatch"})
+	case errors.Is(err, llm.ErrRelayUnavailable):
+		c.JSON(http.StatusConflict, gin.H{"error": "客户端直连未就绪，请保持页面打开并检查网络后重试", "code": "llm_relay_unavailable"})
 	case errors.Is(err, conversation.ErrForkCampaign):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, inquiry.ErrBusy):

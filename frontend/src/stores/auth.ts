@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { authApi, setupApi } from '@/api'
+import { clearLocalKey } from '@/llm/localKey'
 import type { AuthConfig, AuthUser } from '@/types'
 
 const defaultConfig: AuthConfig = {
@@ -97,9 +98,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    const userId = user.value?.id ?? ''
     try {
       await authApi.logout()
     } finally {
+      // 登出时清除本设备的直连 Key（按用户隔离）。
+      if (userId) clearLocalKey(userId)
       user.value = null
     }
   }

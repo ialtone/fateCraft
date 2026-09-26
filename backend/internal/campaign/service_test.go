@@ -146,6 +146,16 @@ func (s *openingStub) SeedOpening(_ context.Context, row *storage.Conversation, 
 	s.seeded = row
 }
 
+// routeStub 桩实现路由解析器，固定返回指定有效路由。
+type routeStub struct {
+	route string
+	err   error
+}
+
+func (s routeStub) EffectiveRoute(context.Context, string) (string, error) {
+	return s.route, s.err
+}
+
 func testIdentityContext(playerID uuid.UUID) (identity.Context, context.Context) {
 	provider := identity.NewContext()
 	return provider, identity.WithPlayerID(context.Background(), playerID.String())
@@ -368,5 +378,67 @@ func TestBoundedContextEventsKeepsNewestWithinBudget(t *testing.T) {
 	}
 	if len(encoded) > 500 {
 		t.Fatalf("bounded events use %d bytes", len(encoded))
+	}
+}
+
+func TestCreateSolidifiesEffectiveRoute(t *testing.T) {
+	playerID := uuid.New()
+	provider, ctx := testIdentityContext(playerID)
+	contract := campaignContract()
+	versionID := uuid.New()
+	selection := &challenge.Selection{
+		ChallengeName: "凡尘问道",
+		Version:       storage.ChallengeVersion{ID: versionID, ContentHash: "hash"}, Contract: *contract,
+	}
+	service := NewService(&campaignRepoStub{}, challengeStub{selection: selection, contract: contract}, nil, provider)
+	service.SetRouteResolver(routeStub{route: storage.LLMRouteClient})
+	created, err := service.Create(ctx, CreateInput{Title: "问道", ChallengeSlug: "campaign"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.LLMRoute != storage.LLMRouteClient {
+		t.Fatalf("campaign route = %q, want client", created.LLMRoute)
+	}
+	// 未注入解析器时默认 server，保持旧行为。
+	legacy := NewService(&campaignRepoStub{}, challengeStub{selection: selection, contract: contract}, nil, provider)
+	createdServer, err := legacy.Create(ctx, CreateInput{Title: "问道", ChallengeSlug: "campaign"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if createdServer.LLMRoute != storage.LLMRouteServer {
+		t.Fatalf("campaign route = %q, want server", createdServer.LLMRoute)
+	}
+}
+
+func TestCreateConversationRequiresMatchingRoute(t *testing.T) {
+	playerID := uuid.New()
+	provider, ctx := testIdentityContext(playerID)
+	contract := campaignContract()
+	newService := func(row storage.Campaign, route string) *Service {
+		service := NewService(&campaignRepoStub{row: row}, challengeStub{contract: contract}, &openingStub{}, provider)
+		service.SetRouteResolver(routeStub{route: route})
+		return service
+	}
+	newRow := func(route string) storage.Campaign {
+		return storage.Campaign{
+			ID: uuid.New(), PlayerID: playerID, Title: "问道", Status: storage.CampaignStatusActive,
+			ChallengeVersionID: uuid.New(), ChallengeHash: "hash", LLMRoute: route,
+		}
+	}
+	// Campaign 路由与当前有效路由一致：对话继承同一路由。
+	row := newRow(storage.LLMRouteClient)
+	service := newService(row, storage.LLMRouteClient)
+	conversation, err := service.CreateConversation(ctx, row.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conversation.LLMRoute != storage.LLMRouteClient {
+		t.Fatalf("conversation route = %q, want client", conversation.LLMRoute)
+	}
+	// 用户切到另一路由后：旧 Campaign 的对话不可创建。
+	oldRow := newRow(storage.LLMRouteServer)
+	mismatched := newService(oldRow, storage.LLMRouteClient)
+	if _, err := mismatched.CreateConversation(ctx, oldRow.ID); !errors.Is(err, storage.ErrLLMRouteMismatch) {
+		t.Fatalf("CreateConversation error = %v, want ErrLLMRouteMismatch", err)
 	}
 }

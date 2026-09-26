@@ -129,3 +129,7 @@ campaign:{campaign_id}:outcome:{outcome_key}:{reward_key}
 | 终局任务调用 | `backend/internal/gameplay/cultivation/campaignactions/world_actions.go` |
 | 平台 Snapshot 保留字段 | `backend/internal/campaign/service.go` |
 | 玩家终局展示 | `frontend/src/components/CampaignViewRenderer.vue` |
+
+## 8. 客户端直连不带出
+
+`client` 路由的 Campaign 照常完成任务与终局（状态、事件、结局展示不变），但 `GrantCampaignOutcomeRewards` 在事务内直接返回空：不计算奖励、不扣来源物、不写账本。结果与 `campaign.completed` 事件、`outcome_rewards` 快照附 `rewards_disabled_reason=client_llm_route`，前端据此显示“客户端直连模式不发放奖励”替代奖励列表。今后任何跨 Campaign 读取终局奖励（统计、排行、成就、解锁）必须排除 `client` 路由对象。

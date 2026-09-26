@@ -207,6 +207,10 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 
 前端动态提示不渲染在消息正文内，而由会话底部固定的 `ConversationGuidanceBar` 展示在滚动内容区与输入框之间。没有 active guidance 时组件完全移除；正文和思考仍按原流式链路显示。Runtime 中声明的长期玩法固定 guidance 仍由 Presentation 渲染，和主叙事动态提示使用同一按钮组件但拥有独立生命周期。
 
+## 客户端直连传输切点
+
+传输层切点在 `llm` 包 `doRaw` 的 HTTP 层（`transport.go` 的 `roundTrip`）：`Params.Relay != nil` 时把已构建的请求交给浏览器执行并返回原始响应，之后的 SSE 解析、大小上限、空闲超时、审计与重试策略全部原样生效，解析与校验逻辑零分叉。回传的必须是原始响应字节，服务端不信任浏览器做任何归一化。Relay 实现见 `internal/llmrelay`，协议与错误码见 [10-api-websocket.md](10-api-websocket.md)。等价性由 `llm` 包的直连/Relay 对照测试保证（同 fixture 下结果、事件序列与审计一致）。
+
 ### 工具快照与字段所有权
 
 每个 Agent 工具快照都绑定 Runtime 编译出的 Ownership Registry hash。Campaign 模式只生成 `narrative.*` conversation 字段的 `fc_state_*` 工具；Campaign 权威字段不会出现在状态工具目录，必须通过对应的 `fc_action_*`。服务端执行时再次解析 Registry，未知路径或跨域路径统一返回 `state_path_forbidden`，拒绝状态、revision 和领域事件副作用。该校验不能只依赖模型收到的 JSON Schema，因为旧步骤、兼容网关或伪造调用都可能绕过目录。

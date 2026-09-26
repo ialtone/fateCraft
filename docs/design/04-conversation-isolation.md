@@ -130,3 +130,9 @@ WebSocket 握手先经过会话认证。生成器开始工作前再次读取并�
 分享 token 是 `v1.<share_id>.<HMAC-SHA256>`，数据库只保存 share ID 和快照，不保存可直接访问的 bearer token。快照不包含来源对话 ID、用户 ID或原消息 ID；所有者列表中的内部定位字段仅由已认证接口返回。后续分支替换不会修改旧快照，重新发布会在同一事务中创建新快照并撤销旧链接。
 
 对话进入 `deleted` 状态时，生命周期事务同步撤销其全部 active 分享，避免出现对话已删除但公开链接仍可读取的中间状态。账号物理删除由外键级联删除分享。ended/archived 不自动撤销已经主动发布的快照。
+
+## LLM 路由固化与不匹配
+
+对话与 Campaign 在创建时按当前有效路由（`platform_managed` 时恒为 `server`，否则为用户设置的 `llm_route`）固化 `llm_route`，不接受请求体传入；`conversations` 与 `campaigns` 各有 `BEFORE UPDATE` 触发器禁止修改，对话路由还必须等于所属 Campaign 路由（复合外键兜底）。
+
+对象路由与当前有效路由不一致时禁止任何模型调用：REST 返回 409（`code=llm_route_mismatch`），WS 返回 `notice`，不创建 run/turn/attempt、不扣额度；生成中途改设置时当前回合按 `llm_route_mismatch` 失败。Memory Worker 遇到不匹配或 `client` 路由无 Relay 连接时把任务放回 pending（不计失败）；角色问答返回 409。

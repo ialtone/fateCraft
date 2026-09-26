@@ -36,6 +36,7 @@ func (r *SettingsRepo) Get(ctx context.Context, playerID string) (*LLMSettings, 
 			TopP:              1.0,
 			StreamEnabled:     true,
 			SettingsRevision:  1,
+			LLMRoute:          LLMRouteServer,
 		}, nil
 	}
 	if err != nil {
@@ -46,6 +47,9 @@ func (r *SettingsRepo) Get(ctx context.Context, playerID string) (*LLMSettings, 
 	}
 	if s.Provider == "" {
 		s.Provider = "openai"
+	}
+	if s.LLMRoute == "" {
+		s.LLMRoute = LLMRouteServer
 	}
 	s.HasAPIKey = s.APIKeyEncrypted != ""
 	return &s, nil
@@ -81,7 +85,7 @@ func (r *SettingsRepo) Save(ctx context.Context, playerID string, s *LLMSettings
 			DoUpdates: clause.AssignmentColumns([]string{
 				"provider", "base_url", "protocol", "api_key_encrypted", "model", "memory_model", "inquiry_model", "max_context_tokens",
 				"max_response_tokens", "temperature", "top_p", "stream_enabled", "reasoning_effort",
-				"memory_reasoning_effort", "inquiry_reasoning_effort", "settings_revision", "updated_at",
+				"memory_reasoning_effort", "inquiry_reasoning_effort", "llm_route", "settings_revision", "updated_at",
 			}),
 		}).Create(s).Error
 	})
@@ -93,5 +97,5 @@ func sameLLMInvocationSettings(a, b *LLMSettings) bool {
 		a.MaxContextTokens == b.MaxContextTokens && a.MaxResponseTokens == b.MaxResponseTokens &&
 		a.Temperature == b.Temperature && a.TopP == b.TopP && a.StreamEnabled == b.StreamEnabled &&
 		a.ReasoningEffort == b.ReasoningEffort && a.MemoryReasoningEffort == b.MemoryReasoningEffort &&
-		a.InquiryReasoningEffort == b.InquiryReasoningEffort
+		a.InquiryReasoningEffort == b.InquiryReasoningEffort && a.LLMRoute == b.LLMRoute
 }

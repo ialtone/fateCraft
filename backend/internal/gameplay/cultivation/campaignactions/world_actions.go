@@ -150,12 +150,18 @@ func submitQuest(ctx context.Context, execution campaign.ActionExecution, argume
 		result["campaign_status"] = status
 		result["campaign_outcome_key"] = parsed.CampaignOutcomeKey
 		result["account_rewards"] = rewards
+		completedPayload := storage.JSONMap{
+			"outcome_key": parsed.CampaignOutcomeKey, "milestone_key": parsed.MilestoneKey,
+			"quest_key": key, "account_rewards": rewards,
+		}
+		// client 路由不发放奖励：原因随结果与事件下发，前端据此展示替代文案。
+		if execution.Campaign.LLMRoute == storage.LLMRouteClient {
+			result["rewards_disabled_reason"] = storage.RewardsDisabledReasonClientRoute
+			completedPayload["rewards_disabled_reason"] = storage.RewardsDisabledReasonClientRoute
+		}
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
 			EventType: "campaign.completed", Visibility: storage.CampaignVisibilityPlayer,
-			Payload: storage.JSONMap{
-				"outcome_key": parsed.CampaignOutcomeKey, "milestone_key": parsed.MilestoneKey,
-				"quest_key": key, "account_rewards": rewards,
-			},
+			Payload: completedPayload,
 		})
 	}
 	return outcome, nil

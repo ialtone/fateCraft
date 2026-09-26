@@ -255,6 +255,8 @@ type Params struct {
 	// RetryPolicy controls safe transport retries before a response body is
 	// delivered. Nil uses the client default; MaxAttempts=1 disables retries.
 	RetryPolicy *RetryPolicy `json:"-"`
+	// Relay 非空时，doRaw 不直接发起 HTTP，而是把已构建的请求交给客户端执行。
+	Relay RelayTransport `json:"-"`
 }
 
 // RetryPolicy only applies while establishing a model HTTP response. Once a

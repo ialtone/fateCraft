@@ -14,6 +14,7 @@ import {
 } from 'naive-ui'
 import { ArrowUpOutline, CopyOutline, FlagOutline } from '@vicons/ionicons5'
 import SharedConversationContent from '@/components/SharedConversationContent.vue'
+import LlmRouteTag from '@/components/LlmRouteTag.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { sharesApi } from '@/api'
 import { useShareStore } from '@/stores/shares'
@@ -138,6 +139,7 @@ function scrollToTop() {
           </p>
           <h1>{{ snapshot.title }}</h1>
           <div class="story-byline">
+            <LlmRouteTag :route="snapshot.llm_route" />
             <NAvatar
               v-if="snapshot.show_username && avatarURL"
               round

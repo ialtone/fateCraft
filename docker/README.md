@@ -88,4 +88,5 @@
 - 应用访问日志会脱敏分享 token；外围 CDN、WAF 和负载均衡也必须对 `/s/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或做等价脱敏
 - 分享 HTML 使用严格 CSP、`Referrer-Policy: no-referrer` 和 `noindex,nofollow`；公开 API 的 gzip 由 Nginx 处理
 - LLM 的 Base URL、API Key 和模型可在前端「设置」页配置，用户配置写入 `llm_settings` 表，平台公共配置写入 `system_settings` 单例
+- 主站当前没有 CSP，客户端直连不受阻；今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效
 - 敏感信息的本机覆盖写 `backend.development.env.local` / `backend.production.env.local`（git 已忽略；如使用需在 compose 的 `env_file` 中追加该文件）

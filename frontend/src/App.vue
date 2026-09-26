@@ -10,17 +10,22 @@ import {
   NIcon,
   NMessageProvider,
   NTooltip,
+  zhCN,
 } from 'naive-ui'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useThemeStore } from '@/stores/theme'
 import { useRewardStore } from '@/stores/rewards'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
+import { useLlmRelayStore } from '@/stores/llmRelay'
 
 const route = useRoute()
 const router = useRouter()
 const theme = useThemeStore()
 const rewards = useRewardStore()
 const auth = useAuthStore()
+const settings = useSettingsStore()
+const relay = useLlmRelayStore()
 
 // 主对话页使用全屏三栏布局，不显示顶部导航。
 const isConversation = computed(() => route.name === 'conversation')
@@ -52,6 +57,21 @@ onMounted(() => {
     },
     { immediate: true },
   )
+  // Relay 连接按“已登录 && user_managed && llm_route==='client'”启停。
+  // 按账号 id 监听：切换账号（含登出/会话过期）时先丢弃旧账号的设置与 Relay
+  // 连接，再加载新账号设置，否则新账号会沿用旧账号的 base_url 与路由判断。
+  // 设置页保存后由 SettingsView 主动 relay.refresh()，这里不监听 settings。
+  watch(
+    () => auth.user?.id,
+    async (userId, prevUserId) => {
+      if (userId === prevUserId && settings.settings) return
+      settings.reset()
+      relay.disconnect()
+      if (userId) await settings.load().catch(() => {})
+      relay.ensure()
+    },
+    { immediate: true },
+  )
 })
 
 async function logout() {
@@ -64,6 +84,7 @@ async function logout() {
   <NConfigProvider
     :theme="theme.naiveTheme"
     :theme-overrides="theme.overrides"
+    :locale="zhCN"
     style="height: 100%"
   >
     <NMessageProvider placement="top">

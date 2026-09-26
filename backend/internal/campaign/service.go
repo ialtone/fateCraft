@@ -150,6 +150,23 @@ type Service struct {
 	gameplay       *gameplay.Registry
 	roll           *roll.Service
 	systemSettings systemSettingsProvider
+	routes         routeResolver
+}
+
+// routeResolver 解析当前用户的有效 LLM 路由（llmsettings.Service 实现）。
+type routeResolver interface {
+	EffectiveRoute(ctx context.Context, playerID string) (string, error)
+}
+
+// SetRouteResolver 注入路由解析器；未注入时创建默认走 server 路由（仅测试路径）。
+func (s *Service) SetRouteResolver(routes routeResolver) { s.routes = routes }
+
+// effectiveRoute 返回指定玩家的有效路由。
+func (s *Service) effectiveRoute(ctx context.Context, playerID string) (string, error) {
+	if s.routes == nil {
+		return storage.LLMRouteServer, nil
+	}
+	return s.routes.EffectiveRoute(ctx, playerID)
 }
 
 func NewService(
@@ -222,11 +239,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Campaign
 	if err != nil {
 		return nil, fmt.Errorf("生成存档随机种子: %w", err)
 	}
+	route, err := s.effectiveRoute(ctx, playerID.String())
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	row := &storage.Campaign{
 		ID: uuid.New(), PlayerID: playerID, Title: title,
 		ChallengeVersionID: selection.Version.ID, ChallengeHash: selection.Version.ContentHash,
 		Status:             storage.CampaignStatusActive,
+		LLMRoute:           route,
 		CurrentLocationKey: selection.Contract.Campaign.InitialLocationKey,
 		RandomSeed:         seed, CreatedAt: now, UpdatedAt: now,
 	}
@@ -315,11 +337,20 @@ func (s *Service) CreateConversation(ctx context.Context, id uuid.UUID) (*storag
 	if contract == nil || gameplay.NormalizeRuntimeMode(contract.Mode) != gameplay.RuntimeModeCampaign || contract.Campaign == nil {
 		return nil, ErrCampaignModeRequired
 	}
+	// Campaign 对话必须等于 Campaign 路由，且等于当前有效路由；复合外键在数据库层兜底。
+	effective, err := s.effectiveRoute(ctx, row.PlayerID.String())
+	if err != nil {
+		return nil, err
+	}
+	if err := storage.CheckLLMRoute(row.LLMRoute, effective); err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	conv := &storage.Conversation{
 		ID: uuid.New(), PlayerID: row.PlayerID.String(), Title: row.Title,
 		Status: storage.StatusActive, ChallengeVersionID: row.ChallengeVersionID,
 		ChallengeHash: row.ChallengeHash, CampaignID: &row.ID,
+		LLMRoute:         row.LLMRoute,
 		CharacterAssetID: row.CharacterAssetID, PersonaAssetID: row.PersonaAssetID,
 		ScenarioAssetID: row.ScenarioAssetID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -621,6 +652,10 @@ func (s *Service) Snapshot(ctx context.Context, id uuid.UUID) (map[string]any, e
 		rewards = []storage.CampaignOutcomeReward{}
 	}
 	snapshot["outcome_rewards"] = rewards
+	// client 路由终局不发放奖励，快照常带原因，前端据此展示替代文案。
+	if row.LLMRoute == storage.LLMRouteClient {
+		snapshot["rewards_disabled_reason"] = storage.RewardsDisabledReasonClientRoute
+	}
 	return snapshot, nil
 }
 

@@ -44,6 +44,10 @@ func (s *Server) getConversationActivity(c *gin.Context) {
 			result.RegenerateCostQuantity = capabilities.RegenerateCostQuantity
 		}
 	}
+	// client 路由不扣费：展示的改写额度恒为 0。
+	if conversation.LLMRoute == storage.LLMRouteClient {
+		result.RegenerateCostQuantity = 0
+	}
 	if conversation.IsProcessing {
 		result.Narrative = "preparing"
 		if s.agents != nil {

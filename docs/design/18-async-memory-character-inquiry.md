@@ -164,6 +164,12 @@ Memory 使用 `memory_archive_v1`，Inquiry 使用 `character_inquiry_v1`，两�
 
 设置页允许用户分别点击 narrative、memory 或 character_inquiry 的“检测”。Memory/Inquiry 检测只对当前保存的对应模型发出一次小型 JSON Schema 请求，结果同步返回且不入库；失败只说明本次诊断结论，不改变生产请求。通用模型协议见 [19-agent-tool-loop.md](19-agent-tool-loop.md)。
 
+## 客户端直连下的执行条件
+
+- 路由闸门：问答 `Ask` 在对象路由 ≠ 有效路由时返回 409（不消耗限流额度、不写消息）；Memory Worker 遇到不匹配时把任务放回 pending（不计失败）。
+- `client` 路由的 Memory 任务只在有 Relay 连接时领取执行（`HasActive`）；领取后执行中连接丢失按暂时性网络失败重试，不计入契约失败。全部关闭页面后任务保持 pending，重新打开（Relay 重连）后继续执行。
+- 问答在 `client` 路由且无 Relay 连接时同步返回 `llm_relay_unavailable`（409）。
+
 ## 维护入口
 
 | 责任 | 代码 |

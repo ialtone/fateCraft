@@ -12,6 +12,7 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/chat"
 	"github.com/ialtone/fatecraft/internal/realtime"
+	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 // maxMessageListLimit 是单次拉取消息数量的上限。
@@ -85,6 +86,34 @@ func (s *Server) respondGenerationBusy(c *gin.Context, convID, requestID uuid.UU
 	c.JSON(http.StatusConflict, gin.H{"error": "当前对话正在生成中，请稍候"})
 }
 
+// requireLLMRoute 校验对话固化路由与当前有效路由：不匹配时返回 409，
+// 不创建 run/turn/attempt、不扣额度。通过返回 true。
+func (s *Server) requireLLMRoute(c *gin.Context, convID uuid.UUID) bool {
+	conv, err := s.conv.GetOwned(c.Request.Context(), convID)
+	if err != nil {
+		fail(c, err)
+		return false
+	}
+	effective := storage.LLMRouteServer
+	if s.llmSettings != nil {
+		effective, err = s.llmSettings.EffectiveRoute(c.Request.Context(), conv.PlayerID)
+		if err != nil {
+			fail(c, err)
+			return false
+		}
+	}
+	if err := storage.CheckLLMRoute(conv.LLMRoute, effective); err != nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":           storage.LLMRouteMismatchMessage(conv.LLMRoute, effective),
+			"code":            "llm_route_mismatch",
+			"llm_route":       conv.LLMRoute,
+			"effective_route": effective,
+		})
+		return false
+	}
+	return true
+}
+
 // postMessage 通过 REST 触发一次生成；结果通过该对话的 WebSocket 广播。
 func (s *Server) postMessage(c *gin.Context) {
 	id, ok := paramUUID(c, "id")
@@ -98,6 +127,9 @@ func (s *Server) postMessage(c *gin.Context) {
 	}
 	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
 		fail(c, err)
+		return
+	}
+	if !s.requireLLMRoute(c, id) {
 		return
 	}
 	requestID, err := requestIDFromString(body.RequestID)
@@ -123,6 +155,9 @@ func (s *Server) regenerate(c *gin.Context) {
 	}
 	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
 		fail(c, err)
+		return
+	}
+	if !s.requireLLMRoute(c, id) {
 		return
 	}
 	var body generationActionBody
@@ -152,6 +187,9 @@ func (s *Server) continueGen(c *gin.Context) {
 	}
 	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
 		fail(c, err)
+		return
+	}
+	if !s.requireLLMRoute(c, id) {
 		return
 	}
 	var body generationActionBody
@@ -211,6 +249,9 @@ func (s *Server) editAndRegenerate(c *gin.Context) {
 	// 确保对话处于活跃状态
 	if _, err := s.conv.EnsureActive(c.Request.Context(), convID); err != nil {
 		fail(c, err)
+		return
+	}
+	if !s.requireLLMRoute(c, convID) {
 		return
 	}
 	var in chat.EditInput

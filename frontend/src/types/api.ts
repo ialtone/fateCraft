@@ -40,6 +40,8 @@ export interface Conversation {
   challenge_version_id: string
   challenge_hash: string
   campaign_id?: string
+  /** 创建时固化的 LLM 请求路由，之后不可修改 */
+  llm_route: 'server' | 'client'
   character_asset_id?: string
   persona_asset_id?: string
   scenario_asset_id?: string
@@ -66,6 +68,8 @@ export interface Campaign {
   scenario_asset_id?: string
   status: CampaignStatusEnum
   outcome_key: string
+  /** 创建时固化的 LLM 请求路由，之后不可修改 */
+  llm_route: 'server' | 'client'
   completed_at_game_time?: number
   current_location_key: string
   game_time: number
@@ -420,6 +424,8 @@ export interface CampaignSnapshot {
   encounters: CampaignEncounterView[]
   available_encounters: CampaignAvailableEncounterView[]
   outcome_rewards: CampaignOutcomeReward[]
+  /** 客户端直连终局不发放奖励时后端填写，前端据此展示替代文案。 */
+  rewards_disabled_reason?: string
 }
 
 /** 聊天消息 - 内部存储的原始消息 */
@@ -486,6 +492,8 @@ export interface ConversationShareSnapshot {
     name: string
     version: string
   }
+  /** 来源对话固化的请求路由；client 表示内容未经服务端校验 */
+  llm_route: 'server' | 'client'
   created_at: string
   messages: SharedMessage[]
 }
@@ -759,8 +767,10 @@ export interface LLMSettings {
   /** 是否已设置 API Key */
   has_api_key: boolean
   access_mode: 'user_managed' | 'platform_managed'
-  source: 'user' | 'platform'
+  source: 'user' | 'platform' | 'client'
   editable: boolean
+  /** 请求路由：server=服务端转发（默认），client=浏览器直连 */
+  llm_route: 'server' | 'client'
   /** 模型名称 */
   model: string
   /** 后台长期记忆模型，空值继承主模型 */
@@ -1647,6 +1657,7 @@ export interface ChallengeCompletedEvent extends SocketEventBase {
     title: string
     summary: string
     tone: string
+    rewards_disabled_reason?: string
   }
   reward_grants?: ChallengeRunReward[]
   metrics?: CompletionMetric[]

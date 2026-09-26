@@ -14,6 +14,7 @@ import {
 } from 'naive-ui'
 import { AddOutline, LockClosedOutline, SearchOutline, SparklesOutline } from '@vicons/ionicons5'
 import ConversationStatusBadge from '@/components/ConversationStatusBadge.vue'
+import LlmRouteTag from '@/components/LlmRouteTag.vue'
 import CreateConversationModal from '@/components/CreateConversationModal.vue'
 import MySharesView from '@/views/MySharesView.vue'
 import { useChallengeStore } from '@/stores/challenges'
@@ -194,6 +195,7 @@ const fmt = (value: string) => new Date(value).toLocaleString('zh-CN')
             <div class="item-head">
               <strong>{{ conversation.title }}</strong>
               <ConversationStatusBadge :status="conversation.status" />
+              <LlmRouteTag :route="conversation.llm_route" />
             </div>
             <div class="meta">{{ fmt(conversation.updated_at) }}</div>
             <div class="item-actions" @click.stop>

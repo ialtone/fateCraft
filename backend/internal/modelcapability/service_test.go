@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
@@ -48,7 +50,7 @@ func TestAgentDiagnosticUsesProductionRequestShape(t *testing.T) {
 			defer server.Close()
 
 			settings.BaseURL = server.URL
-			result := New(llm.NewClient(), "").Check(t.Context(), settings, RoleNarrative)
+			result := New(llm.NewClient(), "").Check(t.Context(), uuid.New(), settings, RoleNarrative)
 			if result.Status != "supported" || result.Feature != "agent_tools" || step != 2 {
 				t.Fatalf("result=%+v steps=%d", result, step)
 			}
@@ -62,7 +64,7 @@ func TestAgentDiagnosticBehaviorMismatchIsInconclusive(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result := New(llm.NewClient(), "").Check(t.Context(), testSettings(server.URL, llm.ProtocolChatCompletions), RoleNarrative)
+	result := New(llm.NewClient(), "").Check(t.Context(), uuid.New(), testSettings(server.URL, llm.ProtocolChatCompletions), RoleNarrative)
 	if result.Status != "inconclusive" || result.ErrorCode != "diagnostic_inconclusive" {
 		t.Fatalf("result=%+v", result)
 	}
@@ -96,7 +98,7 @@ func TestJSONSchemaDiagnosticUsesNativeSchema(t *testing.T) {
 			defer server.Close()
 
 			settings.BaseURL = server.URL
-			result := New(llm.NewClient(), "").Check(t.Context(), settings, RoleMemory)
+			result := New(llm.NewClient(), "").Check(t.Context(), uuid.New(), settings, RoleMemory)
 			if result.Status != "supported" || result.Feature != "json_schema" {
 				t.Fatalf("result=%+v", result)
 			}
@@ -161,7 +163,7 @@ func TestEffortForRoleInheritsNarrativeSetting(t *testing.T) {
 }
 
 func TestDiagnosticParamsDisableTransportRetries(t *testing.T) {
-	params := New(llm.NewClient(), "").params(testSettings("http://example.invalid", llm.ProtocolResponses), "model", RoleNarrative)
+	params := New(llm.NewClient(), "").params(uuid.New(), testSettings("http://example.invalid", llm.ProtocolResponses), "model", RoleNarrative)
 	if params.RetryPolicy == nil || params.RetryPolicy.MaxAttempts != 1 {
 		t.Fatalf("diagnostic retry policy = %#v, want one attempt", params.RetryPolicy)
 	}
@@ -184,7 +186,7 @@ func TestLiveProviderCapabilities(t *testing.T) {
 	settings.StreamEnabled = true
 	service := New(llm.NewClient(), "")
 	for _, role := range []Role{RoleNarrative, RoleMemory} {
-		result := service.Check(t.Context(), settings, role)
+		result := service.Check(t.Context(), uuid.New(), settings, role)
 		if result.Status != "supported" {
 			t.Fatalf("role=%s result=%+v", role, result)
 		}

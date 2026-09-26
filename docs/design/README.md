@@ -56,6 +56,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 - Memory 与角色问答只使用原生 JSON Schema，不降级到固定提交 Tool、`json_object` 或 Prompt-only JSON。
 - 所有工具参数和结构化对象都由后端严格校验；非法工具不产生领域写入，已 committed 的工具不会因后续叙事失败而回滚。
 - 同一对话最多结算一次；Campaign 终局带出也由后端在领域事务中计算、扣除来源并幂等发放。
+- `client` 路由（客户端直连）的对话与 Campaign 不产生任何账号奖励：结算与终局照常展示结局，但跳过全部授予，改写/重新生成不扣费；路由创建时固化、不可修改。
 - 每个运行时字段只有一个所有权域；Campaign 长期事实只能经 `field_ownership`、可信 Action 和领域事件写入，conversation state 不得作为权威事实的兜底。
 - 所有对话运行时数据按 `conversation_id` 和当前用户归属隔离。
 - 每次可写生成由 `conversation_generation_runs` durable owner 负责；`conversations.is_processing` 仅为兼容性忙碌投影，不能作为写入授权或释放条件。
@@ -76,6 +77,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 | 上下文顺序、预算、Memory Worker、只读问答或世界书算法 | 18、08、09 |
 | 已发布内容缓存、容量、指标、世界书编译或玩法定义读取边界 | 06、08、09、13、17、18，并同步 README 配置 |
 | 权限、登录或对话生命周期 | 03、04、05、06、07、10 |
+| LLM 请求路由、Relay 传输、客户端直连放权 | 03、04、05、06、07、10、18、19、21 |
 | 对话分享、公开快照、分享 token、举报或治理 | 03、04、05、06、07、10，并同步 README 与 docker/README |
 | 通用 Campaign 动作、能力投影、Runtime 白名单或事务协议 | 17，并同步 06、08、12、13、15 |
 | Runtime 字段所有权、Campaign/会话边界、状态工具或 Snapshot 来源 | 17、19，并同步 05、07、15 |

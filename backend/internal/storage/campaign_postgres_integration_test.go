@@ -111,8 +111,8 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO campaigns
-        (id, player_id, title, challenge_version_id, challenge_hash, current_location_key, random_seed)
-        VALUES (?, ?, 'Integration', ?, ?, 'world.start', 1)`, campaignID, playerID, versionID, hash).Error; err != nil {
+        (id, player_id, title, challenge_version_id, challenge_hash, current_location_key, random_seed, llm_route)
+        VALUES (?, ?, 'Integration', ?, ?, 'world.start', 1, 'server')`, campaignID, playerID, versionID, hash).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO campaign_item_stacks
@@ -127,7 +127,7 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	conversation := &Conversation{
 		ID: uuid.New(), PlayerID: playerID.String(), Title: "会被存档名覆盖",
 		Status: StatusActive, ChallengeVersionID: versionID, ChallengeHash: hash,
-		CampaignID: &campaignID, CreatedAt: now, UpdatedAt: now,
+		CampaignID: &campaignID, LLMRoute: LLMRouteServer, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := repository.CreateConversation(
 		context.Background(), playerID, conversation, JSONMap{"scene": map[string]any{}}, 1,

@@ -449,6 +449,26 @@ func (r *MemoryRepo) CancelActive(ctx context.Context, conversationID uuid.UUID,
 		}).Error
 }
 
+// ReleaseClaim 把已领取的任务放回 pending，不计失败次数：
+// 路由不匹配、或 client 路由暂无 Relay 连接时调用，retryDelay 后可再次被领取。
+func (r *MemoryRepo) ReleaseClaim(ctx context.Context, jobID uuid.UUID, workerID string, leaseToken uuid.UUID, retryDelay time.Duration) error {
+	now := time.Now()
+	result := r.db.WithContext(ctx).Model(&MemoryJob{}).
+		Where("id = ? AND status = ? AND worker_id = ? AND lease_token = ?", jobID, MemoryJobRunning, workerID, leaseToken).
+		Updates(map[string]any{
+			"status": MemoryJobPending, "worker_id": "", "lease_token": nil, "lease_expires_at": nil,
+			"available_at": now.Add(retryDelay), "updated_at": now,
+			"execution_count": gorm.Expr("GREATEST(execution_count - 1, 0)"),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func sameUUID(left, right *uuid.UUID) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
