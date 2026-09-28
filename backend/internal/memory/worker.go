@@ -259,7 +259,7 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 		reasoningEffort = settings.ReasoningEffort
 	}
 	sourceHash := SourceHash(encoded)
-	protocol := llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol)
+	protocol := llm.NormalizeProtocol(settings.Protocol)
 	fingerprint := Fingerprint(model, settings.BaseURL, string(protocol), maxTokens)
 	if err := w.repo.SetJobSource(ctx, job.ID, w.config.WorkerID, *job.LeaseToken, sourceHash, fingerprint); err != nil {
 		log.Info("记忆任务已失去租约，丢弃固定来源", zap.Error(err))
@@ -269,7 +269,7 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 	memoryID := uuid.New()
 	outputSchema := OutputSchema()
 	result, err := w.llm.CompleteStructured(ctx, llm.Params{
-		BaseURL: settings.BaseURL, Provider: settings.Provider, APIKey: apiKey, Model: model, Protocol: protocol,
+		BaseURL: settings.BaseURL, APIKey: apiKey, Model: model, Protocol: protocol,
 		Temperature: 0.2, TopP: 1, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort,
 		Relay:            w.relayForRoute(settings, source.Conversation.PlayerID),
 		SettingsRevision: settings.SettingsRevision,

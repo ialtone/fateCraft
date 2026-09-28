@@ -36,10 +36,10 @@ func TestAgentTransportMatrix(t *testing.T) {
 					defer server.Close()
 
 					var events []AgentEvent
-					// 显式声明 openai Provider：只有已知 Provider 才会收到
-					// parallel_tool_calls 等可选字段，自定义网关不发。
+					// 测试端点是本地 httptest 地址，按兼容网关处理：不发
+					// parallel_tool_calls、stream_options 与 strict。
 					result, err := NewClient().AgentStep(context.Background(), Params{
-						BaseURL: server.URL, APIKey: "test", Model: "agent-model", Protocol: protocol, Provider: "openai",
+						BaseURL: server.URL, APIKey: "test", Model: "agent-model", Protocol: protocol,
 					}, []Message{{Role: "user", Content: "continue"}}, testAgentTools(), stream, func(event AgentEvent) {
 						events = append(events, event)
 					})
@@ -209,7 +209,7 @@ func TestAgentEdgeCases(t *testing.T) {
 	})
 }
 
-func TestAgentParsersCaptureProviderUsage(t *testing.T) {
+func TestAgentParsersCaptureUsage(t *testing.T) {
 	t.Run("chat complete", func(t *testing.T) {
 		raw := []byte(`{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":30}}`)
 		result, err := parseAgentChatComplete(raw, nil)
@@ -448,16 +448,12 @@ func assertAgentRequest(t *testing.T, body map[string]any, protocol Protocol, st
 	if !ok || len(tools) != 1 {
 		t.Fatalf("tools = %#v", body["tools"])
 	}
-	if protocol == ProtocolChatCompletions || protocol == ProtocolResponses {
-		if body["parallel_tool_calls"] != false {
-			t.Fatalf("%s tool controls = %#v", protocol, body)
-		}
+	// 测试端点是本地地址，按兼容网关处理：可选工具控制字段一律不发。
+	if _, exists := body["parallel_tool_calls"]; exists {
+		t.Fatalf("%s must not receive parallel_tool_calls: %#v", protocol, body)
 	}
-	if protocol == ProtocolChatCompletions && stream {
-		options, ok := body["stream_options"].(map[string]any)
-		if !ok || options["include_usage"] != true {
-			t.Fatalf("chat stream usage options = %#v", body["stream_options"])
-		}
+	if _, exists := body["stream_options"]; exists {
+		t.Fatalf("%s must not receive stream_options: %#v", protocol, body)
 	}
 	if _, exists := body["tool_choice"]; exists {
 		t.Fatalf("tool_choice should use provider default auto semantics: %#v", body["tool_choice"])

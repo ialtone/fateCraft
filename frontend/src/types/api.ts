@@ -758,8 +758,8 @@ export interface RuntimeInspector {
 
 /** LLM 设置 - 大语言模型的配置 */
 export interface LLMSettings {
-  /** Provider profile id resolved by the backend */
-  provider: string
+  /** 按已保存 base_url 识别出的端点档位（只读，供前端展示识别结果） */
+  resolved_profile?: LLMResolvedProfile
   /** API 基础 URL */
   base_url: string
   /** LLM HTTP 协议 */
@@ -771,6 +771,8 @@ export interface LLMSettings {
   editable: boolean
   /** 请求路由：server=服务端转发（默认），client=浏览器直连 */
   llm_route: 'server' | 'client'
+  /** 平台是否允许客户端直连；false 时路由选择不展示，有效路由恒为 server */
+  client_route_enabled: boolean
   /** 模型名称 */
   model: string
   /** 后台长期记忆模型，空值继承主模型 */
@@ -799,12 +801,9 @@ export interface LLMSettings {
   updated_at: string
 }
 
-export interface LLMProviderProfile {
+/** 服务端按 base_url 识别出的端点档位（只读）。协议完全由用户选择，档位不表达协议信息。 */
+export interface LLMResolvedProfile {
   id: string
-  default_api: 'chat_completions' | 'responses'
-  allowed_apis: ('chat_completions' | 'responses')[]
-  thinking_format?: string
-  native_json_schema?: boolean
 }
 
 export type LLMCapabilityRole = 'narrative' | 'memory' | 'character_inquiry'
@@ -835,8 +834,11 @@ export interface AdminSystemSettings {
   diagnostic_log_cleanup_enabled: boolean
   diagnostic_log_retention_days: number
   llm_access_mode: 'user_managed' | 'platform_managed'
+  /** 是否允许用户选择客户端直连（默认关闭，由 owner 开启） */
+  client_llm_route_enabled: boolean
   public_llm_base_url: string
-  public_llm_provider: string
+  /** 公共 base_url 的端点档位识别结果（只读） */
+  public_llm_resolved_profile?: LLMResolvedProfile
   public_llm_protocol: 'chat_completions' | 'responses'
   public_llm_has_api_key: boolean
   public_llm_model: string

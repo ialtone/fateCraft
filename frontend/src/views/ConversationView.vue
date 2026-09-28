@@ -67,9 +67,23 @@ const routeMismatch = computed(() => {
 })
 const mismatchText = computed(() => {
   const conv = convStore.current
-  const name = (route?: string) => (route === 'client' ? '客户端直连' : '服务端转发')
+  if (conv?.llm_route === 'client' && settings.settings && !settings.settings.client_route_enabled) {
+    return '平台已关闭客户端直连，此对话无法继续生成，可新建对话继续游玩。'
+  }
+  // server 路由随接入模式显示为“平台模型”或“服务端转发”。
+  const name = (route?: string) => {
+    if (route === 'client') return '客户端直连'
+    return settings.settings?.access_mode === 'platform_managed' ? '平台模型' : '服务端转发'
+  }
   return `此对话使用「${name(conv?.llm_route)}」模式创建，当前设置为「${name(settings.effectiveRoute)}」，无法继续生成。请切回原设置或新建对话。`
 })
+// 平台关闭开关导致的不匹配：只保留“新建对话”（去设置也选不了直连）。
+const mismatchCausedBySwitchOff = computed(
+  () =>
+    convStore.current?.llm_route === 'client' &&
+    !!settings.settings &&
+    !settings.settings.client_route_enabled,
+)
 // 客户端直连且路由一致，但 Relay 未连接时不能发送。
 const relayNotReady = computed(
   () =>
@@ -334,7 +348,13 @@ async function forkConversation() {
       <span>{{ mismatchText }}</span>
       <span class="route-banner-actions">
         <NButton size="small" secondary @click="router.push('/?action=new')">新建对话</NButton>
-        <NButton size="small" secondary @click="router.push('/settings')">前往设置</NButton>
+        <NButton
+          v-if="!mismatchCausedBySwitchOff"
+          size="small"
+          secondary
+          @click="router.push('/settings')"
+          >前往设置</NButton
+        >
       </span>
     </div>
     <div v-else-if="relayNotReady" class="route-banner faint-banner">

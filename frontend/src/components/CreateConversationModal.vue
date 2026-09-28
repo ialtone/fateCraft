@@ -31,10 +31,14 @@ const settings = useSettingsStore()
 const creating = ref(false)
 const form = ref({ title: '', challenge_slug: '', persona_slug: '' })
 
-// 本次创建将固化的路由（只读展示）：user_managed 下取用户设置，平台托管恒为转发。
+// 本次创建将固化的路由（只读展示），有效路由由后端计算；server 名称随接入模式变化。
 const pendingRoute = computed<'server' | 'client'>(() =>
   settings.effectiveRoute === 'client' ? 'client' : 'server',
 )
+const pendingRouteName = computed(() => {
+  if (pendingRoute.value === 'client') return '客户端直连（不计奖励）'
+  return settings.settings?.access_mode === 'platform_managed' ? '平台模型' : '服务端转发'
+})
 
 const selected = computed(() =>
   challenges.list.find((challenge) => challenge.slug === form.value.challenge_slug),
@@ -177,7 +181,7 @@ async function submit() {
           />
         </NFormItem>
         <p class="faint sm route-hint">
-          本对话将使用：{{ pendingRoute === 'client' ? '客户端直连（不计奖励）' : '服务端转发' }}
+          本对话将使用：{{ pendingRouteName }}
           <RouterLink to="/settings">去设置修改</RouterLink>
         </p>
       </NForm>

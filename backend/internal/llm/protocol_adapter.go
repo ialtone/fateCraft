@@ -50,7 +50,7 @@ func (a responsesAdapter) AgentStep(ctx context.Context, p Params, messages []Me
 }
 
 func (c *Client) adapter(p Params) protocolAdapter {
-	if ResolveProtocolForTarget(p.Provider, p.BaseURL, string(p.Protocol)) == ProtocolChatCompletions {
+	if NormalizeProtocol(string(p.Protocol)) == ProtocolChatCompletions {
 		return chatCompletionsAdapter{client: c}
 	}
 	return responsesAdapter{client: c}

@@ -225,7 +225,6 @@ type AgentEventHandler func(AgentEvent)
 // Params 是一次请求的模型参数。
 type Params struct {
 	BaseURL     string
-	Provider    string
 	APIKey      string
 	Model       string
 	Protocol    Protocol

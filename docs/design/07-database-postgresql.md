@@ -107,7 +107,7 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 ### `llm_settings`、`system_settings` 与 `llm_request_logs`
 
-`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。`system_settings` 是主键固定为 1 的管理员单例，同时保存 `installation_completed_at`（首次安装向导完成时间）、判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
+`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。该表没有 provider 列，端点能力档位只由服务端按 `base_url` 识别。`system_settings` 是主键固定为 1 的管理员单例，同时保存 `installation_completed_at`（首次安装向导完成时间）、判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置（公共配置没有 `public_llm_provider` 列）；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。`client_llm_route_enabled`（默认 FALSE）决定是否在服务端选项之外额外给用户“客户端直连”选项，与 `llm_access_mode` 相互独立，由 owner 开启。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
 
 `admin_audit_logs` 保存首次安装、角色变更、账号状态变更等安全操作的脱敏记录，不保存密码、Cookie、Authorization、初始化凭证或 LLM Key。除主键外不预设低价值筛选索引，确有时间分页需求时再增加单列 `created_at` 索引。
 

@@ -62,7 +62,7 @@ export type {
   MemoryActivityStatus,
   NarrativeActivityStatus,
   LLMSettings,
-  LLMProviderProfile,
+  LLMResolvedProfile,
   LLMCapabilityRole,
   LLMCapabilityDiagnostic,
   LLMCapabilityCheckResponse,

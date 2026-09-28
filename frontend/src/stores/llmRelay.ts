@@ -6,6 +6,23 @@ import { getLocalKey } from '@/llm/localKey'
 
 // 服务端下发的 endpoint 白名单之外一律拒绝，不接受服务端下发 URL。
 const RELAY_ENDPOINTS = ['/chat/completions', '/responses']
+
+// DeepSeek 的 Responses 不在 /v1 下：用户存的 base_url 通常是 Chat 时代的
+// https://api.deepseek.com/v1，直接拼接会得到 /v1/responses 而 404；
+// deepseek 官方域名走 /responses 时去掉 /v1 后缀（与后端 EndpointURL 同规则）。
+function relayRequestURL(baseUrl: string, endpoint: string): string {
+  if (endpoint === '/responses') {
+    try {
+      const host = new URL(baseUrl).hostname.toLowerCase()
+      if (host === 'deepseek.com' || host.endsWith('.deepseek.com')) {
+        baseUrl = baseUrl.replace(/\/v1\/*$/, '')
+      }
+    } catch {
+      // 解析失败时保持原样，由服务端返回可解释错误。
+    }
+  }
+  return `${baseUrl}${endpoint}`
+}
 // chunk 合并阈值：32KiB（UTF-8 字节）或 50ms，先到先发。
 const CHUNK_BYTES = 32 * 1024
 const CHUNK_INTERVAL_MS = 50
@@ -24,7 +41,7 @@ interface PendingFetch {
 
 /**
  * 客户端直连 Relay：应用级用户 WebSocket（与会话页无关）。
- * 满足“已登录 && user_managed && llm_route==='client'”时连接，否则断开。
+ * 满足“已登录 && llm_route==='client'”时连接，否则断开。
  * 收到 relay.request 后用本设备 Key 直接 fetch 模型服务，把原始响应字节回传；
  * Key 只发往本地 base_url + 白名单 endpoint。
  */
@@ -41,11 +58,9 @@ export const useLlmRelayStore = defineStore('llmRelay', () => {
   function shouldConnect(): boolean {
     const auth = useAuthStore()
     const settings = useSettingsStore()
-    return (
-      auth.authenticated &&
-      settings.settings?.access_mode === 'user_managed' &&
-      settings.effectiveRoute === 'client'
-    )
+    // 有效路由已由后端按“平台开关 × 用户保存值”算好，与接入模式无关：
+    // platform_managed + 开关开启 + 用户选 client 同样连接。
+    return auth.authenticated && settings.effectiveRoute === 'client'
   }
 
   function relayUrl(): string {
@@ -208,7 +223,7 @@ export const useLlmRelayStore = defineStore('llmRelay', () => {
         Authorization: `Bearer ${key}`,
       }
       if (frame.stream) headers['Accept'] = 'text/event-stream'
-      const response = await fetch(`${baseUrl}${frame.endpoint}`, {
+      const response = await fetch(relayRequestURL(baseUrl, frame.endpoint), {
         method: 'POST',
         headers,
         body: typeof frame.body === 'string' ? frame.body : '',

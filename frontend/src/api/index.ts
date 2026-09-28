@@ -25,7 +25,6 @@ import type {
   DisplayMessage,
   ActiveGuidance,
   LLMSettings,
-  LLMProviderProfile,
   LLMCapabilityCheckResponse,
   LLMCapabilityRole,
   CharacterInquiryAnswer,
@@ -245,10 +244,6 @@ export const challengesApi = {
 // 设置
 export const settingsApi = {
   get: () => http.get<LLMSettings>('/settings/llm').then((r) => r.data),
-  providers: () =>
-    http
-      .get<{ providers: LLMProviderProfile[] }>('/settings/llm/providers')
-      .then((r) => r.data.providers),
   update: (body: Record<string, any>) =>
     http.patch<LLMSettings>('/settings/llm', body).then((r) => r.data),
   // 通过后端代理拉取上游可用模型列表，避免跨域
@@ -290,8 +285,8 @@ export const adminApi = {
     diagnostic_log_cleanup_enabled?: boolean
     diagnostic_log_retention_days?: number
     llm_access_mode?: 'user_managed' | 'platform_managed'
+    client_llm_route_enabled?: boolean
     public_llm_base_url?: string
-    public_llm_provider?: string
     public_llm_protocol?: 'chat_completions' | 'responses'
     public_llm_api_key?: string
     clear_public_llm_api_key?: boolean
@@ -310,6 +305,15 @@ export const adminApi = {
   fetchPublicModels: (body: { base_url: string; api_key?: string }) =>
     http
       .post<{ models: string[] }>('/admin/system-settings/fetch-models', body)
+      .then((r) => r.data),
+  // 公共 LLM 能力检测（owner-only）：直接使用平台配置，与调用者本人的路由无关。
+  checkPublicCapabilities: (role: LLMCapabilityRole) =>
+    http
+      .post<LLMCapabilityCheckResponse>(
+        '/admin/system-settings/capabilities/check',
+        { role },
+        { timeout: 180000 },
+      )
       .then((r) => r.data),
   listLLMRequestLogs: (params?: { limit?: number; conversation_id?: string }) =>
     http

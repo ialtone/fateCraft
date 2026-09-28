@@ -207,13 +207,12 @@ rewards 返回当前用户持有的奖励定义与余额；ledger 返回关联�
 
 ```text
 GET   /api/settings/llm
-GET   /api/settings/llm/providers
 PATCH /api/settings/llm
 POST  /api/settings/fetch-models
 POST  /api/settings/llm/capabilities/check
 ```
 
-设置由管理员接入模式控制。`GET /api/settings/llm` 返回当前有效配置、`access_mode`、`source`、`editable` 和 `llm_route`；`user_managed` 时来自当前用户行，`platform_managed` 时来自 `system_settings` 公共配置（有效路由恒为 `server`）。GET 不返回 API Key，只返回 `has_api_key`。`client` 路由的运行时配置不解密、不要求 Key，`source` 为 `client`。PATCH 支持 `llm_route`：切到 `client` 会忽略请求中的 `api_key` 并清空服务端 Key（切回需重填），路由变化递增 `settings_revision`；切离 `client` 时服务端主动关闭该玩家 Relay 连接。平台模式下用户 PATCH 和 `/api/settings/fetch-models` 返回 403；`client` 路由下 `/api/settings/fetch-models` 返回 409（浏览器直接请求 `/models`）。管理员通过 `GET/PATCH /api/admin/system-settings` 维护模式和公共配置，Key 只写入不回显，并通过 `POST /api/admin/system-settings/fetch-models` 获取公共模型列表；切到 `platform_managed` 时关闭全部 Relay 连接。
+设置由管理员接入模式与直连开关共同控制。`GET /api/settings/llm` 返回用户个人配置行、`access_mode`、`source`、`editable`、`llm_route` 和 `client_route_enabled`（平台是否允许客户端直连），以及按已保存 base_url 识别的只读 `resolved_profile`（只含 `{id}`，协议完全由用户选择，档位不表达协议信息，供前端展示“已识别为 …，已自动适配请求参数”）；`platform_managed` 下返回的也是个人配置，看不到平台 base_url 与模型名，平台配置不完整时设置页仍可打开。`GET` 返回的 `llm_route` 已是有效路由（只由开关和用户保存值决定）：开关关闭时用户保存的 `client` 被忽略为 `server`。`source` 按有效路由与接入模式给出 `platform` / `user` / `client`；`editable` 表示个人配置是否可编辑（`user_managed`，或开关开启的 `platform_managed`）。GET 不返回 API Key，只返回 `has_api_key`。`client` 路由的运行时配置不解密、不要求 Key，`source` 为 `client`。PATCH 支持 `llm_route`：切到 `client` 会忽略请求中的 `api_key` 并清空服务端 Key（`user_managed` 下切回需重填，`platform_managed` 下不涉及服务端 Key）；用户设置与公共配置都没有 provider 字段，请求体出现 `provider` / `public_llm_provider` 时被忽略，不报错；`platform_managed` + 开关开启 + `server` 只把 `llm_route` 写为 `server`（个人配置与 Key 原样保留，请求体配置字段被忽略，不要求 Key）；路由变化递增 `settings_revision`；平台未开放直连时以 `client` 保存返回 403（`code=llm_client_route_disabled`），`platform_managed` + 开关关闭时用户 PATCH 返回 403，未传 `llm_route` 时沿用当前有效路由；切离 `client` 时服务端主动关闭该玩家 Relay 连接。`platform_managed` 下 `/api/settings/fetch-models` 返回 403（客户端直连由浏览器直接请求 `/models`）；`client` 路由下 `/api/settings/fetch-models` 返回 409（`code=llm_route_client`）。管理员通过 `GET/PATCH /api/admin/system-settings` 维护模式、公共配置和 `client_llm_route_enabled`（只有 owner 可改该字段）；GET 响应附带按公共 base_url 识别的只读 `public_llm_resolved_profile`；Key 只写入不回显，并通过 `POST /api/admin/system-settings/fetch-models` 获取公共模型列表；公共 LLM 能力检测走独立的 owner 接口 `POST /api/admin/system-settings/capabilities/check`（请求体 `{role}`，直接使用平台配置经服务端直连，与检测者本人的路由无关）。关闭直连开关时关闭全部 Relay 连接；切换公共 LLM 不断开。
 
 check 是用户显式触发的同步、无副作用诊断，最长使用独立的 3 分钟请求超时。请求体只能是 `{"role":"narrative"}`、`{"role":"memory"}` 或 `{"role":"character_inquiry"}`；接口不接受 URL、密钥或模型参数，而是读取当前已保存设置。
 
@@ -421,4 +420,4 @@ POST /api/admin/share-reports/:id/resolve
 
 语义：`head` 前断开/超时（120s）可重试；`head` 后断开、`seq` 乱序、未知 `relay_id` 的后续帧按中断处理（不可重试）；`no_key`/`network` 不可重试。同玩家多连接时请求只派发给最新存活连接，旧连接作候补；每玩家并发上限 4，超限排队（受 ctx 约束）。
 
-错误码：`llm_route_mismatch`（对象路由 ≠ 当前有效路由，REST 409 / WS `notice`）、`llm_relay_unavailable`（无 Relay 连接，问答等同步接口 409）、`llm_relay_lost`、`llm_relay_network`、`llm_relay_no_key`。`POST /api/settings/fetch-models` 在 `client` 路由返回 409（`code=llm_route_client`）。
+错误码：`llm_route_mismatch`（对象路由 ≠ 当前有效路由，REST 409 / WS `notice`）、`llm_relay_unavailable`（无 Relay 连接，问答等同步接口 409）、`llm_relay_lost`、`llm_relay_network`、`llm_relay_no_key`、`llm_client_route_disabled`（平台未开放直连时以 `client` 保存设置，PATCH 403）。`POST /api/settings/fetch-models` 在 `client` 路由返回 409（`code=llm_route_client`）。

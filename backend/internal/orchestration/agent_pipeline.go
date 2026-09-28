@@ -214,7 +214,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 		step := &storage.AgentStep{
 			ID: uuid.New(), ConversationID: convID, StepNo: stepNo,
 			Status: storage.AgentStepRunning, OutputLane: storage.AgentLaneUndecided,
-			Model: settings.Model, Protocol: string(llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol)),
+			Model: settings.Model, Protocol: string(llm.NormalizeProtocol(settings.Protocol)),
 			ToolSnapshot: storage.JSONDoc(snapshot.JSON), ToolSnapshotHash: snapshot.Hash,
 			CampaignRevision: conversationCampaignRevision(conv, snapshot), PromptTokens: built.UsedPromptTokens,
 			TokenUsageSource: "estimated", FirstEventMS: -1, FirstTextMS: -1,
@@ -232,8 +232,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 		modelStartedAt := time.Now()
 		firstEventMS, firstTextMS, firstToolMS := int64(-1), int64(-1), int64(-1)
 		params := llm.Params{
-			BaseURL: settings.BaseURL, Provider: settings.Provider, APIKey: apiKey, Model: settings.Model,
-			Protocol: llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol), Temperature: settings.Temperature,
+			BaseURL: settings.BaseURL, APIKey: apiKey, Model: settings.Model,
+			Protocol: llm.NormalizeProtocol(settings.Protocol), Temperature: settings.Temperature,
 			TopP: settings.TopP, MaxTokens: settings.MaxResponseTokens, ReasoningEffort: settings.ReasoningEffort,
 			ConversationID: convID.String(), MessageID: displayID.String(), Purpose: "narrative",
 			AttemptID: metadata.AttemptID.String(), SettingsRevision: settings.SettingsRevision, SettingsSource: settings.Source,

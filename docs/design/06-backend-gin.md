@@ -34,7 +34,20 @@ internal/modelcapability 用户显式触发的无副作用模型诊断
 
 ### LLM 能力规划与传输边界
 
-`internal/llm` 在进入协议 Adapter 前使用服务端维护的 Provider Profile/Model Capabilities 矩阵规划请求。矩阵描述协议、流式终止事件、reasoning、工具调用、结构化输出、图片输入和可选参数能力；前端和玩法包不维护模型名称分支。明确不支持的能力会在请求前裁剪或返回可解释错误，未知能力对自定义兼容网关保持保守透传。
+`internal/llm` 在进入协议 Adapter 前使用服务端维护的端点能力档位（Capability Profile）规划请求。档位只按 Base URL 识别，没有用户可设的 provider 字段；**协议完全由用户选择，任何档位都不能改写**。档位只做两类事：省略端点会拒绝或无意义的可选字段（`stream_options`、`parallel_tool_calls`、工具 `strict`），以及对确定会失败的请求提前拦截并告诉用户怎么改。能力按“档位 × 协议”区分：
+
+网址识别规则（host 小写后比较）：`api.openai.com` 精确匹配为 `openai`（必须精确匹配，该档假设全部能力支持，误判会把 `strict` 等字段发给不支持的网关）；`deepseek.com` 或 `.deepseek.com` 后缀为 `deepseek`；`openrouter.ai` 或 `.openrouter.ai` 后缀为 `openrouter`；其他（含解析失败与空网址）一律为 `custom_openai_compatible`，尊重手动选择的协议。`openai-proxy.example.com`、`api.openai.com.evil.com`、`mydeepseek-proxy.com` 这类仿冒域名都按兼容网关处理。
+
+| 档位 | 协议 | `stream_options`（仅 Chat 流式） | `parallel_tool_calls: false` | 工具 `strict` | JSON Schema 结构化输出 |
+| --- | --- | --- | --- | --- | --- |
+| `openai` | Chat | 发 | 发 | 发 | 支持 |
+| `openai` | Responses | — | 发 | 发 | 支持 |
+| `deepseek` | Chat | 发 | 发 | 不发 | 不支持：提前拦截，提示改用 Responses |
+| `deepseek` | Responses | — | 不发（官方忽略） | 不发 | 支持 |
+| `openrouter` | Chat / Responses | Chat 发 | 不发 | 不发 | 未知（不拦截） |
+| `custom_openai_compatible` | Chat / Responses | 不发 | 不发 | 不发 | 未知（不拦截） |
+
+工具 `strict` 与 JSON Schema 结构化输出是两个独立字段。DeepSeek 的 Responses 不在 `/v1` 下：用户存的 `base_url` 通常是 Chat 时代的 `https://api.deepseek.com/v1`，走 `/responses` 时服务端与浏览器 Relay 都会去掉 `/v1` 后缀，让同一地址两种协议都可用。前端和玩法包不维护模型名称分支。
 
 模型 HTTP 传输只在收到响应体之前对连接错误、429、502、503、504 和明确的临时不可用执行有限指数退避重试，并尊重 `Retry-After`。收到 2xx 流后由解析器负责一次性消费；正文、工具调用或结构化结果已经开始后不重放 Agent 步骤，避免重复领域副作用。所有 SSE JSON 解析错误、提前 EOF 和缺少协议终止事件均为失败，不得把临时文本当作最终结果。
 
@@ -130,7 +143,7 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 3. 首次步骤装配并校验对话固定 Bundle，后续步骤复用该不可变 Bundle；每步重新读取可信状态和当前 Campaign Projection，按 Runtime 构建工具快照。Campaign 动态能力会转换为 `fc_action_*` 工具，并从 Projection 正文移除。
 4. Context Builder 为当前回合、required Prompt、工具定义和最大回复预留预算，按完整回合边界装配历史并写上下文日志；Memory 滞后只规划后台任务，不阻塞叙事。
 5. 第一步固定 attempt 的工具目录版本与 Runtime hash；每步保存工具定义、快照哈希、Handler 版本和 Campaign revision 到 `agent_steps`。
-6. LLM Client 先由 Provider Profile 选择唯一协议 Adapter，在序列化前用 `PrepareToolReplay` 校验并修复历史中的工具调用/结果配对，再向 Chat Completions 或 Responses 提供工具并省略可选的 `tool_choice`，使用协议默认 `auto` 语义。缺失结果只补明确失败结果，孤立结果丢弃，重复/冲突 ID 在本地阻止请求；整理不执行工具、不改变领域事实。步骤结束后按完整统一结果判定：只要存在工具调用就进入工具 lane，伴随文本视为中间内容；否则保存普通文本。
+6. LLM Client 按用户选择的协议使用唯一协议 Adapter，在序列化前用 `PrepareToolReplay` 校验并修复历史中的工具调用/结果配对，再向 Chat Completions 或 Responses 提供工具并省略可选的 `tool_choice`，使用协议默认 `auto` 语义。缺失结果只补明确失败结果，孤立结果丢弃，重复/冲突 ID 在本地阻止请求；整理不执行工具、不改变领域事实。步骤结束后按完整统一结果判定：只要存在工具调用就进入工具 lane，伴随文本视为中间内容；否则保存普通文本。
 7. 文本通道完整结束后保存最终 assistant/display message 并封口 attempt；工具通道先持久化 invocation，再由可信 Handler 执行，将公开 tool result 加入历史后进入下一模型步骤。用户点击“继续”时，触发词也按普通用户消息同时写入内部历史和展示时间线。
 8. 最多允许 6 个写工具成功提交；第 7 个写调用在执行前返回 `mutating_tool_limit`。工具拒绝可以由下一模型步骤消化，不触发内部模型重试。
 9. 写工具已提交但最终文本失败时，attempt/turn 标记为 `partial`，已提交事实保留；用户可以使用只提供文本通道的“继续叙事”收尾。
@@ -255,3 +268,4 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 - 新包 `internal/llmrelay`：用户级 Relay 连接注册表（同玩家多标签页取最新存活连接作主、旧连接候补；每玩家并发上限 4，超限排队）。`Do` 发 `relay.request`、等 head 最长 120s，以 `io.Pipe` 组装 `*http.Response` 交给现有解析器；head 到达后仍监听 ctx，取消时发 `relay.cancel` 并以 ctx 错误关闭 pipe；seq 乱序、`relay_id` 未知等协议违规按规则终止；chunk 队列（64 帧）满时终结本请求、不阻塞同连接其他请求。投递与终结在同一互斥下串行化，避免向已关闭队列发送。入站单帧 256KiB，出站 body 8MiB；心跳沿用 Hub 参数；握手要求有效路由为 client，切回 server/platform 时主动关闭。
 - 调用方统一在 `client` 路由且 `Settings.LLMRoute` 为 client 时注入传输：主叙事（Generator）、Memory Worker（无连接不领取，执行中丢失按暂时性失败重试）、角色问答（无连接 409）、能力诊断。`fetchModels` 在 client 路由返回 409，由浏览器直接请求。
 - 路由闸门：`storage.CheckLLMRoute` + `ErrLLMRouteMismatch`；创建入口固化路由；生成/问答/记忆入口校验；`GET /ws/llm-relay`（`requireAuth` + 路由准入）。
+- 有效路由的唯一计算点是 `llmsettings.resolveRoute`（平台开关 × 用户保存值），与接入模式无关：开关关闭恒为 `server`，否则为用户保存值。`EffectiveRoute`/`Get`/`Personal` 都经它计算；`UpdateUser` 以 `client` 保存而开关关闭时返回 `ErrClientRouteDisabled`（用户设置接口映射 403 + `llm_client_route_disabled`）。`Get` 先算有效路由再分派：`client`（任意接入模式）返回用户个人配置且不检查平台完整性；`platform_managed` 的 `server` 返回平台配置；`user_managed` 的 `server` 返回用户个人配置并解密 Key。`Personal` 返回用户保存的个人配置行（不解密，供设置页展示与保存合并基准，`LLMRoute` 为有效路由）；`UserView` 基于 `Personal`，普通用户看不到平台 base_url 与模型，平台不完整时设置页仍可打开；`PlatformRuntime` 直接返回平台配置，供管理员公共配置诊断。管理接口的开关字段只有 owner 可改；关闭开关时调用 `relays.CloseAll()` 立刻断开全部 Relay 连接，切换公共 LLM 不断开（不改变任何用户的有效路由）；在途回合按连接断开收尾。开关不参与 `public_llm_settings_revision` 判断。

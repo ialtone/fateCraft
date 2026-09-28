@@ -43,19 +43,29 @@ func (s *Server) getLLMSettings(c *gin.Context) {
 		st.HasAPIKey = st.APIKey != "" || st.APIKeyEncrypted != ""
 		st.APIKey = ""
 	}
-	c.JSON(http.StatusOK, st)
+	c.JSON(http.StatusOK, &llmSettingsResponse{LLMSettings: st, ResolvedProfile: resolveLLMProfile(st.BaseURL)})
 }
 
-// listLLMProviderProfiles keeps provider/API capability metadata server-owned.
-// The frontend must not maintain a parallel compatibility matrix.
-func (s *Server) listLLMProviderProfiles(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"providers": llm.Profiles()})
+// llmResolvedProfile 是按已保存 base_url 识别出的端点档位，只读，供前端
+// 展示识别结果。档位识别完全由服务端按网址完成，不放进 storage 模型，
+// 避免 storage 依赖 llm。协议完全由用户选择，档位不表达协议信息。
+type llmResolvedProfile struct {
+	ID string `json:"id"`
+}
+
+func resolveLLMProfile(baseURL string) llmResolvedProfile {
+	return llmResolvedProfile{ID: llm.ResolveProfile(baseURL).ID}
+}
+
+// llmSettingsResponse 在用户设置上附加只读的档位识别结果。
+type llmSettingsResponse struct {
+	*storage.LLMSettings
+	ResolvedProfile llmResolvedProfile `json:"resolved_profile"`
 }
 
 // llmSettingsBody 更新 LLM 设置。api_key 为 nil 时保留原值，避免置空。
 // llm_route 为 nil 时保持当前路由；client 路由的 api_key 只写浏览器，不提交服务端。
 type llmSettingsBody struct {
-	Provider          *string  `json:"provider"`
 	BaseURL           *string  `json:"base_url"`
 	Protocol          *string  `json:"protocol"`
 	APIKey            *string  `json:"api_key"`
@@ -80,21 +90,14 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if s.llmSettings != nil {
-		mode, modeErr := s.llmSettings.AccessMode(c.Request.Context())
-		if modeErr != nil {
-			fail(c, modeErr)
-			return
-		}
-		if mode != llmsettings.AccessModeUserManaged {
-			c.JSON(http.StatusForbidden, gin.H{"error": llmsettings.ErrUserSettingsDisabled.Error()})
-			return
-		}
-	}
+	// 权限判断统一交给 UpdateUser（platform_managed 下开关开启时允许保存
+	// 客户端直连配置或选回平台模型），handler 不再提前拦截。
 	var cur *storage.LLMSettings
 	var err error
 	if s.llmSettings != nil {
-		cur, err = s.llmSettings.Get(c.Request.Context(), playerID)
+		// 合并基准是用户个人配置：platform_managed 下 Get 可能返回平台配置，
+		// 把请求体合并上去再保存会把平台 base_url、模型写进用户行。
+		cur, err = s.llmSettings.Personal(c.Request.Context(), playerID)
 	} else {
 		cur, err = s.settings.Get(c.Request.Context(), playerID)
 	}
@@ -102,73 +105,86 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	if b.BaseURL != nil {
-		cur.BaseURL = strings.TrimSpace(*b.BaseURL)
-	}
-	if b.Provider != nil {
-		cur.Provider = strings.TrimSpace(*b.Provider)
-	}
-	if b.Protocol != nil {
-		cur.Protocol = strings.TrimSpace(*b.Protocol)
+	// 请求体未给 llm_route 时沿用当前有效路由（Personal 已设为有效路由）。
+	route := cur.LLMRoute
+	if b.LLMRoute != nil {
+		route = *b.LLMRoute
 	}
 	apiKey := b.APIKey
-	if b.Model != nil {
-		cur.Model = strings.TrimSpace(*b.Model)
+	// platform_managed 下选回平台模型时只提交 llm_route：个人配置字段原样
+	// 保留（UpdateUser 忽略请求体），跳过合并与校验——个人配置可能为空。
+	skipPersonalMerge := false
+	if s.llmSettings != nil {
+		if mode, modeErr := s.llmSettings.AccessMode(c.Request.Context()); modeErr != nil {
+			fail(c, modeErr)
+			return
+		} else if mode == llmsettings.AccessModePlatformManaged && route == storage.LLMRouteServer {
+			skipPersonalMerge = true
+			apiKey = nil
+		}
 	}
-	if b.MemoryModel != nil {
-		cur.MemoryModel = strings.TrimSpace(*b.MemoryModel)
-	}
-	if b.InquiryModel != nil {
-		cur.InquiryModel = strings.TrimSpace(*b.InquiryModel)
-	}
-	if b.MaxContextTokens != nil {
-		cur.MaxContextTokens = *b.MaxContextTokens
-	}
-	if b.MaxResponseTokens != nil {
-		cur.MaxResponseTokens = *b.MaxResponseTokens
-	}
-	if b.Temperature != nil {
-		cur.Temperature = *b.Temperature
-	}
-	if b.TopP != nil {
-		cur.TopP = *b.TopP
-	}
-	if b.StreamEnabled != nil {
-		cur.StreamEnabled = *b.StreamEnabled
-	}
-	if b.ReasoningEffort != nil {
-		cur.ReasoningEffort = strings.TrimSpace(*b.ReasoningEffort)
-	}
-	if b.MemoryReasoning != nil {
-		cur.MemoryReasoningEffort = strings.TrimSpace(*b.MemoryReasoning)
-	}
-	if b.InquiryReasoning != nil {
-		cur.InquiryReasoningEffort = strings.TrimSpace(*b.InquiryReasoning)
-	}
-	if !llm.IsValidProtocol(cur.Protocol) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "protocol 必须是 chat_completions 或 responses"})
-		return
-	}
-	if cur.Protocol == "" {
-		cur.Protocol = storage.DefaultLLMProtocol
-	}
-	if cur.Provider == "" {
-		cur.Provider = "openai"
-	}
-	if err := validateLLMSettings(cur); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if !skipPersonalMerge {
+		if b.BaseURL != nil {
+			cur.BaseURL = strings.TrimSpace(*b.BaseURL)
+		}
+		if b.Protocol != nil {
+			cur.Protocol = strings.TrimSpace(*b.Protocol)
+		}
+		if b.Model != nil {
+			cur.Model = strings.TrimSpace(*b.Model)
+		}
+		if b.MemoryModel != nil {
+			cur.MemoryModel = strings.TrimSpace(*b.MemoryModel)
+		}
+		if b.InquiryModel != nil {
+			cur.InquiryModel = strings.TrimSpace(*b.InquiryModel)
+		}
+		if b.MaxContextTokens != nil {
+			cur.MaxContextTokens = *b.MaxContextTokens
+		}
+		if b.MaxResponseTokens != nil {
+			cur.MaxResponseTokens = *b.MaxResponseTokens
+		}
+		if b.Temperature != nil {
+			cur.Temperature = *b.Temperature
+		}
+		if b.TopP != nil {
+			cur.TopP = *b.TopP
+		}
+		if b.StreamEnabled != nil {
+			cur.StreamEnabled = *b.StreamEnabled
+		}
+		if b.ReasoningEffort != nil {
+			cur.ReasoningEffort = strings.TrimSpace(*b.ReasoningEffort)
+		}
+		if b.MemoryReasoning != nil {
+			cur.MemoryReasoningEffort = strings.TrimSpace(*b.MemoryReasoning)
+		}
+		if b.InquiryReasoning != nil {
+			cur.InquiryReasoningEffort = strings.TrimSpace(*b.InquiryReasoning)
+		}
+		if !llm.IsValidProtocol(cur.Protocol) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "protocol 必须是 chat_completions 或 responses"})
+			return
+		}
+		if cur.Protocol == "" {
+			cur.Protocol = storage.DefaultLLMProtocol
+		}
+		if err := validateLLMSettings(cur); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	cur.UpdatedAt = time.Now()
 	if s.llmSettings != nil {
-		route := cur.LLMRoute
-		if b.LLMRoute != nil {
-			route = *b.LLMRoute
-		}
 		updated, err := s.llmSettings.UpdateUser(c.Request.Context(), playerID, cur, apiKey, route)
 		if err != nil {
 			if err == llmsettings.ErrUserSettingsDisabled {
 				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+				return
+			}
+			if err == llmsettings.ErrClientRouteDisabled {
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "llm_client_route_disabled"})
 				return
 			}
 			if err == llmsettings.ErrMissingAPIKey || err == llmsettings.ErrInvalidLLMRoute {
@@ -186,7 +202,7 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 		if s.relays != nil && updated.LLMRoute != storage.LLMRouteClient {
 			s.relays.ClosePlayer(playerID)
 		}
-		c.JSON(http.StatusOK, updated)
+		c.JSON(http.StatusOK, &llmSettingsResponse{LLMSettings: updated, ResolvedProfile: resolveLLMProfile(updated.BaseURL)})
 		return
 	}
 	if err := s.settings.Save(c.Request.Context(), playerID, cur); err != nil {
@@ -195,7 +211,7 @@ func (s *Server) updateLLMSettings(c *gin.Context) {
 	}
 	cur.HasAPIKey = cur.APIKey != ""
 	cur.APIKey = ""
-	c.JSON(http.StatusOK, cur)
+	c.JSON(http.StatusOK, &llmSettingsResponse{LLMSettings: cur, ResolvedProfile: resolveLLMProfile(cur.BaseURL)})
 }
 
 func (s *Server) checkLLMCapabilities(c *gin.Context) {

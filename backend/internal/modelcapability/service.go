@@ -64,7 +64,7 @@ func (s *Service) Check(ctx context.Context, playerID uuid.UUID, settings *stora
 		}
 	}
 	result := DiagnosticResult{
-		Role: role, Protocol: string(llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol)),
+		Role: role, Protocol: string(llm.NormalizeProtocol(settings.Protocol)),
 		Model: modelForRole(settings, role), Stream: role == RoleNarrative && settings.StreamEnabled,
 		Status: "unavailable", CheckedAt: time.Now(),
 	}
@@ -156,8 +156,8 @@ func (s *Service) checkJSONSchema(ctx context.Context, playerID uuid.UUID, setti
 func (s *Service) params(playerID uuid.UUID, settings *storage.LLMSettings, model string, role Role) llm.Params {
 	apiKey := settings.APIKey
 	return llm.Params{
-		BaseURL: settings.BaseURL, Provider: settings.Provider, APIKey: apiKey, Model: model,
-		Protocol: llm.ResolveProtocolForTarget(settings.Provider, settings.BaseURL, settings.Protocol), Temperature: 0, TopP: 1,
+		BaseURL: settings.BaseURL, APIKey: apiKey, Model: model,
+		Protocol: llm.NormalizeProtocol(settings.Protocol), Temperature: 0, TopP: 1,
 		ReasoningEffort: effortForRole(settings, role),
 		Relay:           s.relayForRoute(playerID, settings),
 		// A diagnostic is an explicit one-shot probe. The production transport

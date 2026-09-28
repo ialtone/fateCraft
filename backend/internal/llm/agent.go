@@ -256,7 +256,7 @@ func logToolReplayRepairs(p Params, repairs []ReplayRepair) {
 }
 
 // projectAgentContent is the canonical output projection shared by both
-// protocol adapters. Provider replay payloads remain opaque to callers.
+// protocol adapters. Replay payloads remain opaque to callers.
 func projectAgentContent(result AgentStepResult) []ContentBlock {
 	content := make([]ContentBlock, 0, len(result.ToolCalls)+3)
 	for _, raw := range result.ReasoningItems {
@@ -301,7 +301,7 @@ func (c *Client) agentChat(ctx context.Context, p Params, messages []Message, to
 		TopP: p.TopP, MaxTokens: p.MaxTokens, Stream: stream, ReasoningEffort: p.ReasoningEffort,
 		Tools: chatAgentTools(tools, strictToolsAllowed(p)),
 	}
-	if stream && ResolveProfile(p.Provider, p.BaseURL).ID != "custom_openai_compatible" {
+	if stream && ResolveEndpointCapabilities(p.BaseURL, ProtocolChatCompletions).ChatStreamUsage {
 		body.StreamOptions = &chatStreamOptions{IncludeUsage: true}
 	}
 	if len(tools) > 0 && parallelToolFlagAllowed(p) {
@@ -386,13 +386,13 @@ func chatAgentTools(tools []ToolDefinition, strict bool) []chatAgentTool {
 }
 
 // parallelToolFlagAllowed / strictToolsAllowed:自定义兼容网关经常对未知字段
-// 直接返回 400,因此这两个可选字段只发给明确声明支持的 Provider。
+// 直接返回 400,因此这两个可选字段只发给当前协议明确支持的端点档位。
 func parallelToolFlagAllowed(p Params) bool {
-	return ResolveModelCapabilities(p.Provider, p.BaseURL, p.Model).ParallelToolCalls.Status != CapabilityUnknown
+	return ResolveEndpointCapabilities(p.BaseURL, p.Protocol).ParallelToolFlag
 }
 
 func strictToolsAllowed(p Params) bool {
-	return ResolveModelCapabilities(p.Provider, p.BaseURL, p.Model).StructuredJSONSchema.Status == CapabilitySupported
+	return ResolveEndpointCapabilities(p.BaseURL, p.Protocol).StrictTools
 }
 
 func parseAgentChatComplete(raw []byte, onEvent AgentEventHandler) (AgentStepResult, error) {
@@ -1072,7 +1072,7 @@ func rawResponsesOutputText(raw json.RawMessage) string {
 }
 
 // reasoningOutputText extracts only provider-declared readable text from a
-// reasoning output item. Provider-owned fields such as encrypted_content are
+// reasoning output item. Upstream-owned fields such as encrypted_content are
 // intentionally ignored; the raw item is still retained separately for
 // protocol replay.
 func reasoningOutputText(item responsesAgentOutput) string {

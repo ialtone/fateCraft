@@ -4,9 +4,17 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/storage"
 )
+
+// relayRegistry 是设置与管理接口需要的 Relay 注册表能力子集（接口便于测试断言）。
+type relayRegistry interface {
+	CloseAll()
+	ClosePlayer(playerID string)
+	Serve(w http.ResponseWriter, req *http.Request, playerID uuid.UUID)
+}
 
 // serveLLMRelay 升级为用户级 Relay 连接，承载模型请求转发。
 // requireAuth 已校验会话；Registry 内部再校验当前有效路由为 client。

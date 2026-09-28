@@ -1060,7 +1060,6 @@ CREATE INDEX idx_context_build_logs_conversation ON context_build_logs(conversat
 
 CREATE TABLE llm_settings (
     player_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    provider VARCHAR(64) NOT NULL DEFAULT 'openai',
     base_url VARCHAR(512) NOT NULL DEFAULT 'https://api.openai.com/v1',
     protocol VARCHAR(32) NOT NULL DEFAULT 'responses' CHECK (protocol IN ('chat_completions', 'responses')),
     api_key_encrypted TEXT,
@@ -1091,8 +1090,9 @@ CREATE TABLE system_settings (
     diagnostic_log_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     diagnostic_log_retention_days INTEGER NOT NULL DEFAULT 30 CHECK (diagnostic_log_retention_days BETWEEN 1 AND 3650),
     llm_access_mode VARCHAR(32) NOT NULL DEFAULT 'user_managed' CHECK (llm_access_mode IN ('user_managed', 'platform_managed')),
+    -- 是否允许用户选择客户端直连（与 llm_access_mode 相互独立）；默认关闭，由 owner 开启。
+    client_llm_route_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     public_llm_base_url VARCHAR(512) NOT NULL DEFAULT 'https://api.openai.com/v1',
-    public_llm_provider VARCHAR(64) NOT NULL DEFAULT 'openai',
     public_llm_protocol VARCHAR(32) NOT NULL DEFAULT 'responses' CHECK (public_llm_protocol IN ('chat_completions', 'responses')),
     public_llm_api_key_encrypted TEXT,
     public_llm_model VARCHAR(128) NOT NULL DEFAULT '',

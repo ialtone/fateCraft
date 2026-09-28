@@ -24,7 +24,7 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 	if p.Relay == nil && p.APIKey == "" {
 		return nil, fmt.Errorf("未配置 LLM API Key")
 	}
-	requestURL := strings.TrimRight(p.BaseURL, "/") + endpoint
+	requestURL := EndpointURL(p.BaseURL, endpoint)
 	policy := effectiveRetryPolicy(p.RetryPolicy)
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
 		resp, err := c.roundTrip(ctx, p, requestURL, endpoint, body, stream)
@@ -54,7 +54,7 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 			_ = resp.Body.Close()
 		}
 		logging.Named("llm").Warn("模型请求将重试",
-			zap.String("model", p.Model), zap.String("provider", p.Provider),
+			zap.String("model", p.Model), zap.String("profile", ResolveProfile(p.BaseURL).ID),
 			zap.String("endpoint", endpoint), zap.Int("attempt", attempt),
 			zap.Int("max_attempts", policy.MaxAttempts), zap.String("reason", retryReason(err, resp)),
 		)

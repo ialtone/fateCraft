@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/challengeimport"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
+	"github.com/ialtone/fatecraft/internal/modelcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -32,7 +34,14 @@ func (s *Server) getAdminSystemSettings(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, settings)
+	c.JSON(http.StatusOK, &adminSystemSettingsResponse{SystemSettings: settings, PublicLLMResolvedProfile: resolveLLMProfile(settings.PublicLLMBaseURL)})
+}
+
+// adminSystemSettingsResponse 在管理员系统设置上附加公共 base_url 的只读
+// 档位识别结果。
+type adminSystemSettingsResponse struct {
+	*storage.SystemSettings
+	PublicLLMResolvedProfile llmResolvedProfile `json:"public_llm_resolved_profile"`
 }
 
 type adminSystemSettingsBody struct {
@@ -42,8 +51,8 @@ type adminSystemSettingsBody struct {
 	DiagnosticLogCleanup    *bool    `json:"diagnostic_log_cleanup_enabled"`
 	DiagnosticRetentionDays *int     `json:"diagnostic_log_retention_days"`
 	LLMAccessMode           *string  `json:"llm_access_mode"`
+	ClientLLMRouteEnabled   *bool    `json:"client_llm_route_enabled"`
 	PublicBaseURL           *string  `json:"public_llm_base_url"`
-	PublicProvider          *string  `json:"public_llm_provider"`
 	PublicProtocol          *string  `json:"public_llm_protocol"`
 	PublicAPIKey            *string  `json:"public_llm_api_key"`
 	ClearPublicAPIKey       bool     `json:"clear_public_llm_api_key"`
@@ -69,7 +78,7 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 	actorValue, _ := c.Get(authUserKey)
 	actor, _ := actorValue.(*storage.User)
 	if actor == nil || !actor.IsOwner() {
-		if body.LLMAccessMode != nil || body.PublicBaseURL != nil || body.PublicProvider != nil ||
+		if body.LLMAccessMode != nil || body.ClientLLMRouteEnabled != nil || body.PublicBaseURL != nil ||
 			body.PublicProtocol != nil || body.PublicAPIKey != nil || body.ClearPublicAPIKey ||
 			body.PublicModel != nil || body.PublicMemoryModel != nil || body.PublicInquiryModel != nil ||
 			body.PublicMaxContext != nil || body.PublicMaxResponse != nil || body.PublicTemperature != nil ||
@@ -110,11 +119,11 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 	if body.LLMAccessMode != nil {
 		settings.LLMAccessMode = *body.LLMAccessMode
 	}
+	if body.ClientLLMRouteEnabled != nil {
+		settings.ClientLLMRouteEnabled = *body.ClientLLMRouteEnabled
+	}
 	if body.PublicBaseURL != nil {
 		settings.PublicLLMBaseURL = *body.PublicBaseURL
-	}
-	if body.PublicProvider != nil {
-		settings.PublicLLMProvider = strings.TrimSpace(*body.PublicProvider)
 	}
 	if body.PublicProtocol != nil {
 		settings.PublicLLMProtocol = *body.PublicProtocol
@@ -155,7 +164,7 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 	if s.llmSettings != nil {
 		if strings.TrimSpace(settings.LLMAccessMode) == llmsettings.AccessModePlatformManaged {
 			candidate := &storage.LLMSettings{
-				Provider: settings.PublicLLMProvider, BaseURL: settings.PublicLLMBaseURL, Protocol: settings.PublicLLMProtocol,
+				BaseURL: settings.PublicLLMBaseURL, Protocol: settings.PublicLLMProtocol,
 				Model: settings.PublicLLMModel, MaxContextTokens: settings.PublicLLMMaxContextTokens,
 				MaxResponseTokens: settings.PublicLLMMaxResponseTokens,
 				Temperature:       settings.PublicLLMTemperature, TopP: settings.PublicLLMTopP,
@@ -177,18 +186,21 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 			c.JSON(status, gin.H{"error": updateErr.Error()})
 			return
 		}
-		// 切到 platform_managed 后有效路由恒为 server，关闭全部 Relay 连接。
-		if s.relays != nil && updated.LLMAccessMode == llmsettings.AccessModePlatformManaged {
+		// 关闭客户端直连开关时立刻关闭全部 Relay 连接，在途的客户端直连回合
+		// 按连接断开收尾。切换公共 LLM 不改变任何用户的有效路由，不断开连接。
+		// 注意：ClientLLMRouteEnabled 不参与 public_llm_settings_revision 判断（见
+		// llmsettings.samePlatformInvocation），开关本身不递增 revision。
+		if s.relays != nil && body.ClientLLMRouteEnabled != nil && !*body.ClientLLMRouteEnabled {
 			s.relays.CloseAll()
 		}
-		c.JSON(http.StatusOK, updated)
+		c.JSON(http.StatusOK, &adminSystemSettingsResponse{SystemSettings: updated, PublicLLMResolvedProfile: resolveLLMProfile(updated.PublicLLMBaseURL)})
 		return
 	}
 	if err := s.system.Save(c.Request.Context(), settings); err != nil {
 		fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, settings)
+	c.JSON(http.StatusOK, &adminSystemSettingsResponse{SystemSettings: settings, PublicLLMResolvedProfile: resolveLLMProfile(settings.PublicLLMBaseURL)})
 }
 
 func validateDiagnosticLogRetention(days int) error {
@@ -196,6 +208,46 @@ func validateDiagnosticLogRetention(days int) error {
 		return fmt.Errorf("诊断日志保留天数必须在 1 到 3650 之间")
 	}
 	return nil
+}
+
+// checkAdminPublicCapability 检测公共 LLM 配置（owner-only）。直接使用平台
+// 配置经服务端直连执行，与 owner 本人的路由无关：owner 在 platform_managed
+// 下选了客户端直连时，用户接口会返回其个人配置，不能复用。
+func (s *Server) checkAdminPublicCapability(c *gin.Context) {
+	if s.capabilities == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "模型能力服务未配置"})
+		return
+	}
+	if s.llmSettings == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "LLM 设置服务未配置"})
+		return
+	}
+	var body struct {
+		Role modelcapability.Role `json:"role"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if body.Role != modelcapability.RoleNarrative && body.Role != modelcapability.RoleMemory && body.Role != modelcapability.RoleInquiry {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "role 必须是 narrative、memory 或 character_inquiry"})
+		return
+	}
+	settings, err := s.llmSettings.PlatformRuntime(c.Request.Context())
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	playerID := s.identity.CurrentPlayerID(c.Request.Context())
+	checkCtx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer cancel()
+	playerUUID, err := uuid.Parse(playerID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "当前用户身份无效"})
+		return
+	}
+	result := s.capabilities.Check(checkCtx, playerUUID, settings, body.Role)
+	c.JSON(http.StatusOK, gin.H{"settings_revision": settings.SettingsRevision, "result": result})
 }
 
 // fetchAdminPublicModels proxies the administrator's write-only public key to
@@ -231,7 +283,7 @@ func (s *Server) fetchAdminPublicModels(c *gin.Context) {
 			return
 		}
 	}
-	models, err := fetchProviderModels(c, baseURL, key)
+	models, err := fetchUpstreamModels(c, baseURL, key)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -239,7 +291,7 @@ func (s *Server) fetchAdminPublicModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"models": models})
 }
 
-func fetchProviderModels(c *gin.Context, baseURL, apiKey string) ([]string, error) {
+func fetchUpstreamModels(c *gin.Context, baseURL, apiKey string) ([]string, error) {
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, strings.TrimRight(baseURL, "/")+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)

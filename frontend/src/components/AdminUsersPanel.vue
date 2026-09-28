@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NAlert, NSelect, NSpin, NSwitch, useMessage } from 'naive-ui'
+import { NAlert, NSelect, NSpin, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { adminApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type { AdminAuditLog, AdminUser } from '@/types'
 
 const auth = useAuthStore()
 const message = useMessage()
+const dialog = useDialog()
 const users = ref<AdminUser[]>([])
 const auditLogs = ref<AdminAuditLog[]>([])
 const loading = ref(false)
@@ -41,28 +42,36 @@ async function load() {
 
 async function changeRole(user: AdminUser, role: string) {
   if (!isOwner.value || role === user.role) return
-  if (
-    role === 'owner' &&
-    !window.confirm(`确认将 ${user.display_name} 设为新的平台拥有者？当前 owner 会降为 admin。`)
-  )
-    return
   if (user.role === 'owner' && role !== 'owner') {
     message.warning('请先将 owner 转交给其他用户')
     return
   }
-  savingID.value = user.id
-  try {
-    const updated = await adminApi.updateUserRole(user.id, role as AdminUser['role'])
-    const index = users.value.findIndex((item) => item.id === user.id)
-    if (index >= 0) users.value[index] = updated
-    await auth.refreshUser()
-    await load()
-    message.success('角色已更新')
-  } catch (err: any) {
-    message.error(err?.message || '角色更新失败')
-  } finally {
-    savingID.value = ''
+  const apply = async () => {
+    savingID.value = user.id
+    try {
+      const updated = await adminApi.updateUserRole(user.id, role as AdminUser['role'])
+      const index = users.value.findIndex((item) => item.id === user.id)
+      if (index >= 0) users.value[index] = updated
+      await auth.refreshUser()
+      await load()
+      message.success('角色已更新')
+    } catch (err: any) {
+      message.error(err?.message || '角色更新失败')
+    } finally {
+      savingID.value = ''
+    }
   }
+  if (role === 'owner') {
+    dialog.warning({
+      title: '转让平台拥有者？',
+      content: `确认将 ${user.display_name} 设为新的平台拥有者？当前 owner 会降为 admin。`,
+      positiveText: '确认转让',
+      negativeText: '取消',
+      onPositiveClick: () => void apply(),
+    })
+    return
+  }
+  await apply()
 }
 
 async function changeStatus(user: AdminUser, enabled: boolean) {

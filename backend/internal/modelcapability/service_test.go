@@ -37,8 +37,9 @@ func TestAgentDiagnosticUsesProductionRequestShape(t *testing.T) {
 				if body[maxTokensKey] != float64(settings.MaxResponseTokens) {
 					t.Fatalf("%s = %#v, want %d", maxTokensKey, body[maxTokensKey], settings.MaxResponseTokens)
 				}
-				if protocol == llm.ProtocolChatCompletions && body["parallel_tool_calls"] != false {
-					t.Fatalf("parallel_tool_calls = %#v", body["parallel_tool_calls"])
+				// 测试端点是本地地址，按兼容网关处理：可选工具控制字段一律不发。
+				if _, exists := body["parallel_tool_calls"]; exists {
+					t.Fatalf("parallel_tool_calls = %#v, want absent", body["parallel_tool_calls"])
 				}
 				if step == 1 {
 					nonce := diagnosticToolNonce(t, body, protocol)
@@ -171,7 +172,7 @@ func TestDiagnosticParamsDisableTransportRetries(t *testing.T) {
 
 // This opt-in test exercises the exact capability service against a real
 // OpenAI-compatible endpoint without ever storing or printing its API key.
-func TestLiveProviderCapabilities(t *testing.T) {
+func TestLiveEndpointCapabilities(t *testing.T) {
 	baseURL := strings.TrimSpace(os.Getenv("FATECRAFT_LIVE_LLM_BASE_URL"))
 	apiKey := strings.TrimSpace(os.Getenv("FATECRAFT_LIVE_LLM_API_KEY"))
 	model := strings.TrimSpace(os.Getenv("FATECRAFT_LIVE_LLM_MODEL"))
@@ -194,9 +195,8 @@ func TestLiveProviderCapabilities(t *testing.T) {
 }
 
 func testSettings(baseURL string, protocol llm.Protocol) *storage.LLMSettings {
-	// 显式 openai Provider：可选工具控制字段只发给已知 Provider。
 	return &storage.LLMSettings{
-		BaseURL: baseURL, APIKey: "test-key", Model: "test-model", Protocol: string(protocol), Provider: "openai",
+		BaseURL: baseURL, APIKey: "test-key", Model: "test-model", Protocol: string(protocol),
 		MaxResponseTokens: 1024, TopP: 1,
 	}
 }

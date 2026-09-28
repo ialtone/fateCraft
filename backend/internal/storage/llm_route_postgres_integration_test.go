@@ -327,7 +327,7 @@ func TestPostgresClientRouteSettingsSaveAllowsEmptyKey(t *testing.T) {
 	repo := NewSettingsRepo(db)
 	base := func() *LLMSettings {
 		return &LLMSettings{
-			PlayerID: playerID.String(), Provider: "openai", BaseURL: "https://api.openai.com/v1",
+			PlayerID: playerID.String(), BaseURL: "https://api.openai.com/v1",
 			Protocol: DefaultLLMProtocol, Model: "m", MaxContextTokens: DefaultLLMMaxContextTokens,
 			MaxResponseTokens: DefaultLLMMaxResponseTokens, StreamEnabled: true,
 		}

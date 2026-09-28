@@ -57,7 +57,7 @@ type Server struct {
 	llmClient      *llm.Client
 	capabilities   *modelcapability.Service
 	shares         *shareapp.Service
-	relays         *llmrelay.Registry
+	relays         relayRegistry
 	counter        tokenizer.Counter
 	identity       identity.Provider // 当前玩家身份来源（由认证中间件写入 context）
 	auth           *authservice.Service
@@ -126,9 +126,18 @@ func NewServer(d Deps) *Server {
 		memory: d.Memory, inquiries: d.Inquiries,
 		settings: d.Settings, llmSettings: d.LLMSettings, system: d.System, ctxLogs: d.CtxLogs, messages: d.Messages, agents: d.Agents, rewards: d.Rewards,
 		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns,
-		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, relays: d.Relays, counter: d.Counter, identity: d.Identity,
+		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
 		auth: d.Auth, cookieSecure: d.CookieSecure,
 	}
+}
+
+// relaysOrNil 保留“未配置 Relay 时 relays 为 nil”的语义，避免
+// (*llmrelay.Registry)(nil) 装进接口后 != nil 的陷阱。
+func relaysOrNil(r *llmrelay.Registry) relayRegistry {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // Router 注册全部路由。
@@ -215,7 +224,6 @@ func (s *Server) Router(r *gin.Engine) {
 
 	// 设置
 	protected.GET("/settings/llm", s.getLLMSettings)
-	protected.GET("/settings/llm/providers", s.listLLMProviderProfiles)
 	protected.PATCH("/settings/llm", s.updateLLMSettings)
 	protected.POST("/settings/fetch-models", s.fetchModels)
 	protected.POST("/settings/llm/capabilities/check", s.checkLLMCapabilities)
@@ -224,6 +232,7 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.GET("/admin/system-settings", s.requireAdmin, s.getAdminSystemSettings)
 	protected.PATCH("/admin/system-settings", s.requireAdmin, s.updateAdminSystemSettings)
 	protected.POST("/admin/system-settings/fetch-models", s.requireOwner, s.fetchAdminPublicModels)
+	protected.POST("/admin/system-settings/capabilities/check", s.requireOwner, s.checkAdminPublicCapability)
 	protected.GET("/admin/llm-request-logs", s.requireAdmin, s.listAdminLLMRequestLogs)
 	protected.GET("/admin/llm-request-logs/:id", s.requireAdmin, s.getAdminLLMRequestLog)
 	protected.GET("/admin/context-build-logs", s.requireAdmin, s.listAdminContextBuildLogs)

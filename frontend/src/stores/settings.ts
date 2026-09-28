@@ -8,9 +8,10 @@ export type LLMRoute = 'server' | 'client'
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<LLMSettings | null>(null)
 
-  // 有效路由：平台托管时恒为 server，否则为用户设置的路由（缺省 server）。
+  // 有效路由：后端返回的 llm_route 已经是有效路由（只由平台开关和用户
+  // 保存值决定，与接入模式无关），此处只做开关兜底。
   const effectiveRoute = computed<LLMRoute>(() => {
-    if (settings.value?.access_mode === 'platform_managed') return 'server'
+    if (!settings.value?.client_route_enabled) return 'server'
     return settings.value?.llm_route === 'client' ? 'client' : 'server'
   })
 

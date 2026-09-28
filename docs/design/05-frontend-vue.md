@@ -140,7 +140,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ### `settings`
 
-保存当前有效的 LLM 设置，以及 Responses/Chat Completions 协议、叙事、长期记忆、角色问答三个模型选择。协议默认 Responses；首次进入不预填叙事模型，获取模型列表后选择首项；后两者模型为空时继承叙事模型。用户处于 `user_managed` 时可编辑自己的连接和密钥；处于 `platform_managed` 时显示平台只读投影，隐藏用户 Key、保存和个人模型列表入口。API Key 只显示是否已配置，不回显密文或明文；管理员全局设置提供接入模式和公共模型配置。
+保存当前有效的 LLM 设置，以及 Responses/Chat Completions 协议、叙事、长期记忆、角色问答三个模型选择。协议默认 Responses；首次进入不预填叙事模型，获取模型列表后选择首项；后两者模型为空时继承叙事模型。用户处于 `user_managed` 时可编辑自己的连接和密钥；处于 `platform_managed` 时显示平台只读投影，隐藏用户 Key、保存和个人模型列表入口。API Key 只显示是否已配置，不回显密文或明文；管理员全局设置提供接入模式和公共模型配置。设置页没有 Provider 选项：填谁的 Base URL 就用谁的服务（官方、OpenRouter、中转站、本地模型均可），OpenAI、DeepSeek、OpenRouter 官方地址由服务端自动适配。“接口协议”下拉框始终提供 Chat Completions 和 Responses 两项，由用户手动选择，服务端永不改写；协议提示分两种：表单 base_url 与已保存值相同、且服务端识别档位不是兼容网关时显示“已识别为 {档位名}，已自动适配请求参数”；其他情况显示“按所选协议请求。不确定时先用‘测试连接’或能力诊断确认”。管理后台公共 LLM 配置同理：无公共 Provider 选项，协议下拉与提示规则相同，识别结果使用 `public_llm_resolved_profile`。前端不写任何按供应商区分协议的提示；DeepSeek + Chat 下记忆/问答不可用的情况，由后端拦截文案和能力诊断结果告知用户。
 
 ## 管理页面
 
@@ -241,7 +241,8 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 
 - `src/llm/localKey.ts`：本设备 Key 的 get/set/clear（`localStorage`，按用户隔离），不经过 pinia，不进日志；登出时清除。
 - `src/stores/settings.ts`：账号设置；App.vue 按 `auth.user?.id` 监听，切换账号（含登出/会话过期）时先重置设置并断开 Relay，再加载新账号设置，防止新账号沿用旧账号的 `base_url` 与路由判断。
-- `src/stores/llmRelay.ts`：应用级用户 WebSocket（`/ws/llm-relay`），满足“已登录 && user_managed && 路由为 client”时连接（App.vue 监听启停，1s→30s 指数退避）。`relay.request` 只接受白名单 endpoint，URL 由**本地** base_url 拼接；无 Key 回 `no_key`；SSE 按 UTF-8 字节 32KiB/50ms 合并回传（50ms 兜底定时器防尾部滞留），单次读取过大时拆成多个 ≤64KiB 帧、seq 连续；`bufferedAmount > 1MiB` 时背压暂停；`relay.cancel` 中止 fetch 并回 `aborted`。
-- `SettingsView`：user_managed 下的路由二选一（服务端转发/客户端直连）+ 常驻放权说明 + 切换确认框；client 模式 Key 只写本设备、可浏览器获取模型列表、可测试连接（区分鉴权失败/跨域网络失败/成功，https 配 http 非回环给混合内容提示）、可清除本设备 Key；能力诊断走同一接口（服务端经 Relay 执行）。
-- 会话页：页头路由徽标（`LlmRouteTag`）+ client 路由 Relay 状态点；路由不匹配时输入/重生成/续写/改写/guidance 全禁用并给横幅（新建对话、前往设置）；client 未连接时发送禁用；`challenge_completed` 带 `rewards_disabled_reason` 时显示“客户端直连模式不发放奖励”，Campaign 快照带该字段时同样在视图顶部显示替代横幅。列表页同样徽标；创建弹窗只读展示本次固化路由；分享公开页对 client 快照显示未校验标记。
+- `src/stores/llmRelay.ts`：应用级用户 WebSocket（`/ws/llm-relay`），满足“已登录 && 有效路由为 client”时连接（App.vue 监听启停，1s→30s 指数退避），与接入模式无关。`relay.request` 只接受白名单 endpoint，URL 由**本地** base_url 拼接；无 Key 回 `no_key`；SSE 按 UTF-8 字节 32KiB/50ms 合并回传（50ms 兜底定时器防尾部滞留），单次读取过大时拆成多个 ≤64KiB 帧、seq 连续；`bufferedAmount > 1MiB` 时背压暂停；`relay.cancel` 中止 fetch 并回 `aborted`。
+- `SettingsView`：LLM 接入卡片按四种状态渲染。`platform_managed` + 开关关：只显示“模型服务已准备就绪”；`platform_managed` + 开关开：路由二选一（平台模型（推荐）/客户端直连），选平台模型时显示已就绪卡片（不显示配置表单），选直连时显示个人配置表单 + 本设备 Key + 测试连接；`user_managed` + 开关关：个人配置表单 + 服务端 API Key（无路由选择）；`user_managed` + 开关开：路由二选一（服务端转发（推荐）/客户端直连）。切换确认框文案按接入模式区分（平台模式不提“删除服务端 Key”，切回平台模型提示“无需填写 Key”）；`platform_managed` 下选服务端保存时只提交 `{ llm_route: 'server' }`。client 模式 Key 只写本设备、可浏览器获取模型列表、可测试连接（区分鉴权失败/跨域网络失败/成功，https 配 http 非回环给混合内容提示）、可清除本设备 Key；能力诊断走同一接口（服务端经 Relay 执行）。`user_managed` 下开关关闭时路由选择、本设备 Key 区与测试连接全部隐藏，保存固定提交 `server`；服务端返回 `server` 且无 Key 时在 Key 框上方提示“平台已关闭客户端直连，请填写 API Key”（`platform_managed` 下无此提示，关闭开关会自动回到平台模型）。
+- 会话页：页头路由徽标（`LlmRouteTag`）+ client 路由 Relay 状态点；路由不匹配时输入/重生成/续写/改写/guidance 全禁用并给横幅（新建对话、前往设置）；平台关闭开关导致的直连对话不可用时横幅文案为“平台已关闭客户端直连……”，只保留“新建对话”按钮；client 未连接时发送禁用；`server` 路由在界面上随接入模式显示为“平台模型”或“服务端转发”（不匹配横幅、创建弹窗的“本对话将使用”）；`challenge_completed` 带 `rewards_disabled_reason` 时显示“客户端直连模式不发放奖励”，Campaign 快照带该字段时同样在视图顶部显示替代横幅。列表页同样徽标；创建弹窗只读展示本次固化路由；分享公开页对 client 快照显示未校验标记。
+- 管理后台全局设置：“允许用户选择客户端直连”开关独立显示（与接入模式无关，位于公共 LLM 开关之外），只有 owner 可操作；关闭时弹确认框（中断在途回合、直连对话只读；`user_managed` 下用户需填 Key，`platform_managed` 下自动回到平台模型）。公共 LLM 能力检测走独立的 owner 接口 `POST /api/admin/system-settings/capabilities/check`，直接使用平台配置，与检测者本人的路由无关。
 - 今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效。

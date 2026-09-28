@@ -26,7 +26,6 @@ func (r *SettingsRepo) Get(ctx context.Context, playerID string) (*LLMSettings, 
 	if err == gorm.ErrRecordNotFound {
 		return &LLMSettings{
 			PlayerID:         playerID,
-			Provider:         "openai",
 			BaseURL:          "https://api.openai.com/v1",
 			Protocol:         DefaultLLMProtocol,
 			MaxContextTokens: DefaultLLMMaxContextTokens,
@@ -44,9 +43,6 @@ func (r *SettingsRepo) Get(ctx context.Context, playerID string) (*LLMSettings, 
 	}
 	if s.Protocol == "" {
 		s.Protocol = DefaultLLMProtocol
-	}
-	if s.Provider == "" {
-		s.Provider = "openai"
 	}
 	if s.LLMRoute == "" {
 		s.LLMRoute = LLMRouteServer
@@ -83,7 +79,7 @@ func (r *SettingsRepo) Save(ctx context.Context, playerID string, s *LLMSettings
 		return tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "player_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"provider", "base_url", "protocol", "api_key_encrypted", "model", "memory_model", "inquiry_model", "max_context_tokens",
+				"base_url", "protocol", "api_key_encrypted", "model", "memory_model", "inquiry_model", "max_context_tokens",
 				"max_response_tokens", "temperature", "top_p", "stream_enabled", "reasoning_effort",
 				"memory_reasoning_effort", "inquiry_reasoning_effort", "llm_route", "settings_revision", "updated_at",
 			}),
@@ -92,7 +88,7 @@ func (r *SettingsRepo) Save(ctx context.Context, playerID string, s *LLMSettings
 }
 
 func sameLLMInvocationSettings(a, b *LLMSettings) bool {
-	return a.Provider == b.Provider && a.BaseURL == b.BaseURL && a.Protocol == b.Protocol && a.APIKeyEncrypted == b.APIKeyEncrypted &&
+	return a.BaseURL == b.BaseURL && a.Protocol == b.Protocol && a.APIKeyEncrypted == b.APIKeyEncrypted &&
 		a.Model == b.Model && a.MemoryModel == b.MemoryModel && a.InquiryModel == b.InquiryModel &&
 		a.MaxContextTokens == b.MaxContextTokens && a.MaxResponseTokens == b.MaxResponseTokens &&
 		a.Temperature == b.Temperature && a.TopP == b.TopP && a.StreamEnabled == b.StreamEnabled &&

@@ -10,6 +10,7 @@ import {
   NCard,
   NSelect,
   NSpin,
+  useDialog,
   useMessage,
 } from 'naive-ui'
 import { ArrowUpOutline, CopyOutline, FlagOutline } from '@vicons/ionicons5'
@@ -22,6 +23,7 @@ import { useShareStore } from '@/stores/shares'
 const route = useRoute()
 const store = useShareStore()
 const message = useMessage()
+const dialog = useDialog()
 const page = ref<HTMLElement | null>(null)
 const reportOpen = ref(false)
 const reporting = ref(false)
@@ -83,7 +85,11 @@ async function copyLink() {
     await navigator.clipboard.writeText(url)
     message.success('链接已复制')
   } catch {
-    window.prompt('复制分享链接', url)
+    dialog.info({
+      title: '复制分享链接',
+      content: url,
+      positiveText: '知道了',
+    })
   }
 }
 

@@ -19,9 +19,10 @@ import {
   NTabPane,
   NTabs,
   NTag,
+  useDialog,
   useMessage,
 } from 'naive-ui'
-import { adminApi, settingsApi } from '@/api'
+import { adminApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import ChallengeVersionEditor from '@/components/ChallengeVersionEditor.vue'
 import FieldHelp from '@/components/FieldHelp.vue'
@@ -43,7 +44,6 @@ import type {
   InvitationCode,
   LLMCapabilityDiagnostic,
   LLMCapabilityRole,
-  LLMProviderProfile,
   RewardDefinition,
   SaveChallengeVersionInput,
   ConversationShare,
@@ -59,6 +59,7 @@ const props = withDefaults(
 )
 
 const message = useMessage()
+const dialog = useDialog()
 const auth = useAuthStore()
 const activeTab = ref('settings')
 
@@ -90,21 +91,33 @@ const settings = ref<AdminSystemSettings | null>(null)
 const publicLLMKey = ref('')
 const clearPublicLLMKey = ref(false)
 const publicModels = ref<string[]>([])
-const providerProfiles = ref<LLMProviderProfile[]>([])
 const fetchingPublicModels = ref(false)
 const publicDiagnostics = ref<Partial<Record<LLMCapabilityRole, LLMCapabilityDiagnostic>>>({})
 const checkingPublicRoles = ref<Partial<Record<LLMCapabilityRole, boolean>>>({})
 const savedPublicCapabilityKey = ref('')
 const publicLLMExpandedNames = ref<string[]>(['public-llm'])
-const publicProviderProfile = computed(() =>
-  providerProfiles.value.find((profile) => profile.id === settings.value?.public_llm_provider),
-)
-const publicProtocolOptions = computed(() =>
-  (publicProviderProfile.value?.allowed_apis || ['chat_completions', 'responses']).map((value) => ({
-    label: value === 'responses' ? 'Responses' : 'Chat Completions',
-    value,
-  })),
-)
+// 接口协议始终提供两项，由用户手动选择，服务端永不改写；档位只决定
+// 可选字段的取舍与提前拦截（识别结果见 public_llm_resolved_profile）。
+const publicProtocolOptions = [
+  { label: 'Chat Completions', value: 'chat_completions' },
+  { label: 'Responses', value: 'responses' },
+]
+// 已保存的公共 base_url 快照：表单改了没保存时识别结果已过期，不展示。
+const savedPublicBaseURL = ref('')
+const publicProfileNames: Record<string, string> = {
+  openai: 'OpenAI 官方',
+  deepseek: 'DeepSeek 官方',
+  openrouter: 'OpenRouter',
+}
+const publicRecognizedHint = computed(() => {
+  const profile = settings.value?.public_llm_resolved_profile
+  if (!profile) return ''
+  const unchanged =
+    String(settings.value?.public_llm_base_url || '').trim() ===
+    savedPublicBaseURL.value.trim()
+  if (!unchanged || profile.id === 'custom_openai_compatible') return ''
+  return `已识别为 ${publicProfileNames[profile.id] || profile.id}，已自动适配请求参数`
+})
 const llmLogs = ref<AdminLLMRequestLogSummary[]>([])
 const selectedLLMLog = ref<AdminLLMRequestLog | null>(null)
 const contextLogs = ref<AdminContextBuildLogSummary[]>([])
@@ -153,6 +166,14 @@ const createdInvitationCode = ref('')
 const creatingPack = ref(false)
 const creatingReward = ref(false)
 const packForm = ref({ slug: '', name: '', description: '' })
+const showModerateModal = ref(false)
+const moderateTarget = ref<ConversationShare | null>(null)
+const moderateReason = ref('policy_violation')
+const moderatingShare = ref(false)
+const showVersionModal = ref(false)
+const versionPackId = ref('')
+const newVersion = ref('')
+const creatingVersion = ref(false)
 const invitationForm = ref<{ label: string; max_uses: number; expires_at: number | null }>({
   label: '',
   max_uses: 1,
@@ -199,8 +220,8 @@ const publicCapabilityKey = computed(() => {
   if (!value) return ''
   return JSON.stringify([
     value.llm_access_mode,
+    value.client_llm_route_enabled,
     value.public_llm_base_url,
-    value.public_llm_provider,
     value.public_llm_protocol,
     value.public_llm_model,
     value.public_llm_memory_model,
@@ -239,23 +260,11 @@ watch(publicCapabilityKey, () => {
   publicDiagnostics.value = {}
 })
 
-watch(
-  () => settings.value?.public_llm_provider,
-  () => {
-    const allowed = publicProviderProfile.value?.allowed_apis
-    if (settings.value && allowed && !allowed.includes(settings.value.public_llm_protocol)) {
-      settings.value.public_llm_protocol = publicProviderProfile.value?.default_api || allowed[0]
-    }
-  },
-)
-
 async function loadSettings() {
   loadingSettings.value = true
   try {
-    ;[settings.value, providerProfiles.value] = await Promise.all([
-      adminApi.getSystemSettings(),
-      settingsApi.providers(),
-    ])
+    settings.value = await adminApi.getSystemSettings()
+    savedPublicBaseURL.value = settings.value.public_llm_base_url || ''
     syncPublicLLMExpansion()
     savedPublicCapabilityKey.value = publicCapabilityKey.value
     publicDiagnostics.value = {}
@@ -280,8 +289,8 @@ async function saveSettings() {
     if (auth.isOwner) {
       Object.assign(body, {
         llm_access_mode: settings.value.llm_access_mode,
+        client_llm_route_enabled: settings.value.client_llm_route_enabled,
         public_llm_base_url: settings.value.public_llm_base_url,
-        public_llm_provider: settings.value.public_llm_provider,
         public_llm_protocol: settings.value.public_llm_protocol,
         public_llm_model: settings.value.public_llm_model,
         public_llm_memory_model: settings.value.public_llm_memory_model,
@@ -308,6 +317,7 @@ async function saveSettings() {
     syncPublicLLMExpansion()
     publicLLMKey.value = ''
     clearPublicLLMKey.value = false
+    savedPublicBaseURL.value = settings.value.public_llm_base_url || ''
     savedPublicCapabilityKey.value = publicCapabilityKey.value
     publicDiagnostics.value = {}
     message.success('玩法设置已保存')
@@ -324,6 +334,29 @@ function setPlatformLLMEnabled(enabled: boolean) {
   syncPublicLLMExpansion()
 }
 
+function setClientRouteEnabled(enabled: boolean) {
+  if (!settings.value) return
+  if (!enabled && settings.value.client_llm_route_enabled) {
+    const platformMode = settings.value.llm_access_mode === 'platform_managed'
+    dialog.warning({
+      title: '关闭“允许用户选择客户端直连”？',
+      content:
+        '1. 所有进行中的客户端直连回合会立即中断；\n' +
+        '2. 已有客户端直连对话变为只读，重新开启后恢复；\n' +
+        (platformMode
+          ? '3. 选择过客户端直连的用户会自动回到平台模型，无需填写 Key。'
+          : '3. 选择过客户端直连的用户需要填写 API Key 才能继续使用服务端转发。'),
+      positiveText: '确认关闭',
+      negativeText: '取消',
+      onPositiveClick: () => {
+        if (settings.value) settings.value.client_llm_route_enabled = false
+      },
+    })
+    return
+  }
+  settings.value.client_llm_route_enabled = enabled
+}
+
 async function checkPublicCapability(role: LLMCapabilityRole) {
   if (!settings.value || settings.value.llm_access_mode !== 'platform_managed') return
   if (publicCapabilityDirty.value) {
@@ -332,7 +365,9 @@ async function checkPublicCapability(role: LLMCapabilityRole) {
   }
   checkingPublicRoles.value = { ...checkingPublicRoles.value, [role]: true }
   try {
-    const data = await settingsApi.checkCapabilities(role)
+    // 公共配置诊断走独立的 owner 接口，直接使用平台配置，与 owner 本人的
+    // 路由无关（owner 选了客户端直连时用户接口会返回其个人配置）。
+    const data = await adminApi.checkPublicCapabilities(role)
     publicDiagnostics.value = { ...publicDiagnostics.value, [role]: data.result }
   } catch (err: any) {
     message.error(`公共模型检测失败：${err.message || '未知错误'}`)
@@ -424,16 +459,27 @@ async function loadShareGovernance() {
   }
 }
 
-async function moderateShare(item: ConversationShare) {
-  const reason = window.prompt('请输入下架原因（仅管理员可见）', 'policy_violation')?.trim()
-  if (!reason) return
+function moderateShare(item: ConversationShare) {
+  moderateTarget.value = item
+  moderateReason.value = 'policy_violation'
+  showModerateModal.value = true
+}
+
+async function submitModerateShare() {
+  const target = moderateTarget.value
+  const reason = moderateReason.value.trim()
+  if (!target || !reason) return
+  moderatingShare.value = true
   try {
-    await adminApi.moderateConversationShare(item.id, reason)
-    item.status = 'moderated'
-    item.moderated_at = new Date().toISOString()
+    await adminApi.moderateConversationShare(target.id, reason)
+    target.status = 'moderated'
+    target.moderated_at = new Date().toISOString()
+    showModerateModal.value = false
     message.success('分享已下架')
   } catch (err: any) {
     message.error(`下架失败：${err.message || '未知错误'}`)
+  } finally {
+    moderatingShare.value = false
   }
 }
 
@@ -662,21 +708,28 @@ async function importBuiltin(item: AdminBuiltinChallenge) {
   const confirmation = overwrite
     ? `覆盖数据库中的「${item.name}」并以仓库 v${item.version} 作为当前内容？已被使用的同版本快照不会被覆盖；更新已使用内容请先提升版本号。`
     : `导入并发布「${item.name}」v${item.version}？`
-  if (!window.confirm(confirmation)) return
-  importingBuiltin.value = item.slug
-  try {
-    await adminApi.importBuiltin(item.slug, overwrite)
-    await Promise.all([loadBuiltins(), loadChallenges()])
-    message.success(
-      overwrite
-        ? `已用仓库内容覆盖 ${item.name} v${item.version}`
-        : `已导入并发布 ${item.name} v${item.version}`,
-    )
-  } catch (err: any) {
-    message.error(`${overwrite ? '覆盖' : '导入'}失败：${err.message || '未知错误'}`)
-  } finally {
-    importingBuiltin.value = ''
-  }
+  dialog.warning({
+    title: overwrite ? '覆盖挑战内容？' : '导入并发布？',
+    content: confirmation,
+    positiveText: overwrite ? '确认覆盖' : '确认导入',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      importingBuiltin.value = item.slug
+      try {
+        await adminApi.importBuiltin(item.slug, overwrite)
+        await Promise.all([loadBuiltins(), loadChallenges()])
+        message.success(
+          overwrite
+            ? `已用仓库内容覆盖 ${item.name} v${item.version}`
+            : `已导入并发布 ${item.name} v${item.version}`,
+        )
+      } catch (err: any) {
+        message.error(`${overwrite ? '覆盖' : '导入'}失败：${err.message || '未知错误'}`)
+      } finally {
+        importingBuiltin.value = ''
+      }
+    },
+  })
 }
 
 async function openVersion(versionId: string) {
@@ -723,20 +776,28 @@ async function publishVersion() {
 async function deleteVersion() {
   if (!versionDoc.value) return
   const label = `${versionDoc.value.version.version}（${versionDoc.value.version.status}）`
-  if (!window.confirm(`删除版本 ${label}？仅当没有任何对话或存档引用它时才能删除。`)) return
-  deletingVersion.value = true
-  try {
-    await adminApi.deleteChallengeVersion(versionDoc.value.version.id)
-    versionDoc.value = null
-    versionPayload.value = null
-    selectedVersionId.value = ''
-    await loadChallenges()
-    message.success('版本已删除')
-  } catch (err: any) {
-    message.error(`删除失败：${err.message || '未知错误'}`)
-  } finally {
-    deletingVersion.value = false
-  }
+  dialog.warning({
+    title: `删除版本 ${label}？`,
+    content: '仅当没有任何对话或存档引用它时才能删除。',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      if (!versionDoc.value) return
+      deletingVersion.value = true
+      try {
+        await adminApi.deleteChallengeVersion(versionDoc.value.version.id)
+        versionDoc.value = null
+        versionPayload.value = null
+        selectedVersionId.value = ''
+        await loadChallenges()
+        message.success('版本已删除')
+      } catch (err: any) {
+        message.error(`删除失败：${err.message || '未知错误'}`)
+      } finally {
+        deletingVersion.value = false
+      }
+    },
+  })
 }
 
 function setVersionDocument(doc: ChallengeVersionDocument) {
@@ -817,16 +878,29 @@ async function createPack() {
   }
 }
 
-async function createVersion(packId: string) {
-  const version = window.prompt('输入新版本号，例如 1.0.0')?.trim()
-  if (!version) return
+function createVersion(packId: string) {
+  versionPackId.value = packId
+  newVersion.value = ''
+  showVersionModal.value = true
+}
+
+async function submitCreateVersion() {
+  const version = newVersion.value.trim()
+  if (!version) {
+    message.warning('请输入新版本号')
+    return
+  }
+  creatingVersion.value = true
   try {
-    const doc = await adminApi.createChallengeVersion(packId, version)
+    const doc = await adminApi.createChallengeVersion(versionPackId.value, version)
+    showVersionModal.value = false
     await loadChallenges()
     await openVersion(doc.version.id)
     message.success('草稿版本已创建')
   } catch (err: any) {
     message.error(`创建版本失败：${err.message || '未知错误'}`)
+  } finally {
+    creatingVersion.value = false
   }
 }
 
@@ -1013,6 +1087,28 @@ watch(
                   关闭时默认使用用户自己的配置；开启后所有用户统一使用下面的公共连接，切回关闭不会删除用户原有配置。
                 </template>
               </NFormItem>
+              <NFormItem>
+                <template #label>
+                  <FieldHelp label="允许用户选择客户端直连">
+                    <p>开启后，用户可以在设置中选择由其浏览器直接发出模型请求，API Key 只保存在用户设备。</p>
+                    <p>开启公共 LLM 时，用户可在平台模型与客户端直连之间选择。客户端直连使用用户自己的 Key，不消耗平台模型额度。</p>
+                    <p>这类对话和 Campaign 不发放任何奖励，重新生成不消耗额度。</p>
+                    <p>发给模型的完整提示词（含隐藏剧情）在用户浏览器中可见。</p>
+                    <p>是否可用取决于各模型服务商是否允许浏览器跨域访问。</p>
+                  </FieldHelp>
+                </template>
+                <NSwitch
+                  :value="settings.client_llm_route_enabled"
+                  :disabled="!auth.isOwner"
+                  @update:value="setClientRouteEnabled"
+                >
+                  <template #checked>已允许</template>
+                  <template #unchecked>未允许</template>
+                </NSwitch>
+                <template #feedback>
+                  默认关闭。开启后用户自行决定是否直连；关闭会立即中断进行中的直连回合，已有直连对话变为只读，重新开启后恢复。
+                </template>
+              </NFormItem>
             </NForm>
           </NSpin>
           <NCollapse
@@ -1032,35 +1128,29 @@ watch(
               </template>
               <div class="public-llm-content">
                 <NForm label-placement="top" size="small" :disabled="!auth.isOwner">
-                  <NFormItem label="公共 Provider">
-                    <NSelect
-                      v-model:value="settings.public_llm_provider"
-                      :options="
-                        providerProfiles.map((profile) => ({
-                          label: profile.id,
-                          value: profile.id,
-                        }))
-                      "
-                    />
-                  </NFormItem>
                   <NFormItem label="公共 Base URL">
-                    <NInput
-                      v-model:value="settings.public_llm_base_url"
-                      placeholder="https://api.openai.com/v1"
-                    />
+                    <div class="protocol-setting">
+                      <NInput
+                        v-model:value="settings.public_llm_base_url"
+                        placeholder="https://api.openai.com/v1"
+                      />
+                      <div class="protocol-setting__hint">
+                        填谁的地址就用谁的服务（官方、OpenRouter、中转站、本地模型均可）。OpenAI、DeepSeek、OpenRouter
+                        官方地址会自动适配。
+                      </div>
+                    </div>
                   </NFormItem>
                   <NFormItem label="接口协议">
                     <div class="protocol-setting">
                       <NSelect
                         v-model:value="settings.public_llm_protocol"
                         :options="publicProtocolOptions"
-                        :disabled="
-                          !!publicProviderProfile && publicProviderProfile.allowed_apis.length === 1
-                        "
                       />
-                      <div v-if="publicProviderProfile" class="protocol-setting__hint">
-                        <span class="protocol-setting__badge">Provider 能力</span>
-                        <span>Profile：{{ publicProviderProfile.id }} · 协议由后端自动解析</span>
+                      <div class="protocol-setting__hint">
+                        <template v-if="publicRecognizedHint">{{ publicRecognizedHint }}</template>
+                        <template v-else>
+                          按所选协议请求。不确定时先用“测试连接”或能力诊断确认。
+                        </template>
                       </div>
                     </div>
                   </NFormItem>
@@ -2082,6 +2172,47 @@ watch(
         <pre>{{ selectedContextLog.activated_world_entry_ids.join('\n') || '（无）' }}</pre>
       </div>
     </NModal>
+
+    <NModal
+      v-model:show="showModerateModal"
+      preset="dialog"
+      title="下架分享"
+      style="width: min(520px, calc(100vw - 24px))"
+    >
+      <NForm label-placement="top">
+        <NFormItem label="下架原因（仅管理员可见）"
+          ><NInput v-model:value="moderateReason" placeholder="例如 policy_violation"
+        /></NFormItem>
+      </NForm>
+      <template #action>
+        <NButton @click="showModerateModal = false">取消</NButton>
+        <NButton type="primary" :loading="moderatingShare" @click="submitModerateShare"
+          >下架</NButton
+        >
+      </template>
+    </NModal>
+
+    <NModal
+      v-model:show="showVersionModal"
+      preset="dialog"
+      title="新建草稿版本"
+      style="width: min(520px, calc(100vw - 24px))"
+    >
+      <NForm label-placement="top">
+        <NFormItem label="新版本号"
+          ><NInput
+            v-model:value="newVersion"
+            placeholder="例如 1.0.0"
+            @keydown.enter="submitCreateVersion"
+        /></NFormItem>
+      </NForm>
+      <template #action>
+        <NButton @click="showVersionModal = false">取消</NButton>
+        <NButton type="primary" :loading="creatingVersion" @click="submitCreateVersion"
+          >创建</NButton
+        >
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -2180,28 +2311,11 @@ h3 {
 }
 
 .protocol-setting__hint {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 8px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
-}
-
-.protocol-setting__hint > span:last-child {
-  min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.protocol-setting__badge {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-soft));
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-hover);
-  white-space: nowrap;
 }
 
 .model-setting-list {

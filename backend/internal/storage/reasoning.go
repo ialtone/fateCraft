@@ -52,7 +52,7 @@ func ReasoningText(content string, items JSONDoc) string {
 }
 
 // ReasoningTextBlocks extracts the safe, player-facing thinking projection from
-// the canonical ordered content_blocks JSON. Provider-owned replay payloads
+// the canonical ordered content_blocks JSON. Upstream-owned replay payloads
 // are inspected only for readable summary text; opaque fields are never
 // returned to the player.
 func ReasoningTextBlocks(blocks JSONDoc) string {

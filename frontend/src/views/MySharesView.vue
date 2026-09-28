@@ -99,7 +99,11 @@ async function copyURL(item: ConversationShare) {
     await navigator.clipboard.writeText(url)
     message.success('分享链接已复制')
   } catch {
-    window.prompt('复制分享链接', url)
+    dialog.info({
+      title: '复制分享链接',
+      content: url,
+      positiveText: '知道了',
+    })
   }
 }
 

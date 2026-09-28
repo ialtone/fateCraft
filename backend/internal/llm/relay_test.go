@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -107,7 +108,7 @@ func TestRelayEquivalenceWithDirectTransport(t *testing.T) {
 						var events []AgentEvent
 						result, err := client.AgentStep(context.Background(), Params{
 							BaseURL: server.URL, APIKey: "test", Model: "agent-model",
-							Protocol: protocol, Provider: "openai", Relay: relay,
+							Protocol: protocol, Relay: relay,
 						}, []Message{{Role: "user", Content: "continue"}}, testAgentTools(), stream, func(event AgentEvent) {
 							events = append(events, event)
 						})
@@ -169,5 +170,81 @@ func TestRelayEquivalenceWithDirectTransport(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+// TestOfficialEndpointRequestShape 覆盖按 Base URL 识别出的官方档位的请求形态。
+// 官方域名无法用 httptest 直连，这里经假 Relay 捕获服务端构建的请求体。
+// 协议完全由用户选择：断言请求发往所选协议的 endpoint，并逐行断言
+// stream_options、parallel_tool_calls、工具 strict 的有无。
+func TestOfficialEndpointRequestShape(t *testing.T) {
+	chatSSE := "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+	responsesSSE := "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n" +
+		"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
+	tests := []struct {
+		name, baseURL   string
+		requested       Protocol
+		wantEndpoint    string
+		wantStreamUsage bool
+		wantParallel    bool
+		wantStrict      bool
+	}{
+		{name: "openai chat", baseURL: "https://api.openai.com/v1", requested: ProtocolChatCompletions,
+			wantEndpoint: "/chat/completions", wantStreamUsage: true, wantParallel: true, wantStrict: true},
+		{name: "openai responses", baseURL: "https://api.openai.com/v1", requested: ProtocolResponses,
+			wantEndpoint: "/responses", wantParallel: true, wantStrict: true},
+		{name: "deepseek chat", baseURL: "https://api.deepseek.com/v1", requested: ProtocolChatCompletions,
+			wantEndpoint: "/chat/completions", wantStreamUsage: true, wantParallel: true},
+		{name: "deepseek responses", baseURL: "https://api.deepseek.com/v1", requested: ProtocolResponses,
+			wantEndpoint: "/responses"},
+		{name: "openrouter chat", baseURL: "https://openrouter.ai/api/v1", requested: ProtocolChatCompletions,
+			wantEndpoint: "/chat/completions", wantStreamUsage: true},
+		{name: "openrouter responses", baseURL: "https://openrouter.ai/api/v1", requested: ProtocolResponses,
+			wantEndpoint: "/responses"},
+		{name: "custom chat", baseURL: "https://proxy.example.com/v1", requested: ProtocolChatCompletions,
+			wantEndpoint: "/chat/completions"},
+		{name: "custom responses", baseURL: "https://proxy.example.com/v1", requested: ProtocolResponses,
+			wantEndpoint: "/responses"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			relay := &scriptedRelayFunc{}
+			relay.do = func(_ context.Context, req RelayRequest) (*http.Response, error) {
+				relay.gotEndpoint = req.Endpoint
+				relay.gotBody = req.Body
+				sse := chatSSE
+				if tt.requested == ProtocolResponses {
+					sse = responsesSSE
+				}
+				return serveBytes(http.StatusOK, "text/event-stream", []byte(sse), 0), nil
+			}
+			tools := testAgentTools()
+			tools[0].Strict = true
+			if _, err := NewClient().AgentStep(context.Background(), Params{
+				BaseURL: tt.baseURL, APIKey: "test", Model: "m", Protocol: tt.requested, Relay: relay,
+			}, []Message{{Role: "user", Content: "hi"}}, tools, true, nil); err != nil {
+				t.Fatal(err)
+			}
+			if relay.gotEndpoint != tt.wantEndpoint {
+				t.Fatalf("endpoint = %q, want %q", relay.gotEndpoint, tt.wantEndpoint)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(relay.gotBody, &body); err != nil {
+				t.Fatal(err)
+			}
+			if _, exists := body["stream_options"]; exists != tt.wantStreamUsage {
+				t.Errorf("stream_options present = %v, want %v", exists, tt.wantStreamUsage)
+			}
+			if value, exists := body["parallel_tool_calls"]; exists != tt.wantParallel || (exists && value != false) {
+				t.Errorf("parallel_tool_calls = %#v (present %v), want present %v", value, exists, tt.wantParallel)
+			}
+			tool := body["tools"].([]any)[0].(map[string]any)
+			if tt.requested == ProtocolChatCompletions {
+				tool = tool["function"].(map[string]any)
+			}
+			if _, exists := tool["strict"]; exists != tt.wantStrict {
+				t.Errorf("strict present = %v, want %v", exists, tt.wantStrict)
+			}
+		})
 	}
 }

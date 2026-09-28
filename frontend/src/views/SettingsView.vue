@@ -28,7 +28,6 @@ import type {
   ExternalIdentity,
   LLMCapabilityDiagnostic,
   LLMCapabilityRole,
-  LLMProviderProfile,
 } from '@/types'
 
 const store = useSettingsStore()
@@ -51,14 +50,24 @@ const fetchingModels = ref(false)
 const availableModels = ref<string[]>([])
 const diagnostics = ref<Partial<Record<LLMCapabilityRole, LLMCapabilityDiagnostic>>>({})
 const checkingRoles = ref<Partial<Record<LLMCapabilityRole, boolean>>>({})
-const providerProfiles = ref<LLMProviderProfile[]>([])
 const identities = ref<ExternalIdentity[]>([])
 const loadingIdentities = ref(false)
 const defaultProtocol = 'responses'
-const platformManaged = computed(
-  () => store.settings?.access_mode === 'platform_managed' || store.settings?.editable === false,
+// platformModel：接入模式是否为平台统一模型，决定“服务端”选项的文案，
+// 以及选中服务端时显示“已就绪”卡片（个人配置保留但不生效）。
+const platformModel = computed(() => store.settings?.access_mode === 'platform_managed')
+// 是否显示路由选择：只由平台“允许客户端直连”开关决定，与接入模式无关。
+const routeChoiceVisible = computed(() => store.settings?.client_route_enabled === true)
+const clientRoute = computed(() => routeChoiceVisible.value && llmRoute.value === 'client')
+// user_managed 下开关关闭、用户之前选过客户端直连：服务端返回 server 且无
+// Key，提示填写。platform_managed 下关闭开关会自动回到平台模型，无需 Key。
+const clientRouteClosedHint = computed(
+  () =>
+    !platformModel.value &&
+    !routeChoiceVisible.value &&
+    !!store.settings &&
+    !store.settings.has_api_key,
 )
-const clientRoute = computed(() => !platformManaged.value && llmRoute.value === 'client')
 // 保存过的路由：切换对比与脏检查的基准。
 const savedRoute = computed<'server' | 'client'>(() =>
   store.settings?.llm_route === 'client' ? 'client' : 'server',
@@ -78,18 +87,30 @@ const mixedContentHint = computed(() => {
   return '当前为 https 页面，该地址为 http 非回环地址，浏览器会拦截混合内容请求，直连不可用。'
 })
 
-const providerOptions = computed(() =>
-  providerProfiles.value.map((profile) => ({ label: profile.id, value: profile.id })),
+// 接口协议始终提供两项，由用户手动选择，服务端永不改写；档位只决定
+// 可选字段的取舍与提前拦截（识别结果见 resolved_profile）。
+const protocolOptions = [
+  { label: 'Chat Completions', value: 'chat_completions' },
+  { label: 'Responses', value: 'responses' },
+]
+// 服务端按已保存 base_url 识别出的端点档位；base_url 改了没保存时识别结果
+// 已过期，不展示。
+const savedProfile = computed(() => store.settings?.resolved_profile)
+const baseUrlUnchanged = computed(
+  () =>
+    String(form.value.base_url || '').trim() ===
+    String(store.settings?.base_url || '').trim(),
 )
-const selectedProfile = computed<LLMProviderProfile | undefined>(() =>
-  providerProfiles.value.find((profile) => profile.id === form.value.provider),
-)
-const protocolOptions = computed(() => {
-  const allowed = selectedProfile.value?.allowed_apis || ['chat_completions', 'responses']
-  return allowed.map((value) => ({
-    label: value === 'responses' ? 'Responses' : 'Chat Completions',
-    value,
-  }))
+const profileNames: Record<string, string> = {
+  openai: 'OpenAI 官方',
+  deepseek: 'DeepSeek 官方',
+  openrouter: 'OpenRouter',
+}
+const recognizedHint = computed(() => {
+  const profile = savedProfile.value
+  if (!profile || !baseUrlUnchanged.value || profile.id === 'custom_openai_compatible')
+    return ''
+  return `已识别为 ${profileNames[profile.id] || profile.id}，已自动适配请求参数`
 })
 
 const maxResponseTokens = computed(() =>
@@ -97,7 +118,14 @@ const maxResponseTokens = computed(() =>
 )
 
 const capabilitySettingsDirty = computed(() => {
-  if (platformManaged.value) return false
+  // 平台统一模型且选中服务端时：唯一可保存的是路由（切回客户端直连），
+  // 只比较路由；其他情况比较完整表单。
+  if (platformModel.value && !clientRoute.value) {
+    return llmRoute.value !== savedRoute.value
+  }
+  // 只有整卡只读（个人配置不可编辑）时才视为无改动；platform_managed 下选中
+  // 客户端直连时个人表单可编辑，必须走完整比较，否则诊断会测到未保存的旧配置。
+  if (store.settings?.editable === false) return false
   const saved = store.settings
   if (!saved) return true
   return (
@@ -105,7 +133,6 @@ const capabilitySettingsDirty = computed(() => {
     (!clientRoute.value && apiKey.value.trim() !== '') ||
     llmRoute.value !== savedRoute.value ||
     String(form.value.base_url || '').trim() !== String(saved.base_url || '').trim() ||
-    String(form.value.provider || 'openai') !== String(saved.provider || 'openai') ||
     String(form.value.protocol || defaultProtocol) !== String(saved.protocol || defaultProtocol) ||
     String(form.value.model || '').trim() !== String(saved.model || '').trim() ||
     String(form.value.memory_model || '').trim() !== String(saved.memory_model || '').trim() ||
@@ -117,7 +144,6 @@ const capabilitySettingsDirty = computed(() => {
 const capabilityConfigKey = computed(() =>
   JSON.stringify([
     form.value.base_url,
-    form.value.provider,
     form.value.protocol,
     form.value.model,
     form.value.memory_model,
@@ -133,22 +159,11 @@ watch(capabilityConfigKey, () => {
   diagnostics.value = {}
 })
 
-watch(
-  () => form.value.provider,
-  () => {
-    const allowed = selectedProfile.value?.allowed_apis
-    if (allowed && !allowed.includes(form.value.protocol)) {
-      form.value.protocol = selectedProfile.value?.default_api || allowed[0]
-    }
-  },
-)
-
 onMounted(async () => {
   showLinuxDOBindResult()
   loadingIdentities.value = true
   await Promise.all([
     store.load(),
-    settingsApi.providers().then((value) => (providerProfiles.value = value)),
     identityApi
       .list()
       .then((value) => (identities.value = value))
@@ -158,7 +173,6 @@ onMounted(async () => {
   if (store.settings) {
     form.value = {
       ...store.settings,
-      provider: store.settings.provider || 'openai',
       protocol: store.settings.protocol || defaultProtocol,
     }
     llmRoute.value = store.settings.llm_route === 'client' ? 'client' : 'server'
@@ -188,20 +202,22 @@ function showLinuxDOBindResult() {
   void router.replace({ query })
 }
 
-async function unbindIdentity(identity: ExternalIdentity) {
-  if (
-    !window.confirm(
-      `确认解除 ${identity.provider} 账号「${identity.username || identity.provider_user_id}」的绑定？`,
-    )
-  )
-    return
-  try {
-    await identityApi.unbind(identity.id)
-    identities.value = identities.value.filter((item) => item.id !== identity.id)
-    message.success('第三方账户已解除绑定')
-  } catch (err: any) {
-    message.error(`解除绑定失败：${err.message || '未知错误'}`)
-  }
+function unbindIdentity(identity: ExternalIdentity) {
+  dialog.warning({
+    title: '解除第三方账户绑定？',
+    content: `确认解除 ${identity.provider} 账号「${identity.username || identity.provider_user_id}」的绑定？`,
+    positiveText: '解除绑定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await identityApi.unbind(identity.id)
+        identities.value = identities.value.filter((item) => item.id !== identity.id)
+        message.success('第三方账户已解除绑定')
+      } catch (err: any) {
+        message.error(`解除绑定失败：${err.message || '未知错误'}`)
+      }
+    },
+  })
 }
 
 // 切换请求路由时弹确认框：列出不可逆后果，取消则保持原值。
@@ -212,11 +228,15 @@ function onRouteChange(next: 'server' | 'client') {
     return
   }
   const toClient = next === 'client'
+  const toClientContent = platformModel.value
+    ? '1. 平台模型下创建的对话将无法继续生成，需新建对话；\n2. 此模式下挑战与 Campaign 不发放奖励，重新生成不消耗额度。'
+    : '1. 另一模式（服务端转发）下创建的对话将无法继续生成，需新建对话；\n2. 切到客户端直连会删除服务器上保存的 Key；\n3. 此模式下挑战与 Campaign 不发放奖励，重新生成不消耗额度。'
+  const toServerContent = platformModel.value
+    ? '1. 客户端直连模式下创建的对话将无法继续生成，需新建对话；\n2. 切回平台模型无需填写 Key，个人配置会保留。'
+    : '1. 客户端直连模式下创建的对话将无法继续生成，需新建对话；\n2. 切回服务端需要重新填写 Key。'
   dialog.warning({
-    title: toClient ? '切换到客户端直连？' : '切回服务端转发？',
-    content: toClient
-      ? '1. 另一模式（服务端转发）下创建的对话将无法继续生成，需新建对话；\n2. 切到客户端直连会删除服务器上保存的 Key；\n3. 此模式下挑战与 Campaign 不发放奖励，重新生成不消耗额度。'
-      : '1. 客户端直连模式下创建的对话将无法继续生成，需新建对话；\n2. 切回服务端需要重新填写 Key。',
+    title: toClient ? '切换到客户端直连？' : platformModel.value ? '切回平台模型？' : '切回服务端转发？',
+    content: toClient ? toClientContent : toServerContent,
     positiveText: '确认切换',
     negativeText: '取消',
     onPositiveClick: () => {
@@ -226,8 +246,21 @@ function onRouteChange(next: 'server' | 'client') {
 }
 
 async function save() {
-  if (platformManaged.value) {
+  if (platformModel.value && !routeChoiceVisible.value) {
     message.info('当前由平台统一提供 LLM 配置')
+    return
+  }
+  // 平台统一模型且选中服务端：只提交路由（使用平台模型），个人配置保留，
+  // 后端会忽略其他字段；此时个人表单隐藏，无需校验。
+  if (platformModel.value && !clientRoute.value) {
+    try {
+      await store.update({ llm_route: 'server' })
+      message.success('已切回平台模型')
+      diagnostics.value = {}
+      relay.refresh()
+    } catch (err: any) {
+      message.error(`保存设置失败：${err.message || '未知错误'}`)
+    }
     return
   }
   if (Number(form.value.max_response_tokens) + 256 >= Number(form.value.max_context_tokens)) {
@@ -235,10 +268,10 @@ async function save() {
     return
   }
   const body: Record<string, any> = {
-    provider: form.value.provider || 'openai',
     base_url: form.value.base_url,
     protocol: form.value.protocol || defaultProtocol,
-    llm_route: llmRoute.value,
+    // 平台未开放客户端直连时固定提交 server（路由选择已隐藏）。
+    llm_route: routeChoiceVisible.value ? llmRoute.value : 'server',
     model: form.value.model,
     memory_model: form.value.memory_model || '',
     inquiry_model: form.value.inquiry_model || '',
@@ -251,7 +284,7 @@ async function save() {
     memory_reasoning_effort: String(form.value.memory_reasoning_effort ?? '').trim(),
     inquiry_reasoning_effort: String(form.value.inquiry_reasoning_effort ?? '').trim(),
   }
-  if (llmRoute.value === 'client') {
+  if (clientRoute.value) {
     // 客户端直连：Key 只写本设备，不随设置提交；顺手清掉服务端输入框。
     if (auth.user && localApiKey.value.trim()) setLocalKey(auth.user.id, localApiKey.value)
     apiKey.value = ''
@@ -440,15 +473,32 @@ function clearDeviceKey() {
 
     <section class="card">
       <div class="card-head">LLM 接入</div>
-      <div v-if="platformManaged" class="managed-state">
+      <div v-if="platformModel && !routeChoiceVisible" class="managed-state">
         <div class="managed-state-title">模型服务已准备就绪</div>
         <p>平台已经为你配置好模型服务，无需填写 API Key 或选择模型，直接开始使用即可。</p>
         <p class="managed-state-hint">如需调整模型服务，请联系管理员。</p>
       </div>
       <NForm v-else label-placement="top" size="small">
-        <NFormItem label="请求路由">
+        <NFormItem v-if="routeChoiceVisible">
+          <template #label>
+            <FieldHelp label="请求路由">
+              <p>
+                <strong>服务端转发（平台统一模型时叫“平台模型”）</strong>
+                由服务器向模型服务商发请求。挑战与 Campaign 正常发放奖励，重新生成消耗额度；个人模式下 API
+                Key 保存在服务器。
+              </p>
+              <p>
+                <strong>客户端直连</strong>
+                由你的浏览器直接向模型服务商发请求，API Key
+                只保存在本设备。但服务端无法校验模型输出：挑战与 Campaign
+                不发放奖励，重新生成不消耗额度；发给模型的完整提示词（含隐藏剧情）可在浏览器中查看。该模式只适合体验对话玩法。
+              </p>
+            </FieldHelp>
+          </template>
           <NRadioGroup :value="llmRoute" size="medium" @update:value="onRouteChange">
-            <NRadioButton value="server">服务端转发（推荐）</NRadioButton>
+            <NRadioButton value="server">{{
+              platformModel ? '平台模型（推荐）' : '服务端转发（推荐）'
+            }}</NRadioButton>
             <NRadioButton value="client">客户端直连</NRadioButton>
           </NRadioGroup>
           <template #feedback>
@@ -456,7 +506,9 @@ function clearDeviceKey() {
               {{
                 llmRoute === 'client'
                   ? '由本设备浏览器直接请求模型，API Key 只保存在本设备'
-                  : '由服务器请求模型，完整享有奖励与挑战记录'
+                  : platformModel
+                    ? '使用平台统一配置的模型，完整享有奖励与挑战记录'
+                    : '由服务器请求模型，完整享有奖励与挑战记录'
               }}
             </span>
           </template>
@@ -465,29 +517,39 @@ function clearDeviceKey() {
           此模式下，服务端无法校验模型输出：挑战与 Campaign
           不发放奖励，重新生成不消耗额度；发给模型的完整提示词（含隐藏剧情信息）可在浏览器中查看。该模式只用于体验对话玩法。
         </NAlert>
-        <NFormItem label="Provider">
-          <NSelect
-            v-model:value="form.provider"
-            :options="providerOptions"
-            placeholder="选择服务商配置"
-          />
-        </NFormItem>
+        <div v-if="platformModel && !clientRoute" class="managed-state">
+          <div class="managed-state-title">模型服务已准备就绪</div>
+          <p>当前使用平台统一配置的模型，直接开始使用即可；个人配置会保留，切回客户端直连时可继续使用。</p>
+        </div>
+        <template v-if="!platformModel || clientRoute">
         <NFormItem label="Base URL（OpenAI 兼容）">
-          <NInput v-model:value="form.base_url" placeholder="https://api.openai.com/v1" />
-        </NFormItem>
-        <NFormItem label="接口协议">
           <div class="protocol-setting">
-            <NSelect
-              v-model:value="form.protocol"
-              :options="protocolOptions"
-              :disabled="!!selectedProfile && selectedProfile.allowed_apis.length === 1"
-            />
-            <div v-if="selectedProfile" class="protocol-setting__hint">
-              <span class="protocol-setting__badge">Provider 能力</span>
-              <span>Profile：{{ selectedProfile.id }} · 协议由后端自动解析</span>
+            <NInput v-model:value="form.base_url" placeholder="https://api.openai.com/v1" />
+            <div class="protocol-setting__hint">
+              填谁的地址就用谁的服务（官方、OpenRouter、中转站、本地模型均可）。OpenAI、DeepSeek、OpenRouter
+              官方地址会自动适配。
             </div>
           </div>
         </NFormItem>
+        <NFormItem label="接口协议">
+          <div class="protocol-setting">
+            <NSelect v-model:value="form.protocol" :options="protocolOptions" />
+            <div class="protocol-setting__hint">
+              <template v-if="recognizedHint">{{ recognizedHint }}</template>
+              <template v-else>
+                按所选协议请求。不确定时先用“测试连接”或能力诊断确认。
+              </template>
+            </div>
+          </div>
+        </NFormItem>
+        <NAlert
+          v-if="clientRouteClosedHint"
+          type="info"
+          :show-icon="false"
+          class="route-note"
+        >
+          平台已关闭客户端直连，请填写 API Key 以使用服务端转发。
+        </NAlert>
         <NFormItem
           v-if="!clientRoute"
           :label="`API Key${store.settings?.has_api_key ? '（已配置，留空则保持不变）' : ''}`"
@@ -648,8 +710,9 @@ function clearDeviceKey() {
           </template>
           <NSlider v-model:value="form.top_p" :min="0" :max="1" :step="0.05" />
         </NFormItem>
+        </template>
       </NForm>
-      <div v-if="!platformManaged" class="save-row row">
+      <div v-if="!platformModel || routeChoiceVisible" class="save-row row">
         <NButton type="primary" @click="save">保存设置</NButton>
       </div>
     </section>
@@ -758,28 +821,11 @@ function clearDeviceKey() {
 }
 
 .protocol-setting__hint {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 8px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
-}
-
-.protocol-setting__hint > span:last-child {
-  min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.protocol-setting__badge {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-soft));
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-hover);
-  white-space: nowrap;
 }
 
 .section-divider {
