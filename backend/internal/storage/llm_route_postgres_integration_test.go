@@ -10,7 +10,7 @@ import (
 )
 
 // seedLLMRouteTestGraph 说明：本文件的种子直接内联在各测试中，
-// 复用 openGenerationTestDB 建表（含最新 init.sql）。
+// 复用 openGenerationTestDB 建表（执行最新 Goose migrations）。
 func TestPostgresLLMRouteImmutableAndForeignKey(t *testing.T) {
 	db := openGenerationTestDB(t)
 	playerID, packID, versionID := uuid.New(), uuid.New(), uuid.New()
@@ -192,7 +192,7 @@ func TestPostgresClientRouteRegenerateSkipsCharge(t *testing.T) {
 	db := openGenerationTestDB(t)
 	ctx := context.Background()
 	playerID, packID, versionID := uuid.New(), uuid.New(), uuid.New()
-	// 改写额度由 init.sql 预置（id 00000000-0000-0000-0000-000000000001，
+	// 改写额度由基线 migration 预置（id 00000000-0000-0000-0000-000000000001，
 	// key fatecraft.message-rewrite-credit），种子不得重复插入。
 	hash := strings.Repeat("0", 64)
 	for _, statement := range []string{

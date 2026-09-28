@@ -4,7 +4,7 @@
 
 后端使用 Go、Gin、GORM、PostgreSQL、WebSocket 和 zap。应用入口是 `cmd/server`，负责首次内容初始化、HTTP、WebSocket、LLM 和游戏运行时。
 
-`cmd/server` 不运行 AutoMigrate，表结构只由 `scripts/sql/init.sql` 初始化。连接数据库后，server 在事务级 advisory lock 内检查 `challenge_packs`：为空时读取 `preset_packs` 并通过正常发布流程初始化内置挑战；非空时直接跳过，不读取或修改内置内容。
+`cmd/server` 不运行 AutoMigrate，也不隐式修改数据库结构。部署阶段先运行 `cmd/migrate up`；连接数据库后，server 在事务级 advisory lock 内检查 `challenge_packs`：为空时读取 `preset_packs` 并通过正常发布流程初始化内置挑战；非空时直接跳过，不读取或修改内置内容。
 
 ## 模块划分
 

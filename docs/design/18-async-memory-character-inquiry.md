@@ -180,6 +180,6 @@ Memory 使用 `memory_archive_v1`，Inquiry 使用 `character_inquiry_v1`，两�
 | Inquiry 快照、契约与服务 | `backend/internal/inquiry`、`storage/repo_inquiry.go` |
 | Inquiry HTTP | `backend/internal/api/inquiries.go` |
 | 左栏 UI | `frontend/src/components/CharacterSidebar.vue`、`InquiryPanel.vue` |
-| 权威表结构 | `backend/scripts/sql/init.sql` |
+| 权威表结构 | `backend/migrations/*.sql`，由 `cmd/migrate` 执行 |
 
 修改这些边界时至少运行 `go test ./...`、`go vet ./...` 和 `vue-tsc --noEmit`；发布前再执行项目约定的生产构建。PostgreSQL 集成测试使用随机隔离 schema，设置 `FATECRAFT_TEST_DATABASE_URL` 后执行；测试结束会删除该 schema。

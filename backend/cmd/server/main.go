@@ -53,7 +53,7 @@ func main() {
 	logger := logging.Init(cfg.LogLevel, cfg.LogFormat)
 	defer func() { _ = logger.Sync() }()
 
-	// 只连接数据库；表结构由 scripts/sql/init.sql 唯一维护。
+	// 只连接数据库；表结构由独立的 cmd/migrate 在部署阶段维护。
 	db, err := storage.Open(cfg.DatabaseURL, storage.DBPoolConfig{
 		MaxOpenConns: cfg.DBMaxOpenConns, MaxIdleConns: cfg.DBMaxIdleConns,
 		ConnMaxLifetime: cfg.DBConnMaxLifetime, ConnMaxIdleTime: cfg.DBConnMaxIdleTime,

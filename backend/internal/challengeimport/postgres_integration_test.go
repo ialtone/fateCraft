@@ -2,55 +2,17 @@ package challengeimport
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/ialtone/fatecraft/internal/storage"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/ialtone/fatecraft/internal/testdb"
 )
 
 func TestPostgresBundledMortalPathImportAndOverwrite(t *testing.T) {
-	databaseURL := os.Getenv("FATECRAFT_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("FATECRAFT_TEST_DATABASE_URL is not set")
-	}
-	baseDB, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	schemaName := "fatecraft_pack_verify_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if err := baseDB.Exec("CREATE SCHEMA " + schemaName).Error; err != nil {
-		t.Fatalf("create isolated verification schema: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := baseDB.Exec("DROP SCHEMA " + schemaName + " CASCADE").Error; err != nil {
-			t.Errorf("drop isolated verification schema: %v", err)
-		}
-	})
-	parsedURL, err := url.Parse(databaseURL)
-	if err != nil || parsedURL.Scheme == "" {
-		t.Fatalf("FATECRAFT_TEST_DATABASE_URL must be a PostgreSQL URL: %v", err)
-	}
-	query := parsedURL.Query()
-	query.Set("search_path", schemaName)
-	parsedURL.RawQuery = query.Encode()
-	db, err := gorm.Open(postgres.Open(parsedURL.String()), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema, err := os.ReadFile(filepath.Join("..", "..", "scripts", "sql", "init.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(string(schema)).Error; err != nil {
-		t.Fatalf("initialize PostgreSQL schema %s: %v", fmt.Sprintf("%q", schemaName), err)
-	}
+	db := testdb.Open(t, "pack_verify")
 
 	ctx := context.Background()
 	repository := storage.NewChallengeRepository(db)

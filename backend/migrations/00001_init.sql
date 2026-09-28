@@ -1,7 +1,6 @@
--- Fatecraft PostgreSQL schema (fresh database only)
--- 在空的 fatecraft 数据库中执行本文件；本项目不维护旧结构兼容迁移。
-
-BEGIN;
+-- +goose Up
+-- Fatecraft PostgreSQL schema baseline.
+-- This project started migration tracking at version 1; no older schema is supported.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
@@ -1277,37 +1276,44 @@ CREATE INDEX idx_reward_ledger_player ON reward_ledger(player_id, created_at DES
 CREATE INDEX idx_reward_ledger_source ON reward_ledger(source_type, source_id);
 CREATE INDEX idx_reward_ledger_run ON reward_ledger(challenge_run_id);
 
+-- +goose StatementBegin
 CREATE FUNCTION reject_reward_ledger_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'reward_ledger is append-only';
 END;
 $$;
+-- +goose StatementEnd
 CREATE TRIGGER trg_reward_ledger_append_only
     BEFORE UPDATE OR DELETE ON reward_ledger
     FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 
+-- +goose StatementBegin
 CREATE FUNCTION reject_campaign_event_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'campaign_events is append-only';
 END;
 $$;
+-- +goose StatementEnd
 CREATE TRIGGER trg_campaign_events_append_only
     BEFORE UPDATE OR DELETE ON campaign_events
     FOR EACH ROW EXECUTE FUNCTION reject_campaign_event_mutation();
 
+-- +goose StatementBegin
 CREATE FUNCTION reject_campaign_action_commit_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'campaign_action_commits is append-only';
 END;
 $$;
+-- +goose StatementEnd
 CREATE TRIGGER trg_campaign_action_commits_append_only
     BEFORE UPDATE OR DELETE ON campaign_action_commits
     FOR EACH ROW EXECUTE FUNCTION reject_campaign_action_commit_mutation();
 
 -- 对话与 Campaign 的 llm_route 创建后不可修改；路由切换必须新建对象。
+-- +goose StatementBegin
 CREATE FUNCTION reject_llm_route_change() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -1317,6 +1323,7 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+-- +goose StatementEnd
 CREATE TRIGGER trg_conversations_llm_route_immutable
     BEFORE UPDATE ON conversations
     FOR EACH ROW EXECUTE FUNCTION reject_llm_route_change();
@@ -1371,8 +1378,12 @@ COMMENT ON TABLE campaign_encounters IS 'Campaign 当前遭遇的可信状态、
 COMMENT ON TABLE campaign_events IS 'Campaign 只追加领域事件，visibility 控制玩家与模型可见范围';
 COMMENT ON TABLE campaign_action_commits IS 'Campaign 领域动作幂等提交记录，一次动作可对应多条事件';
 COMMENT ON TABLE conversations IS '玩家创建的叙事会话；每个长期 Campaign 最多绑定一个持续对话';
+COMMENT ON TABLE conversation_generation_runs IS '对话可写生成的持久租约与所有权记录，用于并发互斥和进程恢复';
 COMMENT ON TABLE chat_messages IS '进入模型上下文的对话消息，含 Chat/Responses 思考协议回放字段';
 COMMENT ON TABLE display_messages IS '玩家可见的时间线消息及安全展示元数据';
+COMMENT ON TABLE conversation_shares IS '对话连续消息范围的不可变公开快照、所有权和撤销状态';
+COMMENT ON TABLE conversation_share_reports IS '公开对话分享的匿名举报记录和来源去重指纹';
+COMMENT ON TABLE conversation_share_audit_events IS '管理员处理公开分享与举报的不可变审计事件';
 COMMENT ON TABLE conversation_states IS '每个对话当前的结构化状态快照';
 COMMENT ON TABLE state_revisions IS '结构化状态每次可信更新前后的审计记录';
 COMMENT ON TABLE conversation_turns IS '对话内稳定排序且以完整生成流程封口的逻辑回合';
@@ -1409,4 +1420,3 @@ COMMENT ON COLUMN llm_settings.reasoning_effort IS '叙事思考强度；空串�
 COMMENT ON COLUMN system_settings.public_llm_api_key_encrypted IS '平台公共模型 API Key 的 AES-GCM 密文，永不通过 API 返回';
 COMMENT ON COLUMN reward_ledger.idempotency_key IS '调用方生成的唯一业务幂等键，防止重复授予或消费';
 
-COMMIT;

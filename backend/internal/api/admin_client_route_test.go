@@ -4,15 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"github.com/ialtone/fatecraft/internal/identity"
@@ -20,6 +17,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/modelcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
+	"github.com/ialtone/fatecraft/internal/testdb"
 )
 
 // clientRouteStubUsers / clientRouteStubSystem 实现 llmsettings 的仓储接口
@@ -195,39 +193,11 @@ func TestUpdateLLMSettingsPlatformClientSavesPersonal(t *testing.T) {
 	}
 }
 
-// openClientRouteTestDB 在独立 schema 上建表（含最新 init.sql），与 storage 包的
-// PG 测试隔离。无 FATECRAFT_TEST_DATABASE_URL 时跳过。
+// openClientRouteTestDB 在独立 schema 上运行最新 migration，与 storage 包的
+// PostgreSQL 测试隔离。无 FATECRAFT_TEST_DATABASE_URL 时跳过。
 func openClientRouteTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	databaseURL := os.Getenv("FATECRAFT_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("FATECRAFT_TEST_DATABASE_URL is not set")
-	}
-	baseDB, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	schemaName := "fatecraft_client_route_verify_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if err := baseDB.Exec("CREATE SCHEMA " + schemaName).Error; err != nil {
-		t.Fatalf("create verification schema: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := baseDB.Exec("DROP SCHEMA " + schemaName + " CASCADE").Error; err != nil {
-			t.Errorf("drop verification schema: %v", err)
-		}
-	})
-	db, err := gorm.Open(postgres.Open(databaseURL+"&search_path="+schemaName), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema, err := os.ReadFile(filepath.Join("..", "..", "scripts", "sql", "init.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(string(schema)).Error; err != nil {
-		t.Fatalf("initialize verification schema: %v", err)
-	}
-	return db
+	return testdb.Open(t, "client_route_verify")
 }
 
 func TestUpdateAdminSystemSettingsClosesRelaysWhenClientRouteDisabled(t *testing.T) {

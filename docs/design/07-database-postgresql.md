@@ -4,13 +4,13 @@
 
 PostgreSQL 是 Fatecraft 的运行时权威数据源，保存认证、挑战固定版本、对话状态、判定证据、结算、奖励账本和管理员设置。仓库 JSON 只是内置玩法的可导入源文件；玩法导入或发布后，生成过程只能读取数据库中与对话固定版本关联的内容。
 
-当前项目按新项目维护，不承担旧数据库兼容：
+当前项目从第一版 schema 开始使用 Goose 管理结构：
 
-- `backend/scripts/sql/init.sql` 是空数据库的完整最终 Schema。
+- `backend/migrations/00001_init.sql` 是完整基线，后续结构和必要数据变化使用新的增量 migration。
 - 不使用 GORM `AutoMigrate` 修改生产结构。
 - 不保留 `accounts`、单一灵石字段、旧回溯计数或旧结局字段。
-- 测试站需要结构变化时，重建空库并完整执行 `init.sql`。
-- 脚本使用一个事务；任一 DDL、约束、种子或注释失败都会整体回滚。
+- 开发、测试、Docker 和生产环境都通过 `cmd/migrate up` 执行相同的内嵌 migration。
+- migration 默认使用事务；任一 DDL、约束、种子或注释失败都会整体回滚。确需禁用事务的 migration 必须显式标注并说明原因。
 
 `CREATE EXTENSION IF NOT EXISTS pgcrypto` 和 `pg_trgm` 固定安装在 `public` schema。前者提供 `gen_random_uuid()`；后者为标题的模糊搜索提供 `public.gin_trgm_ops` GIN 索引。`IF NOT EXISTS` 让重复执行扩展声明不会报错。它不代表数据库会自动加密业务字段：密码、会话令牌、验证码、邀请码和 SMTP 密码仍由后端分别使用 Argon2id/bcrypt、SHA-256 或 AES-GCM 处理。
 
@@ -57,7 +57,7 @@ challenge_packs
         `-- challenge_reward_rules -> reward_definitions
 ~~~
 
-Schema 当前包含 57 张表，`init.sql` 为每张表提供 `COMMENT ON TABLE`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
+基线 migration 当前包含 61 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
 
 ## 认证与平台设置
 
@@ -323,14 +323,15 @@ Campaign 终局授予使用 `source_type=campaign_outcome` 和 Campaign ID 作�
 Schema 变更至少执行：
 
 ~~~powershell
-rg -n "^CREATE TABLE" backend/scripts/sql/init.sql
-rg -n "^COMMENT ON TABLE" backend/scripts/sql/init.sql
+rg -n "^CREATE TABLE" backend/migrations
+rg -n "^COMMENT ON TABLE" backend/migrations
 cd backend
+go run ./cmd/migrate status
 go test ./...
 go vet ./...
 ~~~
 
-两次表计数必须一致。由于本项目当前不维护迁移，DDL 修改后应使用空测试数据库完整执行 `init.sql` 验证，而不是在旧库上零散补字段。
+两次业务表计数必须一致。已在共享环境执行的 migration 不得修改；DDL 修正必须新增 migration，并同时在空数据库和已迁移数据库验证 `up`。集成测试在随机 PostgreSQL schema 中执行同一套 migration。
 
 ### 状态域与事件权威性
 
@@ -341,7 +342,7 @@ go vet ./...
 - `conversation_share_reports`：保存匿名举报原因、可选说明和 HMAC 派生的举报者指纹；`(share_id, reporter_fingerprint)` 唯一，避免同一来源重复创建。
 - `conversation_share_audit_events`：保存管理员下架、解决举报和驳回举报事件；关联对象或管理员物理删除后外键置空，审计事件本身保留。
 
-快照是匿名读取的唯一正文来源，数据库不保存完整分享 token。`conversation_shares.player_id` 和 `conversation_id` 随账号或对话物理删除级联清理；对话日常使用软删除，因此仓储还会在删除生命周期事务中把 active 分享标记为 revoked。表结构只由 `backend/scripts/sql/init.sql` 管理，不使用 AutoMigrate。
+快照是匿名读取的唯一正文来源，数据库不保存完整分享 token。`conversation_shares.player_id` 和 `conversation_id` 随账号或对话物理删除级联清理；对话日常使用软删除，因此仓储还会在删除生命周期事务中把 active 分享标记为 revoked。表结构只由 `backend/migrations` 中按顺序执行的 SQL 管理，不使用 AutoMigrate。
 
 ## LLM 请求路由列
 

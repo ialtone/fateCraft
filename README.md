@@ -97,15 +97,21 @@ PostgreSQL 和后端领域服务是玩法事实的权威来源。浏览器、玩
 
 ### 1. 初始化数据库
 
-Fatecraft 不使用 AutoMigrate，也没有旧表兼容或自动迁移旁路。空数据库必须完整执行一次 [init.sql](backend/scripts/sql/init.sql)：
+Fatecraft 不使用 AutoMigrate。数据库结构由 [Goose migrations](backend/migrations) 显式维护，空数据库和已有环境使用同一个升级入口。先按下一节创建 `backend/.env` 并确认 `DATABASE_URL`，然后执行：
 
 ```bash
-psql "$DATABASE_URL" -f backend/scripts/sql/init.sql
+cd backend
+go run ./cmd/migrate up
 ```
 
-没有本机 <code>psql</code> 时，可以使用 Navicat、DBeaver 等数据库管理工具连接目标数据库并执行同一脚本。
+查看当前版本和待执行 migration：
 
-请勿对已有 Fatecraft schema 重复执行 <code>init.sql</code>。结构升级必须显式维护 SQL 和数据迁移，而不是依赖服务启动时猜测数据库状态。
+```bash
+go run ./cmd/migrate version
+go run ./cmd/migrate status
+```
+
+每个已执行 migration 都记录在 `goose_db_version`。服务进程不会在启动时隐式修改数据库；部署必须先让 `migrate up` 成功，再启动后端。
 
 ### 2. 配置后端
 
@@ -341,6 +347,7 @@ docker compose -f docker/docker-compose.prod.yml up --build -d
 
 ```text
 backend/
+  cmd/migrate/              独立数据库迁移命令
   cmd/server/               HTTP、WebSocket 与 Worker 组合根
   internal/api/             Gin 路由、权限与请求边界
   internal/auth/            登录、会话、验证码和邀请码
@@ -353,7 +360,7 @@ backend/
   internal/memory/          异步长期记忆调度、契约与 Worker
   internal/orchestration/   主叙事 Agent、工具目录和事务编排
   internal/storage/         PostgreSQL 模型、仓储和奖励账本
-  scripts/sql/init.sql      空数据库权威 schema
+  migrations/               Goose SQL migration 与当前 schema 权威来源
   data/preset_packs/        官方玩法首次初始化材料
   data/roll_config.yaml     判定算法与词表
 frontend/

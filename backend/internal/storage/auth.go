@@ -25,7 +25,7 @@ const (
 	OAuthPurposeBind  = "bind"
 )
 
-// users 表唯一约束/索引的名称，必须与 init.sql 保持一致；冲突识别依赖名称而不是错误文本。
+// users 表唯一约束/索引的名称，必须与数据库 migration 保持一致；冲突识别依赖名称而不是错误文本。
 const (
 	usersUsernameUniqueIndex   = "idx_users_username_lower"
 	usersEmailUniqueConstraint = "users_email_key"

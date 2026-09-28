@@ -17,7 +17,7 @@ type DBPoolConfig struct {
 	ConnMaxIdleTime time.Duration
 }
 
-// Open 通过 GORM 连接 PostgreSQL。表结构只由 scripts/sql/init.sql 维护。
+// Open 通过 GORM 连接 PostgreSQL。表结构只由 Goose migrations 维护。
 func Open(dsn string, poolConfigs ...DBPoolConfig) (*gorm.DB, error) {
 	pool := DBPoolConfig{}
 	if len(poolConfigs) > 0 {

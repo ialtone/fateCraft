@@ -31,7 +31,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 
 发生冲突时按以下顺序判断：
 
-1. 数据库关系与约束：`backend/scripts/sql/init.sql`。
+1. 数据库关系与约束：按版本顺序执行的 `backend/migrations/*.sql`。
 2. 后端安全和事务行为：`backend/internal`。
 3. 模型协议、工具目录与结构化契约：`backend/internal/llm`、`backend/internal/orchestration/agent_tools.go`、`backend/internal/memory/contract.go` 和 `backend/internal/inquiry`。
 4. 判定算法参数：`backend/data/roll_config.yaml`。

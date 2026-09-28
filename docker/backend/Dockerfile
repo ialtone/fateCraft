@@ -1,5 +1,5 @@
 # Fatecraft 后端运行时镜像。
-# 二进制由宿主机 `task backend:build` 交叉编译产出（docker/backend/bin/fatecraft），
+# 二进制由宿主机 `task backend:build` 交叉编译产出，
 # 镜像本身不做编译，保持构建快、体积小。
 FROM alpine:3.22
 
@@ -11,9 +11,10 @@ ENV GIN_MODE=release
 ENV TZ=Asia/Shanghai
 
 COPY ./bin/fatecraft ./fatecraft
+COPY ./bin/fatecraft-migrate ./fatecraft-migrate
 
 # 判定配置、响应 Schema 和首次启动材料由 compose 挂载到 /app/backend/data（DATA_DIR=data）。
-RUN chmod +x ./fatecraft && mkdir -p data
+RUN chmod +x ./fatecraft ./fatecraft-migrate && mkdir -p data
 
 EXPOSE 8081
 

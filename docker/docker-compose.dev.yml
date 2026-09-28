@@ -12,14 +12,25 @@ services:
       - "15433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
-      # 数据卷为空（首次启动）时自动执行权威建表脚本 init.sql；已有数据时不会重复执行
-      - ../backend/scripts/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  migrate:
+    image: fatecraft-backend:dev
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    env_file:
+      - ./backend.development.env
+    command: ["./fatecraft-migrate", "up"]
 
   postgres-backup:
     build:
@@ -42,13 +53,14 @@ services:
     mem_limit: 256m
 
   backend:
+    image: fatecraft-backend:dev
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      postgresql:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     env_file:
       - ./backend.development.env
     ports:

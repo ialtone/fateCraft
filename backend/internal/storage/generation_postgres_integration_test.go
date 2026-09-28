@@ -3,16 +3,13 @@ package storage
 import (
 	"context"
 	"errors"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/ialtone/fatecraft/internal/operation"
-	"gorm.io/driver/postgres"
+	"github.com/ialtone/fatecraft/internal/testdb"
 	"gorm.io/gorm"
 )
 
@@ -295,42 +292,7 @@ func TestPostgresExpiredLeasePreemptionSealsOrphanedTurn(t *testing.T) {
 
 func openGenerationTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	databaseURL := os.Getenv("FATECRAFT_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("FATECRAFT_TEST_DATABASE_URL is not set")
-	}
-	baseDB, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	schemaName := "fatecraft_generation_verify_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if err := baseDB.Exec("CREATE SCHEMA " + schemaName).Error; err != nil {
-		t.Fatalf("create verification schema: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := baseDB.Exec("DROP SCHEMA " + schemaName + " CASCADE").Error; err != nil {
-			t.Errorf("drop verification schema: %v", err)
-		}
-	})
-	parsed, err := url.Parse(databaseURL)
-	if err != nil || parsed.Scheme == "" {
-		t.Fatalf("invalid PostgreSQL test URL: %v", err)
-	}
-	query := parsed.Query()
-	query.Set("search_path", schemaName)
-	parsed.RawQuery = query.Encode()
-	db, err := gorm.Open(postgres.Open(parsed.String()), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema, err := os.ReadFile(filepath.Join("..", "..", "scripts", "sql", "init.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(string(schema)).Error; err != nil {
-		t.Fatalf("initialize verification schema: %v", err)
-	}
-	return db
+	return testdb.Open(t, "generation_verify")
 }
 
 func seedGenerationTestConversation(t *testing.T, db *gorm.DB) uuid.UUID {

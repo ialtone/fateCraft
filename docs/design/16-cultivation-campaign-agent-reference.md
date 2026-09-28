@@ -2,7 +2,7 @@
 
 > 状态：已实现，当前内容基线为内置玩法包 `mortal-path 3.6.2`。
 >
-> 本文是后续开发 Agent 理解、维护和扩展修仙长期 Campaign 的稳定入口。它描述当前代码真实提供的边界，不记录实施阶段，也不把设想写成已交付能力。发生冲突时，以 `backend/scripts/sql/init.sql`、`backend/internal` 和已发布 Runtime Contract 为准。
+> 本文是后续开发 Agent 理解、维护和扩展修仙长期 Campaign 的稳定入口。它描述当前代码真实提供的边界，不记录实施阶段，也不把设想写成已交付能力。发生冲突时，以 `backend/migrations`、`backend/internal` 和已发布 Runtime Contract 为准。
 
 ## 1. 系统定位
 
@@ -297,7 +297,7 @@ Context Provider 同时声明顶层主题优先级；完整投影超出当前模
 5. 改变已发布内容时提升稳定版本号。管理员的“覆盖内置内容”只允许替换未被 Conversation 或 Campaign 使用的同版本快照；发布新版本会退役旧版本并封存其普通对话，旧对话保持只读，可从详情页基于当前版本开启新对话。Campaign 存档仍固定原版本并按独立生命周期运行。
 6. 先通过加载与发布校验，再在空数据库或隔离 schema 执行真实导入；不要只做 JSON 解析检查。
 
-本项目按新系统维护，不提供旧 Campaign 迁移脚本。空数据库使用最新 `backend/scripts/sql/init.sql` 初始化。
+本项目按新系统维护，不提供旧 Campaign 数据迁移脚本。空数据库和已有环境都使用最新 Goose migration 初始化或升级。
 
 ## 11. 安全不变量
 
@@ -327,7 +327,7 @@ cd ../frontend
 npm run build
 ~~~
 
-PostgreSQL 集成测试读取 `FATECRAFT_TEST_DATABASE_URL`，为每次测试创建随机临时 schema、执行完整 `init.sql`，结束后删除 schema。它当前验证：
+PostgreSQL 集成测试读取 `FATECRAFT_TEST_DATABASE_URL`，为每次测试创建随机临时 schema、执行完整 Goose migration，结束后删除 schema。它当前验证：
 
 - revision 并发只有一个提交成功；
 - action id 幂等重放；
@@ -341,7 +341,7 @@ PostgreSQL 集成测试读取 `FATECRAFT_TEST_DATABASE_URL`，为每次测试创
 
 | 关注点 | 入口 |
 | --- | --- |
-| PostgreSQL 权威 schema | `backend/scripts/sql/init.sql` |
+| PostgreSQL 权威 schema | `backend/migrations/*.sql`，由 `cmd/migrate` 执行 |
 | Campaign 生命周期与动作调度 | `backend/internal/campaign/service.go` |
 | Campaign 天命判定适配 | `backend/internal/campaign/roll.go` |
 | 通用动作能力、Schema 和 Violation | `backend/internal/campaign/capability.go` |

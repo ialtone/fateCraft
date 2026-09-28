@@ -9,6 +9,18 @@ tasks:
     cmds:
       - go run ./cmd/server
 
+  db:migrate:
+    desc: 将 DATABASE_URL 指向的数据库迁移到最新版本
+    dir: backend
+    cmds:
+      - go run ./cmd/migrate up
+
+  db:status:
+    desc: 查看 DATABASE_URL 指向数据库的迁移状态
+    dir: backend
+    cmds:
+      - go run ./cmd/migrate status
+
   backend:test:
     desc: 运行后端全部测试
     dir: backend
@@ -25,6 +37,7 @@ tasks:
       GOARCH: amd64
     cmds:
       - go build -ldflags "-s -w" -o ../docker/backend/bin/fatecraft ./cmd/server
+      - go build -ldflags "-s -w" -o ../docker/backend/bin/fatecraft-migrate ./cmd/migrate
 
   frontend:dev:
     desc: 本机运行前端 Vite 开发服务（代理 /api 与 /ws 到 :8081）
