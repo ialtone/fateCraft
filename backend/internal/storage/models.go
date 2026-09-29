@@ -324,6 +324,7 @@ type ChallengeRun struct {
 func (ChallengeRun) TableName() string { return "challenge_runs" }
 
 type RewardDefinition struct {
+	Disabled    bool       `json:"disabled"`
 	ID          uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
 	Key         string     `gorm:"column:key;uniqueIndex;not null" json:"key"`
 	Kind        string     `gorm:"column:kind;not null" json:"kind"`
@@ -344,6 +345,8 @@ type RewardDefinition struct {
 func (RewardDefinition) TableName() string { return "reward_definitions" }
 
 type PlayerRewardBalance struct {
+	RefundedTotal      int64     `json:"refunded_total"`
+	ReversedTotal      int64     `json:"reversed_total"`
 	PlayerID           uuid.UUID `gorm:"column:player_id;primaryKey;type:uuid" json:"player_id"`
 	RewardDefinitionID uuid.UUID `gorm:"column:reward_definition_id;primaryKey;type:uuid" json:"reward_definition_id"`
 	Balance            int64     `gorm:"column:balance;not null" json:"balance"`
@@ -355,6 +358,7 @@ type PlayerRewardBalance struct {
 func (PlayerRewardBalance) TableName() string { return "player_reward_balances" }
 
 type RewardLedgerEntry struct {
+	RelatedEntryID     *uuid.UUID `gorm:"type:uuid" json:"related_entry_id,omitempty"`
 	ID                 uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
 	PlayerID           uuid.UUID  `gorm:"column:player_id;type:uuid;not null;index" json:"player_id"`
 	RewardDefinitionID uuid.UUID  `gorm:"column:reward_definition_id;type:uuid;not null" json:"reward_definition_id"`

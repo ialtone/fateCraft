@@ -876,7 +876,7 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 			extraction := extractionRules[rule.ID]
 			stack := itemStacks[extractionKey{item: extraction.ItemKey, quality: extraction.QualityKey}]
 			if stack == nil {
-				continue
+				break
 			}
 			consumed := int64(0)
 			var err error
@@ -885,7 +885,7 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 				return nil, err
 			}
 			if amount == 0 {
-				continue
+				break
 			}
 			itemDefinition, exists := itemDefinitions[extraction.ItemKey]
 			if !exists {
@@ -907,7 +907,7 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 		default:
 			return nil, fmt.Errorf("Campaign 结局奖励计算器不受支持: %s", rule.CalculatorKey)
 		}
-		grant, err := grantLockedCampaignReward(ctx, s.tx, balances[definition.ID], definition, RewardMutation{
+		grant, err := NewRewardRepository(s.tx).AwardInCurrentTx(ctx, RewardMutation{
 			PlayerID: campaign.PlayerID, RewardKey: definition.Key, Quantity: amount,
 			SourceType: "campaign_outcome", SourceID: campaign.ID.String(),
 			IdempotencyKey: idempotencyKey, Metadata: metadata,
@@ -939,47 +939,6 @@ func campaignOutcomeRewardIdempotencyKey(campaignID uuid.UUID, outcomeKey, rewar
 	return "campaign:" + campaignID.String() + ":outcome:" + outcomeKey + ":" + rewardKey
 }
 
-func grantLockedCampaignReward(
-	ctx context.Context,
-	db *gorm.DB,
-	balance *PlayerRewardBalance,
-	definition RewardDefinition,
-	in RewardMutation,
-) (*RewardMutationResult, error) {
-	if balance == nil || balance.PlayerID != in.PlayerID || balance.RewardDefinitionID != definition.ID {
-		return nil, errors.New("Campaign 结局奖励余额锁不匹配")
-	}
-	if in.Quantity <= 0 {
-		return nil, errors.New("授予数量必须大于 0")
-	}
-	if !definition.Stackable && balance.Balance > 0 {
-		return &RewardMutationResult{Definition: definition, Balance: balance.Balance}, nil
-	}
-
-	balance.Balance += in.Quantity
-	balance.GrantedTotal += in.Quantity
-	balance.UpdatedAt = time.Now()
-	if err := db.WithContext(ctx).Save(balance).Error; err != nil {
-		return nil, err
-	}
-	metadata := in.Metadata
-	if metadata == nil {
-		metadata = JSONMap{}
-	}
-	entry := &RewardLedgerEntry{
-		ID: uuid.New(), PlayerID: in.PlayerID, RewardDefinitionID: definition.ID,
-		Operation: "grant", QuantityDelta: in.Quantity, SourceType: in.SourceType,
-		SourceID: in.SourceID, ChallengeRunID: in.ChallengeRunID,
-		IdempotencyKey: in.IdempotencyKey, Metadata: metadata, CreatedAt: time.Now(),
-	}
-	if err := db.WithContext(ctx).Create(entry).Error; err != nil {
-		return nil, err
-	}
-	return &RewardMutationResult{
-		Definition: definition, Ledger: entry, Balance: balance.Balance, Applied: true,
-	}, nil
-}
-
 func campaignRewardSource(metadata JSONMap) *CampaignRewardSource {
 	raw, ok := metadata["extraction"]
 	if !ok {
@@ -1003,11 +962,8 @@ func campaignRewardSource(metadata JSONMap) *CampaignRewardSource {
 }
 
 func campaignRuleRewardSnapshot(snapshot JSONMap, fallback RewardDefinition) JSONMap {
-	out := JSONMap{
-		"key": fallback.Key, "kind": fallback.Kind, "name": fallback.Name,
-		"unit": fallback.Unit, "icon": fallback.Icon,
-	}
-	for _, key := range []string{"key", "kind", "name", "unit", "icon"} {
+	out := rewardSnapshot(fallback)
+	for _, key := range []string{"key", "kind", "name", "unit", "icon", "description"} {
 		if value, ok := snapshot[key].(string); ok {
 			out[key] = value
 		}

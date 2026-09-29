@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -514,7 +515,21 @@ func (s *Server) listAdminBuiltins(c *gin.Context) {
 }
 
 type adminBuiltinImportBody struct {
-	Overwrite bool `json:"overwrite"`
+	Overwrite    bool   `json:"overwrite"`
+	PreviewToken string `json:"preview_token"`
+}
+
+func (s *Server) previewAdminBuiltin(c *gin.Context) {
+	slug, ok := paramSlug(c, "slug")
+	if !ok {
+		return
+	}
+	preview, err := s.builtins.PreviewBuiltin(c.Request.Context(), slug)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, preview)
 }
 
 func (s *Server) importAdminBuiltin(c *gin.Context) {
@@ -529,14 +544,14 @@ func (s *Server) importAdminBuiltin(c *gin.Context) {
 			return
 		}
 	}
-	var (
-		result *challengeimport.ImportResult
-		err    error
-	)
-	if body.Overwrite {
-		result, err = s.builtins.OverwriteBuiltin(c.Request.Context(), slug)
-	} else {
-		result, err = s.builtins.ImportBuiltin(c.Request.Context(), slug)
+	if body.PreviewToken == "" {
+		c.JSON(http.StatusConflict, gin.H{"error": "请先预览差异并确认导入", "code": "preview_required"})
+		return
+	}
+	result, err := s.builtins.ConfirmBuiltin(c.Request.Context(), slug, body.Overwrite, body.PreviewToken, rewardActor(c))
+	if errors.Is(err, challengeimport.ErrPreviewChanged) {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "preview_changed"})
+		return
 	}
 	if err != nil {
 		fail(c, err)

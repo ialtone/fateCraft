@@ -1,152 +1,76 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { GiftOutline, RefreshOutline } from '@vicons/ionicons5'
-import { NButton, NEmpty, NIcon, NSpin, NTag, useMessage } from 'naive-ui'
-import { rewardsApi } from '@/api'
+import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
 import { useRewardStore } from '@/stores/rewards'
-import { platformValue } from '@/lib/presentation'
-import type { RewardLedgerEntry } from '@/types'
-
-const message = useMessage()
+import RewardRecordsPanel from '@/components/RewardRecordsPanel.vue'
+import RewardExchangePanel from '@/components/RewardExchangePanel.vue'
+import RewardLedgerPanel from '@/components/RewardLedgerPanel.vue'
+import { rewardError } from '@/lib/rewards'
 const rewards = useRewardStore()
-const ledger = ref<RewardLedgerEntry[]>([])
-const loadingLedger = ref(false)
-
-const collections = computed(() =>
-  rewards.items.filter((item) => ['badge', 'entitlement', 'item'].includes(item.definition.kind)),
-)
+const error = ref(''),
+  revision = ref(0)
+const records = ref<InstanceType<typeof RewardRecordsPanel>>()
 const balances = computed(() =>
-  rewards.items.filter((item) => ['currency', 'credit'].includes(item.definition.kind)),
+  rewards.items.filter((r) => ['currency', 'credit'].includes(r.definition.kind)),
 )
-
-function kindLabel(kind: string) {
-  return platformValue('reward_kind', kind, '其他奖励')
-}
-
-function operationLabel(operation: RewardLedgerEntry['operation']) {
-  return platformValue('reward_operation', operation)
-}
-
-function sourceLabel(source: string) {
-  return platformValue('reward_source', source, '其他来源')
-}
-
-function signedQuantity(entry: RewardLedgerEntry) {
-  const quantity = entry.quantity_delta
-  return `${quantity > 0 ? '+' : ''}${quantity.toLocaleString()}${entry.definition.unit || ''}`
-}
-
-function formatTime(value: string) {
-  return new Date(value).toLocaleString('zh-CN', { hour12: false })
-}
-
+const collections = computed(() =>
+  rewards.items.filter((r) => !['currency', 'credit'].includes(r.definition.kind)),
+)
 async function load() {
-  loadingLedger.value = true
+  error.value = ''
   try {
-    const [, entries] = await Promise.all([rewards.load(), rewardsApi.ledger(100)])
-    ledger.value = entries
-  } catch (err: any) {
-    message.error(`读取奖励失败：${err.message || '未知错误'}`)
-  } finally {
-    loadingLedger.value = false
+    await rewards.load()
+    revision.value++
+  } catch (err) {
+    error.value = rewardError(err)
   }
 }
-
-onMounted(() => void load())
+async function refresh() {
+  await load()
+  await records.value?.reload()
+}
+onMounted(load)
 </script>
-
 <template>
   <div class="reward-page">
     <header class="page-head">
       <div>
         <p class="eyebrow">PLAYER REWARDS</p>
         <h1>我的奖励</h1>
-        <p>奖励由挑战结算和平台功能产生，余额与流水均以后端账本为准。</p>
+        <p>通关获得奖励，积累点数，兑换账号奖励或额度。</p>
       </div>
-      <NButton secondary :loading="rewards.loading || loadingLedger" @click="load">
-        <template #icon
-          ><NIcon><RefreshOutline /></NIcon
-        ></template>
-        刷新
-      </NButton>
+      <NButton :loading="rewards.loading" @click="refresh">刷新</NButton>
     </header>
-
+    <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NSpin :show="rewards.loading && !rewards.loaded">
-      <section class="reward-section">
-        <h2>余额与额度</h2>
-        <div v-if="balances.length" class="reward-grid">
-          <article v-for="item in balances" :key="item.definition.key" class="reward-card">
-            <NIcon class="reward-icon"><GiftOutline /></NIcon>
+      <section
+        v-for="group in [
+          { title: '余额与点数 / 额度', items: balances },
+          { title: '藏品与成就', items: collections },
+        ]"
+        :key="group.title"
+        class="reward-section"
+      >
+        <h2>{{ group.title }}</h2>
+        <div v-if="group.items.length" class="reward-grid">
+          <article v-for="item in group.items" :key="item.definition.id" class="reward-card">
             <div class="reward-copy">
-              <div class="reward-title">
-                <strong>{{ item.definition.name }}</strong>
-                <NTag size="small" :bordered="false">{{ kindLabel(item.definition.kind) }}</NTag>
-              </div>
-              <p>{{ item.definition.description || '暂无说明' }}</p>
+              <strong>{{ item.definition.name }}</strong>
+              <p>{{ item.definition.description }}</p>
             </div>
             <div class="reward-balance">
               {{ item.balance.toLocaleString() }}<small>{{ item.definition.unit }}</small>
             </div>
           </article>
         </div>
-        <NEmpty v-else description="暂时没有可用余额" />
-      </section>
-
-      <section class="reward-section">
-        <h2>藏品与成就</h2>
-        <div v-if="collections.length" class="reward-grid">
-          <article
-            v-for="item in collections"
-            :key="item.definition.key"
-            class="reward-card collectible"
-          >
-            <NIcon class="reward-icon"><GiftOutline /></NIcon>
-            <div class="reward-copy">
-              <div class="reward-title">
-                <strong>{{ item.definition.name }}</strong>
-                <NTag size="small" type="success" :bordered="false">{{
-                  kindLabel(item.definition.kind)
-                }}</NTag>
-              </div>
-              <p>{{ item.definition.description || '暂无说明' }}</p>
-            </div>
-            <div class="reward-balance">
-              {{ item.balance.toLocaleString() }}<small>{{ item.definition.unit }}</small>
-            </div>
-          </article>
-        </div>
-        <NEmpty v-else description="完成挑战后，徽章和藏品会出现在这里" />
+        <NEmpty v-else-if="!error && !rewards.loading" description="暂无可用资产" />
       </section>
     </NSpin>
-
-    <section class="reward-section">
-      <div class="section-head">
-        <h2>奖励流水</h2>
-        <span>最近 {{ ledger.length }} 条</span>
-      </div>
-      <NSpin :show="loadingLedger">
-        <div v-if="ledger.length" class="ledger-list">
-          <article v-for="entry in ledger" :key="entry.id" class="ledger-row">
-            <div class="ledger-main">
-              <strong>{{ entry.definition.name }}</strong>
-              <span
-                >{{ operationLabel(entry.operation) }} · {{ sourceLabel(entry.source_type) }}</span
-              >
-            </div>
-            <div class="ledger-meta">
-              <strong :class="{ positive: entry.quantity_delta > 0 }">{{
-                signedQuantity(entry)
-              }}</strong>
-              <time :datetime="entry.created_at">{{ formatTime(entry.created_at) }}</time>
-            </div>
-          </article>
-        </div>
-        <NEmpty v-else description="还没有奖励流水" />
-      </NSpin>
-    </section>
+    <RewardExchangePanel @changed="refresh" />
+    <RewardRecordsPanel ref="records" @changed="load" />
+    <RewardLedgerPanel :refresh-key="revision" />
   </div>
 </template>
-
 <style scoped>
 .reward-page {
   width: min(1040px, 100%);
@@ -214,7 +138,7 @@ onMounted(() => void load())
 
 .reward-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 13px;
   align-items: center;
   min-width: 0;

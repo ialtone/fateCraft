@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -39,11 +40,12 @@ func (s *Server) createAdminRewardDefinition(c *gin.Context) {
 	definition.Name = strings.TrimSpace(definition.Name)
 	definition.Kind = strings.TrimSpace(definition.Kind)
 	definition.CreatedBy = &creator
-	if err := s.rewards.CreateDefinition(c.Request.Context(), &definition); err != nil {
-		fail(c, err)
+	created, err := s.rewards.SaveDefinition(c.Request.Context(), creator, uuid.Nil, definition, false)
+	if err != nil {
+		rewardFail(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, definition)
+	c.JSON(http.StatusCreated, created)
 }
 
 func (s *Server) updateAdminRewardDefinition(c *gin.Context) {
@@ -59,17 +61,22 @@ func (s *Server) updateAdminRewardDefinition(c *gin.Context) {
 	definition.Key = strings.TrimSpace(definition.Key)
 	definition.Name = strings.TrimSpace(definition.Name)
 	definition.Kind = strings.TrimSpace(definition.Kind)
-	updated, err := s.rewards.UpdateDefinition(c.Request.Context(), id, &definition)
+	updated, err := s.rewards.SaveDefinition(c.Request.Context(), rewardActor(c), id, definition, c.Query("disable_registration") == "true")
 	if err != nil {
-		fail(c, err)
+		rewardFail(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, updated)
 }
 
+var rewardKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,159}$`)
+
 func validRewardDefinition(definition *storage.RewardDefinition) bool {
 	if definition == nil || strings.TrimSpace(definition.Key) == "" ||
 		strings.TrimSpace(definition.Kind) == "" || strings.TrimSpace(definition.Name) == "" {
+		return false
+	}
+	if !rewardKeyPattern.MatchString(strings.TrimSpace(definition.Key)) || len(definition.Name) > 128 || len(definition.Unit) > 32 || (!definition.Stackable && definition.Consumable) {
 		return false
 	}
 	switch definition.Kind {

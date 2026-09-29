@@ -115,6 +115,13 @@ const router = createRouter({
           meta: { title: '诊断日志' },
         },
         {
+          path: 'rewards',
+          name: 'admin-rewards',
+          component: () => import('@/views/AdminView.vue'),
+          props: { section: 'rewards' },
+          meta: { title: '奖励管理' },
+        },
+        {
           path: 'gameplay',
           name: 'admin-gameplay',
           component: () => import('@/views/AdminView.vue'),

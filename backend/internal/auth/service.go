@@ -90,7 +90,7 @@ type Repository interface {
 	UpdateInvitationCode(context.Context, *storage.InvitationCode) error
 	InstallationComplete(context.Context) (bool, error)
 	InitializeOwner(context.Context, *storage.User) (*storage.User, error)
-	ListUsers(context.Context, int, int) ([]storage.User, error)
+	ListUsers(context.Context, int, int, string) ([]storage.User, error)
 	UpdateUserRole(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
 	UpdateUserStatus(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
 	ListAdminAuditLogs(context.Context, int) ([]storage.AdminAuditLog, error)
@@ -583,8 +583,8 @@ func (s *Service) hasLinuxDOIdentity(ctx context.Context, userID uuid.UUID) (boo
 }
 
 // ListUsers 分页读取用户列表；limit/offset 由调用方校验。
-func (s *Service) ListUsers(ctx context.Context, limit, offset int) ([]storage.User, error) {
-	return s.repo.ListUsers(ctx, limit, offset)
+func (s *Service) ListUsers(ctx context.Context, limit, offset int, search string) ([]storage.User, error) {
+	return s.repo.ListUsers(ctx, limit, offset, search)
 }
 
 func (s *Service) UpdateUserRole(ctx context.Context, actorID, targetID uuid.UUID, role string) (*storage.User, error) {

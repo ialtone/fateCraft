@@ -1004,6 +1004,7 @@ export interface AdminExternalIdentity {
 
 export interface AdminAuditLog {
   id: string
+  request_id?: string
   actor_user_id?: string
   target_user_id?: string
   action: string
@@ -1242,6 +1243,7 @@ export interface PublicChallenge {
 }
 
 export interface RewardDefinition {
+  disabled: boolean
   id: string
   key: string
   kind: 'currency' | 'item' | 'badge' | 'entitlement' | 'credit'
@@ -1259,6 +1261,8 @@ export interface RewardDefinition {
 }
 
 export interface PlayerReward {
+  refunded_total: number
+  reversed_total: number
   definition: RewardDefinition
   balance: number
   granted_total: number
@@ -1269,7 +1273,8 @@ export interface PlayerReward {
 export interface RewardLedgerEntry {
   id: string
   definition: RewardDefinition
-  operation: 'grant' | 'consume' | 'adjust'
+  operation: 'grant' | 'consume' | 'refund' | 'reverse'
+  related_entry_id?: string
   quantity_delta: number
   source_type: string
   source_id: string

@@ -237,7 +237,7 @@ Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局�
 - outcome key 唯一，category/tone 合法，verifier 已安装且配置有效；
 - 通用数值条件和状态倍率引用已声明的数值字段；
 - Prompt 明确引用每个 outcome key；
-- 奖励定义存在，公开快照仍与定义一致，calculator 已安装；
+- 奖励定义存在且未停用，公开快照仍与定义一致，calculator 已安装；
 - 能力成本引用存在且可消费的奖励；
 - 入口奖励前置条件引用存在定义，条件树不过深。
 
@@ -280,7 +280,7 @@ data/preset_packs/<slug>/
 
 空数据库首次启动时，在 PostgreSQL advisory lock 下导入并发布全部内置包。导入事务会先创建或精确复用奖励定义，再创建 Pack、版本、Runtime、资产、outcome 和 reward rules，最后执行与管理端相同的发布校验。
 
-数据库已有任何 Pack 时，启动不自动升级。管理员在“内置内容”查看仓库版本和哈希；新版本可显式“导入并发布”，仓库内容与数据库当前快照不一致时显示“覆盖现有内容”。覆盖必须由请求体显式确认，仍会重新执行完整发布校验。
+数据库已有任何 Pack 时，启动不自动升级。管理员在“内置内容”查看仓库版本和哈希；新版本可显式“导入并发布”，仓库内容与数据库当前快照不一致时显示“覆盖现有内容”。导入前展示共享奖励差异、引用与前后规则，确认时提交 preview_token 和覆盖标记；服务端在配置锁内核对预览，并重新执行完整发布校验。
 
 同一 `slug + version` 内容变化时，覆盖事务先锁定目标版本并检查引用。无人使用时可以删除旧草稿/快照并以新 ID 重建、校验、计算哈希和发布；已被对话或 Campaign 引用时仍返回 409，要求提升版本号。仓库版本低于或等于当前版本时也不能通过覆盖回退。发布更高版本时，旧版本标记为 `retired`，其普通 active 对话自动封存为只读；旧快照不会被删除，用户可从历史对话分叉出绑定当前版本的新对话。
 
@@ -323,11 +323,13 @@ data/preset_packs/<slug>/
 4. 检查该对话没有 `challenge_run`；
 5. 重建可信 evidence 并再次执行固定 outcome verifier；
 6. 执行全部 reward calculator；
-7. 写 run、奖励账本、余额和多奖励快照；
+7. 写 run，通过 AwardInCurrentTx 写获奖记录、实际账本、余额和多奖励快照；
 8. 将对话置为 ended；
 9. 提交后发送通用 `challenge_completed`。
 
-唯一约束和幂等键保证并发重试不会重复结算。验证不满足是业务拒绝，不是系统错误。
+唯一约束和幂等键保证并发重试不会重复结算。零结果、已拥有非叠加资产分别保留 skipped/zero_quantity、skipped/already_owned，不造授予流水；负数或越界失败回滚。多资产余额按 ID 升序加锁，所有奖励与对话完成同事务。验证不满足是业务拒绝，不是系统错误。
+
+奖励管理从 /admin/rewards 集中定位玩法版本，规则仍通过草稿/发布编辑；账号资产积累、领取和兑换见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
 ## 内容演进规则
 

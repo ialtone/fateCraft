@@ -14,6 +14,7 @@ const navItems = [
   { to: '/admin/auth', label: '账号与注册' },
   { to: '/admin/identities', label: '第三方账户' },
   { to: '/admin/logs', label: '诊断日志' },
+  { to: '/admin/rewards', label: '奖励管理' },
   { to: '/admin/gameplay', label: '玩法能力' },
   { to: '/admin/content', label: '内置内容' },
   { to: '/admin/challenges', label: '挑战内容' },

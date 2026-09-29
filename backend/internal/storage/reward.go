@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,10 +22,12 @@ const MessageRewriteCreditKey = platformcapability.MessageRewriteRewardKey
 var (
 	ErrInsufficientReward       = errors.New("奖励余额不足")
 	ErrRewardDefinitionConflict = errors.New("奖励定义冲突")
-	ErrRewardDefinitionInUse    = errors.New("奖励定义已被挑战引用")
+	ErrRewardDefinitionInUse    = errors.New("奖励资产已被使用，不能改变 Key、类型、堆叠或消费语义")
 )
 
 type PlayerRewardView struct {
+	RefundedTotal int64            `json:"refunded_total"`
+	ReversedTotal int64            `json:"reversed_total"`
 	Definition    RewardDefinition `json:"definition"`
 	Balance       int64            `json:"balance"`
 	GrantedTotal  int64            `json:"granted_total"`
@@ -35,6 +38,7 @@ type PlayerRewardView struct {
 // PlayerRewardLedgerView 是面向当前玩家的公开账本视图。它不暴露玩家 ID、
 // 幂等键等内部字段，并附带奖励定义，前端无需猜测 UUID 对应的名称。
 type PlayerRewardLedgerView struct {
+	RelatedEntryID *uuid.UUID       `json:"related_entry_id,omitempty"`
 	ID             uuid.UUID        `json:"id"`
 	Definition     RewardDefinition `json:"definition"`
 	Operation      string           `json:"operation"`
@@ -47,6 +51,7 @@ type PlayerRewardLedgerView struct {
 }
 
 type RewardMutation struct {
+	RelatedEntryID *uuid.UUID
 	PlayerID       uuid.UUID
 	RewardKey      string
 	Quantity       int64
@@ -165,12 +170,23 @@ func (r *RewardRepository) UpdateDefinition(ctx context.Context, id uuid.UUID, w
 		Where("reward_definition_id = ?", id).Count(&references).Error; err != nil {
 		return nil, err
 	}
-	if references > 0 && (wanted.Key != current.Key || wanted.Kind != current.Kind ||
+	var otherReferences int64
+	if err := r.db.WithContext(ctx).Raw(`SELECT
+		(SELECT count(*) FROM reward_records WHERE reward_definition_id = ?) +
+		(SELECT count(*) FROM reward_ledger WHERE reward_definition_id = ?) +
+		(SELECT count(*) FROM player_reward_balances WHERE reward_definition_id = ?) +
+		(SELECT count(*) FROM registration_reward_rules WHERE reward_definition_id = ?) +
+		(SELECT count(*) FROM reward_exchange_offers WHERE cost_definition_id = ? OR reward_definition_id = ?) +
+		(SELECT count(*) FROM reward_exchange_revisions WHERE snapshot->>'cost_definition_id' = ? OR snapshot->>'reward_definition_id' = ?)`, id, id, id, id, id, id, id.String(), id.String()).Scan(&otherReferences).Error; err != nil {
+		return nil, err
+	}
+	if (references+otherReferences > 0 || current.Key == MessageRewriteCreditKey) && (wanted.Key != current.Key || wanted.Kind != current.Kind ||
 		wanted.Stackable != current.Stackable || wanted.Consumable != current.Consumable) {
 		return nil, ErrRewardDefinitionInUse
 	}
 	updates := map[string]any{
 		"key": wanted.Key, "kind": wanted.Kind, "name": wanted.Name,
+		"disabled":    wanted.Disabled,
 		"description": wanted.Description, "unit": wanted.Unit, "icon": wanted.Icon,
 		"stackable": wanted.Stackable, "consumable": wanted.Consumable,
 		"featured": wanted.Featured, "sort_order": wanted.SortOrder,
@@ -188,11 +204,13 @@ func (r *RewardRepository) ListPlayerRewards(ctx context.Context, playerID uuid.
 		Balance       int64     `gorm:"column:balance"`
 		GrantedTotal  int64     `gorm:"column:granted_total"`
 		ConsumedTotal int64     `gorm:"column:consumed_total"`
+		RefundedTotal int64     `gorm:"column:refunded_total"`
+		ReversedTotal int64     `gorm:"column:reversed_total"`
 		BalanceTime   time.Time `gorm:"column:balance_updated_at"`
 	}
 	var rows []row
 	err := r.db.WithContext(ctx).Table("reward_definitions AS d").
-		Select("d.*, COALESCE(b.balance, 0) AS balance, COALESCE(b.granted_total, 0) AS granted_total, COALESCE(b.consumed_total, 0) AS consumed_total, COALESCE(b.updated_at, d.updated_at) AS balance_updated_at").
+		Select("d.*, COALESCE(b.balance, 0) AS balance, COALESCE(b.granted_total, 0) AS granted_total, COALESCE(b.consumed_total, 0) AS consumed_total, COALESCE(b.refunded_total, 0) AS refunded_total, COALESCE(b.reversed_total, 0) AS reversed_total, COALESCE(b.updated_at, d.updated_at) AS balance_updated_at").
 		Joins("LEFT JOIN player_reward_balances AS b ON b.reward_definition_id = d.id AND b.player_id = ?", playerID).
 		Where("COALESCE(b.balance, 0) > 0 OR d.featured = TRUE").
 		Order("d.sort_order ASC, d.name ASC, d.key ASC").
@@ -205,14 +223,21 @@ func (r *RewardRepository) ListPlayerRewards(ctx context.Context, playerID uuid.
 		out = append(out, PlayerRewardView{
 			Definition: item.RewardDefinition, Balance: item.Balance,
 			GrantedTotal: item.GrantedTotal, ConsumedTotal: item.ConsumedTotal,
-			UpdatedAt: item.BalanceTime,
+			UpdatedAt:     item.BalanceTime,
+			RefundedTotal: item.RefundedTotal, ReversedTotal: item.ReversedTotal,
 		})
 	}
 	return out, nil
 }
 
-func (r *RewardRepository) ListLedger(ctx context.Context, playerID uuid.UUID, limit int) ([]PlayerRewardLedgerView, error) {
-	if limit <= 0 || limit > 200 {
+type RewardPageCursor struct {
+	Time         time.Time
+	ID           uuid.UUID
+	DefinitionID *uuid.UUID
+}
+
+func (r *RewardRepository) ListLedger(ctx context.Context, playerID uuid.UUID, limit int, cursors ...RewardPageCursor) ([]PlayerRewardLedgerView, error) {
+	if limit <= 0 || limit > 201 {
 		limit = 50
 	}
 	type row struct {
@@ -232,7 +257,17 @@ func (r *RewardRepository) ListLedger(ctx context.Context, playerID uuid.UUID, l
 		RewardUpdatedAt   time.Time `gorm:"column:reward_updated_at"`
 	}
 	var rows []row
-	err := r.db.WithContext(ctx).Table("reward_ledger AS e").
+	q := r.db.WithContext(ctx).Table("reward_ledger AS e")
+	if len(cursors) > 0 {
+		cursor := cursors[0]
+		if !cursor.Time.IsZero() {
+			q = q.Where("(e.created_at, e.id) < (?, ?)", cursor.Time, cursor.ID)
+		}
+		if cursor.DefinitionID != nil {
+			q = q.Where("e.reward_definition_id = ?", *cursor.DefinitionID)
+		}
+	}
+	err := q.
 		Select(`e.*,
 			d.key AS reward_key, d.kind AS reward_kind, d.name AS reward_name,
 			d.description AS reward_description, d.unit AS reward_unit, d.icon AS reward_icon,
@@ -260,11 +295,29 @@ func (r *RewardRepository) ListLedger(ctx context.Context, playerID uuid.UUID, l
 			},
 			Operation: item.Operation, QuantityDelta: item.QuantityDelta,
 			SourceType: item.SourceType, SourceID: item.SourceID,
-			ChallengeRunID: item.ChallengeRunID, Metadata: item.RewardLedgerEntry.Metadata,
-			CreatedAt: item.RewardLedgerEntry.CreatedAt,
+			ChallengeRunID: item.ChallengeRunID, Metadata: publicRewardMetadata(item.RewardLedgerEntry.Metadata),
+			CreatedAt:      item.RewardLedgerEntry.CreatedAt,
+			RelatedEntryID: item.RelatedEntryID,
 		})
+		if snapshot, ok := item.RewardLedgerEntry.Metadata["reward_snapshot"].(map[string]any); ok {
+			view := &out[len(out)-1].Definition
+			view.Name = stringFromMap(JSONMap(snapshot), "name", view.Name)
+			view.Description = stringFromMap(JSONMap(snapshot), "description", view.Description)
+			view.Unit = stringFromMap(JSONMap(snapshot), "unit", view.Unit)
+			view.Icon = stringFromMap(JSONMap(snapshot), "icon", view.Icon)
+		}
 	}
 	return out, nil
+}
+
+func publicRewardMetadata(metadata JSONMap) JSONMap {
+	result := JSONMap{}
+	for _, key := range []string{"reward_snapshot", "record_id", "outcome_key", "challenge_version_id", "extraction", "offer_id", "offer_revision"} {
+		if value, ok := metadata[key]; ok {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 func (r *RewardRepository) HasBalance(ctx context.Context, playerID uuid.UUID, rewardKey string, quantity int64) (bool, error) {
@@ -312,13 +365,16 @@ func (r *RewardRepository) RefundConsumed(ctx context.Context, in RewardRefund) 
 			return fmt.Errorf("奖励返还参数不完整")
 		}
 		var consumed RewardLedgerEntry
-		err := tx.db.WithContext(ctx).Where("player_id = ? AND operation = ? AND idempotency_key = ? AND quantity_delta < 0",
+		err := tx.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("player_id = ? AND operation = ? AND idempotency_key = ? AND quantity_delta < 0",
 			in.PlayerID, "consume", in.ConsumeIdempotencyKey).First(&consumed).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil
 		}
 		if err != nil {
 			return err
+		}
+		if consumed.SourceType == "reward_exchange" {
+			return ErrRewardReversal
 		}
 		if in.RewardKey != "" {
 			definition, definitionErr := tx.DefinitionByKey(ctx, in.RewardKey)
@@ -334,21 +390,21 @@ func (r *RewardRepository) RefundConsumed(ctx context.Context, in RewardRefund) 
 			metadata = JSONMap{}
 		}
 		metadata["refund_of"] = in.ConsumeIdempotencyKey
-		result, err = tx.GrantInCurrentTx(ctx, RewardMutation{
+		if snapshot, ok := consumed.Metadata["reward_snapshot"]; ok {
+			metadata["reward_snapshot"] = snapshot
+		}
+		result, err = tx.mutateCurrentTx(ctx, RewardMutation{
 			PlayerID: in.PlayerID, RewardKey: in.RewardKey, Quantity: -consumed.QuantityDelta,
 			SourceType: "message_rewrite_refund", SourceID: in.SourceID,
-			IdempotencyKey: in.RefundIdempotencyKey, Metadata: metadata,
-		})
+			IdempotencyKey: "refund:" + consumed.ID.String(), RelatedEntryID: &consumed.ID, Metadata: metadata,
+		}, "refund")
 		return err
 	})
 	return result, err
 }
 
 func (r *RewardRepository) GrantInCurrentTx(ctx context.Context, in RewardMutation) (*RewardMutationResult, error) {
-	if in.Quantity <= 0 {
-		return nil, fmt.Errorf("授予数量必须大于 0")
-	}
-	return r.mutateCurrentTx(ctx, in, "grant")
+	return r.AwardInCurrentTx(ctx, in)
 }
 
 func (r *RewardRepository) ConsumeInCurrentTx(ctx context.Context, in RewardMutation) (*RewardMutationResult, error) {
@@ -359,6 +415,9 @@ func (r *RewardRepository) ConsumeInCurrentTx(ctx context.Context, in RewardMuta
 }
 
 func (r *RewardRepository) mutateCurrentTx(ctx context.Context, in RewardMutation, operation string) (*RewardMutationResult, error) {
+	if in.Quantity <= 0 || in.Quantity > MaxRewardQuantity {
+		return nil, ErrRewardQuantity
+	}
 	if in.PlayerID == uuid.Nil || strings.TrimSpace(in.RewardKey) == "" ||
 		strings.TrimSpace(in.IdempotencyKey) == "" || strings.TrimSpace(in.SourceType) == "" ||
 		strings.TrimSpace(in.SourceID) == "" {
@@ -371,10 +430,19 @@ func (r *RewardRepository) mutateCurrentTx(ctx context.Context, in RewardMutatio
 	if operation == "consume" && !definition.Consumable {
 		return nil, fmt.Errorf("%w: %s 不可消费", ErrInsufficientReward, definition.Key)
 	}
+	if operation == "grant" && !definition.Stackable && in.Quantity != 1 {
+		return nil, ErrRewardQuantity
+	}
+	if err := r.lockRewardKey(ctx, "ledger:"+in.IdempotencyKey); err != nil {
+		return nil, err
+	}
 
 	var existing RewardLedgerEntry
 	err = r.db.WithContext(ctx).First(&existing, "idempotency_key = ?", in.IdempotencyKey).Error
 	if err == nil {
+		if existing.PlayerID != in.PlayerID || existing.RewardDefinitionID != definition.ID || existing.Operation != operation || (existing.QuantityDelta != in.Quantity && existing.QuantityDelta != -in.Quantity) || existing.SourceType != in.SourceType || existing.SourceID != in.SourceID {
+			return nil, ErrRewardRequestConflict
+		}
 		balance, balanceErr := r.lockBalance(ctx, in.PlayerID, definition.ID)
 		if balanceErr != nil {
 			return nil, balanceErr
@@ -395,20 +463,30 @@ func (r *RewardRepository) mutateCurrentTx(ctx context.Context, in RewardMutatio
 		return nil, err
 	}
 	delta := in.Quantity
-	if operation == "consume" {
+	if operation == "consume" || operation == "reverse" {
 		delta = -in.Quantity
 		if balance.Balance < in.Quantity {
 			return nil, ErrInsufficientReward
 		}
-	} else if !definition.Stackable && balance.Balance > 0 {
+	} else if operation == "grant" && !definition.Stackable && balance.Balance > 0 {
 		return &RewardMutationResult{Definition: *definition, Balance: balance.Balance, Applied: false}, nil
 	}
 
+	if delta > 0 && balance.Balance > MaxRewardQuantity-delta {
+		return nil, ErrRewardQuantity
+	}
+	if balance.GrantedTotal > MaxRewardQuantity-in.Quantity && operation == "grant" || balance.ConsumedTotal > MaxRewardQuantity-in.Quantity && operation == "consume" || balance.RefundedTotal > MaxRewardQuantity-in.Quantity && operation == "refund" || balance.ReversedTotal > MaxRewardQuantity-in.Quantity && operation == "reverse" {
+		return nil, ErrRewardQuantity
+	}
 	balance.Balance += delta
 	if operation == "grant" {
 		balance.GrantedTotal += in.Quantity
-	} else {
+	} else if operation == "consume" {
 		balance.ConsumedTotal += in.Quantity
+	} else if operation == "refund" {
+		balance.RefundedTotal += in.Quantity
+	} else if operation == "reverse" {
+		balance.ReversedTotal += in.Quantity
 	}
 	balance.UpdatedAt = time.Now()
 	if err := r.db.WithContext(ctx).Save(balance).Error; err != nil {
@@ -423,6 +501,10 @@ func (r *RewardRepository) mutateCurrentTx(ctx context.Context, in RewardMutatio
 		Operation: operation, QuantityDelta: delta, SourceType: in.SourceType,
 		SourceID: in.SourceID, ChallengeRunID: in.ChallengeRunID,
 		IdempotencyKey: in.IdempotencyKey, Metadata: metadata, CreatedAt: time.Now(),
+		RelatedEntryID: in.RelatedEntryID,
+	}
+	if _, ok := entry.Metadata["reward_snapshot"]; !ok {
+		entry.Metadata["reward_snapshot"] = rewardSnapshot(*definition)
 	}
 	if err := r.db.WithContext(ctx).Create(entry).Error; err != nil {
 		return nil, err
@@ -437,4 +519,19 @@ func (r *RewardRepository) lockBalance(ctx context.Context, playerID, definition
 	err := r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&row, "player_id = ? AND reward_definition_id = ?", playerID, definitionID).Error
 	return &row, err
+}
+
+// LockBalances orders every multi-asset grant the same way as exchange payments.
+func (r *RewardRepository) LockBalances(ctx context.Context, playerID uuid.UUID, ids []uuid.UUID) error {
+	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+	for _, id := range ids {
+		if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&PlayerRewardBalance{PlayerID: playerID, RewardDefinitionID: id, UpdatedAt: time.Now()}).Error; err != nil {
+			return err
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	var rows []PlayerRewardBalance
+	return r.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("player_id = ? AND reward_definition_id IN ?", playerID, ids).Order("reward_definition_id ASC").Find(&rows).Error
 }

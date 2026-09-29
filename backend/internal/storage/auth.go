@@ -533,9 +533,21 @@ func (r *AuthRepository) InitializeOwner(ctx context.Context, user *User) (*User
 }
 
 // ListUsers 按创建时间倒序分页读取用户；limit/offset 的取值范围由调用方校验。
-func (r *AuthRepository) ListUsers(ctx context.Context, limit, offset int) ([]User, error) {
+func (r *AuthRepository) ListUsers(ctx context.Context, limit, offset int, search string) ([]User, error) {
 	var users []User
-	err := r.db.WithContext(ctx).Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&users).Error
+	query := r.db.WithContext(ctx)
+	search = strings.TrimSpace(search)
+	if search != "" {
+		if id, err := uuid.Parse(search); err == nil {
+			query = query.Where("id = ?", id)
+		} else if strings.Contains(search, "@") {
+			query = query.Where("lower(email) = lower(?)", search)
+		} else {
+			pattern := "%" + strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(search) + "%"
+			query = query.Where("username ILIKE ? OR display_name ILIKE ?", pattern, pattern)
+		}
+	}
+	err := query.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&users).Error
 	return users, err
 }
 
@@ -759,11 +771,5 @@ func (r *AuthRepository) emailExists(db *gorm.DB, email string) bool {
 }
 
 func grantInitialRewards(ctx context.Context, db *gorm.DB, playerID uuid.UUID) error {
-	_, err := NewRewardRepository(db).GrantInCurrentTx(ctx, RewardMutation{
-		PlayerID: playerID, RewardKey: MessageRewriteCreditKey, Quantity: 10,
-		SourceType: "user_registration", SourceID: playerID.String(),
-		IdempotencyKey: "user_registration:" + playerID.String() + ":" + MessageRewriteCreditKey,
-		Metadata:       JSONMap{"reason": "initial_allowance"},
-	})
-	return err
+	return NewRewardRepository(db).GrantRegistrationInCurrentTx(ctx, playerID)
 }

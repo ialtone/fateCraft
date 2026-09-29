@@ -30,6 +30,19 @@ func (s *builtinImporterStub) ListBuiltins(context.Context) ([]challengeimport.B
 	return s.items, s.listErr
 }
 
+func (s *builtinImporterStub) PreviewBuiltin(context.Context, string) (*challengeimport.BuiltinPreview, error) {
+	return &challengeimport.BuiltinPreview{Token: "preview"}, nil
+}
+func (s *builtinImporterStub) ConfirmBuiltin(ctx context.Context, slug string, overwrite bool, token string, actor uuid.UUID) (*challengeimport.ImportResult, error) {
+	if token != "preview" {
+		return nil, challengeimport.ErrPreviewChanged
+	}
+	if overwrite {
+		return s.OverwriteBuiltin(ctx, slug)
+	}
+	return s.ImportBuiltin(ctx, slug)
+}
+
 func (s *builtinImporterStub) ImportBuiltin(_ context.Context, slug string) (*challengeimport.ImportResult, error) {
 	s.importedSlug = slug
 	return s.importResult, s.importErr
@@ -141,7 +154,8 @@ func TestImportAdminBuiltinUsesSlugOnly(t *testing.T) {
 	server := &Server{builtins: stub}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/admin/builtin-challenges/trial/import", nil)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/admin/builtin-challenges/trial/import", strings.NewReader(`{"preview_token":"preview"}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Params = gin.Params{{Key: "slug", Value: "trial"}}
 
 	server.importAdminBuiltin(ctx)
@@ -164,7 +178,7 @@ func TestImportAdminBuiltinPassesExplicitOverwrite(t *testing.T) {
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/admin/builtin-challenges/trial/import",
-		strings.NewReader(`{"overwrite":true}`),
+		strings.NewReader(`{"overwrite":true,"preview_token":"preview"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Params = gin.Params{{Key: "slug", Value: "trial"}}

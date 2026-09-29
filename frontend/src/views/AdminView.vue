@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
   NAlert,
@@ -28,6 +29,8 @@ import ChallengeVersionEditor from '@/components/ChallengeVersionEditor.vue'
 import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
+import AdminRewardsPanel from '@/components/AdminRewardsPanel.vue'
+import { rewardManagementApi } from '@/api/rewards'
 import type {
   AdminBuiltinChallenge,
   AdminAuthSettings,
@@ -62,6 +65,8 @@ const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 const activeTab = ref('settings')
+const route = useRoute(),
+  router = useRouter()
 
 function tabNameForSection(section: string) {
   if (section === 'all') return 'settings'
@@ -78,6 +83,7 @@ const sectionTitle = computed(
       auth: '账号与注册',
       identities: '第三方账户',
       gameplay: '玩法能力',
+      rewards: '奖励管理',
       content: '内置内容',
       challenges: '挑战内容',
       sharing: '分享治理',
@@ -113,8 +119,7 @@ const publicRecognizedHint = computed(() => {
   const profile = settings.value?.public_llm_resolved_profile
   if (!profile) return ''
   const unchanged =
-    String(settings.value?.public_llm_base_url || '').trim() ===
-    savedPublicBaseURL.value.trim()
+    String(settings.value?.public_llm_base_url || '').trim() === savedPublicBaseURL.value.trim()
   if (!unchanged || profile.id === 'custom_openai_compatible') return ''
   return `已识别为 ${publicProfileNames[profile.id] || profile.id}，已自动适配请求参数`
 })
@@ -191,6 +196,54 @@ const rewardForm = ref({
   featured: false,
   sort_order: 100,
 })
+const editingReward = ref<RewardDefinition | null>(null)
+function openRewardEditor(reward?: RewardDefinition) {
+  editingReward.value = reward || null
+  rewardForm.value = reward
+    ? { ...reward }
+    : {
+        key: '',
+        kind: 'currency',
+        name: '',
+        description: '',
+        unit: '',
+        icon: '',
+        stackable: true,
+        consumable: true,
+        featured: false,
+        sort_order: 100,
+      }
+  showRewardModal.value = true
+}
+async function toggleReward(reward: RewardDefinition) {
+  try {
+    const impact = await rewardManagementApi.impact(reward.id)
+    const disableRegistration = !reward.disabled && !!impact.registration?.enabled
+    dialog.warning({
+      title: reward.disabled ? '启用奖励资产' : '停用奖励资产',
+      content: reward.disabled
+        ? `启用 ${reward.name}，不会自动启用已停用的发奖规则。`
+        : `停用 ${reward.name} 后禁止新的独立发放。有 ${impact.rules.length} 条玩法规则引用、${impact.pending} 笔待领取记录、${impact.exchange_offers.length} 个兑换商品；已发布玩法与已获奖记录仍会履约，已有余额仍可消费。${disableRegistration ? '本次将同时停用注册赠送规则。' : ''}`,
+      positiveText: '确认',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        try {
+          await adminApi.updateRewardDefinition(
+            reward.id,
+            { ...reward, disabled: !reward.disabled },
+            disableRegistration,
+          )
+          await loadGameplayCatalog()
+          message.success('奖励状态已更新')
+        } catch (err: any) {
+          message.error(err.message || '操作失败')
+        }
+      },
+    })
+  } catch (err: any) {
+    message.error(err.message || '读取影响范围失败')
+  }
+}
 const rewardKindOptions = [
   { label: '货币', value: 'currency' },
   { label: '物品', value: 'item' },
@@ -702,37 +755,50 @@ function builtinStatusType(status: AdminBuiltinChallenge['status']): 'success' |
   return 'warning'
 }
 
+const builtinPreview = ref<Awaited<ReturnType<typeof adminApi.previewBuiltin>>>()
+const builtinSelection = ref<AdminBuiltinChallenge>()
+const showBuiltinPreview = ref(false)
+const builtinPreviewError = ref('')
 async function importBuiltin(item: AdminBuiltinChallenge) {
-  const overwrite = item.status === 'update_available' && item.overwritable
-  if (!item.importable && !overwrite) return
-  const confirmation = overwrite
-    ? `覆盖数据库中的「${item.name}」并以仓库 v${item.version} 作为当前内容？已被使用的同版本快照不会被覆盖；更新已使用内容请先提升版本号。`
-    : `导入并发布「${item.name}」v${item.version}？`
-  dialog.warning({
-    title: overwrite ? '覆盖挑战内容？' : '导入并发布？',
-    content: confirmation,
-    positiveText: overwrite ? '确认覆盖' : '确认导入',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      importingBuiltin.value = item.slug
-      try {
-        await adminApi.importBuiltin(item.slug, overwrite)
-        await Promise.all([loadBuiltins(), loadChallenges()])
-        message.success(
-          overwrite
-            ? `已用仓库内容覆盖 ${item.name} v${item.version}`
-            : `已导入并发布 ${item.name} v${item.version}`,
-        )
-      } catch (err: any) {
-        message.error(`${overwrite ? '覆盖' : '导入'}失败：${err.message || '未知错误'}`)
-      } finally {
-        importingBuiltin.value = ''
-      }
-    },
-  })
+  importingBuiltin.value = item.slug
+  builtinPreviewError.value = ''
+  try {
+    builtinPreview.value = await adminApi.previewBuiltin(item.slug)
+    builtinSelection.value = item
+    showBuiltinPreview.value = true
+  } catch (err: any) {
+    message.error(err.message || '读取导入差异失败')
+  } finally {
+    importingBuiltin.value = ''
+  }
+}
+async function confirmBuiltinImport() {
+  if (!builtinPreview.value || !builtinSelection.value) return
+  const item = builtinSelection.value
+  importingBuiltin.value = item.slug
+  builtinPreviewError.value = ''
+  try {
+    await adminApi.importBuiltin(
+      item.slug,
+      item.status === 'update_available' && item.overwritable,
+      builtinPreview.value.preview_token,
+    )
+    showBuiltinPreview.value = false
+    await Promise.all([loadBuiltins(), loadChallenges(), loadGameplayCatalog()])
+    message.success('已按确认的差异导入内容')
+  } catch (err: any) {
+    builtinPreviewError.value = err.message || '导入失败，请重新预览差异'
+  } finally {
+    importingBuiltin.value = ''
+  }
 }
 
 async function openVersion(versionId: string) {
+  if (props.section !== 'challenges' && props.section !== 'all') {
+    showBuiltinPreview.value = false
+    await router.push({ path: '/admin/challenges', query: { version: versionId } })
+    return
+  }
   selectedVersionId.value = versionId
   try {
     setVersionDocument(await adminApi.getChallengeVersion(versionId))
@@ -925,11 +991,14 @@ async function createRewardDefinition() {
   }
   creatingReward.value = true
   try {
-    await adminApi.createRewardDefinition({
+    const body = {
       ...rewardForm.value,
       kind: rewardForm.value.kind as RewardDefinition['kind'],
-      metadata: {},
-    })
+      metadata: editingReward.value?.metadata || {},
+      disabled: editingReward.value?.disabled || false,
+    }
+    if (editingReward.value) await adminApi.updateRewardDefinition(editingReward.value.id, body)
+    else await adminApi.createRewardDefinition(body)
     showRewardModal.value = false
     rewardForm.value = {
       key: '',
@@ -944,9 +1013,9 @@ async function createRewardDefinition() {
       sort_order: 100,
     }
     await loadGameplayCatalog()
-    message.success('奖励定义已创建')
+    message.success('奖励定义已保存')
   } catch (err: any) {
-    message.error(`创建奖励失败：${err.message || '未知错误'}`)
+    message.error(`保存奖励失败：${err.message || '未知错误'}`)
   } finally {
     creatingReward.value = false
   }
@@ -968,8 +1037,16 @@ watch(
     if (section === 'all' || section === 'identities') void loadAuthIdentities()
     if (section === 'all' || section === 'challenges') void loadChallenges()
     if (section === 'all' || section === 'content') void loadBuiltins()
-    if (section === 'all' || section === 'gameplay') void loadGameplayCatalog()
+    if (['all', 'gameplay', 'rewards', 'challenges'].includes(section)) void loadGameplayCatalog()
     if (section === 'all' || section === 'sharing') void loadShareGovernance()
+  },
+  { immediate: true },
+)
+watch(
+  () => [props.section, route.query.version],
+  () => {
+    if (props.section === 'challenges' && typeof route.query.version === 'string')
+      void openVersion(route.query.version)
   },
   { immediate: true },
 )
@@ -1090,8 +1167,15 @@ watch(
               <NFormItem>
                 <template #label>
                   <FieldHelp label="允许用户选择客户端直连">
-                    <p>开启后，用户可以在设置中选择由其浏览器直接发出模型请求，API Key 只保存在用户设备。</p>
-                    <p>开启公共 LLM 时，用户可在平台模型与客户端直连之间选择。客户端直连使用用户自己的 Key，不消耗平台模型额度。</p>
+                    <p>
+                      开启后，用户可以在设置中选择由其浏览器直接发出模型请求，API Key
+                      只保存在用户设备。
+                    </p>
+                    <p>
+                      开启公共 LLM
+                      时，用户可在平台模型与客户端直连之间选择。客户端直连使用用户自己的
+                      Key，不消耗平台模型额度。
+                    </p>
                     <p>这类对话和 Campaign 不发放任何奖励，重新生成不消耗额度。</p>
                     <p>发给模型的完整提示词（含隐藏剧情）在用户浏览器中可见。</p>
                     <p>是否可用取决于各模型服务商是否允许浏览器跨域访问。</p>
@@ -1409,34 +1493,45 @@ watch(
               </div>
             </div>
           </section>
-
-          <section class="admin-section">
-            <div class="section-toolbar">
-              <div>
-                <h3>奖励定义</h3>
-                <p class="section-sub">稳定 key 被挑战引用后，不可改变类型、堆叠和消费语义。</p>
-              </div>
-              <NButton type="primary" @click="showRewardModal = true">新建奖励</NButton>
-            </div>
-            <div
-              v-for="reward in rewardDefinitions"
-              :key="reward.id"
-              class="catalog-row reward-row-admin"
-            >
-              <div>
-                <strong>{{ reward.name }}</strong>
-                <span class="muted">{{ reward.key }}</span>
-                <p>{{ reward.description || '暂无说明' }}</p>
-              </div>
-              <div class="catalog-tags">
-                <NTag size="small">{{ reward.kind }}</NTag>
-                <NTag v-if="reward.stackable" size="small" type="info">可堆叠</NTag>
-                <NTag v-if="reward.consumable" size="small" type="warning">可消费</NTag>
-                <NTag v-if="reward.featured" size="small" type="success">顶栏展示</NTag>
-              </div>
-            </div>
-          </section>
         </NSpin>
+      </NTabPane>
+
+      <NTabPane v-if="sectionVisible('rewards')" name="rewards" tab="奖励管理">
+        <AdminRewardsPanel :definitions="rewardDefinitions" @open-version="openVersion">
+          <template #assets>
+            <section class="admin-section">
+              <div class="section-toolbar">
+                <div>
+                  <h3>奖励定义</h3>
+                  <p class="section-sub">稳定 key 被挑战引用后，不可改变类型、堆叠和消费语义。</p>
+                </div>
+                <NButton type="primary" @click="openRewardEditor()">新建奖励</NButton>
+              </div>
+              <div
+                v-for="reward in rewardDefinitions"
+                :key="reward.id"
+                class="catalog-row reward-row-admin"
+              >
+                <div>
+                  <strong>{{ reward.name }}</strong>
+                  <span class="muted">{{ reward.key }}</span>
+                  <p>{{ reward.description || '暂无说明' }}</p>
+                </div>
+                <div class="catalog-tags">
+                  <NTag size="small">{{ reward.kind }}</NTag>
+                  <NTag v-if="reward.stackable" size="small" type="info">可堆叠</NTag>
+                  <NTag v-if="reward.consumable" size="small" type="warning">可消费</NTag>
+                  <NTag v-if="reward.featured" size="small" type="success">顶栏展示</NTag>
+                  <NTag v-if="reward.disabled" size="small" type="warning">已停用</NTag>
+                  <NButton size="small" @click="openRewardEditor(reward)">编辑</NButton>
+                  <NButton size="small" @click="toggleReward(reward)">{{
+                    reward.disabled ? '启用' : '停用'
+                  }}</NButton>
+                </div>
+              </div>
+            </section>
+          </template>
+        </AdminRewardsPanel>
       </NTabPane>
 
       <NTabPane v-if="sectionVisible('auth')" name="auth" tab="账号与注册">
@@ -1886,7 +1981,7 @@ watch(
     <NModal
       v-model:show="showRewardModal"
       preset="dialog"
-      title="新建奖励定义"
+      :title="editingReward ? '编辑奖励定义' : '新建奖励定义'"
       style="width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
     >
       <NForm label-placement="top">
@@ -1924,7 +2019,7 @@ watch(
       <template #action>
         <NButton @click="showRewardModal = false">取消</NButton>
         <NButton type="primary" :loading="creatingReward" @click="createRewardDefinition"
-          >创建</NButton
+          >保存</NButton
         >
       </template>
     </NModal>
@@ -2214,6 +2309,95 @@ watch(
       </template>
     </NModal>
   </div>
+  <NModal
+    v-model:show="showBuiltinPreview"
+    preset="card"
+    title="预览并确认内容导入"
+    :mask-closable="!importingBuiltin"
+    :closable="!importingBuiltin"
+    style="width: min(960px, 96vw)"
+  >
+    <template v-if="builtinPreview">
+      <h3>
+        {{ builtinPreview.info.name }} · {{ builtinPreview.current_version?.version || '未导入' }} →
+        {{ builtinPreview.info.version }}
+      </h3>
+      <p>
+        确认将发布所选玩法内容，并按下列差异更新共享奖励资产。已有存档和获奖记录保留自己的快照。
+      </p>
+      <NAlert v-if="builtinPreviewError" type="error">{{ builtinPreviewError }}</NAlert>
+      <h4>共享奖励资产变化</h4>
+      <p v-if="!builtinPreview.rewards.length">没有奖励资产字段变化。</p>
+      <div
+        v-for="diff in builtinPreview.rewards"
+        :key="diff.key"
+        style="padding: 12px 0; border-bottom: 1px solid var(--border-soft)"
+      >
+        <strong>{{ diff.key }}</strong
+        ><NAlert v-if="diff.conflict" type="error"
+          >资产已停用或语义冲突，不能导入。请先处理定义或使用新的资产 Key。</NAlert
+        >
+        <table style="width: 100%; table-layout: fixed; overflow-wrap: anywhere">
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>当前</th>
+              <th>导入后</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(value, key) in diff.after" :key="key">
+              <td>{{ key }}</td>
+              <td>{{ JSON.stringify(diff.before?.[key] ?? null) }}</td>
+              <td>{{ JSON.stringify(value) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-if="diff.impact">
+          已有 {{ diff.impact.rules.length }} 条玩法引用、{{ diff.impact.pending }} 笔待领取奖励。
+        </p>
+        <NButton
+          v-for="rule in diff.impact?.rules || []"
+          :key="rule.id"
+          text
+          @click="openVersion(rule.challenge_version_id)"
+          >查看引用玩法 {{ rule.challenge_version_id }}</NButton
+        >
+      </div>
+      <h4>当前奖励规则</h4>
+      <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{
+        JSON.stringify(
+          builtinPreview.current_rules.map((r) => ({
+            asset: r.reward_definition_id,
+            calculator: r.calculator_key,
+            config: r.calculator_config,
+            enabled: r.enabled,
+          })),
+          null,
+          2,
+        )
+      }}</pre>
+      <h4>导入后的奖励规则</h4>
+      <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{
+        JSON.stringify(builtinPreview.proposed_rules, null, 2)
+      }}</pre>
+    </template>
+    <template #footer
+      ><NButton
+        v-if="builtinSelection"
+        :disabled="!!importingBuiltin"
+        @click="importBuiltin(builtinSelection)"
+        >重新预览</NButton
+      >
+      <NButton
+        type="primary"
+        :loading="!!importingBuiltin"
+        :disabled="!builtinPreview || builtinPreview.rewards.some((d) => d.conflict)"
+        @click="confirmBuiltinImport"
+        >确认导入以上变更</NButton
+      ></template
+    >
+  </NModal>
 </template>
 
 <style scoped>

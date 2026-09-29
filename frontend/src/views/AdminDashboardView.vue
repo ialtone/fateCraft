@@ -15,7 +15,16 @@ const areas = [
     description: '审计站内账号与 LinuxDo 等外部身份的绑定。',
   },
   { to: '/admin/logs', title: '诊断日志', description: '查看模型请求与上下文构建明细。' },
-  { to: '/admin/gameplay', title: '玩法能力', description: '查看可信玩法模块与奖励定义。' },
+  {
+    to: '/admin/rewards',
+    title: '奖励管理',
+    description: '管理通关奖励、用户点数、积分兑换和发放记录。',
+  },
+  {
+    to: '/admin/gameplay',
+    title: '玩法能力',
+    description: '查看可信玩法模块、结局验证器和奖励计算器。',
+  },
   { to: '/admin/content', title: '内置内容', description: '导入仓库内置挑战内容。' },
   { to: '/admin/challenges', title: '挑战内容', description: '维护挑战包、草稿版本和发布版本。' },
   { to: '/admin/shares', title: '分享治理', description: '处理公开分享和待处理举报。' },

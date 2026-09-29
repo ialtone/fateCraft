@@ -64,12 +64,20 @@ func (s *Server) listAdminUsers(c *gin.Context) {
 	if !ok {
 		return
 	}
-	users, err := s.auth.ListUsers(c.Request.Context(), limit, offset)
+	if len(c.Query("q")) > 256 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "搜索内容过长"})
+		return
+	}
+	users, err := s.auth.ListUsers(c.Request.Context(), limit+1, offset, c.Query("q"))
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"users": users})
+	hasMore := len(users) > limit
+	if hasMore {
+		users = users[:limit]
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users, "has_more": hasMore})
 }
 
 func (s *Server) listAdminAuthIdentities(c *gin.Context) {

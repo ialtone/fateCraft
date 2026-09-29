@@ -496,6 +496,9 @@ func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVer
 			return nil, fmt.Errorf("%w: 奖励定义不存在", ErrInvalidChallenge)
 		}
 		in.RewardRules[index].PublicSnapshot = rewardSnapshot(*definition)
+		if definition.Disabled {
+			return nil, fmt.Errorf("%w: 奖励已停用", ErrInvalidChallenge)
+		}
 	}
 	if err := s.repo.ReplaceDraft(
 		ctx, versionID, storage.JSONDoc(in.Manifest), in.Runtime, in.Assets, in.Definitions, in.Outcomes, in.RewardRules,
@@ -803,10 +806,9 @@ func (s *Service) evaluateSettlement(
 		if err != nil {
 			return nil, fmt.Errorf("%w: 奖励计算失败: %v", ErrSettlementDenied, err)
 		}
-		// 奖励数量为 0 是合法结果（例如灵石为 0）：跳过该项、不写账本，
-		// 结算照常完成，避免零资产玩家永远无法结算。
-		if amount <= 0 {
-			continue
+		// Zero is a durable skipped award; a negative calculator result is invalid.
+		if amount < 0 {
+			return nil, fmt.Errorf("%w: 奖励计算数量为负数", ErrSettlementDenied)
 		}
 		definition, err := repo.RewardDefinition(ctx, rule.RewardDefinitionID)
 		if err != nil {
@@ -866,6 +868,9 @@ func (s *Service) ValidateDocument(ctx context.Context, doc *VersionDocument) er
 			return fmt.Errorf("%w: 奖励定义不存在", ErrInvalidChallenge)
 		}
 		expected := rewardSnapshot(*definition)
+		if definition.Disabled {
+			return fmt.Errorf("%w: 奖励已停用", ErrInvalidChallenge)
+		}
 		for _, key := range []string{"key", "kind", "name", "description", "unit", "icon", "stackable", "consumable"} {
 			if fmt.Sprint(rule.PublicSnapshot[key]) != fmt.Sprint(expected[key]) {
 				return fmt.Errorf("%w: 奖励 %s 的 public_snapshot 已过期", ErrInvalidChallenge, definition.Key)

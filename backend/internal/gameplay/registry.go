@@ -490,7 +490,7 @@ func validateFixedConfig(config storage.JSONMap) error {
 	amount, ok := numberValue(config["amount"])
 	// amount 必须是正整数：小数会在运行时被截断（例如 1.5 变成 1），
 	// 这类配置必须在发布时直接拒绝。
-	if !ok || amount <= 0 || amount != math.Trunc(amount) || amount > math.MaxInt64 {
+	if !ok || amount <= 0 || amount != math.Trunc(amount) || amount > float64(storage.MaxRewardQuantity) {
 		return fmt.Errorf("core.fixed.amount 必须是正整数")
 	}
 	return nil
@@ -527,14 +527,14 @@ func validateStateMultiplierConfig(config storage.JSONMap) error {
 		return fmt.Errorf("core.state_multiplier.state_path 不能为空")
 	}
 	bps, ok := numberValue(config["multiplier_bps"])
-	if !ok || bps <= 0 || bps != math.Trunc(bps) || bps > math.MaxInt64 {
+	if !ok || bps <= 0 || bps != math.Trunc(bps) || bps > float64(storage.MaxRewardQuantity) {
 		return fmt.Errorf("core.state_multiplier.multiplier_bps 无效")
 	}
 	if raw, exists := config["max_amount"]; exists && raw != nil {
 		maxAmount, ok := numberValue(raw)
 		// max_amount 为 0 会把所有奖励截断为 0，必须是正整数（M-8 之后 0 值会被跳过，
 		// 配置 0 等同于发不出奖励，属于误配，发布时拒绝）。
-		if !ok || maxAmount <= 0 || maxAmount != math.Trunc(maxAmount) {
+		if !ok || maxAmount <= 0 || maxAmount != math.Trunc(maxAmount) || maxAmount > float64(storage.MaxRewardQuantity) {
 			return fmt.Errorf("core.state_multiplier.max_amount 无效")
 		}
 	}
@@ -547,7 +547,7 @@ func calculateStateMultiplier(evidence Evidence, config storage.JSONMap) (int64,
 	}
 	raw, ok := ValueAtPath(evidence.State, stringValue(config["state_path"]))
 	base, numeric := numberValue(raw)
-	if !ok || !numeric || base < 0 {
+	if !ok || !numeric || base < 0 || base > float64(storage.MaxRewardQuantity) || math.IsNaN(base) || math.IsInf(base, 0) {
 		return 0, fmt.Errorf("奖励基数状态不存在或不是非负数字")
 	}
 	bps, _ := numberValue(config["multiplier_bps"])
@@ -566,6 +566,9 @@ func calculateStateMultiplier(evidence Evidence, config storage.JSONMap) (int64,
 	// 结算照常完成，而不是把整个结算拒绝掉。
 	if amount <= 0 {
 		return 0, nil
+	}
+	if amount > storage.MaxRewardQuantity {
+		return 0, fmt.Errorf("奖励数量超出安全整数范围")
 	}
 	return amount, nil
 }

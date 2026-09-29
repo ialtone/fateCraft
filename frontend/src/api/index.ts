@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { BuiltinRewardPreview } from '@/types/rewards'
 import type {
   AdminAuthSettings,
   InvitationCode,
@@ -262,8 +263,10 @@ export const settingsApi = {
 // 管理员全局玩法设置
 export const adminApi = {
   // 用户与第三方身份列表由后端限制为每页最多 200 条。
-  listUsers: (params: { limit?: number; offset?: number } = { limit: 200 }) =>
-    http.get<{ users: AdminUser[] }>('/admin/users', { params }).then((r) => r.data.users),
+  listUsers: (params: { q?: string; limit?: number; offset?: number } = { limit: 30 }) =>
+    http
+      .get<{ users: AdminUser[]; has_more: boolean }>('/admin/users', { params })
+      .then((r) => r.data),
   listAuthIdentities: (params: { limit?: number; offset?: number } = { limit: 200 }) =>
     http
       .get<{ identities: AdminExternalIdentity[] }>('/admin/auth-identities', { params })
@@ -356,10 +359,15 @@ export const adminApi = {
     http
       .get<{ builtins: AdminBuiltinChallenge[] }>('/admin/builtin-challenges')
       .then((r) => r.data.builtins),
-  importBuiltin: (slug: string, overwrite = false) =>
+  previewBuiltin: (slug: string) =>
+    http
+      .get<BuiltinRewardPreview>(`/admin/builtin-challenges/${encodeURIComponent(slug)}/preview`)
+      .then((r) => r.data),
+  importBuiltin: (slug: string, overwrite: boolean, previewToken: string) =>
     http
       .post<BuiltinImportResult>(`/admin/builtin-challenges/${encodeURIComponent(slug)}/import`, {
         overwrite,
+        preview_token: previewToken,
       })
       .then((r) => r.data),
   listChallenges: () =>
@@ -394,9 +402,15 @@ export const adminApi = {
     http
       .post<RewardDefinition>('/admin/reward-definitions', body)
       .then((response) => response.data),
-  updateRewardDefinition: (id: string, body: Partial<RewardDefinition>) =>
+  updateRewardDefinition: (
+    id: string,
+    body: Partial<RewardDefinition>,
+    disableRegistration = false,
+  ) =>
     http
-      .patch<RewardDefinition>(`/admin/reward-definitions/${id}`, body)
+      .patch<RewardDefinition>(`/admin/reward-definitions/${id}`, body, {
+        params: { disable_registration: disableRegistration },
+      })
       .then((response) => response.data),
 }
 

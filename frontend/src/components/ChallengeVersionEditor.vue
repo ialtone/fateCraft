@@ -15,6 +15,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import JsonValueInput from '@/components/JsonValueInput.vue'
+import RewardCalculatorInput from '@/components/RewardCalculatorInput.vue'
 import type { GameplayModuleDescriptor, RewardDefinition, SaveChallengeVersionInput } from '@/types'
 
 const props = defineProps<{
@@ -817,7 +818,10 @@ function applyAdvanced() {
           /></NFormItem>
         </div>
         <NFormItem label="计算器配置"
-          ><JsonValueInput v-model="rule.calculator_config" :readonly="readonly" :min-rows="3"
+          ><RewardCalculatorInput
+            v-model="rule.calculator_config"
+            :calculator="rule.calculator_key"
+            :readonly="readonly"
         /></NFormItem>
       </article>
     </NTabPane>

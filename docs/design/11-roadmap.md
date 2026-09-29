@@ -19,6 +19,12 @@
 
 数据库结构由 Goose SQL migrations 版本化管理；开发、测试、Docker 和生产部署使用同一个显式迁移入口，应用启动不执行隐式 DDL。
 
+## 奖励管理与兑换验收
+
+代码已接通独立后台、规则定位、注册修订、用户搜索与发放、统一获奖与领取、不可变账本和账号积分兑换，实际模型见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+
+发布前仍需真实 PostgreSQL 验收：本地检查未配置可用验证库，集成测试被跳过。验证库通过 FATECRAFT_TEST_DATABASE_URL 配置，随机 schema 执行完整 00001，覆盖并发发放/领取/兑换、审计与订单回滚、权限、修订及余额不为负，不通过自动清库或兼容迁移绕过基线要求。
+
 ## P0：协议与事务回归
 
 ### Provider 兼容矩阵

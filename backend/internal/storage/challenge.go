@@ -435,6 +435,9 @@ func (r *ChallengeRepository) CreateDraftWithContent(
 
 func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherID uuid.UUID, validate PublicationValidator) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
+		if err := tx.Rewards().LockConfiguration(ctx); err != nil {
+			return err
+		}
 		version, err := tx.LockVersion(ctx, versionID)
 		if err != nil {
 			return err
@@ -465,6 +468,11 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		rules, err := tx.ListRewardRules(ctx, versionID)
 		if err != nil {
 			return err
+		}
+		for _, rule := range rules {
+			if err := tx.Rewards().ValidateNewRuleReference(ctx, rule.RewardDefinitionID); err != nil {
+				return err
+			}
 		}
 		contentHash, err := validate(*pack, *version, *runtime, assets, definitions, outcomes, rules)
 		if err != nil {
@@ -599,12 +607,19 @@ func (r *ChallengeRepository) CompleteRun(
 	// client 路由：结局校验、challenge_runs 写入与对话结束照常，只跳过奖励授予。
 	// 路由在事务内直接取自已加行锁的对话行，不在调用方判断，保证所有入口一致。
 	if conv.LLMRoute != LLMRouteClient {
+		ids := make([]uuid.UUID, 0, len(grants))
+		for _, grant := range grants {
+			ids = append(ids, grant.Definition.ID)
+		}
+		if err := r.Rewards().LockBalances(ctx, playerID, ids); err != nil {
+			return nil, err
+		}
 		for _, grant := range grants {
 			result, err := r.Rewards().GrantInCurrentTx(ctx, RewardMutation{
 				PlayerID: playerID, RewardKey: grant.Definition.Key, Quantity: grant.Quantity,
 				SourceType: "challenge_run", SourceID: run.ID.String(),
 				IdempotencyKey: "challenge_run:" + run.ID.String() + ":" + grant.Definition.Key,
-				ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey},
+				ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey, "challenge_version_id": run.ChallengeVersionID.String(), "reward_snapshot": grant.Snapshot},
 			})
 			if err != nil {
 				return nil, err

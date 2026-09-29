@@ -194,14 +194,103 @@ DELETE /api/conversations/:id/inquiries
 
 接口都只允许 conversation 所有者。问答可读取 ended/archived 对话的已提交玩家资料，不获取主生成锁、不执行玩法动作、不写主消息或长期记忆；cancel 只取消当前实例正在执行的侧栏模型请求，DELETE 只清空专用问答历史且会拒绝与执行中请求竞态。回答返回 snapshot ID、branch epoch、revision 和 `stale`，引用的来源只包含公开标签。长期记忆没有普通玩家生成、编辑、查询或重试 API。
 
-## 玩家奖励
+## 玩家奖励、领取与兑换
 
 ```text
-GET /api/me/rewards
-GET /api/me/reward-ledger?limit=50
+GET  /api/me/rewards
+GET  /api/me/reward-ledger?limit=30&cursor=...
+GET  /api/me/reward-records?limit=30&cursor=...
+GET  /api/me/reward-records/:id
+POST /api/me/reward-records/:id/claim
+GET  /api/me/reward-exchange/offers
+POST /api/me/reward-exchange/orders
+GET  /api/me/reward-exchange/orders?limit=30&cursor=...
+GET  /api/me/reward-exchange/by-request/:request_id
 ```
 
-rewards 返回当前用户持有的奖励定义与余额；ledger 返回关联奖励定义的只读流水，`limit` 由后端限制在 1–200。接口不接受客户端提交用户 ID，余额不能直接修改。玩法能力消费和挑战结算由领域事务写入账本。
+本人身份从认证上下文取得，不能由 user_id 参数选择。余额接口返回 {rewards}，流水返回 {entries,next_cursor}，获奖列表返回 {records,next_cursor}，商品返回 {offers}，订单列表返回 {orders,next_cursor}。游标按 (created_at,id) 倒序编码，limit 为 1–200；无下一页时 next_cursor 为空。
+
+获奖列表可按 reward_definition_id、status、source_type、source_id、purpose 和 created_from/created_to（RFC3339）筛选。状态为 pending/granted/skipped/cancelled；reversed 筛选有 reversal_ledger_id 的 granted 记录。用户响应不包含操作者、管理原因、管理请求 ID/哈希或审计。领取 pending 后返回实际记录，重复领取返回原结果；他人记录统一不存在。quantity 是获奖数量，只有 granted 关联实际 grant 流水；skipped 使用 already_owned/zero_quantity 区分原因。
+
+兑换请求为：
+
+```json
+{
+  "request_id": "客户端生成的 UUID",
+  "offer_id": "商品 UUID",
+  "revision": 1,
+  "units": 1
+}
+```
+
+revision 必须与页面确认价格对应。成功返回订单、支付和目标数量、不可变商品/资产快照、cost_ledger_id 与 reward_record_id。点数扣除、奖励发放和订单同事务；相同 request ID/内容只处理一次，内容不同返回 409。响应丢失后查询原请求或原样重试，暂未查询到不代表事务失败。
+
+## 奖励管理接口
+
+以下全部需要 requireAdmin（admin 或 owner），管理写入在事务中再次校验权限：
+
+```text
+GET  /api/admin/rewards/overview
+GET  /api/admin/rewards/rules?reward_definition_id=...&limit=30&offset=0
+GET  /api/admin/rewards/audits?limit=30&cursor=...
+GET  /api/admin/users/:id/rewards
+GET  /api/admin/users/:id/reward-records
+GET  /api/admin/users/:id/reward-ledger
+POST /api/admin/users/:id/reward-grants
+GET  /api/admin/reward-grants/by-request/:request_id
+GET  /api/admin/reward-records
+GET  /api/admin/reward-records/:id
+POST /api/admin/reward-records/:id/:action
+GET  /api/admin/reward-definitions/:id/impact
+GET  /api/admin/registration-reward-rule
+PUT  /api/admin/registration-reward-rule
+GET  /api/admin/reward-exchange/offers
+POST /api/admin/reward-exchange/offers
+PUT  /api/admin/reward-exchange/offers/:id
+GET  /api/admin/reward-exchange/offers/:id/revisions
+GET  /api/admin/reward-exchange/orders?user_id=...&cursor=...
+```
+
+用户资产返回 {user,rewards}；获奖全局列表另支持 user_id/actor_id 筛选，详情返回 {record,audits}。规则目录返回 {rules,has_more}，附玩法、版本、当前版本标记及资产信息；概览返回 {assets}，各项聚合数量是十进制字符串，不跨资产求和；审计返回 {audits,next_cursor}。
+
+管理员发放请求：
+
+```json
+{
+  "request_id": "客户端生成的 UUID",
+  "reward_definition_id": "资产 UUID",
+  "quantity": 10,
+  "purpose": "gift",
+  "delivery_mode": "claim",
+  "reason": "内部运营原因",
+  "public_note": "感谢参与本次活动"
+}
+```
+
+purpose 为 gift/compensation，delivery_mode 为 direct/claim，reason 必填。目标来自路径、操作者来自认证；数量必须是 1–9007199254740991 的整数，非叠加资产只能发 1。待领取创建不增加余额；direct 返回 granted 或合法 skipped。按请求查询可还原目标和结果；同一 ID 更改任一已确认内容返回冲突。
+
+action 仅支持 cancel/reverse/note，请求体为 {request_id,reason}。撤销仅限 pending，撤销原因用户可见；冲正仅支持余额足够的可叠加 currency/credit 整笔操作，兑换来源不可冲正；note 与冲正原因仅管理员可见。资产 impact 返回玩法规则、待领取计数、注册规则与兑换商品引用。停用注册规则正在使用的资产须在定义 PATCH 显式携带 disable_registration=true，与停用修订和审计原子提交。
+
+注册规则 PUT 使用 {reward_definition_id,quantity,enabled}，响应含新修订 id。兑换商品 POST/PUT 使用 {name,description,cost_definition_id,cost_quantity,reward_definition_id,reward_quantity,enabled,sort_order,revision}；创建时服务端设 revision=1，编辑必须带当前修订，成功追加修订和审计。revision 历史返回 {revisions}；无兑换退款或单边返还接口。
+
+业务错误响应为 {error,code}：
+
+| code | HTTP | 含义 |
+| --- | --- | --- |
+| not_found | 404 | 目标或本人可访问的记录不存在 |
+| admin_required | 403 | 缺少管理权限 |
+| request_conflict | 409 | 同一请求 ID 内容不一致 |
+| reward_state_conflict | 409 | 状态不允许操作 |
+| asset_conflict | 409 | 已使用资产语义不可更改或定义冲突 |
+| asset_disabled / user_disabled | 400 | 新请求目标不可用 |
+| invalid_quantity | 400 | 非正整数、不符合叠加规则或超过安全范围 |
+| insufficient_balance | 400 | 余额不足 |
+| reversal_unsupported | 400 | 不支持冲正或单边返还 |
+| exchange_changed | 409 | 商品修订已变，须刷新确认 |
+| exchange_owned | 409 | 已拥有非叠加目标，未扣分 |
+| exchange_unavailable | 400 | 商品下架或兑换配置无效 |
+
+无新奖励 WebSocket 事件；领取、管理和兑换操作通过 REST 响应及重新读取余额/记录确认。完整语义与当前验证范围见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
 ## LLM 设置
 
@@ -223,13 +312,13 @@ check 是用户显式触发的同步、无副作用诊断，最长使用独立�
 用户与审计：
 
 ```text
-GET   /api/admin/users
+GET   /api/admin/users?q=...&limit=30&offset=0
 PATCH /api/admin/users/:id/role
 PATCH /api/admin/users/:id/status
 GET   /api/admin/audit-logs?limit=50
 ```
 
-用户列表和审计读取需要管理员；角色和账号状态变更只允许 owner。角色只能是 `user`、`admin` 或 `owner`，owner 转交与唯一 owner 保护由后端事务执行。
+用户列表返回 {users,has_more}。q 为 UUID 时精确匹配，包含 @ 时按完整邮箱匹配，其他按用户名/昵称字面包含搜索；大小写不敏感，转义 SQL 通配符，按 created_at DESC,id DESC 排序。limit 上限 200，offset 上限 100000，切换查询重置 offset。用户列表和审计读取需要管理员；角色和账号状态变更只允许 owner。角色只能是 `user`、`admin` 或 `owner`，owner 转交与唯一 owner 保护由后端事务执行。
 
 ```text
 GET   /api/admin/system-settings
@@ -249,6 +338,7 @@ POST  /api/admin/invitation-codes
 PATCH /api/admin/invitation-codes/:id
 
 GET  /api/admin/builtin-challenges
+GET  /api/admin/builtin-challenges/:slug/preview
 POST /api/admin/builtin-challenges/:slug/import
 
 GET   /api/admin/gameplay-modules
@@ -270,7 +360,9 @@ POST /api/admin/challenge-versions/:id/publish
 
 上下文构建日志不受详细模型日志开关影响：管理员列表返回最近构建的预算摘要，单条详情返回 Prompt 分段、必选/裁剪结果、历史消息 ID、世界书 entry ID 和 Memory lag。普通玩家上下文接口不会返回这些技术明细。
 
-内置内容列表只返回仓库包的公开元数据、版本、内容哈希、数据库当前版本和 `available/imported/update_available` 状态，不返回 Prompt 或世界书正文。导入接口只接受扫描结果中的 slug，以及可选请求体 `{"overwrite": true}`，不接受文件路径或上传内容。普通导入不会覆盖或降级；已使用版本应提升版本号并发布新快照。新版本发布事务会将旧版本标记为 retired，并把该版本下普通 active 对话标记为 archived；旧对话仍可通过只读接口浏览。`POST /conversations/:id/fork` 会按来源对话的玩法和 Persona，在当前版本创建全新的初始对话，不复制任意旧状态；Campaign 对话必须走独立的存档流程。
+内置内容列表只返回仓库包的公开元数据、版本、内容哈希、数据库当前版本和 `available/imported/update_available` 状态，不返回 Prompt 或世界书正文。导入接口只接受扫描结果中的 slug，以及请求体 `{"preview_token":"预览返回的哈希","overwrite":true}`（overwrite 按需要提供），不接受文件路径或上传内容。普通导入不会覆盖或降级；已使用版本应提升版本号并发布新快照。新版本发布事务会将旧版本标记为 retired，并把该版本下普通 active 对话标记为 archived；旧对话仍可通过只读接口浏览。`POST /conversations/:id/fork` 会按来源对话的玩法和 Persona，在当前版本创建全新的初始对话，不复制任意旧状态；Campaign 对话必须走独立的存档流程。
+
+预览接口返回共享奖励定义变化、引用影响与当前/拟导入规则，确认时在事务中重新计算 token；过期返回冲突，需重新预览。
 
 gameplay-modules 返回服务端已经安装的 engine、动作、verifier、calculator 与 settlement handler，仅用于选择可信能力。奖励定义接口维护全局稳定奖励；已被版本、余额或账本引用后，不允许破坏性改变 kind、stackable 或 consumable 语义。
 

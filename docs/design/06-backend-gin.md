@@ -76,7 +76,7 @@ Handler 负责 HTTP 语义，不实现业务授权。领域服务不能相信请
 
 会话令牌使用加密安全随机数生成，响应只通过 HttpOnly Cookie 发送。数据库保存 SHA-256 哈希和过期时间。密码使用 bcrypt 哈希。
 
-邮箱认证策略和 SMTP 配置来自单行 `auth_settings`，每次登录、发码或注册都读取服务端设置。验证码只保存 bcrypt 摘要并限制有效期、重发和尝试次数；邀请码只保存 SHA-256 摘要。注册事务负责消费验证码与邀请码、创建用户，并在平台定义了初始奖励时写入奖励余额和账本；任何一步失败都会整体回滚。SMTP 密码通过部署环境变量 `AUTH_DATA_ENCRYPTION_KEY` 加密，管理 API 只暴露是否已经配置。
+邮箱认证策略和 SMTP 配置来自单行 `auth_settings`，每次登录、发码或注册都读取服务端设置。验证码只保存 bcrypt 摘要并限制有效期、重发和尝试次数；邀请码只保存 SHA-256 摘要。注册事务负责消费验证码与邀请码、创建用户，并按最新 registration_reward_rules 修订写入获奖记录、奖励余额和账本；任何一步失败都会整体回滚。SMTP 密码通过部署环境变量 `AUTH_DATA_ENCRYPTION_KEY` 加密，管理 API 只暴露是否已经配置。
 
 用户角色固定为 `owner`、`admin`、`user`。空库通过 `/setup` 首次安装向导直接提交本地用户名、邮箱和密码，服务端在事务中创建唯一 `owner`，同时写入 `system_settings.installation_completed_at`、初始奖励和管理员审计记录；安装完成前邮箱和 LinuxDo 登录关闭，完成后普通注册开放且后续用户默认都是 `user`。`requireAdmin` 允许 owner/admin 访问日常运营接口，`requireOwner` 保护角色、认证策略和平台密钥等最高权限接口。认证中间件每次从数据库读取当前用户状态和角色，因此停用或降权会立即使旧会话失去对应权限。
 
@@ -191,9 +191,17 @@ Campaign 生产与经济动作使用同一可信入口。`craft.learn_recipe`、
 
 市场补货只依赖 Campaign 游戏时间。读取投影可以预测已跨过的完整补货周期，实际买卖会在同一事务中先持久化补货，再结算库存和价格；不启动现实时间后台任务。买卖价格统一复用 `marketrules`，依次应用版本市场修正、动态市场修正、商品修正、库存稀缺和势力声望，避免展示价与结算价使用两套算法。
 
-结算工具在事务内锁定对话并重建证据，执行固定版本的 outcome verifier 和全部 reward calculator。`challenge_runs`、`challenge_run_rewards`、`player_reward_balances`、只增不改的 `reward_ledger`、对话状态、invocation 与 tool 消息原子更新；动作 Handler 不直接写余额。条件不满足是可观察的业务拒绝，数据库、事务或持久化失败才是系统错误。
+结算工具在事务内锁定对话并重建证据，执行固定版本的 outcome verifier 和全部 reward calculator。`challenge_runs`、`reward_records`、`challenge_run_rewards`、`player_reward_balances`、只增不改的 `reward_ledger`、对话状态、invocation 与 tool 消息原子更新；动作 Handler 不直接写余额。条件不满足是可观察的业务拒绝，数据库、事务或持久化失败才是系统错误。
 
 消息改写与重新生成共享平台级能力，公开描述通过 Runtime API 的 `platform_capabilities` 返回，但授权策略不由 Runtime Contract 决定。其奖励扣除、新分支创建、旧 turn/message/Memory 失效和新用户消息必须在一个仓储事务中完成；存在已提交 Campaign 动作或事件的回合不能通过普通 regenerate/rewrite 回滚。
+
+## 统一奖励业务
+
+`RewardRepository.AwardInCurrentTx` 复用挑战、Campaign 和注册原事务，AdminGrant/ClaimReward/ManageReward 封装独立发放、领取和管理操作；mutateCurrentTx 统一维护 grant/consume/refund/reverse 账本与余额。获奖记录表达资格和结果，不能直接当作余额。
+
+SaveDefinition、SaveRegistrationRule、SaveExchangeOffer 在配置锁内校验并保存管理审计，审计失败整体回滚。内置导入使用 PreviewBuiltin/ConfirmBuiltin，在同一锁域核对预览 token。Exchange 核对用户、商品和修订，按资产 ID 顺序锁余额，将支付、目标获奖与订单同事务提交；重放核对请求内容，已拥有非叠加目标在扣款前拒绝，多资产通关结算遵循相同锁顺序。
+
+API 从认证上下文取用户/操作者，管理写入再次校验权限；用户响应剔除管理原因和审计。详情见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
 ## 错误映射
 

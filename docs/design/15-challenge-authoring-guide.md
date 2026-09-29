@@ -453,10 +453,10 @@ Campaign Runtime 还可以声明 `presentation.campaign_view`，由通用 `Campa
 支持 `currency/item/badge/entitlement/credit`。非堆叠奖励必须不可消费。导入时：
 
 - key 不存在则创建；
-- 已存在且 kind/stackable/consumable 一致则复用并刷新展示信息；
+- 已存在且 kind/stackable/consumable 一致、资产未停用时可复用；显式导入先预览共享展示字段与引用，确认后刷新；
 - 稳定语义冲突则拒绝整包导入并回滚。
 
-平台自有奖励（如改写额度）不必重复放进每个包，但发布时必须已存在于数据库。
+平台自有奖励（如改写额度）不必重复放进每个包，但发布时必须已存在且未停用。普通重启不覆盖管理员配置；显式导入须提交当前 preview_token，预览变化则重新确认。
 
 ## Character、Persona 与 Scenario
 
@@ -514,6 +514,8 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 
 ## 奖励设计
 
+资产、注册赠送、用户发放与积分兑换在独立“奖励管理”配置，详见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。玩法包只声明通关资格和可信计算，不内嵌兑换商品、账号余额或管理员操作，注册赠送与兑换汇率不进入玩法版本。
+
 - 徽章/entitlement 通常非堆叠，固定数量 1。
 - currency/credit 通常可堆叠，可按固定值或可信数值状态计算。
 - 不要把局内临时资源直接当账号余额；结算时由 calculator 转换。
@@ -530,7 +532,7 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 4. 在“玩法运行”选择已安装模块并声明 State Schema。
 5. 在“玩家界面”配置状态分组。
 6. 在“结局验证”选择 verifier 并填写受限配置。
-7. 在“奖励规则”选择全局奖励定义与 calculator。
+7. 在“奖励规则”选择全局奖励定义与 calculator。后台“奖励管理”可集中定位规则；core.fixed、core.state_multiplier、campaign.extract_item_stack 提供结构化参数表单。
 8. 保存草稿，再校验发布。
 
 整份 JSON 位于“高级 JSON”，适合导入/导出，不是主要维护入口。

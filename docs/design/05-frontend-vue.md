@@ -34,7 +34,7 @@ Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转�
 | `/` | ConversationListView | 已发布挑战、我的对话、筛选与创建入口 |
 | `/conversations/:id` | ConversationView | 消息、生成、状态、判定、结局和上下文 |
 | `/shares` | ConversationListView + MySharesView | 首页“我的分享”小标签；跨对话检索、分页与管理 |
-| `/rewards` | RewardsView | 奖励余额、徽章/藏品与不可变奖励流水 |
+| `/rewards` | RewardsView | 余额、领取、积分兑换、获奖记录、订单和流水 |
 | `/settings` | SettingsView | 当前用户 LLM 配置、第三方账户绑定 |
 | `/admin/identities` | AdminView | 管理员只读审计站内账号与第三方身份绑定关系 |
 | `/admin` | AdminLayout + AdminDashboardView | 管理后台总览；与普通用户端分离 |
@@ -42,7 +42,8 @@ Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转�
 | `/admin/settings` | AdminView(section=settings) | 判定系统、平台 LLM 和诊断策略 |
 | `/admin/auth` | AdminView(section=auth) | 登录注册策略、SMTP 和邀请码 |
 | `/admin/logs` | AdminView(section=logs) | 模型请求和上下文构建诊断 |
-| `/admin/gameplay` | AdminView(section=gameplay) | 可信玩法模块和奖励定义 |
+| `/admin/gameplay` | AdminView(section=gameplay) | 可信玩法模块、验证器与计算器 |
+| `/admin/rewards` | AdminView(section=rewards) + AdminRewardsPanel | 独立奖励管理、发放、兑换与审计 |
 | `/admin/content` | AdminView(section=content) | 仓库内置挑战导入 |
 | `/admin/challenges` | AdminView(section=challenges) | 挑战包、草稿和发布版本 |
 | `/admin/shares` | AdminView(section=sharing) | 公开分享和举报治理 |
@@ -144,7 +145,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ## 管理页面
 
-管理页面分为五个 Tab：
+管理页面使用独立侧栏路由，主要区域如下：
 
 ### 玩法设置
 
@@ -153,8 +154,15 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 ### 玩法能力
 
 - 只读展示后端已经注册的 engine、动作、verifier、calculator 和 settlement handler。
-- 维护平台级奖励定义，供挑战奖励、入口条件和玩家能力成本引用。
-- 已被使用的奖励不能破坏性改变稳定语义。
+奖励资产维护集中在独立“奖励管理”入口。
+
+### 奖励管理
+
+`AdminRewardsPanel` 按概览、资产、规则、用户、兑换、记录组织操作。规则列表跳转 `/admin/challenges?version=<id>`，已发布版本只读；编辑继续创建草稿并发布。`RewardUserSearch` 调用服务端搜索和分页，`AdminUsersPanel` 使用 `{users,has_more}` 中的 users 数组，不把响应对象当成账号列表。
+
+`AdminRewardUserPanel` 绑定选定用户 ID，展示余额、用途、直接/待领取方式、管理原因和公开说明，预览后提交稳定 request ID。`RewardRecordsPanel` 提供来源/状态/时间筛选，管理模式另支持用户和资产筛选、详情审计、撤销、受限冲正和说明；兑换来源不可单边冲正。`RewardLedgerPanel` 用游标展示实际流水。
+
+`AdminRewardExchangePanel` 配置商品及修订；`RewardExchangePanel` 确认价格、份数和所得，未知结果保留原请求并查询或重试；`RewardExchangeOrders` 展示不可变订单。用户领取或兑换后重新读取 rewards Store、记录与流水，顶栏额度随 Store 刷新，不在本地预扣余额。概览总量用十进制字符串避免精度丢失。完整交互边界见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
 ### 账号与注册
 
@@ -169,7 +177,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 - `available` 可由管理员确认后导入并立即发布。
 - `imported` 表示数据库当前版本与仓库版本、哈希一致，不重复导入。
 - `update_available` 表示仓库内容与数据库当前快照不同，展示“覆盖现有内容”并要求二次确认。已使用版本应先提升版本号；发布新版本后，旧普通对话自动变为只读，详情页提供“基于新版本继续”入口。
-- 前端只提交 slug 和显式 `overwrite` 标记，不能指定服务器路径、上传内容或绕过发布校验。
+- 前端先展示奖励差异、引用和前后规则，再提交 slug、preview_token 和显式 overwrite；预览过期重新确认，不能指定服务器路径、上传内容或绕过校验。
 
 ### 挑战内容
 
@@ -183,7 +191,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ## 类型契约
 
-`src/types/api.ts` 维护后端模型与 WebSocket 事件；`src/types/auth.ts` 维护认证公开类型。删除后端字段或路由时，应同时删除前端类型、Store 和页面引用，避免“类型还在但功能已不存在”。
+`src/types/api.ts` 维护后端模型与 WebSocket 事件；`src/types/auth.ts` 维护认证公开类型；`src/types/rewards.ts` 维护获奖、兑换和管理响应。删除后端字段或路由时，应同时删除前端类型、Store 和页面引用，避免“类型还在但功能已不存在”。
 
 对话创建类型不得重新加入 Character、Prompt 或 WorldBook ID。管理员完整版本类型不得复用于普通挑战公开响应。
 

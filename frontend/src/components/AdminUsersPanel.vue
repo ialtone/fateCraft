@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NAlert, NSelect, NSpin, NSwitch, useDialog, useMessage } from 'naive-ui'
+import {
+  NAlert,
+  NButton,
+  NInput,
+  NModal,
+  NSelect,
+  NSpin,
+  NSwitch,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
+import AdminRewardUserPanel from './AdminRewardUserPanel.vue'
 import { adminApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type { AdminAuditLog, AdminUser } from '@/types'
@@ -9,14 +20,19 @@ const auth = useAuthStore()
 const message = useMessage()
 const dialog = useDialog()
 const users = ref<AdminUser[]>([])
+const rewardUser = ref<AdminUser>()
+const showRewards = ref(false)
 const auditLogs = ref<AdminAuditLog[]>([])
 const loading = ref(false)
 const savingID = ref('')
 const error = ref('')
 const isOwner = computed(() => auth.isOwner)
-// 后端单页上限；返回恰好这么多条时提示列表可能不完整。
-const USER_PAGE_LIMIT = 200
-const reachedPageLimit = computed(() => users.value.length >= USER_PAGE_LIMIT)
+const USER_PAGE_LIMIT = 30
+const query = ref('')
+const submittedQuery = ref('')
+const offset = ref(0)
+const hasMore = ref(false)
+let loadSequence = 0
 const roleOptions = [
   { label: '普通用户', value: 'user' },
   { label: '管理员', value: 'admin' },
@@ -24,20 +40,34 @@ const roleOptions = [
 ]
 
 async function load() {
+  const sequence = ++loadSequence
   loading.value = true
   error.value = ''
   try {
     const [nextUsers, nextLogs] = await Promise.all([
-      adminApi.listUsers({ limit: USER_PAGE_LIMIT }),
+      adminApi.listUsers({ q: submittedQuery.value, limit: USER_PAGE_LIMIT, offset: offset.value }),
       adminApi.listAuditLogs(30),
     ])
-    users.value = nextUsers
+    if (sequence !== loadSequence) return
+    users.value = nextUsers.users
+    hasMore.value = nextUsers.has_more
     auditLogs.value = nextLogs
   } catch (err: any) {
-    error.value = err?.message || '读取用户管理数据失败'
+    if (sequence === loadSequence) error.value = err?.message || '读取用户管理数据失败'
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
+}
+
+function searchUsers() {
+  submittedQuery.value = query.value.trim()
+  offset.value = 0
+  void load()
+}
+
+function pageUsers(delta: number) {
+  offset.value = Math.max(0, offset.value + delta * USER_PAGE_LIMIT)
+  void load()
 }
 
 async function changeRole(user: AdminUser, role: string) {
@@ -97,6 +127,10 @@ function formatTime(value?: string) {
 }
 
 onMounted(() => void load())
+function openRewards(user: AdminUser) {
+  rewardUser.value = user
+  showRewards.value = true
+}
 </script>
 
 <template>
@@ -105,9 +139,15 @@ onMounted(() => void load())
       首次安装完成后，所有新账号默认为普通用户。只有 owner 可以调整角色和停用管理员。
     </p>
     <NAlert v-if="error" type="error" :show-icon="true">{{ error }}</NAlert>
-    <NAlert v-if="reachedPageLimit" type="info" :show-icon="true">
-      只显示最新注册的 {{ USER_PAGE_LIMIT }} 个账号。
-    </NAlert>
+    <form class="user-search" @submit.prevent="searchUsers">
+      <NInput
+        v-model:value="query"
+        :maxlength="256"
+        aria-label="查找用户"
+        placeholder="用户名、显示名称、完整邮箱或用户 ID"
+      />
+      <NButton attr-type="submit" :loading="loading">查找用户</NButton>
+    </form>
     <NSpin :show="loading">
       <div class="user-list">
         <div v-for="user in users" :key="user.id" class="user-row">
@@ -120,6 +160,7 @@ onMounted(() => void load())
             >
           </div>
           <div class="user-actions">
+            <NButton size="small" @click="openRewards(user)">奖励与点数</NButton>
             <NSelect
               v-if="isOwner"
               :value="user.role"
@@ -137,10 +178,21 @@ onMounted(() => void load())
             />
           </div>
         </div>
-        <p v-if="!users.length && !loading" class="muted">暂无用户</p>
+        <p v-if="!users.length && !loading && !error" class="muted">没有匹配的用户</p>
       </div>
     </NSpin>
+    <div class="user-search">
+      <NButton :disabled="loading || offset === 0" @click="pageUsers(-1)">上一页</NButton>
+      <NButton :disabled="loading || !hasMore" @click="pageUsers(1)">下一页</NButton>
+    </div>
 
+    <NModal
+      v-model:show="showRewards"
+      preset="card"
+      title="用户奖励与点数"
+      style="width: min(1040px, 96vw)"
+      ><AdminRewardUserPanel v-if="rewardUser" :key="rewardUser.id" :user-id="rewardUser.id"
+    /></NModal>
     <h4>最近管理员操作</h4>
     <div class="audit-list">
       <div v-for="log in auditLogs" :key="log.id" class="audit-row">
@@ -155,6 +207,11 @@ onMounted(() => void load())
 <style scoped>
 .users-panel {
   padding: 24px 0;
+}
+.user-search {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
 }
 
 .user-list,

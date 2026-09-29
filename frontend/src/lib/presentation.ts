@@ -34,6 +34,12 @@ const platformLabels: Record<string, Record<string, string>> = {
     entitlement: '权限',
   },
   reward_source: {
+    challenge_run: '挑战结算',
+    campaign_outcome: '长期世界终局',
+    user_registration: '注册赠送',
+    admin_grant: '管理员发放',
+    admin_reversal: '管理员冲正',
+    message_rewrite_refund: '改写失败返还',
     challenge_settlement: '挑战结算',
     message_rewrite: '剧情改写',
     registration: '新用户赠送',
@@ -41,7 +47,8 @@ const platformLabels: Record<string, Record<string, string>> = {
   reward_operation: {
     grant: '获得',
     consume: '使用',
-    adjust: '调整',
+    refund: '返还',
+    reverse: '冲正',
   },
 }
 

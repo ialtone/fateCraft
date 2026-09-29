@@ -173,7 +173,7 @@ func (f *fakeRepository) InitializeOwner(_ context.Context, user *storage.User) 
 	f.user.Role = storage.UserRoleOwner
 	return f.user, nil
 }
-func (f *fakeRepository) ListUsers(context.Context, int, int) ([]storage.User, error) {
+func (f *fakeRepository) ListUsers(context.Context, int, int, string) ([]storage.User, error) {
 	if f.user == nil {
 		return nil, nil
 	}
