@@ -3,8 +3,10 @@ package dbmigration_test
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/ialtone/fatecraft/internal/dbmigration"
 	"github.com/ialtone/fatecraft/internal/testdb"
@@ -19,7 +21,8 @@ func TestBaselineMigrationAndFailedMigrationRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 	if err := dbmigration.Up(ctx, sqlDB); err != nil {
 		t.Fatalf("first migration run: %v", err)
 	}
@@ -43,7 +46,62 @@ func TestBaselineMigrationAndFailedMigrationRollback(t *testing.T) {
 	}
 
 	assertBaselineObjects(t, sqlDB)
+	assertBaselineDownRejected(t, ctx, sqlDB)
 	assertFailedMigrationRollsBack(t, ctx, sqlDB)
+}
+
+func TestConcurrentBaselineMigration(t *testing.T) {
+	db := testdb.OpenEmpty(t, "migration_concurrent")
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for range 2 {
+		go func() {
+			<-start
+			// Each call creates a different provider, so only the database lock
+			// can serialize the migration-table creation and baseline DDL.
+			results <- dbmigration.Up(ctx, sqlDB)
+		}()
+	}
+	close(start)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Errorf("concurrent migration: %v", err)
+		}
+	}
+	var applied int
+	if err := sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM goose_db_version WHERE version_id=1 AND is_applied`).Scan(&applied); err != nil {
+		t.Fatal(err)
+	}
+	if applied != 1 {
+		t.Fatalf("baseline version records = %d, want 1", applied)
+	}
+	assertBaselineObjects(t, sqlDB)
+}
+
+func assertBaselineDownRejected(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	// Exercise the SQL guard directly, bypassing our CLI's command rejection.
+	p, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Down(ctx); err == nil || !strings.Contains(err.Error(), "baseline 00001 is irreversible") {
+		t.Fatalf("baseline Down = %v, want explicit rejection", err)
+	}
+	version, err := dbmigration.Version(ctx, db)
+	if err != nil || version != 1 {
+		t.Fatalf("version after rejected Down = %d, %v; want 1", version, err)
+	}
+	assertBaselineObjects(t, db)
+	if err := dbmigration.Up(ctx, db); err != nil {
+		t.Fatalf("Up after rejected Down: %v", err)
+	}
 }
 
 func assertBaselineObjects(t *testing.T, db interface {

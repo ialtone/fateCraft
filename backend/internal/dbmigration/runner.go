@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
@@ -13,12 +14,15 @@ import (
 )
 
 // Open creates the database/sql connection used exclusively by migration commands.
-func Open(dsn string) (*sql.DB, error) {
-	db, err := sql.Open("postgres", dsn)
+func Open(ctx context.Context, dsn string) (*sql.DB, error) {
+	// pgx observes the context during connection startup as well as queries.
+	cfg, err := pgx.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open postgres for migrations: %w", err)
+		// Parser errors may include the DSN, which can contain credentials.
+		return nil, fmt.Errorf("invalid PostgreSQL migration connection configuration")
 	}
-	if err := db.Ping(); err != nil {
+	db := stdlib.OpenDB(*cfg)
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping postgres for migrations: %w", err)
 	}
@@ -50,18 +54,6 @@ func Up(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := p.Up(ctx); err != nil {
 		return fmt.Errorf("apply database migrations: %w", err)
-	}
-	return nil
-}
-
-// Down rolls back the latest migration. Production callers should not expose this operation.
-func Down(ctx context.Context, db *sql.DB) error {
-	p, err := provider(db)
-	if err != nil {
-		return err
-	}
-	if _, err := p.Down(ctx); err != nil {
-		return fmt.Errorf("roll back database migration: %w", err)
 	}
 	return nil
 }

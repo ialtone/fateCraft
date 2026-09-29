@@ -1,6 +1,8 @@
 -- +goose Up
 -- Fatecraft PostgreSQL schema baseline.
 -- This project started migration tracking at version 1; no older schema is supported.
+-- Until the baseline is frozen, edits require validation in a fresh schema.
+-- Goose tracks versions, not changes to an already-applied file.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
@@ -1560,4 +1562,15 @@ CREATE TRIGGER reward_record_immutable BEFORE UPDATE OR DELETE ON reward_records
 CREATE TRIGGER reward_exchange_order_immutable BEFORE UPDATE OR DELETE ON reward_exchange_orders FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER reward_exchange_revision_immutable BEFORE UPDATE OR DELETE ON reward_exchange_revisions FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER registration_reward_revision_immutable BEFORE UPDATE OR DELETE ON registration_reward_rules FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
+
+-- +goose Down
+-- Refuse rollback even when this file is run through an external Goose tool.
+-- Raising inside the migration transaction preserves both schema and version.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    RAISE EXCEPTION 'baseline 00001 is irreversible';
+END;
+$$;
+-- +goose StatementEnd
 

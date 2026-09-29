@@ -11,6 +11,8 @@ PostgreSQL 是 Fatecraft 的运行时权威数据源，保存认证、挑战固�
 - 不保留 `accounts`、单一灵石字段、旧回溯计数或旧结局字段。
 - 开发、测试、Docker 和生产环境都通过 `cmd/migrate up` 执行相同的内嵌 migration。
 - migration 默认使用事务；任一 DDL、约束、种子或注释失败都会整体回滚。确需禁用事务的 migration 必须显式标注并说明原因。
+- `cmd/migrate` 只接受 `up/status/version`，在连接数据库前拒绝 `down`，不再提供环境变量绕过。00001 的 `Down` 段主动抛错，即使用外部 Goose 工具回退也不会撤销版本记录或删除业务表。
+- 迁移通过 PostgreSQL session advisory lock 串行执行。`MIGRATION_CONNECT_TIMEOUT` 默认 `10s`，限制首次连接；`MIGRATION_TIMEOUT` 默认 `10m`，限制包含连接、等锁、DDL 在内的命令执行。二者必须为正的 Go duration，错误配置直接报错；Ctrl+C / SIGTERM 取消操作并回滚尚未提交的事务。
 
 `CREATE EXTENSION IF NOT EXISTS pgcrypto` 和 `pg_trgm` 固定安装在 `public` schema。前者提供 `gen_random_uuid()`；后者为标题的模糊搜索提供 `public.gin_trgm_ops` GIN 索引。`IF NOT EXISTS` 让重复执行扩展声明不会报错。它不代表数据库会自动加密业务字段：密码、会话令牌、验证码、邀请码和 SMTP 密码仍由后端分别使用 Argon2id/bcrypt、SHA-256 或 AES-GCM 处理。
 
@@ -337,11 +339,15 @@ rg -n "^CREATE TABLE" backend/migrations
 rg -n "^COMMENT ON TABLE" backend/migrations
 cd backend
 go run ./cmd/migrate status
-go test ./...
 go vet ./...
+# 必须在进程环境配置专用的 FATECRAFT_TEST_DATABASE_URL，不从 .env 自动加载。
+$env:FATECRAFT_REQUIRE_TEST_DATABASE = 'true'
+go test -count=1 -timeout=10m ./...
 ~~~
 
-两次业务表计数必须一致。已在共享环境执行的 migration 不得修改；DDL 修正必须新增 migration，并同时在空数据库和已迁移数据库验证 `up`。集成测试在随机 PostgreSQL schema 中执行同一套 migration。
+两次业务表计数必须一致。仓库根目录的 `task backend:test:postgres` 提供同样的强制验证流程：没有 `FATECRAFT_TEST_DATABASE_URL` 会失败，不会以跳过集成测试视为通过；CI 使用相同规则。集成测试在随机 PostgreSQL schema 中执行同一套 migration，覆盖首次初始化、重复与并发 `up`、拒绝基线 `down` 后版本和表仍保留，以及失败 migration 的事务回滚。
+
+当前基线未冻结，结构修改仍集中在 00001；Goose 不校验已执行文件的内容，旧开发库即使显示版本 1，也可能缺少后来加入的表或约束。每次修改应在空数据库或上述隔离 schema 中验证，不自动删除、重置或改写已有库的版本记录。开始保留正式数据后冻结基线，此后已执行 migration 不得修改，DDL 修正改用新增 migration，并同时在空数据库和已迁移数据库验证 `up`。
 
 ### 状态域与事件权威性
 

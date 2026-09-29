@@ -22,11 +22,20 @@ tasks:
       - go run ./cmd/migrate status
 
   backend:test:
-    desc: 运行后端全部测试
+    desc: 运行后端测试（未配置测试库时跳过 PostgreSQL 集成测试）
     dir: backend
     cmds:
       - go vet ./...
       - go test ./...
+
+  backend:test:postgres:
+    desc: 强制运行含 PostgreSQL 集成测试的后端验证（必须配置专用测试库）
+    dir: backend
+    env:
+      FATECRAFT_REQUIRE_TEST_DATABASE: 'true'
+    cmds:
+      - go vet ./...
+      - go test -count=1 -timeout=10m ./...
 
   backend:build:
     desc: 交叉编译 Linux amd64 后端服务，供 Docker 镜像使用

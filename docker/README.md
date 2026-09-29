@@ -5,6 +5,7 @@
 - 后端开发：`task backend:dev`
 - 数据库升级/状态：`task db:migrate` / `task db:status`
 - 后端测试：`task backend:test`
+- 数据库变更验证：配置专用 `FATECRAFT_TEST_DATABASE_URL` 后执行 `task backend:test:postgres`；缺少测试库会失败
 - 前端开发：`task frontend:dev`
 - 前端类型检查：`task frontend:check`
 - 后端 Linux amd64 二进制：`task backend:build`（输出 `docker/backend/bin/fatecraft` 和 `fatecraft-migrate`）
@@ -40,6 +41,10 @@
   两个 compose 文件都会在 PostgreSQL healthy 后运行一次性 `migrate` 服务，执行内嵌在
   `fatecraft-migrate` 中的全部待执行 migration。空库完成初始化，已有数据库只执行新版本；
   版本记录保存在 `goose_db_version`，迁移失败时后端不会启动。
+
+  当前未冻结的基线变更仍并入 00001；已执行旧版 00001 的开发库不会因重新构建镜像或再次 `up` 自动同步结构。使用全新数据库或隔离测试 schema 验证，不自动删除现有数据。开始保留正式数据后冻结基线，再通过新增 migration 升级。
+
+  迁移仅支持 `up/status/version`，00001 明确禁止回退。可在对应 `backend.*.env` 配置 `MIGRATION_CONNECT_TIMEOUT=10s` 和 `MIGRATION_TIMEOUT=10m`；后者包含连接、等锁和 SQL 执行，必须是正的 Go duration。容器收到 SIGTERM 会取消操作并回滚未提交的事务。
 
   ```bash
   # 初始化或升级数据库，然后启动后端

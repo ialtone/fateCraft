@@ -16,7 +16,8 @@ import (
 )
 
 // Open creates a temporary PostgreSQL schema and applies the same migrations used by production.
-// Tests are skipped when FATECRAFT_TEST_DATABASE_URL is not configured.
+// Tests are skipped without FATECRAFT_TEST_DATABASE_URL unless
+// FATECRAFT_REQUIRE_TEST_DATABASE=true makes PostgreSQL verification mandatory.
 func Open(t testing.TB, prefix string) *gorm.DB {
 	t.Helper()
 	db := OpenEmpty(t, prefix)
@@ -35,6 +36,9 @@ func OpenEmpty(t testing.TB, prefix string) *gorm.DB {
 	t.Helper()
 	databaseURL := os.Getenv("FATECRAFT_TEST_DATABASE_URL")
 	if databaseURL == "" {
+		if os.Getenv("FATECRAFT_REQUIRE_TEST_DATABASE") == "true" {
+			t.Fatal("FATECRAFT_TEST_DATABASE_URL is required for PostgreSQL verification")
+		}
 		t.Skip("FATECRAFT_TEST_DATABASE_URL is not set")
 	}
 

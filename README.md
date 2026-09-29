@@ -113,6 +113,10 @@ go run ./cmd/migrate status
 
 每个已执行 migration 都记录在 `goose_db_version`。服务进程不会在启动时隐式修改数据库；部署必须先让 `migrate up` 成功，再启动后端。
 
+当前新项目的基线尚未冻结，结构变更继续并入 `00001_init.sql`。Goose 只跟踪版本，不检测已执行 SQL 的内容变化：修改 00001 后，旧开发库再次执行 `up` 不会自动补表，`status/version` 也不能证明结构一致。请在全新数据库或集成测试创建的隔离 schema 中验证；开始保留正式数据后冻结基线，后续使用增量 migration，不自动重置已有数据库。
+
+迁移命令只支持 `up/status/version`，不提供 `down`；00001 的 SQL 也明确拒绝回退，保留结构与版本记录。连接默认最多等待 `10s`，整个命令默认最多执行 `10m`（包含连接、等锁与 SQL）；可通过 `MIGRATION_CONNECT_TIMEOUT` / `MIGRATION_TIMEOUT` 调整为正的 Go duration。Ctrl+C 或 SIGTERM 会取消当前迁移，未提交的事务回滚。
+
 ### 2. 配置后端
 
 复制示例配置：
@@ -395,11 +399,14 @@ npm run format:check
 npm run build
 ```
 
-PostgreSQL 集成测试默认跳过。需要运行时，为测试进程提供专用、可丢弃的数据库：
+未配置测试库时，普通后端测试会跳过 PostgreSQL 集成测试。数据库变更验收必须为测试进程提供专用、可丢弃的 PostgreSQL 数据库，然后运行强制验证入口（在仓库根目录执行）：
 
-```text
-FATECRAFT_TEST_DATABASE_URL=postgres://...
+```powershell
+$env:FATECRAFT_TEST_DATABASE_URL = 'postgres://user:password@localhost:5432/fatecraft_test?sslmode=disable'
+task backend:test:postgres
 ```
+
+该任务设置 `FATECRAFT_REQUIRE_TEST_DATABASE=true`，缺少测试库时直接失败，并以 `-count=1` 禁用测试结果缓存。也可进入 `backend`，设置这两个环境变量后执行 `go test -count=1 -timeout=10m ./...`。测试创建随机 schema，执行完整 00001 并在结束后清理该 schema；覆盖首次初始化、重复/并发迁移、基线回退拒绝和失败事务回滚。CI 已配置 PostgreSQL 服务，并使用相同的强制验证模式。测试变量需传给进程，不从 `backend/.env` 自动加载。
 
 真实供应商能力测试使用 <code>FATECRAFT_LIVE_LLM_BASE_URL</code>、<code>FATECRAFT_LIVE_LLM_API_KEY</code>、<code>FATECRAFT_LIVE_LLM_MODEL</code> 和可选的 <code>FATECRAFT_LIVE_LLM_PROTOCOL</code>，默认同样跳过。
 
