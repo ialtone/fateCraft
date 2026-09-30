@@ -132,7 +132,7 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	if err != nil || storedLog.RawResponse != requestLog.RawResponse || !storedLog.ReceivedDone {
 		t.Fatalf("stored detailed LLM request log = %+v, err = %v", storedLog, err)
 	}
-	listedLogs, err := requestLogs.List(context.Background(), 10, &conversation.ID)
+	listedLogs, _, _, err := requestLogs.List(context.Background(), LogQuery{Limit: 10, ConversationID: &conversation.ID})
 	if err != nil || len(listedLogs) != 1 || len(listedLogs[0].RawResponse) != 0 {
 		t.Fatalf("request log summaries = %+v, err = %v", listedLogs, err)
 	}

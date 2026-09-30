@@ -189,12 +189,13 @@ func (w *Worker) releaseClaim(ctx context.Context, job *storage.MemoryJob) {
 // executeGuarded 兜住单个任务的 panic：只让这一个任务失败并释放租约，
 // 不能让整个记忆 Worker 乃至进程退出。
 func (w *Worker) executeGuarded(ctx context.Context, job *storage.MemoryJob) {
+	ctx = logging.WithFields(logging.NewTrace(ctx), zap.String("job_id", job.ID.String()), zap.String("conversation_id", job.ConversationID.String()))
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			logging.Named("memory").Error("记忆任务 panic",
+			logging.FromContext(ctx, "memory").Error("记忆任务 panic",
 				zap.String("job_id", job.ID.String()), zap.String("conversation_id", job.ConversationID.String()),
 				zap.Any("panic", recovered), zap.String("stack", string(debug.Stack())))
-			w.finishFailure(ctx, job, "worker_panic", fmt.Errorf("panic: %v", recovered), false)
+			w.finishFailure(ctx, job, "worker_panic", fmt.Errorf("panic (%T)", recovered), false)
 		}
 	}()
 	w.execute(ctx, job)
@@ -204,7 +205,7 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 	if job.LeaseToken == nil {
 		return
 	}
-	log := logging.Named("memory").With(
+	log := logging.FromContext(root, "memory").With(
 		zap.String("job_id", job.ID.String()), zap.String("conversation_id", job.ConversationID.String()),
 	)
 	ctx, cancel := context.WithTimeout(root, w.config.RequestTimeout)
@@ -269,7 +270,8 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 	memoryID := uuid.New()
 	outputSchema := OutputSchema()
 	result, err := w.llm.CompleteStructured(ctx, llm.Params{
-		BaseURL: settings.BaseURL, APIKey: apiKey, Model: model, Protocol: protocol,
+		PlayerID: source.Conversation.PlayerID,
+		BaseURL:  settings.BaseURL, APIKey: apiKey, Model: model, Protocol: protocol,
 		Temperature: 0.2, TopP: 1, MaxTokens: maxTokens, ReasoningEffort: reasoningEffort,
 		Relay:            w.relayForRoute(settings, source.Conversation.PlayerID),
 		SettingsRevision: settings.SettingsRevision,
@@ -389,7 +391,7 @@ func (w *Worker) finishFailure(root context.Context, job *storage.MemoryJob, cod
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(root), 5*time.Second)
 	defer cancel()
-	failErr := w.repo.FailJob(ctx, job.ID, w.config.WorkerID, *job.LeaseToken, code, err.Error(), retryAt)
+	failErr := w.repo.FailJob(ctx, job.ID, w.config.WorkerID, *job.LeaseToken, code, logging.ErrorText(err), retryAt)
 	if failErr != nil {
 		if !errors.Is(failErr, storage.ErrNotFound) {
 			logging.Named("memory").Warn("记录记忆任务失败状态失败", zap.String("job_id", job.ID.String()), zap.Error(failErr))

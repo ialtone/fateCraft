@@ -20,29 +20,41 @@ func (r *LLMRequestLogRepo) Create(ctx context.Context, row *LLMRequestLog) erro
 	if row.OutputTypes == nil {
 		row.OutputTypes = pq.StringArray{}
 	}
+	if row.BodyMetadata == nil {
+		row.BodyMetadata = JSONMap{}
+	}
+	if len(row.RequestBody) == 0 {
+		row.RequestBody = JSONDoc(`{}`)
+	}
 	return r.db.WithContext(ctx).Create(row).Error
 }
 
-func (r *LLMRequestLogRepo) List(ctx context.Context, limit int, conversationID *uuid.UUID) ([]LLMRequestLog, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	query := r.db.WithContext(ctx)
-	if conversationID != nil {
-		query = query.Where("conversation_id = ?", *conversationID)
+func (r *LLMRequestLogRepo) List(ctx context.Context, filter LogQuery) ([]LLMRequestLog, string, bool, error) {
+	query, err := filter.query(ctx, r.db, "llm")
+	if err != nil {
+		return nil, "", false, err
 	}
 	var rows []LLMRequestLog
-	err := query.Select(
-		"id", "conversation_id", "message_id", "purpose", "attempt_id", "memory_job_id", "memory_id",
+	err = query.Select(
+		"id", "trace_id", "protocol", "started_at", "transport_attempts", "input_tokens", "output_tokens", "error_code", "body_status", "body_metadata", "settings_source", "conversation_id", "message_id", "purpose", "attempt_id", "memory_job_id", "memory_id",
 		"inquiry_id", "inquiry_snapshot_id", "inquiry_snapshot_branch_epoch", "inquiry_snapshot_revision", "model", "stream", "response_status",
 		"finish_reason", "received_done", "success", "audit_truncated", "error", "duration_ms", "created_at",
 		"settings_revision", "output_mode", "contract_name", "contract_version", "contract_fingerprint",
 		"transport_success", "structured_success", "structured_error_code", "output_types",
-	).Order("created_at DESC, id DESC").Limit(limit).Find(&rows).Error
-	return rows, err
+	).Find(&rows).Error
+	if err != nil {
+		return nil, "", false, err
+	}
+	more := len(rows) > filter.Limit
+	if more {
+		rows = rows[:filter.Limit]
+	}
+	next := ""
+	if more {
+		last := rows[len(rows)-1]
+		next = filter.next("llm", last.CreatedAt, last.ID)
+	}
+	return rows, next, more, nil
 }
 
 func (r *LLMRequestLogRepo) Get(ctx context.Context, id uuid.UUID) (*LLMRequestLog, error) {

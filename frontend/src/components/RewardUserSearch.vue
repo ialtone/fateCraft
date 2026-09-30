@@ -5,6 +5,7 @@ import { adminApi } from '@/api'
 import type { AdminUser } from '@/types'
 import { rewardError } from '@/lib/rewards'
 const emit = defineEmits<{ select: [user: AdminUser] }>()
+withDefaults(defineProps<{ selectLabel?: string }>(), { selectLabel: '奖励与点数' })
 const query = ref(''),
   submitted = ref(''),
   error = ref('')
@@ -35,15 +36,16 @@ async function search(page = 0, fresh = false) {
 </script>
 <template>
   <div class="user-search">
-    <form class="search-bar" @submit.prevent="search(0, true)">
+    <div class="search-bar" role="search" aria-label="查找用户">
       <NInput
         v-model:value="query"
         aria-label="查找用户"
         placeholder="用户名、显示名称、完整邮箱或用户 ID"
         :maxlength="256"
+        @keydown.enter.prevent="search(0, true)"
       />
-      <NButton attr-type="submit" type="primary" :loading="loading">查找用户</NButton>
-    </form>
+      <NButton type="primary" :loading="loading" @click="search(0, true)">查找用户</NButton>
+    </div>
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NSpin :show="loading">
       <div v-for="user in users" :key="user.id" class="search-user">
@@ -54,7 +56,7 @@ async function search(page = 0, fresh = false) {
             {{ user.status === 'active' ? '正常' : '已停用' }}</small
           >
         </div>
-        <NButton @click="emit('select', user)">奖励与点数</NButton>
+        <NButton @click="emit('select', user)">{{ selectLabel }}</NButton>
       </div>
       <NEmpty v-if="searched && !loading && !error && !users.length" description="没有匹配的用户" />
     </NSpin>

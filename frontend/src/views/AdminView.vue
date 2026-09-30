@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import AdminDiagnostics from '@/components/AdminDiagnostics.vue'
+import DetailedLogScope from '@/components/DetailedLogScope.vue'
+import {
+  systemSettingFields,
+  authSettingFields,
+  pickSettings,
+  applySavedSettings,
+  type SystemSettingsTab,
+  type AuthSettingsTab,
+} from '@/lib/adminSettingGroups'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -65,6 +75,12 @@ const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 const activeTab = ref('settings')
+const settingsTab = ref<SystemSettingsTab>('gameplay')
+const authTab = ref<AuthSettingsTab | 'invitations'>('login')
+const sharingTab = ref('shares')
+const challengesTab = ref('catalog')
+const settingsTabLabels = { gameplay: '判定规则', llm: '模型服务', logs: '日志策略' }
+const authTabLabels = { login: '登录与注册', smtp: '发信邮箱', verification: '验证码邮件' }
 const route = useRoute(),
   router = useRouter()
 
@@ -123,9 +139,7 @@ const publicRecognizedHint = computed(() => {
   if (!unchanged || profile.id === 'custom_openai_compatible') return ''
   return `已识别为 ${publicProfileNames[profile.id] || profile.id}，已自动适配请求参数`
 })
-const llmLogs = ref<AdminLLMRequestLogSummary[]>([])
 const selectedLLMLog = ref<AdminLLMRequestLog | null>(null)
-const contextLogs = ref<AdminContextBuildLogSummary[]>([])
 const selectedContextLog = ref<AdminContextBuildLog | null>(null)
 const authSettings = ref<AdminAuthSettings | null>(null)
 const authIdentities = ref<AdminExternalIdentity[]>([])
@@ -140,8 +154,6 @@ const rewardDefinitions = ref<RewardDefinition[]>([])
 const publicShares = ref<ConversationShare[]>([])
 const shareReports = ref<ConversationShareReport[]>([])
 const loadingSettings = ref(false)
-const loadingLLMLogs = ref(false)
-const loadingContextLogs = ref(false)
 const loadingAuthSettings = ref(false)
 const loadingAuthIdentities = ref(false)
 const loadingInvitations = ref(false)
@@ -329,53 +341,46 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-  if (!settings.value) return
+  if (!settings.value || savingSettings.value) return
+  const group = settingsTab.value
+  if (group === 'llm' && !auth.isOwner) return
+  if (
+    group === 'logs' &&
+    settings.value.detailed_llm_logging_scope !== 'all' &&
+    !settings.value.detailed_llm_logging_target_id?.trim()
+  ) {
+    message.warning('请选择采集用户或填写完整对话 ID')
+    return
+  }
+  const fields: readonly (keyof AdminSystemSettings)[] = systemSettingFields[group]
+  const body: Record<string, unknown> = pickSettings(settings.value, fields)
+  if (group === 'logs')
+    body.detailed_llm_logging_target_id =
+      settings.value.detailed_llm_logging_target_id?.trim() || ''
+  if (group === 'llm') {
+    if (publicLLMKey.value.trim()) body.public_llm_api_key = publicLLMKey.value.trim()
+    if (clearPublicLLMKey.value) body.clear_public_llm_api_key = true
+  }
   savingSettings.value = true
   try {
-    const body: Record<string, unknown> = {
-      roll_system_enabled: settings.value.roll_system_enabled,
-      roll_difficulty_mode: settings.value.roll_difficulty_mode,
-      detailed_llm_logging_enabled: settings.value.detailed_llm_logging_enabled,
-      diagnostic_log_cleanup_enabled: settings.value.diagnostic_log_cleanup_enabled,
-      diagnostic_log_retention_days: settings.value.diagnostic_log_retention_days,
+    const updated = await adminApi.updateSystemSettings(body)
+    applySavedSettings(settings.value, updated, fields)
+    if (group === 'llm') {
+      applySavedSettings(settings.value, updated, [
+        'public_llm_has_api_key',
+        'public_llm_resolved_profile',
+        'public_llm_settings_revision',
+      ])
+      syncPublicLLMExpansion()
+      publicLLMKey.value = ''
+      clearPublicLLMKey.value = false
+      savedPublicBaseURL.value = updated.public_llm_base_url || ''
+      savedPublicCapabilityKey.value = publicCapabilityKey.value
+      publicDiagnostics.value = {}
     }
-    if (auth.isOwner) {
-      Object.assign(body, {
-        llm_access_mode: settings.value.llm_access_mode,
-        client_llm_route_enabled: settings.value.client_llm_route_enabled,
-        public_llm_base_url: settings.value.public_llm_base_url,
-        public_llm_protocol: settings.value.public_llm_protocol,
-        public_llm_model: settings.value.public_llm_model,
-        public_llm_memory_model: settings.value.public_llm_memory_model,
-        public_llm_inquiry_model: settings.value.public_llm_inquiry_model,
-        public_llm_max_context_tokens: settings.value.public_llm_max_context_tokens,
-        public_llm_max_response_tokens: settings.value.public_llm_max_response_tokens,
-        public_llm_temperature: settings.value.public_llm_temperature,
-        public_llm_top_p: settings.value.public_llm_top_p,
-        public_llm_stream_enabled: settings.value.public_llm_stream_enabled,
-        public_llm_reasoning_effort: String(
-          settings.value.public_llm_reasoning_effort ?? '',
-        ).trim(),
-        public_llm_memory_reasoning_effort: String(
-          settings.value.public_llm_memory_reasoning_effort ?? '',
-        ).trim(),
-        public_llm_inquiry_reasoning_effort: String(
-          settings.value.public_llm_inquiry_reasoning_effort ?? '',
-        ).trim(),
-      })
-      if (publicLLMKey.value.trim()) body.public_llm_api_key = publicLLMKey.value.trim()
-      if (clearPublicLLMKey.value) body.clear_public_llm_api_key = true
-    }
-    settings.value = await adminApi.updateSystemSettings(body as any)
-    syncPublicLLMExpansion()
-    publicLLMKey.value = ''
-    clearPublicLLMKey.value = false
-    savedPublicBaseURL.value = settings.value.public_llm_base_url || ''
-    savedPublicCapabilityKey.value = publicCapabilityKey.value
-    publicDiagnostics.value = {}
-    message.success('玩法设置已保存')
+    message.success(settingsTabLabels[group] + '已保存')
   } catch (err: any) {
-    message.error(`保存管理设置失败：${err.message || '未知错误'}`)
+    message.error('保存管理设置失败：' + (err.message || '未知错误'))
   } finally {
     savingSettings.value = false
   }
@@ -467,34 +472,16 @@ async function fetchPublicModels() {
   }
 }
 
-async function loadLLMLogs() {
-  loadingLLMLogs.value = true
-  try {
-    llmLogs.value = await adminApi.listLLMRequestLogs({ limit: 50 })
-  } catch (err: any) {
-    message.error(`读取模型请求日志失败：${err.message || '未知错误'}`)
-  } finally {
-    loadingLLMLogs.value = false
-  }
-}
-
 async function openLLMLog(row: AdminLLMRequestLogSummary) {
   try {
     selectedLLMLog.value = await adminApi.getLLMRequestLog(row.id)
     showLLMLogModal.value = true
   } catch (err: any) {
-    message.error(`读取请求明细失败：${err.message || '未知错误'}`)
-  }
-}
-
-async function loadContextLogs() {
-  loadingContextLogs.value = true
-  try {
-    contextLogs.value = await adminApi.listContextBuildLogs({ limit: 50 })
-  } catch (err: any) {
-    message.error(`读取上下文构建日志失败：${err.message || '未知错误'}`)
-  } finally {
-    loadingContextLogs.value = false
+    message.error(
+      err.response?.status === 404
+        ? '该诊断记录不存在或已按策略清理'
+        : `读取请求明细失败：${err.message || '未知错误'}`,
+    )
   }
 }
 
@@ -551,21 +538,12 @@ async function openContextLog(row: AdminContextBuildLogSummary) {
     selectedContextLog.value = await adminApi.getContextBuildLog(row.id)
     showContextLogModal.value = true
   } catch (err: any) {
-    message.error(`读取上下文构建明细失败：${err.message || '未知错误'}`)
+    message.error(
+      err.response?.status === 404
+        ? '该诊断记录不存在或已按策略清理'
+        : `读取上下文构建明细失败：${err.message || '未知错误'}`,
+    )
   }
-}
-
-function llmLogStatus(row: AdminLLMRequestLogSummary) {
-  if (!row.transport_success) return '传输失败'
-  if (row.output_mode && !row.structured_success) return '结构失败'
-  if (row.stream && !row.received_done) return '未收到结束标记'
-  return '成功'
-}
-
-function llmLogStatusType(row: AdminLLMRequestLogSummary): 'error' | 'warning' | 'success' {
-  if (!row.transport_success || (row.output_mode && !row.structured_success)) return 'error'
-  if (row.stream && !row.received_done) return 'warning'
-  return 'success'
 }
 
 function llmLogPurposeLabel(purpose: string) {
@@ -603,23 +581,32 @@ async function loadAuthIdentities() {
 }
 
 async function saveAuthSettings() {
-  if (!auth.isOwner) {
-    message.warning('只有平台拥有者可以修改认证设置')
+  if (
+    !auth.isOwner ||
+    !authSettings.value ||
+    savingAuthSettings.value ||
+    authTab.value === 'invitations'
+  )
     return
+  const group = authTab.value
+  const fields: readonly (keyof AdminAuthSettings)[] = authSettingFields[group]
+  const body: Record<string, unknown> = pickSettings(authSettings.value, fields)
+  if (group === 'smtp') {
+    body.smtp_password = smtpPassword.value
+    body.clear_smtp_password = clearSMTPPassword.value
   }
-  if (!authSettings.value) return
   savingAuthSettings.value = true
   try {
-    authSettings.value = await adminApi.updateAuthSettings({
-      ...authSettings.value,
-      smtp_password: smtpPassword.value,
-      clear_smtp_password: clearSMTPPassword.value,
-    })
-    smtpPassword.value = ''
-    clearSMTPPassword.value = false
-    message.success('账号与注册设置已保存')
+    const updated = await adminApi.updateAuthSettings(body)
+    applySavedSettings(authSettings.value, updated, fields)
+    if (group === 'smtp') {
+      authSettings.value.has_smtp_password = updated.has_smtp_password
+      smtpPassword.value = ''
+      clearSMTPPassword.value = false
+    }
+    message.success(authTabLabels[group] + '已保存')
   } catch (err: any) {
-    message.error(`保存认证设置失败：${err.message || '未知错误'}`)
+    message.error('保存认证设置失败：' + (err.message || '未知错误'))
   } finally {
     savingAuthSettings.value = false
   }
@@ -802,6 +789,7 @@ async function openVersion(versionId: string) {
   selectedVersionId.value = versionId
   try {
     setVersionDocument(await adminApi.getChallengeVersion(versionId))
+    challengesTab.value = 'editor'
   } catch (err: any) {
     message.error(`读取版本失败：${err.message || '未知错误'}`)
   }
@@ -855,6 +843,7 @@ async function deleteVersion() {
         versionDoc.value = null
         versionPayload.value = null
         selectedVersionId.value = ''
+        challengesTab.value = 'catalog'
         await loadChallenges()
         message.success('版本已删除')
       } catch (err: any) {
@@ -1026,10 +1015,6 @@ watch(
   (section) => {
     activeTab.value = tabNameForSection(section)
     if (section === 'all' || section === 'settings') void loadSettings()
-    if (section === 'all' || section === 'logs') {
-      void loadLLMLogs()
-      void loadContextLogs()
-    }
     if (section === 'all' || section === 'auth') {
       void loadAuthSettings()
       void loadInvitations()
@@ -1069,400 +1054,385 @@ watch(
       <NTabPane v-if="sectionVisible('users')" name="users" tab="用户与权限">
         <AdminUsersPanel />
       </NTabPane>
-      <NTabPane v-if="sectionVisible('settings')" name="settings" tab="全局设置">
-        <section v-if="sectionVisible('settings')" class="admin-section">
-          <h3>
-            <FieldHelp label="天命判定">
-              <p>
-                控制玩法中的概率判定系统。启用后，挑战动作可以按照平台规则进行成功、失败或难度判定。
-              </p>
-              <p>普通用户只能参与判定，不能修改这个开关或平台难度。</p>
-            </FieldHelp>
-          </h3>
-          <p class="section-sub">普通用户只能参与判定，无法覆盖平台难度或开关。</p>
-          <NSpin :show="loadingSettings">
-            <NForm v-if="settings" label-placement="top">
-              <NFormItem label="判定系统">
-                <NSwitch v-model:value="settings.roll_system_enabled">
-                  <template #checked>已启用</template>
-                  <template #unchecked>已停用</template>
-                </NSwitch>
-              </NFormItem>
-              <NFormItem>
-                <template #label>
-                  <FieldHelp label="挑战难度">
-                    <p>调整平台判定的整体难度，会影响需要进行概率判定的挑战动作。</p>
-                    <p>简单、普通、困难分别对应更高、标准和更低的成功倾向。</p>
-                  </FieldHelp>
-                </template>
-                <NRadioGroup v-model:value="settings.roll_difficulty_mode">
-                  <NRadioButton
-                    v-for="option in difficultyOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </NRadioButton>
-                </NRadioGroup>
-              </NFormItem>
-              <NFormItem>
-                <template #label>
-                  <FieldHelp label="自动清理诊断日志">
+      <NTabPane v-if="sectionVisible('settings')" name="settings" tab="全局设置"
+        ><NSpin :show="loadingSettings"
+          ><NTabs v-model:value="settingsTab" type="line" animated>
+            <NTabPane name="gameplay" tab="判定规则" display-directive="show:lazy"
+              ><section class="admin-section">
+                <h3>
+                  <FieldHelp label="天命判定">
                     <p>
-                      定期分批清理超过保留期限的模型请求日志和上下文构建日志，避免大字段长期占用数据库空间。
+                      控制玩法中的概率判定系统。启用后，挑战动作可以按照平台规则进行成功、失败或难度判定。
                     </p>
-                    <p>分享治理审计记录不受此策略影响；关闭开关不会删除现有日志。</p>
+                    <p>普通用户只能参与判定，不能修改这个开关或平台难度。</p>
                   </FieldHelp>
-                </template>
-                <NSwitch v-model:value="settings.diagnostic_log_cleanup_enabled">
-                  <template #checked>已启用</template>
-                  <template #unchecked>已关闭</template>
-                </NSwitch>
-              </NFormItem>
-              <NFormItem v-if="settings.diagnostic_log_cleanup_enabled" label="诊断日志保留天数">
-                <NInputNumber
-                  v-model:value="settings.diagnostic_log_retention_days"
-                  :min="1"
-                  :max="3650"
-                  :precision="0"
-                />
-                <template #feedback>
-                  默认保留 30 天；清理任务每小时检查一次，每次只做有限批次，避免形成数据库峰值。
-                </template>
-              </NFormItem>
-              <NFormItem>
-                <template #label>
-                  <FieldHelp label="模型请求详细日志">
-                    <p>记录模型请求体、原始响应和处理结果，用于排查模型协议、超时和上下文问题。</p>
-                    <p>不会记录 API Key 或认证头；日志可能包含剧情上下文，排查完成后建议关闭。</p>
-                  </FieldHelp>
-                </template>
-                <NSwitch v-model:value="settings.detailed_llm_logging_enabled">
-                  <template #checked>记录中</template>
-                  <template #unchecked>已关闭</template>
-                </NSwitch>
-                <template #feedback>
-                  开启后保存完整模型请求与原始响应；不会记录 API Key 或认证头。
-                </template>
-              </NFormItem>
-              <NFormItem>
-                <template #label>
-                  <FieldHelp label="启用平台公共 LLM">
-                    <p>开启后，所有用户统一使用本页下方配置的公共模型服务。</p>
-                    <p>关闭后，用户改用各自的 LLM 配置；切换不会删除用户原有设置。</p>
-                  </FieldHelp>
-                </template>
-                <NSwitch
-                  :value="settings.llm_access_mode === 'platform_managed'"
-                  :disabled="!auth.isOwner"
-                  @update:value="setPlatformLLMEnabled"
-                >
-                  <template #checked>已启用</template>
-                  <template #unchecked>未启用</template>
-                </NSwitch>
-                <template #feedback>
-                  关闭时默认使用用户自己的配置；开启后所有用户统一使用下面的公共连接，切回关闭不会删除用户原有配置。
-                </template>
-              </NFormItem>
-              <NFormItem>
-                <template #label>
-                  <FieldHelp label="允许用户选择客户端直连">
-                    <p>
-                      开启后，用户可以在设置中选择由其浏览器直接发出模型请求，API Key
-                      只保存在用户设备。
-                    </p>
-                    <p>
-                      开启公共 LLM
-                      时，用户可在平台模型与客户端直连之间选择。客户端直连使用用户自己的
-                      Key，不消耗平台模型额度。
-                    </p>
-                    <p>这类对话和 Campaign 不发放任何奖励，重新生成不消耗额度。</p>
-                    <p>发给模型的完整提示词（含隐藏剧情）在用户浏览器中可见。</p>
-                    <p>是否可用取决于各模型服务商是否允许浏览器跨域访问。</p>
-                  </FieldHelp>
-                </template>
-                <NSwitch
-                  :value="settings.client_llm_route_enabled"
-                  :disabled="!auth.isOwner"
-                  @update:value="setClientRouteEnabled"
-                >
-                  <template #checked>已允许</template>
-                  <template #unchecked>未允许</template>
-                </NSwitch>
-                <template #feedback>
-                  默认关闭。开启后用户自行决定是否直连；关闭会立即中断进行中的直连回合，已有直连对话变为只读，重新开启后恢复。
-                </template>
-              </NFormItem>
-            </NForm>
-          </NSpin>
-          <NCollapse
-            v-if="settings && settings.llm_access_mode === 'platform_managed'"
-            v-model:expanded-names="publicLLMExpandedNames"
-            class="admin-subgroup public-llm-collapse"
-          >
-            <NCollapseItem name="public-llm">
-              <template #header>
-                <div>
-                  <h3 id="public-llm-heading">公共 LLM 配置</h3>
-                  <p class="section-sub">由上方开关启用，配置只在平台公共模式下生效。</p>
-                </div>
-              </template>
-              <template #header-extra>
-                <NTag v-if="settings.public_llm_has_api_key" type="success">已配置 Key</NTag>
-              </template>
-              <div class="public-llm-content">
-                <NForm label-placement="top" size="small" :disabled="!auth.isOwner">
-                  <NFormItem label="公共 Base URL">
-                    <div class="protocol-setting">
-                      <NInput
-                        v-model:value="settings.public_llm_base_url"
-                        placeholder="https://api.openai.com/v1"
-                      />
-                      <div class="protocol-setting__hint">
-                        填谁的地址就用谁的服务（官方、OpenRouter、中转站、本地模型均可）。OpenAI、DeepSeek、OpenRouter
-                        官方地址会自动适配。
-                      </div>
-                    </div>
+                </h3>
+                <p class="section-sub">普通用户只能参与判定，无法覆盖平台难度或开关。</p>
+                <NForm v-if="settings" label-placement="top" :disabled="savingSettings">
+                  <NFormItem label="判定系统">
+                    <NSwitch v-model:value="settings.roll_system_enabled">
+                      <template #checked>已启用</template>
+                      <template #unchecked>已停用</template>
+                    </NSwitch>
                   </NFormItem>
-                  <NFormItem label="接口协议">
-                    <div class="protocol-setting">
-                      <NSelect
-                        v-model:value="settings.public_llm_protocol"
-                        :options="publicProtocolOptions"
-                      />
-                      <div class="protocol-setting__hint">
-                        <template v-if="publicRecognizedHint">{{ publicRecognizedHint }}</template>
-                        <template v-else>
-                          按所选协议请求。不确定时先用“测试连接”或能力诊断确认。
-                        </template>
-                      </div>
-                    </div>
-                  </NFormItem>
-                  <NFormItem label="公共 API Key">
-                    <div class="public-key-control">
-                      <NInput
-                        v-model:value="publicLLMKey"
-                        :disabled="clearPublicLLMKey"
-                        type="password"
-                        show-password-on="click"
-                        placeholder="留空保持现有 Key"
-                      />
-                      <NButton
-                        v-if="settings.public_llm_has_api_key"
-                        type="error"
-                        secondary
-                        @click="clearPublicLLMKey = !clearPublicLLMKey"
-                      >
-                        {{ clearPublicLLMKey ? '取消清除' : '清除 Key' }}
-                      </NButton>
-                    </div>
-                  </NFormItem>
-                  <div class="model-setting-list">
-                    <LLMModelSetting
-                      v-model="settings.public_llm_model"
-                      v-model:reasoning-effort="settings.public_llm_reasoning_effort"
-                      :options="publicModels"
-                      role="narrative"
-                      label="公共叙事模型"
-                      :diagnostic="publicDiagnostics.narrative"
-                      :checking="checkingPublicRoles.narrative"
-                      placeholder="可直接输入模型名称"
-                      @detect="checkPublicCapability('narrative')"
-                    >
-                      <template #model-label-extra>
-                        <NButton
-                          text
-                          type="primary"
-                          size="tiny"
-                          :disabled="!auth.isOwner"
-                          :loading="fetchingPublicModels"
-                          @click="fetchPublicModels"
-                        >
-                          获取模型列表
-                        </NButton>
-                      </template>
-                    </LLMModelSetting>
-
-                    <LLMModelSetting
-                      v-model="settings.public_llm_memory_model"
-                      v-model:reasoning-effort="settings.public_llm_memory_reasoning_effort"
-                      :options="publicModels"
-                      role="memory"
-                      label="公共长期记忆模型"
-                      :diagnostic="publicDiagnostics.memory"
-                      :checking="checkingPublicRoles.memory"
-                      placeholder="留空继承叙事模型"
-                      @detect="checkPublicCapability('memory')"
-                    />
-
-                    <LLMModelSetting
-                      v-model="settings.public_llm_inquiry_model"
-                      v-model:reasoning-effort="settings.public_llm_inquiry_reasoning_effort"
-                      :options="publicModels"
-                      role="character_inquiry"
-                      label="公共角色问答模型"
-                      :diagnostic="publicDiagnostics.character_inquiry"
-                      :checking="checkingPublicRoles.character_inquiry"
-                      placeholder="留空继承叙事模型"
-                      @detect="checkPublicCapability('character_inquiry')"
-                    />
-                  </div>
-                  <div class="admin-llm-grid">
-                    <NFormItem>
-                      <template #label>
-                        <FieldHelp label="最大上下文 token">
-                          <p>
-                            限制一次请求可使用的上下文总预算，包括系统提示、世界书、历史消息和模型回复。过小会丢失较早内容，过大可能超出模型窗口并增加成本。
-                          </p>
-                        </FieldHelp>
-                      </template>
-                      <NInputNumber
-                        v-model:value="settings.public_llm_max_context_tokens"
-                        :min="4096"
-                        :max="2000000"
-                      />
-                    </NFormItem>
-                    <NFormItem>
-                      <template #label>
-                        <FieldHelp label="最大回复 token">
-                          <p>
-                            限制模型单次回复的最大
-                            token，不代表模型一定会生成这么长。该值需要小于上下文预算，并为协议和上下文留出空间。
-                          </p>
-                        </FieldHelp>
-                      </template>
-                      <NInputNumber
-                        v-model:value="settings.public_llm_max_response_tokens"
-                        :min="128"
-                      />
-                    </NFormItem>
-                    <NFormItem>
-                      <template #label>
-                        <FieldHelp label="Temperature">
-                          <p>
-                            控制输出的随机性。值越高，输出越有创造力和不可预测性；值越低，输出越稳定和确定。
-                          </p>
-                          <p>推荐范围：0.7-1.0（叙事）/ 0.2-0.5（逻辑任务）。</p>
-                        </FieldHelp>
-                      </template>
-                      <NInputNumber
-                        v-model:value="settings.public_llm_temperature"
-                        :min="0"
-                        :max="2"
-                        :step="0.1"
-                      />
-                    </NFormItem>
-                    <NFormItem>
-                      <template #label>
-                        <FieldHelp label="Top P">
-                          <p>
-                            核采样（Nucleus
-                            Sampling）控制候选词汇的范围。值越小，模型越倾向于选择最可能的词汇；值越大，候选范围越广。
-                          </p>
-                          <p>推荐范围：0.9-1.0，通常不要和 Temperature 同时大幅调整。</p>
-                        </FieldHelp>
-                      </template>
-                      <NInputNumber
-                        v-model:value="settings.public_llm_top_p"
-                        :min="0"
-                        :max="1"
-                        :step="0.05"
-                      />
-                    </NFormItem>
-                  </div>
                   <NFormItem>
                     <template #label>
-                      <FieldHelp label="流式输出">
+                      <FieldHelp label="挑战难度">
+                        <p>调整平台判定的整体难度，会影响需要进行概率判定的挑战动作。</p>
+                        <p>简单、普通、困难分别对应更高、标准和更低的成功倾向。</p>
+                      </FieldHelp>
+                    </template>
+                    <NRadioGroup v-model:value="settings.roll_difficulty_mode">
+                      <NRadioButton
+                        v-for="option in difficultyOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </NRadioButton>
+                    </NRadioGroup>
+                  </NFormItem>
+                </NForm>
+              </section></NTabPane
+            >
+            <NTabPane name="llm" tab="模型服务" display-directive="show:lazy"
+              ><section class="admin-section">
+                <h3>模型接入与公共模型</h3>
+                <p class="section-sub">配置平台公共模型及客户端直连，仅平台拥有者可修改。</p>
+                <NForm
+                  v-if="settings"
+                  label-placement="top"
+                  :disabled="savingSettings || !auth.isOwner"
+                >
+                  <NFormItem>
+                    <template #label>
+                      <FieldHelp label="启用平台公共 LLM">
+                        <p>开启后，所有用户统一使用本页下方配置的公共模型服务。</p>
+                        <p>关闭后，用户改用各自的 LLM 配置；切换不会删除用户原有设置。</p>
+                      </FieldHelp>
+                    </template>
+                    <NSwitch
+                      :value="settings.llm_access_mode === 'platform_managed'"
+                      :disabled="!auth.isOwner"
+                      @update:value="setPlatformLLMEnabled"
+                    >
+                      <template #checked>已启用</template>
+                      <template #unchecked>未启用</template>
+                    </NSwitch>
+                    <template #feedback>
+                      关闭时默认使用用户自己的配置；开启后所有用户统一使用下面的公共连接，切回关闭不会删除用户原有配置。
+                    </template>
+                  </NFormItem>
+                  <NFormItem>
+                    <template #label>
+                      <FieldHelp label="允许用户选择客户端直连">
                         <p>
-                          开启后模型会边生成边返回内容，界面可以逐步显示；关闭后等待完整回复再展示。
+                          开启后，用户可以在设置中选择由其浏览器直接发出模型请求，API Key
+                          只保存在用户设备。
                         </p>
                         <p>
-                          流式输出不会改变模型能力或最大
-                          token；如果服务商的流式接口不稳定，可以关闭。
+                          开启公共 LLM
+                          时，用户可在平台模型与客户端直连之间选择。客户端直连使用用户自己的
+                          Key，不消耗平台模型额度。
+                        </p>
+                        <p>这类对话和 Campaign 不发放任何奖励，重新生成不消耗额度。</p>
+                        <p>发给模型的完整提示词（含隐藏剧情）在用户浏览器中可见。</p>
+                        <p>是否可用取决于各模型服务商是否允许浏览器跨域访问。</p>
+                      </FieldHelp>
+                    </template>
+                    <NSwitch
+                      :value="settings.client_llm_route_enabled"
+                      :disabled="!auth.isOwner"
+                      @update:value="setClientRouteEnabled"
+                    >
+                      <template #checked>已允许</template>
+                      <template #unchecked>未允许</template>
+                    </NSwitch>
+                    <template #feedback>
+                      默认关闭。开启后用户自行决定是否直连；关闭会立即中断进行中的直连回合，已有直连对话变为只读，重新开启后恢复。
+                    </template>
+                  </NFormItem>
+                </NForm>
+                <NCollapse
+                  v-if="settings && settings.llm_access_mode === 'platform_managed'"
+                  v-model:expanded-names="publicLLMExpandedNames"
+                  class="admin-subgroup public-llm-collapse"
+                >
+                  <NCollapseItem name="public-llm">
+                    <template #header>
+                      <div>
+                        <h3 id="public-llm-heading">公共 LLM 配置</h3>
+                        <p class="section-sub">由上方开关启用，配置只在平台公共模式下生效。</p>
+                      </div>
+                    </template>
+                    <template #header-extra>
+                      <NTag v-if="settings.public_llm_has_api_key" type="success">已配置 Key</NTag>
+                    </template>
+                    <div class="public-llm-content">
+                      <NForm
+                        label-placement="top"
+                        size="small"
+                        :disabled="savingSettings || !auth.isOwner"
+                      >
+                        <NFormItem label="公共 Base URL">
+                          <div class="protocol-setting">
+                            <NInput
+                              v-model:value="settings.public_llm_base_url"
+                              placeholder="https://api.openai.com/v1"
+                            />
+                            <div class="protocol-setting__hint">
+                              填谁的地址就用谁的服务（官方、OpenRouter、中转站、本地模型均可）。OpenAI、DeepSeek、OpenRouter
+                              官方地址会自动适配。
+                            </div>
+                          </div>
+                        </NFormItem>
+                        <NFormItem label="接口协议">
+                          <div class="protocol-setting">
+                            <NSelect
+                              v-model:value="settings.public_llm_protocol"
+                              :options="publicProtocolOptions"
+                            />
+                            <div class="protocol-setting__hint">
+                              <template v-if="publicRecognizedHint">{{
+                                publicRecognizedHint
+                              }}</template>
+                              <template v-else>
+                                按所选协议请求。不确定时先用“测试连接”或能力诊断确认。
+                              </template>
+                            </div>
+                          </div>
+                        </NFormItem>
+                        <NFormItem label="公共 API Key">
+                          <div class="public-key-control">
+                            <NInput
+                              v-model:value="publicLLMKey"
+                              :disabled="clearPublicLLMKey"
+                              type="password"
+                              show-password-on="click"
+                              placeholder="留空保持现有 Key"
+                            />
+                            <NButton
+                              v-if="settings.public_llm_has_api_key"
+                              type="error"
+                              secondary
+                              @click="clearPublicLLMKey = !clearPublicLLMKey"
+                            >
+                              {{ clearPublicLLMKey ? '取消清除' : '清除 Key' }}
+                            </NButton>
+                          </div>
+                        </NFormItem>
+                        <div class="model-setting-list">
+                          <LLMModelSetting
+                            v-model="settings.public_llm_model"
+                            v-model:reasoning-effort="settings.public_llm_reasoning_effort"
+                            :options="publicModels"
+                            role="narrative"
+                            label="公共叙事模型"
+                            :diagnostic="publicDiagnostics.narrative"
+                            :checking="checkingPublicRoles.narrative"
+                            placeholder="可直接输入模型名称"
+                            @detect="checkPublicCapability('narrative')"
+                          >
+                            <template #model-label-extra>
+                              <NButton
+                                text
+                                type="primary"
+                                size="tiny"
+                                :disabled="savingSettings || !auth.isOwner"
+                                :loading="fetchingPublicModels"
+                                @click="fetchPublicModels"
+                              >
+                                获取模型列表
+                              </NButton>
+                            </template>
+                          </LLMModelSetting>
+
+                          <LLMModelSetting
+                            v-model="settings.public_llm_memory_model"
+                            v-model:reasoning-effort="settings.public_llm_memory_reasoning_effort"
+                            :options="publicModels"
+                            role="memory"
+                            label="公共长期记忆模型"
+                            :diagnostic="publicDiagnostics.memory"
+                            :checking="checkingPublicRoles.memory"
+                            placeholder="留空继承叙事模型"
+                            @detect="checkPublicCapability('memory')"
+                          />
+
+                          <LLMModelSetting
+                            v-model="settings.public_llm_inquiry_model"
+                            v-model:reasoning-effort="settings.public_llm_inquiry_reasoning_effort"
+                            :options="publicModels"
+                            role="character_inquiry"
+                            label="公共角色问答模型"
+                            :diagnostic="publicDiagnostics.character_inquiry"
+                            :checking="checkingPublicRoles.character_inquiry"
+                            placeholder="留空继承叙事模型"
+                            @detect="checkPublicCapability('character_inquiry')"
+                          />
+                        </div>
+                        <div class="admin-llm-grid">
+                          <NFormItem>
+                            <template #label>
+                              <FieldHelp label="最大上下文 token">
+                                <p>
+                                  限制一次请求可使用的上下文总预算，包括系统提示、世界书、历史消息和模型回复。过小会丢失较早内容，过大可能超出模型窗口并增加成本。
+                                </p>
+                              </FieldHelp>
+                            </template>
+                            <NInputNumber
+                              v-model:value="settings.public_llm_max_context_tokens"
+                              :min="4096"
+                              :max="2000000"
+                            />
+                          </NFormItem>
+                          <NFormItem>
+                            <template #label>
+                              <FieldHelp label="最大回复 token">
+                                <p>
+                                  限制模型单次回复的最大
+                                  token，不代表模型一定会生成这么长。该值需要小于上下文预算，并为协议和上下文留出空间。
+                                </p>
+                              </FieldHelp>
+                            </template>
+                            <NInputNumber
+                              v-model:value="settings.public_llm_max_response_tokens"
+                              :min="128"
+                            />
+                          </NFormItem>
+                          <NFormItem>
+                            <template #label>
+                              <FieldHelp label="Temperature">
+                                <p>
+                                  控制输出的随机性。值越高，输出越有创造力和不可预测性；值越低，输出越稳定和确定。
+                                </p>
+                                <p>推荐范围：0.7-1.0（叙事）/ 0.2-0.5（逻辑任务）。</p>
+                              </FieldHelp>
+                            </template>
+                            <NInputNumber
+                              v-model:value="settings.public_llm_temperature"
+                              :min="0"
+                              :max="2"
+                              :step="0.1"
+                            />
+                          </NFormItem>
+                          <NFormItem>
+                            <template #label>
+                              <FieldHelp label="Top P">
+                                <p>
+                                  核采样（Nucleus
+                                  Sampling）控制候选词汇的范围。值越小，模型越倾向于选择最可能的词汇；值越大，候选范围越广。
+                                </p>
+                                <p>推荐范围：0.9-1.0，通常不要和 Temperature 同时大幅调整。</p>
+                              </FieldHelp>
+                            </template>
+                            <NInputNumber
+                              v-model:value="settings.public_llm_top_p"
+                              :min="0"
+                              :max="1"
+                              :step="0.05"
+                            />
+                          </NFormItem>
+                        </div>
+                        <NFormItem>
+                          <template #label>
+                            <FieldHelp label="流式输出">
+                              <p>
+                                开启后模型会边生成边返回内容，界面可以逐步显示；关闭后等待完整回复再展示。
+                              </p>
+                              <p>
+                                流式输出不会改变模型能力或最大
+                                token；如果服务商的流式接口不稳定，可以关闭。
+                              </p>
+                            </FieldHelp>
+                          </template>
+                          <NSwitch v-model:value="settings.public_llm_stream_enabled" />
+                        </NFormItem>
+                      </NForm>
+                    </div>
+                  </NCollapseItem>
+                </NCollapse></section
+            ></NTabPane>
+            <NTabPane name="logs" tab="日志策略" display-directive="show:lazy"
+              ><section class="admin-section">
+                <h3>日志采集与保留</h3>
+                <p class="section-sub">模型调用摘要始终保留；详细正文与过期诊断清理分别控制。</p>
+                <NForm v-if="settings" label-placement="top" :disabled="savingSettings">
+                  <NFormItem>
+                    <template #label>
+                      <FieldHelp label="自动清理诊断日志">
+                        <p>
+                          定期分批清理超过保留期限的模型请求日志和上下文构建日志，避免大字段长期占用数据库空间。
+                        </p>
+                        <p>分享治理审计记录不受此策略影响；关闭开关不会删除现有日志。</p>
+                      </FieldHelp>
+                    </template>
+                    <NSwitch v-model:value="settings.diagnostic_log_cleanup_enabled">
+                      <template #checked>已启用</template>
+                      <template #unchecked>已关闭</template>
+                    </NSwitch>
+                  </NFormItem>
+                  <NFormItem
+                    v-if="settings.diagnostic_log_cleanup_enabled"
+                    label="诊断日志保留天数"
+                  >
+                    <NInputNumber
+                      v-model:value="settings.diagnostic_log_retention_days"
+                      :min="1"
+                      :max="3650"
+                      :precision="0"
+                    />
+                    <template #feedback>
+                      默认保留 30 天；清理任务每小时检查一次，每次只做有限批次，避免形成数据库峰值。
+                    </template>
+                  </NFormItem>
+                  <NFormItem>
+                    <template #label>
+                      <FieldHelp label="模型请求详细日志">
+                        <p>
+                          记录模型请求体、原始响应和处理结果，用于排查模型协议、超时和上下文问题。
+                        </p>
+                        <p>
+                          关闭时仍保留调用结果摘要。开启后会保存有大小限制的请求和响应正文，可能包含玩家内容；认证字段会过滤，排查完成后建议关闭。
                         </p>
                       </FieldHelp>
                     </template>
-                    <NSwitch v-model:value="settings.public_llm_stream_enabled" />
+                    <NSwitch v-model:value="settings.detailed_llm_logging_enabled">
+                      <template #checked>记录中</template>
+                      <template #unchecked>已关闭</template>
+                    </NSwitch>
+                    <template #feedback>
+                      开启后按下方范围采集有大小限制的请求和响应正文；认证字段会过滤。
+                    </template>
                   </NFormItem>
-                </NForm>
-              </div>
-            </NCollapseItem>
-          </NCollapse>
-          <div class="actions">
-            <NButton type="primary" :loading="savingSettings" @click="saveSettings"
-              >保存全局设置</NButton
+                  <NFormItem
+                    v-show="settings.detailed_llm_logging_enabled"
+                    label="详细日志采集范围"
+                  >
+                    <DetailedLogScope
+                      v-model:scope="settings.detailed_llm_logging_scope"
+                      v-model:target-id="settings.detailed_llm_logging_target_id"
+                      :enabled="settings.detailed_llm_logging_enabled"
+                    />
+                  </NFormItem> </NForm
+                ><NButton secondary @click="router.push('/admin/logs')">查看诊断日志</NButton>
+              </section></NTabPane
             >
-          </div>
-        </section>
-      </NTabPane>
+          </NTabs>
+          <div v-if="settings" class="actions">
+            <NButton
+              type="primary"
+              :loading="savingSettings"
+              :disabled="settingsTab === 'llm' && !auth.isOwner"
+              @click="saveSettings"
+              >保存{{ settingsTabLabels[settingsTab] }}</NButton
+            >
+          </div></NSpin
+        ></NTabPane
+      >
 
       <NTabPane v-if="sectionVisible('logs')" name="logs" tab="诊断日志">
-        <section class="admin-section">
-          <div class="section-toolbar">
-            <div>
-              <h3>模型请求明细</h3>
-              <p class="section-sub">最近 50 次模型调用，流式降级与重试会分别记录。</p>
-            </div>
-            <NButton secondary :loading="loadingLLMLogs" @click="loadLLMLogs">刷新</NButton>
-          </div>
-          <NSpin :show="loadingLLMLogs">
-            <div v-if="!llmLogs.length" class="empty-copy">暂无模型请求日志。</div>
-            <div v-for="row in llmLogs" :key="row.id" class="llm-log-row">
-              <div class="llm-log-main">
-                <div class="llm-log-title">
-                  <NTag size="small" :bordered="false">{{ llmLogPurposeLabel(row.purpose) }}</NTag>
-                  <strong>{{ row.model }}</strong>
-                </div>
-                <span class="muted">
-                  {{ new Date(row.created_at).toLocaleString() }} ·
-                  {{ row.stream ? '流式' : '非流式' }} · {{ row.duration_ms }} ms
-                  <template v-if="row.response_status"> · HTTP {{ row.response_status }}</template>
-                  <template v-if="row.finish_reason"> · {{ row.finish_reason }}</template>
-                </span>
-                <span v-if="row.conversation_id" class="hash-line">
-                  对话 {{ row.conversation_id }}
-                </span>
-                <span v-if="row.error" class="llm-log-error">{{ row.error }}</span>
-              </div>
-              <div class="llm-log-actions">
-                <NTag size="small" :type="llmLogStatusType(row)">{{ llmLogStatus(row) }}</NTag>
-                <NButton size="small" secondary @click="openLLMLog(row)">查看</NButton>
-              </div>
-            </div>
-          </NSpin>
-        </section>
-
-        <section class="admin-section">
-          <div class="section-toolbar">
-            <div>
-              <h3>上下文构建明细</h3>
-              <p class="section-sub">最近 50 次叙事请求的 Prompt 分段、裁剪和引用诊断。</p>
-            </div>
-            <NButton secondary :loading="loadingContextLogs" @click="loadContextLogs">刷新</NButton>
-          </div>
-          <NSpin :show="loadingContextLogs">
-            <div v-if="!contextLogs.length" class="empty-copy">暂无上下文构建记录。</div>
-            <div v-for="row in contextLogs" :key="row.id" class="llm-log-row">
-              <div class="llm-log-main">
-                <div class="llm-log-title">
-                  <NTag size="small" :bordered="false">Prompt</NTag>
-                  <strong>{{ row.model }}</strong>
-                </div>
-                <span class="muted">
-                  {{ new Date(row.created_at).toLocaleString() }} · {{ row.used_prompt_tokens }} /
-                  {{ row.max_context_tokens }} token · 历史 {{ row.included_message_count }} 条 ·
-                  世界书 {{ row.activated_world_entry_count }} 条
-                </span>
-                <span class="hash-line">对话 {{ row.conversation_id }}</span>
-              </div>
-              <div class="llm-log-actions">
-                <NTag v-if="row.memory_lag" size="small" type="warning">记忆滞后</NTag>
-                <NTag v-else size="small" type="success">完整</NTag>
-                <NButton size="small" secondary @click="openContextLog(row)">查看</NButton>
-              </div>
-            </div>
-          </NSpin>
-        </section>
+        <AdminDiagnostics @open-llm="openLLMLog" @open-context="openContextLog" />
       </NTabPane>
 
       <NTabPane v-if="sectionVisible('gameplay')" name="gameplay" tab="玩法能力">
@@ -1534,212 +1504,251 @@ watch(
         </AdminRewardsPanel>
       </NTabPane>
 
-      <NTabPane v-if="sectionVisible('auth')" name="auth" tab="账号与注册">
-        <NSpin :show="loadingAuthSettings">
-          <template v-if="authSettings">
-            <section class="admin-section">
-              <h3>登录与注册策略</h3>
-              <p class="section-sub">设置保存后立即作用于登录和注册接口。</p>
-              <div class="setting-list">
-                <div class="setting-row">
-                  <div>
-                    <strong>本地密码登录</strong>
-                    <span class="muted">允许已有用户名或邮箱账号使用密码登录</span>
-                  </div>
-                  <NSwitch v-model:value="authSettings.email_auth_enabled" />
-                </div>
-                <div class="setting-row">
-                  <div>
-                    <strong>LinuxDo 登录</strong>
-                    <span class="muted">允许使用已绑定的 LinuxDo 账号登录</span>
-                  </div>
-                  <NSwitch v-model:value="authSettings.linuxdo_login_enabled" />
-                </div>
-                <div class="setting-row">
-                  <div>
-                    <strong>邮箱注册</strong>
-                    <span class="muted">允许访客创建新的邮箱账号</span>
-                  </div>
-                  <NSwitch v-model:value="authSettings.email_registration_enabled" />
-                </div>
-                <div class="setting-row">
-                  <div>
-                    <strong>邮箱验证码</strong>
-                    <span class="muted">注册时验证邮箱所有权</span>
-                  </div>
-                  <NSwitch v-model:value="authSettings.email_verification_enabled" />
-                </div>
-                <div class="setting-row">
-                  <div>
-                    <strong>必须使用邀请码</strong>
-                    <span class="muted">注册时消耗一个有效的邀请码名额</span>
-                  </div>
-                  <NSwitch v-model:value="authSettings.invitation_required" />
-                </div>
-              </div>
-            </section>
-
-            <section class="admin-section">
-              <h3>发信邮箱</h3>
-              <p class="section-sub">SMTP 密码以密文保存，读取页面时不会回显。</p>
-              <NForm class="auth-settings-form" label-placement="top" :disabled="!auth.isOwner">
-                <div class="form-grid three-columns">
-                  <NFormItem label="SMTP 主机">
-                    <NInput v-model:value="authSettings.smtp_host" placeholder="smtp.example.com" />
-                  </NFormItem>
-                  <NFormItem label="端口">
-                    <NInputNumber
-                      v-model:value="authSettings.smtp_port"
-                      :min="1"
-                      :max="65535"
-                      style="width: 100%"
-                    />
-                  </NFormItem>
-                  <NFormItem label="连接安全">
-                    <NSelect
-                      v-model:value="authSettings.smtp_security"
-                      :options="smtpSecurityOptions"
-                    />
-                  </NFormItem>
-                </div>
-                <div class="form-grid two-columns">
-                  <NFormItem label="SMTP 用户名">
-                    <NInput v-model:value="authSettings.smtp_username" autocomplete="off" />
-                  </NFormItem>
-                  <NFormItem label="SMTP 密码">
-                    <div class="password-setting">
-                      <NInput
-                        :value="smtpPassword"
-                        type="password"
-                        show-password-on="click"
-                        autocomplete="new-password"
-                        :placeholder="
-                          authSettings.has_smtp_password && !clearSMTPPassword
-                            ? '已配置，留空不修改'
-                            : '输入 SMTP 密码或授权码'
-                        "
-                        @update:value="onSMTPPasswordInput"
+      <NTabPane v-if="sectionVisible('auth')" name="auth" tab="账号与注册"
+        ><NTabs v-model:value="authTab" type="line" animated>
+          <NTabPane name="login" tab="登录与注册" display-directive="show:lazy"
+            ><NSpin :show="loadingAuthSettings"
+              ><template v-if="authSettings">
+                <section class="admin-section">
+                  <h3>登录与注册策略</h3>
+                  <p class="section-sub">设置保存后立即作用于登录和注册接口。</p>
+                  <div class="setting-list">
+                    <div class="setting-row">
+                      <div>
+                        <strong>本地密码登录</strong>
+                        <span class="muted">允许已有用户名或邮箱账号使用密码登录</span>
+                      </div>
+                      <NSwitch
+                        :disabled="!auth.isOwner || savingAuthSettings"
+                        v-model:value="authSettings.email_auth_enabled"
                       />
-                      <NButton
-                        secondary
-                        :disabled="!authSettings.has_smtp_password || clearSMTPPassword"
-                        @click="markSMTPPasswordForClearing"
-                      >
-                        {{ clearSMTPPassword ? '待清除' : '清除' }}
-                      </NButton>
                     </div>
-                  </NFormItem>
-                  <NFormItem label="发件邮箱">
-                    <NInput
-                      v-model:value="authSettings.sender_email"
-                      inputmode="email"
-                      placeholder="noreply@example.com"
-                    />
-                  </NFormItem>
-                  <NFormItem label="发件人名称">
-                    <NInput v-model:value="authSettings.sender_name" placeholder="Fatecraft" />
-                  </NFormItem>
-                </div>
-              </NForm>
-            </section>
-
+                    <div class="setting-row">
+                      <div>
+                        <strong>LinuxDo 登录</strong>
+                        <span class="muted">允许使用已绑定的 LinuxDo 账号登录</span>
+                      </div>
+                      <NSwitch
+                        :disabled="!auth.isOwner || savingAuthSettings"
+                        v-model:value="authSettings.linuxdo_login_enabled"
+                      />
+                    </div>
+                    <div class="setting-row">
+                      <div>
+                        <strong>邮箱注册</strong>
+                        <span class="muted">允许访客创建新的邮箱账号</span>
+                      </div>
+                      <NSwitch
+                        :disabled="!auth.isOwner || savingAuthSettings"
+                        v-model:value="authSettings.email_registration_enabled"
+                      />
+                    </div>
+                    <div class="setting-row">
+                      <div>
+                        <strong>邮箱验证码</strong>
+                        <span class="muted">注册时验证邮箱所有权</span>
+                      </div>
+                      <NSwitch
+                        :disabled="!auth.isOwner || savingAuthSettings"
+                        v-model:value="authSettings.email_verification_enabled"
+                      />
+                    </div>
+                    <div class="setting-row">
+                      <div>
+                        <strong>必须使用邀请码</strong>
+                        <span class="muted">注册时消耗一个有效的邀请码名额</span>
+                      </div>
+                      <NSwitch
+                        :disabled="!auth.isOwner || savingAuthSettings"
+                        v-model:value="authSettings.invitation_required"
+                      />
+                    </div>
+                  </div>
+                </section> </template></NSpin
+          ></NTabPane>
+          <NTabPane name="smtp" tab="发信邮箱" display-directive="show:lazy"
+            ><NSpin :show="loadingAuthSettings"
+              ><template v-if="authSettings">
+                <section class="admin-section">
+                  <h3>发信邮箱</h3>
+                  <p class="section-sub">SMTP 密码以密文保存，读取页面时不会回显。</p>
+                  <NForm
+                    class="auth-settings-form"
+                    label-placement="top"
+                    :disabled="!auth.isOwner || savingAuthSettings"
+                  >
+                    <div class="form-grid three-columns">
+                      <NFormItem label="SMTP 主机">
+                        <NInput
+                          v-model:value="authSettings.smtp_host"
+                          placeholder="smtp.example.com"
+                        />
+                      </NFormItem>
+                      <NFormItem label="端口">
+                        <NInputNumber
+                          v-model:value="authSettings.smtp_port"
+                          :min="1"
+                          :max="65535"
+                          style="width: 100%"
+                        />
+                      </NFormItem>
+                      <NFormItem label="连接安全">
+                        <NSelect
+                          v-model:value="authSettings.smtp_security"
+                          :options="smtpSecurityOptions"
+                        />
+                      </NFormItem>
+                    </div>
+                    <div class="form-grid two-columns">
+                      <NFormItem label="SMTP 用户名">
+                        <NInput v-model:value="authSettings.smtp_username" autocomplete="off" />
+                      </NFormItem>
+                      <NFormItem label="SMTP 密码">
+                        <div class="password-setting">
+                          <NInput
+                            :value="smtpPassword"
+                            type="password"
+                            show-password-on="click"
+                            autocomplete="new-password"
+                            :placeholder="
+                              authSettings.has_smtp_password && !clearSMTPPassword
+                                ? '已配置，留空不修改'
+                                : '输入 SMTP 密码或授权码'
+                            "
+                            @update:value="onSMTPPasswordInput"
+                          />
+                          <NButton
+                            secondary
+                            :disabled="!authSettings.has_smtp_password || clearSMTPPassword"
+                            @click="markSMTPPasswordForClearing"
+                          >
+                            {{ clearSMTPPassword ? '待清除' : '清除' }}
+                          </NButton>
+                        </div>
+                      </NFormItem>
+                      <NFormItem label="发件邮箱">
+                        <NInput
+                          v-model:value="authSettings.sender_email"
+                          inputmode="email"
+                          placeholder="noreply@example.com"
+                        />
+                      </NFormItem>
+                      <NFormItem label="发件人名称">
+                        <NInput v-model:value="authSettings.sender_name" placeholder="Fatecraft" />
+                      </NFormItem>
+                    </div>
+                  </NForm>
+                </section> </template></NSpin
+          ></NTabPane>
+          <NTabPane name="verification" tab="验证码邮件" display-directive="show:lazy"
+            ><NSpin :show="loadingAuthSettings"
+              ><template v-if="authSettings">
+                <section class="admin-section">
+                  <h3>验证码邮件</h3>
+                  <NForm
+                    class="auth-settings-form"
+                    label-placement="top"
+                    :disabled="!auth.isOwner || savingAuthSettings"
+                  >
+                    <NFormItem label="邮件主题">
+                      <NInput v-model:value="authSettings.verification_subject" />
+                    </NFormItem>
+                    <NFormItem label="邮件正文">
+                      <NInput
+                        v-model:value="authSettings.verification_template"
+                        type="textarea"
+                        :autosize="{ minRows: 5, maxRows: 10 }"
+                      />
+                      <template #feedback>
+                        <span v-pre>可用占位符：{{ code }}、{{ expires_minutes }}</span>
+                      </template>
+                    </NFormItem>
+                    <div class="form-grid two-columns">
+                      <NFormItem label="有效期（分钟）">
+                        <NInputNumber
+                          v-model:value="authSettings.verification_code_ttl_minutes"
+                          :min="1"
+                          :max="60"
+                          style="width: 100%"
+                        />
+                      </NFormItem>
+                      <NFormItem label="重发间隔（秒）">
+                        <NInputNumber
+                          v-model:value="authSettings.verification_resend_seconds"
+                          :min="30"
+                          :max="3600"
+                          style="width: 100%"
+                        />
+                      </NFormItem>
+                    </div>
+                  </NForm>
+                </section> </template></NSpin
+          ></NTabPane>
+          <NTabPane name="invitations" tab="邀请码" display-directive="show:lazy">
             <section class="admin-section">
-              <h3>验证码邮件</h3>
-              <NForm class="auth-settings-form" label-placement="top" :disabled="!auth.isOwner">
-                <NFormItem label="邮件主题">
-                  <NInput v-model:value="authSettings.verification_subject" />
-                </NFormItem>
-                <NFormItem label="邮件正文">
-                  <NInput
-                    v-model:value="authSettings.verification_template"
-                    type="textarea"
-                    :autosize="{ minRows: 5, maxRows: 10 }"
+              <div class="section-toolbar">
+                <div>
+                  <h3>邀请码</h3>
+                  <p class="section-sub">邀请码原文仅在创建后显示一次。</p>
+                </div>
+                <NButton type="primary" @click="showInvitationModal = true">生成邀请码</NButton>
+              </div>
+              <NSpin :show="loadingInvitations">
+                <div v-if="!invitations.length" class="empty-copy">还没有邀请码。</div>
+                <div v-for="item in invitations" :key="item.id" class="invitation-row">
+                  <div class="invitation-main">
+                    <div class="invitation-title">
+                      <strong>{{ item.label || '未命名邀请码' }}</strong>
+                      <NTag
+                        size="small"
+                        :type="invitationStatus(item) === '可使用' ? 'success' : 'default'"
+                      >
+                        {{ invitationStatus(item) }}
+                      </NTag>
+                    </div>
+                    <span class="muted">
+                      尾号 {{ item.code_hint }} · 已使用 {{ item.used_count }} /
+                      {{ item.max_uses === 0 ? '不限' : item.max_uses }}
+                      <template v-if="item.expires_at">
+                        · {{ new Date(item.expires_at).toLocaleString() }} 到期
+                      </template>
+                    </span>
+                  </div>
+                  <NSwitch
+                    :value="item.enabled"
+                    :loading="updatingInvitation === item.id"
+                    @update:value="(value) => updateInvitation(item, value)"
                   />
-                  <template #feedback>
-                    <span v-pre>可用占位符：{{ code }}、{{ expires_minutes }}</span>
-                  </template>
-                </NFormItem>
-                <div class="form-grid two-columns">
-                  <NFormItem label="有效期（分钟）">
-                    <NInputNumber
-                      v-model:value="authSettings.verification_code_ttl_minutes"
-                      :min="1"
-                      :max="60"
-                      style="width: 100%"
-                    />
-                  </NFormItem>
-                  <NFormItem label="重发间隔（秒）">
-                    <NInputNumber
-                      v-model:value="authSettings.verification_resend_seconds"
-                      :min="30"
-                      :max="3600"
-                      style="width: 100%"
-                    />
-                  </NFormItem>
                 </div>
-              </NForm>
-              <div class="section-toolbar auth-actions">
-                <div class="test-email-row">
-                  <NInput v-model:value="testEmail" inputmode="email" placeholder="测试收件邮箱" />
-                  <NButton
-                    secondary
-                    :disabled="!auth.isOwner"
-                    :loading="testingEmail"
-                    @click="sendTestEmail"
-                    >发送测试邮件</NButton
-                  >
-                </div>
-                <NButton
-                  type="primary"
-                  :disabled="!auth.isOwner"
-                  :loading="savingAuthSettings"
-                  @click="saveAuthSettings"
-                >
-                  保存账号设置
-                </NButton>
-              </div>
-            </section>
-          </template>
-        </NSpin>
-
-        <section class="admin-section">
-          <div class="section-toolbar">
-            <div>
-              <h3>邀请码</h3>
-              <p class="section-sub">邀请码原文仅在创建后显示一次。</p>
-            </div>
-            <NButton type="primary" @click="showInvitationModal = true">生成邀请码</NButton>
+              </NSpin>
+            </section> </NTabPane
+        ></NTabs>
+        <div v-if="authTab !== 'invitations' && authSettings" class="section-toolbar auth-actions">
+          <div v-if="authTab !== 'login'" class="test-email-row">
+            <NInput
+              v-model:value="testEmail"
+              inputmode="email"
+              placeholder="测试收件邮箱"
+            /><NButton
+              secondary
+              :disabled="!auth.isOwner || savingAuthSettings"
+              :loading="testingEmail"
+              @click="sendTestEmail"
+              >发送测试邮件</NButton
+            >
           </div>
-          <NSpin :show="loadingInvitations">
-            <div v-if="!invitations.length" class="empty-copy">还没有邀请码。</div>
-            <div v-for="item in invitations" :key="item.id" class="invitation-row">
-              <div class="invitation-main">
-                <div class="invitation-title">
-                  <strong>{{ item.label || '未命名邀请码' }}</strong>
-                  <NTag
-                    size="small"
-                    :type="invitationStatus(item) === '可使用' ? 'success' : 'default'"
-                  >
-                    {{ invitationStatus(item) }}
-                  </NTag>
-                </div>
-                <span class="muted">
-                  尾号 {{ item.code_hint }} · 已使用 {{ item.used_count }} /
-                  {{ item.max_uses === 0 ? '不限' : item.max_uses }}
-                  <template v-if="item.expires_at">
-                    · {{ new Date(item.expires_at).toLocaleString() }} 到期
-                  </template>
-                </span>
-              </div>
-              <NSwitch
-                :value="item.enabled"
-                :loading="updatingInvitation === item.id"
-                @update:value="(value) => updateInvitation(item, value)"
-              />
-            </div>
-          </NSpin>
-        </section>
-      </NTabPane>
+          <NButton
+            type="primary"
+            :disabled="!auth.isOwner"
+            :loading="savingAuthSettings"
+            @click="saveAuthSettings"
+            >保存{{ authTabLabels[authTab] }}</NButton
+          >
+        </div>
+        <p v-if="authTab === 'smtp' || authTab === 'verification'" class="section-sub">
+          测试邮件使用已保存的发信邮箱和验证码模板，请先保存修改。
+        </p></NTabPane
+      >
 
       <NTabPane v-if="sectionVisible('identities')" name="identities" tab="第三方账户">
         <section class="admin-section">
@@ -1823,137 +1832,160 @@ watch(
       </NTabPane>
 
       <NTabPane v-if="sectionVisible('challenges')" name="challenges" tab="挑战内容">
-        <section class="admin-section challenge-admin">
-          <div class="section-toolbar">
-            <div>
-              <h3>挑战包与版本</h3>
-              <p class="section-sub">先保存草稿，再通过发布校验。新版本不会影响已有对话。</p>
-            </div>
-            <NButton type="primary" @click="showPackModal = true">新建挑战包</NButton>
-          </div>
-          <NSpin :show="loadingChallenges">
-            <div v-if="!packs.length" class="empty-copy">还没有挑战包，请先创建挑战包。</div>
-            <div v-for="item in packs" :key="item.pack.id" class="pack-row">
-              <div class="pack-head">
+        <NTabs v-model:value="challengesTab" type="line" animated
+          ><NTabPane name="catalog" tab="挑战包与版本" display-directive="show:lazy"
+            ><section class="admin-section challenge-admin">
+              <div class="section-toolbar">
                 <div>
-                  <strong>{{ item.pack.name }}</strong>
-                  <span class="muted">{{ item.pack.slug }} · {{ item.pack.status }}</span>
+                  <h3>挑战包与版本</h3>
+                  <p class="section-sub">先保存草稿，再通过发布校验。新版本不会影响已有对话。</p>
                 </div>
-                <NButton size="small" secondary @click="createVersion(item.pack.id)"
-                  >复制新版本</NButton
-                >
+                <NButton type="primary" @click="showPackModal = true">新建挑战包</NButton>
               </div>
-              <div class="version-list">
-                <button
-                  v-for="version in item.versions"
-                  :key="version.id"
-                  class="version-button"
-                  :class="{ selected: selectedVersionId === version.id }"
-                  type="button"
-                  @click="openVersion(version.id)"
-                >
-                  <span>v{{ version.version }}</span>
-                  <NTag
-                    size="small"
-                    :type="version.status === 'published' ? 'success' : 'warning'"
-                    >{{ version.status }}</NTag
-                  >
-                </button>
-              </div>
-            </div>
-          </NSpin>
-        </section>
-
-        <section v-if="versionDoc" class="editor-section">
-          <div class="section-toolbar">
-            <div>
-              <h3>{{ versionDoc.version.version }} · 版本内容</h3>
-              <p class="section-sub">
-                结构化维护入口、运行契约、状态展示、结局与奖励；高级 JSON 仅用于导入导出。
-              </p>
-            </div>
-            <div class="editor-actions">
-              <NButton
-                v-if="versionDoc.version.status === 'draft'"
-                :loading="savingVersion"
-                @click="saveVersion"
-                >保存草稿</NButton
-              >
-              <NButton
-                v-if="versionDoc.version.status === 'draft'"
-                type="primary"
-                :loading="publishingVersion"
-                @click="publishVersion"
-                >校验并发布</NButton
-              >
-              <NButton type="error" :loading="deletingVersion" @click="deleteVersion"
-                >删除版本</NButton
-              >
-            </div>
-          </div>
-          <ChallengeVersionEditor
-            v-if="versionPayload"
-            v-model="versionPayload"
-            :modules="modules"
-            :rewards="rewardDefinitions"
-            :readonly="versionDoc.version.status !== 'draft'"
-          />
-          <p v-if="versionDoc.version.content_hash" class="hash-line">
-            内容哈希：{{ versionDoc.version.content_hash }}
-          </p>
-        </section>
-      </NTabPane>
-      <NTabPane v-if="sectionVisible('sharing')" name="sharing" tab="分享治理">
-        <NSpin :show="loadingShareGovernance">
-          <section class="admin-section">
-            <div class="section-toolbar">
-              <div>
-                <h3>公开分享</h3>
-                <p class="section-sub">仅显示玩家主动发布的快照，不提供未分享对话的读取入口。</p>
-              </div>
-              <NButton @click="loadShareGovernance">刷新</NButton>
-            </div>
-            <div v-if="publicShares.length" class="admin-list">
-              <div v-for="item in publicShares" :key="item.id" class="admin-list-row">
+              <NSpin :show="loadingChallenges">
+                <div v-if="!packs.length" class="empty-copy">还没有挑战包，请先创建挑战包。</div>
+                <div v-for="item in packs" :key="item.pack.id" class="pack-row">
+                  <div class="pack-head">
+                    <div>
+                      <strong>{{ item.pack.name }}</strong>
+                      <span class="muted">{{ item.pack.slug }} · {{ item.pack.status }}</span>
+                    </div>
+                    <NButton size="small" secondary @click="createVersion(item.pack.id)"
+                      >复制新版本</NButton
+                    >
+                  </div>
+                  <div class="version-list">
+                    <button
+                      v-for="version in item.versions"
+                      :key="version.id"
+                      class="version-button"
+                      :class="{ selected: selectedVersionId === version.id }"
+                      type="button"
+                      @click="openVersion(version.id)"
+                    >
+                      <span>v{{ version.version }}</span>
+                      <NTag
+                        size="small"
+                        :type="version.status === 'published' ? 'success' : 'warning'"
+                        >{{ version.status }}</NTag
+                      >
+                    </button>
+                  </div>
+                </div>
+              </NSpin>
+            </section>
+          </NTabPane>
+          <NTabPane
+            name="editor"
+            tab="版本编辑"
+            :disabled="!versionDoc"
+            display-directive="show:lazy"
+            ><section v-if="versionDoc" class="editor-section">
+              <div class="section-toolbar">
                 <div>
-                  <strong>{{ item.title }}</strong>
+                  <h3>{{ versionDoc.version.version }} · 版本内容</h3>
                   <p class="section-sub">
-                    {{ item.message_count }} 条 · {{ item.status }} ·
-                    {{ new Date(item.created_at).toLocaleString() }}
+                    结构化维护入口、运行契约、状态展示、结局与奖励；高级 JSON 仅用于导入导出。
                   </p>
                 </div>
-                <NButton
-                  size="small"
-                  type="error"
-                  :disabled="item.status !== 'active'"
-                  @click="moderateShare(item)"
-                  >下架</NButton
-                >
-              </div>
-            </div>
-            <p v-else class="section-sub">暂无公开分享。</p>
-          </section>
-          <section class="admin-section">
-            <h3>待处理举报</h3>
-            <div v-if="shareReports.length" class="admin-list">
-              <div v-for="item in shareReports" :key="item.id" class="admin-list-row">
-                <div>
-                  <strong>{{ item.reason }}</strong>
-                  <p class="section-sub">{{ item.details || '未填写说明' }}</p>
-                </div>
-                <div class="row" style="gap: 8px">
-                  <NButton size="small" @click="resolveShareReport(item, 'dismissed')"
-                    >驳回</NButton
+                <div class="editor-actions">
+                  <NButton
+                    v-if="versionDoc.version.status === 'draft'"
+                    :loading="savingVersion"
+                    @click="saveVersion"
+                    >保存草稿</NButton
                   >
-                  <NButton size="small" type="primary" @click="resolveShareReport(item, 'resolved')"
-                    >完成</NButton
+                  <NButton
+                    v-if="versionDoc.version.status === 'draft'"
+                    type="primary"
+                    :loading="publishingVersion"
+                    @click="publishVersion"
+                    >校验并发布</NButton
+                  >
+                  <NButton type="error" :loading="deletingVersion" @click="deleteVersion"
+                    >删除版本</NButton
                   >
                 </div>
               </div>
-            </div>
-            <p v-else class="section-sub">没有待处理举报。</p>
-          </section>
-        </NSpin>
+              <ChallengeVersionEditor
+                v-if="versionPayload"
+                :key="versionDoc.version.id"
+                v-model="versionPayload"
+                :modules="modules"
+                :rewards="rewardDefinitions"
+                :readonly="versionDoc.version.status !== 'draft'"
+              />
+              <p v-if="versionDoc.version.content_hash" class="hash-line">
+                内容哈希：{{ versionDoc.version.content_hash }}
+              </p>
+            </section>
+          </NTabPane>
+        </NTabs>
+      </NTabPane>
+      <NTabPane v-if="sectionVisible('sharing')" name="sharing" tab="分享治理">
+        <NSpin :show="loadingShareGovernance"
+          ><NTabs v-model:value="sharingTab" type="line" animated
+            ><NTabPane name="shares" tab="公开分享" display-directive="show:lazy">
+              <section class="admin-section">
+                <div class="section-toolbar">
+                  <div>
+                    <h3>公开分享</h3>
+                    <p class="section-sub">
+                      仅显示玩家主动发布的快照，不提供未分享对话的读取入口。
+                    </p>
+                  </div>
+                  <NButton @click="loadShareGovernance">刷新</NButton>
+                </div>
+                <div v-if="publicShares.length" class="admin-list">
+                  <div v-for="item in publicShares" :key="item.id" class="admin-list-row">
+                    <div>
+                      <strong>{{ item.title }}</strong>
+                      <p class="section-sub">
+                        {{ item.message_count }} 条 · {{ item.status }} ·
+                        {{ new Date(item.created_at).toLocaleString() }}
+                      </p>
+                    </div>
+                    <NButton
+                      size="small"
+                      type="error"
+                      :disabled="item.status !== 'active'"
+                      @click="moderateShare(item)"
+                      >下架</NButton
+                    >
+                  </div>
+                </div>
+                <p v-else class="section-sub">暂无公开分享。</p>
+              </section> </NTabPane
+            ><NTabPane name="reports" tab="待处理举报" display-directive="show:lazy"
+              ><section class="admin-section">
+                <div class="section-toolbar">
+                  <h3>待处理举报</h3>
+                  <NButton @click="loadShareGovernance">刷新</NButton>
+                </div>
+                <div v-if="shareReports.length" class="admin-list">
+                  <div v-for="item in shareReports" :key="item.id" class="admin-list-row">
+                    <div>
+                      <strong>{{ item.reason }}</strong>
+                      <p class="section-sub">{{ item.details || '未填写说明' }}</p>
+                    </div>
+                    <div class="row" style="gap: 8px">
+                      <NButton size="small" @click="resolveShareReport(item, 'dismissed')"
+                        >驳回</NButton
+                      >
+                      <NButton
+                        size="small"
+                        type="primary"
+                        @click="resolveShareReport(item, 'resolved')"
+                        >完成</NButton
+                      >
+                    </div>
+                  </div>
+                </div>
+                <p v-else class="section-sub">没有待处理举报。</p>
+              </section>
+            </NTabPane></NTabs
+          ></NSpin
+        >
       </NTabPane>
     </NTabs>
 
@@ -2126,7 +2158,13 @@ watch(
             <dt>传输 / 结构</dt>
             <dd>
               {{ selectedLLMLog.transport_success ? '成功' : '失败' }} /
-              {{ selectedLLMLog.structured_success ? '成功' : '失败' }}
+              {{
+                !selectedLLMLog.output_mode
+                  ? '不适用'
+                  : selectedLLMLog.structured_success
+                    ? '成功'
+                    : '失败'
+              }}
             </dd>
           </div>
           <div v-if="selectedLLMLog.structured_error_code">
@@ -2172,12 +2210,38 @@ watch(
         <NAlert v-if="selectedLLMLog.error" type="error" :show-icon="false">
           {{ selectedLLMLog.error }}
         </NAlert>
-        <h4>请求 JSON</h4>
-        <pre>{{ JSON.stringify(selectedLLMLog.request_body, null, 2) }}</pre>
-        <h4>原始响应</h4>
-        <pre>{{ selectedLLMLog.raw_response || '（空响应）' }}</pre>
-        <h4>合并后的模型正文</h4>
-        <pre>{{ selectedLLMLog.response_text || '（未提取到正文）' }}</pre>
+        <p>
+          关联 ID：{{ selectedLLMLog.trace_id || '无' }} · 网络尝试
+          {{ selectedLLMLog.transport_attempts }} 次
+        </p>
+        <p>
+          开始时间：{{ new Date(selectedLLMLog.started_at).toLocaleString() }} · 协议：{{
+            selectedLLMLog.protocol
+          }}
+        </p>
+        <p>
+          供应商 token 用量：输入 {{ selectedLLMLog.input_tokens ?? '未知' }} / 输出
+          {{ selectedLLMLog.output_tokens ?? '未知' }}
+        </p>
+        <NAlert v-if="selectedLLMLog.body_status === 'disabled'" type="info"
+          >此次调用未采集正文，仅保留结果摘要。</NAlert
+        >
+        <template v-else>
+          <NAlert v-if="selectedLLMLog.body_status !== 'captured'" type="warning"
+            >正文包含截断或异常预览，不能将预览当成完整请求重放。</NAlert
+          >
+          <p v-for="(info, field) in selectedLLMLog.body_metadata" :key="field">
+            {{ field }}：原始 {{ info.original_bytes }} 字节，保存 {{ info.stored_bytes }} 字节{{
+              info.truncated ? ' · 已截断' : ''
+            }}{{ info.invalid ? ' · 已处理异常编码' : '' }}
+          </p>
+          <h4>请求 JSON</h4>
+          <pre>{{ JSON.stringify(selectedLLMLog.request_body, null, 2) }}</pre>
+          <h4>原始响应</h4>
+          <pre>{{ selectedLLMLog.raw_response || '（空响应）' }}</pre>
+          <h4>合并后的模型正文</h4>
+          <pre>{{ selectedLLMLog.response_text || '（未提取到正文）' }}</pre>
+        </template>
       </div>
     </NModal>
 
@@ -2401,6 +2465,10 @@ watch(
 </template>
 
 <style scoped>
+.single-section-tabs > :deep(.n-tabs-nav) {
+  display: none;
+}
+
 .page {
   max-width: 1080px;
   margin: 0 auto;

@@ -1059,6 +1059,8 @@ CREATE TABLE context_build_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_context_build_logs_conversation ON context_build_logs(conversation_id, created_at DESC, id DESC);
+CREATE INDEX idx_context_build_logs_created ON context_build_logs(created_at DESC, id DESC);
+CREATE INDEX idx_context_build_logs_attempt ON context_build_logs(attempt_id, created_at DESC, id DESC) WHERE attempt_id IS NOT NULL;
 
 CREATE TABLE llm_settings (
     player_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -1089,6 +1091,13 @@ CREATE TABLE system_settings (
     roll_system_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     roll_difficulty_mode VARCHAR(10) NOT NULL DEFAULT 'normal' CHECK (roll_difficulty_mode IN ('easy', 'normal', 'hard')),
     detailed_llm_logging_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    detailed_llm_logging_scope VARCHAR(16) NOT NULL DEFAULT 'all' CHECK (detailed_llm_logging_scope IN ('all', 'user', 'conversation')),
+    detailed_llm_logging_target_id UUID,
+    CONSTRAINT chk_detailed_llm_logging_target CHECK (
+        (detailed_llm_logging_scope = 'all' AND detailed_llm_logging_target_id IS NULL)
+        OR (detailed_llm_logging_scope IN ('user', 'conversation') AND detailed_llm_logging_target_id IS NOT NULL
+            AND detailed_llm_logging_target_id <> '00000000-0000-0000-0000-000000000000'::uuid)
+    ),
     diagnostic_log_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     diagnostic_log_retention_days INTEGER NOT NULL DEFAULT 30 CHECK (diagnostic_log_retention_days BETWEEN 1 AND 3650),
     llm_access_mode VARCHAR(32) NOT NULL DEFAULT 'user_managed' CHECK (llm_access_mode IN ('user_managed', 'platform_managed')),
@@ -1114,6 +1123,7 @@ CREATE TABLE system_settings (
 INSERT INTO system_settings (id) VALUES (1);
 
 CREATE TABLE admin_audit_logs (
+	trace_id UUID,
     id UUID PRIMARY KEY,
     actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     target_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -1128,7 +1138,19 @@ CREATE TABLE admin_audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_admin_audit_created ON admin_audit_logs(created_at DESC,id DESC);
+CREATE INDEX idx_admin_audit_actor ON admin_audit_logs(actor_user_id,created_at DESC,id DESC);
+
 CREATE TABLE llm_request_logs (
+	trace_id UUID,
+	protocol TEXT NOT NULL DEFAULT 'responses',
+	started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	transport_attempts INTEGER NOT NULL DEFAULT 0 CHECK (transport_attempts >= 0),
+	input_tokens INTEGER CHECK (input_tokens >= 0),
+	output_tokens INTEGER CHECK (output_tokens >= 0),
+	error_code TEXT NOT NULL DEFAULT '',
+	body_status TEXT NOT NULL DEFAULT 'disabled' CHECK (body_status IN ('disabled','captured','truncated','invalid')),
+	body_metadata JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(body_metadata) = 'object'),
     id UUID PRIMARY KEY,
     conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
     message_id UUID,
@@ -1166,6 +1188,8 @@ CREATE TABLE llm_request_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_llm_request_logs_created ON llm_request_logs(created_at DESC, id DESC);
+CREATE INDEX idx_llm_request_logs_trace ON llm_request_logs(trace_id, created_at DESC, id DESC) WHERE trace_id IS NOT NULL;
+CREATE INDEX idx_llm_request_logs_attempt ON llm_request_logs(attempt_id, created_at DESC, id DESC) WHERE attempt_id IS NOT NULL;
 CREATE INDEX idx_llm_request_logs_conversation ON llm_request_logs(conversation_id, created_at DESC, id DESC);
 
 CREATE TABLE character_inquiry_threads (
@@ -1404,8 +1428,8 @@ COMMENT ON TABLE memory_jobs IS '异步长期记忆持久任务、租约、退�
 COMMENT ON TABLE context_build_logs IS '每次模型上下文装配的预算、分段和引用审计';
 COMMENT ON TABLE llm_settings IS '玩家自己的模型连接和生成参数；API Key 仅以 AES-GCM 密文保存且不对外返回';
 COMMENT ON TABLE system_settings IS '管理员维护的平台全局玩法设置与公共模型配置（单例）';
-COMMENT ON TABLE admin_audit_logs IS '首次安装、角色变更和账号状态变更的脱敏管理员审计记录';
-COMMENT ON TABLE llm_request_logs IS '管理员按需开启的模型请求详细诊断记录；不保存认证头或 API Key';
+COMMENT ON TABLE admin_audit_logs IS '首次安装、账号、奖励和配置变更的事务审计；trace_id 独立于业务 request_id';
+COMMENT ON TABLE llm_request_logs IS '模型逻辑调用摘要与按需采集的有界正文；不保存认证头或 API Key';
 COMMENT ON TABLE character_inquiry_threads IS '与主叙事隔离的角色状态只读问答线程';
 COMMENT ON TABLE character_inquiry_messages IS '只读角色问答消息、固定快照版本与公开来源引用';
 COMMENT ON TABLE character_inquiry_rate_limits IS '角色问答独立持久速率窗口，不受清空问答历史影响';

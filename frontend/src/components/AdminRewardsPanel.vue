@@ -28,12 +28,13 @@ import RewardUserSearch from './RewardUserSearch.vue'
 import AdminRewardUserPanel from './AdminRewardUserPanel.vue'
 import RewardRecordsPanel from './RewardRecordsPanel.vue'
 import AdminRewardExchangePanel from './AdminRewardExchangePanel.vue'
+import RewardExchangeOrders from './RewardExchangeOrders.vue'
 const props = defineProps<{ definitions: RewardDefinition[] }>(),
   emit = defineEmits<{ openVersion: [id: string] }>(),
   message = useMessage()
 const selected = ref<AdminUser>(),
   userOpen = ref(false),
-  error = ref(''),
+  errors = ref<Record<string, string>>({}),
   saving = ref(false),
   tab = ref('overview')
 const rule = ref<RegistrationRewardRule>(),
@@ -46,7 +47,9 @@ const rule = ref<RegistrationRewardRule>(),
   ruleMore = ref(false),
   audits = ref<AdminAuditLog[]>([]),
   auditCursor = ref(''),
-  busy = ref(false)
+  loading = ref<Record<string, boolean>>({})
+const error = computed(() => errors.value[tab.value] || '')
+const busy = computed(() => loading.value[tab.value] || false)
 const options = computed(() =>
   props.definitions.map((d) => ({
     label: `${d.name} · ${d.key}${d.disabled ? '（已停用）' : ''}`,
@@ -64,19 +67,19 @@ function select(user: AdminUser) {
   userOpen.value = true
 }
 async function overview() {
-  error.value = ''
-  busy.value = true
+  errors.value.overview = ''
+  loading.value.overview = true
   try {
     assets.value = await api.overview()
   } catch (err) {
-    error.value = rewardError(err)
+    errors.value.overview = rewardError(err)
   } finally {
-    busy.value = false
+    loading.value.overview = false
   }
 }
 async function loadRules(more = false) {
-  busy.value = true
-  error.value = ''
+  loading.value.rules = true
+  errors.value.rules = ''
   try {
     const offset = more ? ruleOffset.value + 30 : 0
     const page = await api.rules(ruleAsset.value, offset)
@@ -84,51 +87,56 @@ async function loadRules(more = false) {
     ruleOffset.value = offset
     ruleMore.value = page.has_more
   } catch (err) {
-    error.value = rewardError(err)
+    errors.value.rules = rewardError(err)
   } finally {
-    busy.value = false
+    loading.value.rules = false
   }
 }
 async function loadRegistration() {
+  if (loading.value.registration) return
+  loading.value.registration = true
+  errors.value.registration = ''
   try {
     rule.value = await api.registration()
   } catch (err) {
-    error.value = rewardError(err)
+    errors.value.registration = rewardError(err)
+  } finally {
+    loading.value.registration = false
   }
 }
 async function save() {
   if (!rule.value) return
   saving.value = true
-  error.value = ''
+  errors.value.registration = ''
   try {
     rule.value = await api.saveRegistration(rule.value)
     message.success('规则已保存，新注册用户按新规则执行')
   } catch (err) {
-    error.value = rewardError(err)
+    errors.value.registration = rewardError(err)
   } finally {
     saving.value = false
   }
 }
 async function lookup() {
-  error.value = ''
+  errors.value.records = ''
   found.value = undefined
   try {
     found.value = await api.request(requestID.value.trim())
   } catch (err) {
-    error.value = rewardError(err)
+    errors.value.records = rewardError(err)
   }
 }
 async function loadAudits(more = false) {
-  busy.value = true
-  error.value = ''
+  loading.value.audit = true
+  errors.value.audit = ''
   try {
     const page = await api.audits(more ? auditCursor.value : undefined)
     audits.value = more ? [...audits.value, ...page.audits] : page.audits
     auditCursor.value = page.next_cursor
   } catch (err) {
-    error.value = rewardError(err)
+    errors.value.audit = rewardError(err)
   } finally {
-    busy.value = false
+    loading.value.audit = false
   }
 }
 function auditLabel(action: string) {
@@ -150,13 +158,10 @@ function auditLabel(action: string) {
   )
 }
 watch(tab, (value) => {
-  error.value = ''
   if (value === 'overview') void overview()
-  if (value === 'rules') {
-    void loadRules()
-    void loadRegistration()
-  }
-  if (value === 'records') void loadAudits()
+  if (value === 'rules') void loadRules()
+  if (value === 'registration' && !rule.value) void loadRegistration()
+  if (value === 'audit') void loadAudits()
 })
 watch(ruleAsset, () => loadRules())
 onMounted(overview)
@@ -166,7 +171,7 @@ onMounted(overview)
     <p class="intro">通关发奖、积累点数、兑换账号奖励。这里统一管理资产、规则与每笔发放。</p>
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NTabs v-model:value="tab" type="line" animated>
-      <NTabPane name="overview" tab="概览"
+      <NTabPane name="overview" tab="概览" display-directive="show:lazy"
         ><div class="toolbar">
           <h3>按资产统计</h3>
           <NButton :loading="busy" @click="overview">刷新</NButton>
@@ -195,8 +200,10 @@ onMounted(overview)
         </div>
         <NEmpty v-if="!busy && !error && !assets.length" description="暂无奖励资产"
       /></NTabPane>
-      <NTabPane name="assets" tab="奖励资产"><slot name="assets" /></NTabPane>
-      <NTabPane name="rules" tab="发奖规则"
+      <NTabPane name="assets" tab="奖励资产" display-directive="show:lazy"
+        ><slot name="assets"
+      /></NTabPane>
+      <NTabPane name="rules" tab="通关规则" display-directive="show:lazy"
         ><h3>玩法发奖规则</h3>
         <p>规则随玩法版本发布；已发布版本和已有存档保持固定。点击版本可查看，编辑时创建草稿。</p>
         <NSelect
@@ -231,7 +238,9 @@ onMounted(overview)
           :loading="busy"
           @click="loadRules(true)"
           >加载更多规则</NButton
-        >
+        > </NTabPane
+      ><NTabPane name="registration" tab="注册赠送" display-directive="show:lazy"
+        ><NButton v-if="!rule" :loading="busy" @click="loadRegistration">读取注册赠送规则</NButton>
         <section v-if="rule">
           <h3>注册赠送</h3>
           <p>保存后影响新注册账号，已有赠送记录保留原规则。</p>
@@ -254,15 +263,18 @@ onMounted(overview)
           ><small>当前修订 {{ rule.id }} · {{ new Date(rule.created_at).toLocaleString() }}</small>
         </section></NTabPane
       >
-      <NTabPane name="users" tab="用户发放"
+      <NTabPane name="users" tab="用户发放" display-directive="show:lazy"
         ><h3>查找用户，发放奖励与点数</h3>
         <p>支持用户名、显示名称、完整邮箱或用户 ID。选定账号后可直接发放或创建待领取奖励。</p>
         <RewardUserSearch @select="select"
       /></NTabPane>
-      <NTabPane name="exchange" tab="积分兑换"
+      <NTabPane name="exchange" tab="兑换商品" display-directive="show:lazy"
         ><AdminRewardExchangePanel :definitions="definitions"
       /></NTabPane>
-      <NTabPane name="records" tab="记录与审计"
+      <NTabPane name="orders" tab="兑换订单" display-directive="show:lazy">
+        <RewardExchangeOrders admin />
+      </NTabPane>
+      <NTabPane name="records" tab="发放记录" display-directive="show:lazy"
         ><section>
           <h3>查询原发放请求</h3>
           <div class="request">
@@ -277,8 +289,9 @@ onMounted(overview)
             {{ rewardStatus(found) }} · 用户 {{ found.user_id }}</NAlert
           >
         </section>
-        <RewardRecordsPanel admin :definitions="definitions" />
-        <section>
+        <RewardRecordsPanel admin :definitions="definitions" /> </NTabPane
+      ><NTabPane name="audit" tab="管理审计" display-directive="show:lazy"
+        ><section>
           <div class="toolbar">
             <h3>管理审计</h3>
             <NButton :loading="busy" @click="loadAudits()">刷新</NButton>

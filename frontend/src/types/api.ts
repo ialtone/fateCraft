@@ -826,11 +826,15 @@ export interface LLMCapabilityCheckResponse {
 }
 
 /** 管理员维护的平台全局设置 */
+export type DetailedLLMLoggingScope = 'all' | 'user' | 'conversation'
+
 export interface AdminSystemSettings {
   id: number
   roll_system_enabled: boolean
   roll_difficulty_mode: DifficultyModeEnum
   detailed_llm_logging_enabled: boolean
+  detailed_llm_logging_scope: DetailedLLMLoggingScope
+  detailed_llm_logging_target_id: string | null
   diagnostic_log_cleanup_enabled: boolean
   diagnostic_log_retention_days: number
   llm_access_mode: 'user_managed' | 'platform_managed'
@@ -857,6 +861,19 @@ export interface AdminSystemSettings {
 }
 
 export interface AdminLLMRequestLogSummary {
+  started_at: string
+  trace_id?: string
+  protocol: string
+  transport_attempts: number
+  input_tokens: number | null
+  output_tokens: number | null
+  body_status: 'disabled' | 'captured' | 'truncated' | 'invalid'
+  body_metadata: Record<
+    string,
+    { original_bytes: number; stored_bytes: number; truncated: boolean; invalid: boolean }
+  >
+  error_code?: string
+
   id: string
   conversation_id?: string
   message_id?: string
@@ -1003,6 +1020,7 @@ export interface AdminExternalIdentity {
 }
 
 export interface AdminAuditLog {
+  trace_id?: string
   id: string
   request_id?: string
   actor_user_id?: string

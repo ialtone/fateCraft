@@ -312,7 +312,7 @@ func (c *Client) agentChat(ctx context.Context, p Params, messages []Message, to
 	if err != nil {
 		return result, err
 	}
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	started := time.Now()
 	resp, err := c.doRaw(ctx, p, "/chat/completions", requestBody, stream)
 	if err != nil {
@@ -330,7 +330,7 @@ func (c *Client) agentChat(ctx context.Context, p Params, messages []Message, to
 	var done bool
 	if stream {
 		var rawText string
-		result, rawText, done, err = parseAgentChatStream(resp.Body, onEvent)
+		result, rawText, done, err = parseAgentChatStream(resp.Body, onEvent, auditOn)
 		raw = []byte(rawText)
 	} else {
 		raw, err = readAllBounded(resp.Body, maxLLMResponseBytes)
@@ -343,6 +343,10 @@ func (c *Client) agentChat(ctx context.Context, p Params, messages []Message, to
 	}
 	if err == nil && strings.TrimSpace(result.TextProjection()) == "" && len(result.ToolCallBlocks()) == 0 {
 		err = errors.New("模型响应为空")
+	}
+	if call := auditCall(ctx); call != nil && (result.Usage.InputTokens > 0 || result.Usage.OutputTokens > 0) {
+		usage := result.Usage
+		call.usage = &usage
 	}
 	c.writeAudit(ctx, auditOn, p, stream, requestBody, string(raw), result.TextProjection(), resp.StatusCode, result.FinishReason, done, err == nil, err, started)
 	return result, err
@@ -431,9 +435,9 @@ func parseAgentChatComplete(raw []byte, onEvent AgentEventHandler) (AgentStepRes
 	return result, nil
 }
 
-func parseAgentChatStream(reader io.Reader, onEvent AgentEventHandler) (AgentStepResult, string, bool, error) {
+func parseAgentChatStream(reader io.Reader, onEvent AgentEventHandler, auditOn bool) (AgentStepResult, string, bool, error) {
 	var result AgentStepResult
-	raw := newAuditBuffer(maxLLMAuditBytes)
+	raw := newCaptureBuffer(auditOn)
 	var text strings.Builder
 	calls := map[int]*accumulatedAgentCall{}
 	done := false
@@ -541,7 +545,7 @@ func (c *Client) agentResponses(ctx context.Context, p Params, messages []Messag
 	if err != nil {
 		return result, err
 	}
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	started := time.Now()
 	resp, err := c.doRaw(ctx, p, "/responses", requestBody, stream)
 	if err != nil {
@@ -559,7 +563,7 @@ func (c *Client) agentResponses(ctx context.Context, p Params, messages []Messag
 	var done bool
 	if stream {
 		var rawText string
-		result, rawText, done, err = parseAgentResponsesStream(resp.Body, onEvent)
+		result, rawText, done, err = parseAgentResponsesStream(resp.Body, onEvent, auditOn)
 		raw = []byte(rawText)
 	} else {
 		raw, err = readAllBounded(resp.Body, maxLLMResponseBytes)
@@ -572,6 +576,10 @@ func (c *Client) agentResponses(ctx context.Context, p Params, messages []Messag
 	}
 	if err == nil && strings.TrimSpace(result.TextProjection()) == "" && len(result.ToolCallBlocks()) == 0 {
 		err = errors.New("模型响应为空")
+	}
+	if call := auditCall(ctx); call != nil && (result.Usage.InputTokens > 0 || result.Usage.OutputTokens > 0) {
+		usage := result.Usage
+		call.usage = &usage
 	}
 	c.writeAudit(ctx, auditOn, p, stream, requestBody, string(raw), result.TextProjection(), resp.StatusCode, result.FinishReason, done, err == nil, err, started)
 	return result, err
@@ -688,9 +696,9 @@ func parseAgentResponsesComplete(raw []byte, onEvent AgentEventHandler) (AgentSt
 	return result, nil
 }
 
-func parseAgentResponsesStream(reader io.Reader, onEvent AgentEventHandler) (AgentStepResult, string, bool, error) {
+func parseAgentResponsesStream(reader io.Reader, onEvent AgentEventHandler, auditOn bool) (AgentStepResult, string, bool, error) {
 	var result AgentStepResult
-	raw := newAuditBuffer(maxLLMAuditBytes)
+	raw := newCaptureBuffer(auditOn)
 	var text strings.Builder
 	calls := map[string]*accumulatedAgentCall{}
 	reasoningTexts := make(map[string]string)
@@ -875,7 +883,7 @@ func parseAgentResponsesStream(reader io.Reader, onEvent AgentEventHandler) (Age
 				}
 			case "response.failed":
 				if event.Error != nil && event.Error.Message != "" {
-					return result, raw.String(), true, fmt.Errorf("模型响应失败: %s", event.Error.Message)
+					return result, raw.String(), true, &providerMessageError{message: event.Error.Message}
 				}
 				return result, raw.String(), true, errors.New("模型响应失败")
 			}

@@ -21,7 +21,6 @@ import type {
   RewardExchangeOfferView,
   RewardExchangeRevision,
 } from '@/types/rewards'
-import RewardExchangeOrders from './RewardExchangeOrders.vue'
 const props = defineProps<{ definitions: RewardDefinition[] }>(),
   message = useMessage()
 const offers = ref<RewardExchangeOfferView[]>([]),
@@ -147,10 +146,7 @@ onMounted(load)
         ><NButton @click="edit(offer)">编辑 / 上下架</NButton>
       </div>
     </article>
-    <NEmpty
-      v-if="!loading && !error && !offers.length"
-      description="尚未配置兑换商品"
-    /><RewardExchangeOrders admin />
+    <NEmpty v-if="!loading && !error && !offers.length" description="尚未配置兑换商品" />
     <NModal
       v-model:show="open"
       preset="card"

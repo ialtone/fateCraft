@@ -142,16 +142,16 @@ func (s *Server) updateAdminUserStatus(c *gin.Context) {
 }
 
 func (s *Server) listAdminAuditLogs(c *gin.Context) {
-	limit, ok := adminListLimit(c)
+	filter, ok := logQuery(c, "audit")
 	if !ok {
 		return
 	}
-	logs, err := s.auth.ListAdminAuditLogs(c.Request.Context(), limit)
+	logs, next, more, err := s.auth.ListAdminAuditLogs(c.Request.Context(), filter)
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"logs": logs})
+	c.JSON(http.StatusOK, gin.H{"logs": logs, "next_cursor": next, "has_more": more})
 }
 
 // adminListOffset 读取管理列表的 offset 参数：缺省为 0，必须是 0 到 100000 的整数，否则直接返回 400。

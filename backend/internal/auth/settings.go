@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
-
+	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/secretbox"
 	"github.com/ialtone/fatecraft/internal/storage"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const registrationPurpose = "registration"
@@ -39,23 +39,23 @@ type AdminAuthSettings struct {
 }
 
 type UpdateAuthSettingsInput struct {
-	EmailAuthEnabled           bool   `json:"email_auth_enabled"`
-	LinuxDOLoginEnabled        bool   `json:"linuxdo_login_enabled"`
-	EmailRegistrationEnabled   bool   `json:"email_registration_enabled"`
-	EmailVerificationEnabled   bool   `json:"email_verification_enabled"`
-	InvitationRequired         bool   `json:"invitation_required"`
-	SMTPHost                   string `json:"smtp_host"`
-	SMTPPort                   int    `json:"smtp_port"`
-	SMTPSecurity               string `json:"smtp_security"`
-	SMTPUsername               string `json:"smtp_username"`
-	SMTPPassword               string `json:"smtp_password"`
-	ClearSMTPPassword          bool   `json:"clear_smtp_password"`
-	SenderEmail                string `json:"sender_email"`
-	SenderName                 string `json:"sender_name"`
-	VerificationSubject        string `json:"verification_subject"`
-	VerificationTemplate       string `json:"verification_template"`
-	VerificationCodeTTLMinutes int    `json:"verification_code_ttl_minutes"`
-	VerificationResendSeconds  int    `json:"verification_resend_seconds"`
+	EmailAuthEnabled           *bool   `json:"email_auth_enabled"`
+	LinuxDOLoginEnabled        *bool   `json:"linuxdo_login_enabled"`
+	EmailRegistrationEnabled   *bool   `json:"email_registration_enabled"`
+	EmailVerificationEnabled   *bool   `json:"email_verification_enabled"`
+	InvitationRequired         *bool   `json:"invitation_required"`
+	SMTPHost                   *string `json:"smtp_host"`
+	SMTPPort                   *int    `json:"smtp_port"`
+	SMTPSecurity               *string `json:"smtp_security"`
+	SMTPUsername               *string `json:"smtp_username"`
+	SMTPPassword               string  `json:"smtp_password"`
+	ClearSMTPPassword          bool    `json:"clear_smtp_password"`
+	SenderEmail                *string `json:"sender_email"`
+	SenderName                 *string `json:"sender_name"`
+	VerificationSubject        *string `json:"verification_subject"`
+	VerificationTemplate       *string `json:"verification_template"`
+	VerificationCodeTTLMinutes *int    `json:"verification_code_ttl_minutes"`
+	VerificationResendSeconds  *int    `json:"verification_resend_seconds"`
 }
 
 func (s *Service) AdminSettings(ctx context.Context) (*AdminAuthSettings, error) {
@@ -72,18 +72,67 @@ func (s *Service) AdminSettings(ctx context.Context) (*AdminAuthSettings, error)
 // 注意：本站允许同时关闭两种登录方式（之后无人能登录，已有会话过期前仍有效），
 // 仅关闭密码登录时才做上述检查。
 func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in UpdateAuthSettingsInput) (*AdminAuthSettings, error) {
+	ctx = identity.WithPlayerID(ctx, actorID.String())
 	current, err := s.repo.GetAuthSettings(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateSettingsInput(&in); err != nil {
+	// PATCH fields omitted by another settings tab retain their persisted values.
+	next := *current
+	current = &next
+	if in.EmailAuthEnabled != nil {
+		current.EmailAuthEnabled = *in.EmailAuthEnabled
+	}
+	if in.LinuxDOLoginEnabled != nil {
+		current.LinuxDOLoginEnabled = *in.LinuxDOLoginEnabled
+	}
+	if in.EmailRegistrationEnabled != nil {
+		current.EmailRegistrationEnabled = *in.EmailRegistrationEnabled
+	}
+	if in.EmailVerificationEnabled != nil {
+		current.EmailVerificationEnabled = *in.EmailVerificationEnabled
+	}
+	if in.InvitationRequired != nil {
+		current.InvitationRequired = *in.InvitationRequired
+	}
+	if in.SMTPHost != nil {
+		current.SMTPHost = strings.TrimSpace(*in.SMTPHost)
+	}
+	if in.SMTPPort != nil {
+		current.SMTPPort = *in.SMTPPort
+	}
+	if in.SMTPSecurity != nil {
+		current.SMTPSecurity = *in.SMTPSecurity
+	}
+	if in.SMTPUsername != nil {
+		current.SMTPUsername = strings.TrimSpace(*in.SMTPUsername)
+	}
+	if in.SenderEmail != nil {
+		current.SenderEmail = strings.ToLower(strings.TrimSpace(*in.SenderEmail))
+	}
+	if in.SenderName != nil {
+		current.SenderName = strings.TrimSpace(*in.SenderName)
+	}
+	if in.VerificationSubject != nil {
+		current.VerificationSubject = strings.TrimSpace(*in.VerificationSubject)
+	}
+	if in.VerificationTemplate != nil {
+		current.VerificationTemplate = strings.TrimSpace(*in.VerificationTemplate)
+	}
+	if in.VerificationCodeTTLMinutes != nil {
+		current.VerificationCodeTTLMinutes = *in.VerificationCodeTTLMinutes
+	}
+	if in.VerificationResendSeconds != nil {
+		current.VerificationResendSeconds = *in.VerificationResendSeconds
+	}
+	if err := validateSettingsInput(current); err != nil {
 		return nil, err
 	}
-	if in.EmailRegistrationEnabled && !in.EmailAuthEnabled {
+	if current.EmailRegistrationEnabled && !current.EmailAuthEnabled {
 		return nil, fmt.Errorf("%w: 开启邮箱注册时必须同时开启邮箱登录", ErrInvalidAuthSettings)
 	}
 	// 仅当 LinuxDo 登录保持开启时才检查：双关全灭是管理员的明确选择，不做控制。
-	if !in.EmailAuthEnabled && in.LinuxDOLoginEnabled {
+	if !current.EmailAuthEnabled && current.LinuxDOLoginEnabled {
 		if !s.cfg.LinuxDOEnabled() {
 			return nil, fmt.Errorf("%w: LinuxDo 登录尚未配置，关闭密码登录后所有账号都将无法登录", ErrInvalidAuthSettings)
 		}
@@ -95,21 +144,6 @@ func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in
 			return nil, fmt.Errorf("%w: 关闭密码登录前，请先在“设置 → 第三方账户”中为当前 owner 账号绑定 LinuxDo，否则 owner 将无法登录", ErrInvalidAuthSettings)
 		}
 	}
-	current.EmailAuthEnabled = in.EmailAuthEnabled
-	current.LinuxDOLoginEnabled = in.LinuxDOLoginEnabled
-	current.EmailRegistrationEnabled = in.EmailRegistrationEnabled
-	current.EmailVerificationEnabled = in.EmailVerificationEnabled
-	current.InvitationRequired = in.InvitationRequired
-	current.SMTPHost = strings.TrimSpace(in.SMTPHost)
-	current.SMTPPort = in.SMTPPort
-	current.SMTPSecurity = in.SMTPSecurity
-	current.SMTPUsername = strings.TrimSpace(in.SMTPUsername)
-	current.SenderEmail = strings.ToLower(strings.TrimSpace(in.SenderEmail))
-	current.SenderName = strings.TrimSpace(in.SenderName)
-	current.VerificationSubject = strings.TrimSpace(in.VerificationSubject)
-	current.VerificationTemplate = strings.TrimSpace(in.VerificationTemplate)
-	current.VerificationCodeTTLMinutes = in.VerificationCodeTTLMinutes
-	current.VerificationResendSeconds = in.VerificationResendSeconds
 
 	if in.ClearSMTPPassword {
 		current.SMTPPasswordEncrypted = ""
@@ -256,7 +290,7 @@ func adminSettingsView(s *storage.AuthSettings) *AdminAuthSettings {
 	}
 }
 
-func validateSettingsInput(in *UpdateAuthSettingsInput) error {
+func validateSettingsInput(in *storage.AuthSettings) error {
 	if in.SMTPPort < 1 || in.SMTPPort > 65535 {
 		return fmt.Errorf("%w: SMTP 端口必须在 1-65535 之间", ErrInvalidAuthSettings)
 	}
@@ -288,10 +322,10 @@ func validateSettingsInput(in *UpdateAuthSettingsInput) error {
 
 func validateMailerSettings(s *storage.AuthSettings) error {
 	if strings.TrimSpace(s.SMTPHost) == "" || s.SMTPPort < 1 || strings.TrimSpace(s.SenderEmail) == "" {
-		return errors.New("请先完整配置 SMTP 主机、端口和发件邮箱")
+		return fmt.Errorf("%w: 请先完整配置 SMTP 主机、端口和发件邮箱", ErrInvalidAuthSettings)
 	}
 	if _, err := normalizeEmail(s.SenderEmail); err != nil {
-		return errors.New("发件邮箱格式无效")
+		return fmt.Errorf("%w: 发件邮箱格式无效", ErrInvalidAuthSettings)
 	}
 	return nil
 }

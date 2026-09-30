@@ -16,6 +16,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/contextbuilder"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
+	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/modelcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
@@ -358,7 +359,7 @@ func (s *Server) fetchModels(c *gin.Context) {
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建请求失败: " + err.Error()})
+		fail(c, err)
 		return
 	}
 
@@ -371,21 +372,20 @@ func (s *Server) fetchModels(c *gin.Context) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "请求失败: " + err.Error()})
+		upstreamFailure(c, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "LLM 服务返回错误: " + string(body)})
+		upstreamFailure(c, &llm.HTTPError{StatusCode: resp.StatusCode})
 		return
 	}
 
 	// 解析响应
 	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "解析响应失败: " + err.Error()})
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&result); err != nil {
+		fail(c, err)
 		return
 	}
 
@@ -406,4 +406,9 @@ func (s *Server) fetchModels(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"models": models})
+}
+
+func upstreamFailure(c *gin.Context, err error) {
+	_ = c.Error(err)
+	c.JSON(http.StatusBadGateway, gin.H{"error": "模型服务暂时不可用", "code": "upstream_error", "trace_id": logging.TraceID(c.Request.Context())})
 }

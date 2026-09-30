@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -27,11 +26,17 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 	requestURL := EndpointURL(p.BaseURL, endpoint)
 	policy := effectiveRetryPolicy(p.RetryPolicy)
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
+		if call := auditCall(ctx); call != nil {
+			call.attempts.Store(int32(attempt))
+		}
 		resp, err := c.roundTrip(ctx, p, requestURL, endpoint, body, stream)
 		if err == nil && !retryableStatus(resp.StatusCode) {
 			// 响应头已到达;后续读取由空闲看门狗与调用方 ctx 共同约束,
 			// 不再有覆盖整个流的固定总超时。
 			resp.Body = newIdleBody(resp.Body, streamIdleTimeout)
+			if call := auditCall(ctx); call != nil {
+				resp.Body = &auditCountingBody{ReadCloser: resp.Body, call: call}
+			}
 			return resp, nil
 		}
 		if attempt == policy.MaxAttempts || !retryableTransportError(err, resp) {
@@ -40,6 +45,9 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 			}
 			if resp != nil {
 				resp.Body = newIdleBody(resp.Body, streamIdleTimeout)
+				if call := auditCall(ctx); call != nil {
+					resp.Body = &auditCountingBody{ReadCloser: resp.Body, call: call}
+				}
 			}
 			return resp, nil
 		}
@@ -53,7 +61,11 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 		}
-		logging.Named("llm").Warn("模型请求将重试",
+		log := logging.FromContext(ctx, "llm")
+		if call := auditCall(ctx); call != nil {
+			log = log.With(zap.String("llm_call_id", call.id))
+		}
+		log.Warn("模型请求将重试",
 			zap.String("model", p.Model), zap.String("profile", ResolveProfile(p.BaseURL).ID),
 			zap.String("endpoint", endpoint), zap.Int("attempt", attempt),
 			zap.Int("max_attempts", policy.MaxAttempts), zap.String("reason", retryReason(err, resp)),
@@ -143,10 +155,10 @@ func retryableTransportError(err error, resp *http.Response) bool {
 
 func retryReason(err error, resp *http.Response) string {
 	if resp != nil {
-		return resp.Status
+		return strconv.Itoa(resp.StatusCode)
 	}
 	if err != nil {
-		return err.Error()
+		return logging.ErrorText(err)
 	}
 	return "temporary_failure"
 }
@@ -207,17 +219,14 @@ func retryAfterDelay(value string) time.Duration {
 	return 0
 }
 
-func (c *Client) shouldAudit(ctx context.Context) bool {
-	return c.auditWriter != nil && (c.auditEnabled == nil || c.auditEnabled(ctx))
+func (c *Client) shouldAudit(ctx context.Context, p Params) bool {
+	return c.auditWriter != nil && (c.auditEnabled == nil || c.auditEnabled(ctx, p))
 }
 
 func (c *Client) writeAudit(ctx context.Context, auditOn bool, p Params, stream bool, requestBody []byte, rawResponse, responseText string, status int, finishReason string, receivedDone, success bool, callErr error, started time.Time) {
-	if !auditOn || c.auditWriter == nil {
+	if c.auditWriter == nil {
 		return
 	}
-	requestBody, requestTruncated := boundedAuditBytes(requestBody)
-	rawResponse, rawTruncated := boundedAuditString(rawResponse)
-	responseText, textTruncated := boundedAuditString(responseText)
 	detail := RequestAudit{
 		ConversationID: p.ConversationID, MessageID: p.MessageID,
 		Purpose: p.Purpose, AttemptID: p.AttemptID, MemoryJobID: p.MemoryJobID, MemoryID: p.MemoryID,
@@ -225,7 +234,7 @@ func (c *Client) writeAudit(ctx context.Context, auditOn bool, p Params, stream 
 		InquirySnapshotBranchEpoch: p.InquirySnapshotBranchEpoch, InquirySnapshotRevision: p.InquirySnapshotRevision,
 		Model: p.Model, BaseURL: safeAuditURL(p.BaseURL), Stream: stream,
 		RequestBody: requestBody, RawResponse: rawResponse, ResponseText: responseText,
-		AuditTruncated: requestTruncated || rawTruncated || textTruncated,
+		AuditTruncated: false,
 		ResponseStatus: status, FinishReason: finishReason, ReceivedDone: receivedDone,
 		Success: success, DurationMS: time.Since(started).Milliseconds(),
 		SettingsRevision: p.SettingsRevision, SettingsSource: p.SettingsSource,
@@ -233,25 +242,11 @@ func (c *Client) writeAudit(ctx context.Context, auditOn bool, p Params, stream 
 		// parser/contract errors are represented separately by Success/Error.
 		TransportSuccess: status >= http.StatusOK && status < http.StatusMultipleChoices,
 	}
-	if callErr != nil {
-		detail.Error = callErr.Error()
-	}
-	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
-	if err := c.auditWriter(auditCtx, detail); err != nil {
-		logging.Named("llm").Warn("详细模型请求日志写入失败", zap.Error(err))
-	}
+	c.finishAudit(ctx, auditOn, p, detail, callErr)
 }
 
 func safeAuditURL(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-	parsed.User = nil
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String()
+	return logging.SafeURL(raw)
 }
 
 func boundedHTTPErrorBody(body []byte) string {

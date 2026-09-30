@@ -29,6 +29,8 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 
 账号奖励专题：[22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)，覆盖通关获得、积累、领取、管理员发放和积分兑换。
 
+日志专题：[23-logging-and-diagnostics.md](23-logging-and-diagnostics.md)，覆盖诊断关联、正文预算、队列、配置审计、后台筛选及运行验收边界。
+
 ## 权威来源
 
 发生冲突时按以下顺序判断：

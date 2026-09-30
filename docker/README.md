@@ -78,7 +78,7 @@
 ## 数据库备份
 
 - 由 `postgres-backup` sidecar 容器执行，宿主机无需装 cron；限制 `0.75 CPU`、`256MB` 内存
-- 默认东八区每天 `02:00` 触发 `pg_dump`，备份输出到宿主机 `docker/backups`，日志在 `docker/backups/backup.log`
+- 默认东八区每天 `02:00` 触发 `pg_dump`，备份输出到宿主机 `docker/backups`，任务日志输出到备份容器 stdout/stderr，可用 `docker compose -f docker/docker-compose.prod.yml logs postgres-backup` 查看（在仓库根目录执行）
 - 默认保留最近 `7` 天，可用 `BACKUP_RETENTION_DAYS` 覆盖；备份时间用 `BACKUP_CRON_SCHEDULE` 覆盖
 - 手动立即备份：
   `docker compose -f docker-compose.prod.yml exec postgres-backup /usr/local/bin/postgres-backup-now`
@@ -90,8 +90,16 @@
 - 后端镜像不做编译，只拷贝宿主机交叉编译的服务与迁移二进制（alpine + 健康检查 `GET /api/health`）
 - 前端镜像为 `nginx:1.27-alpine`，托管 SPA 并反代 API/WebSocket；WebSocket 反代已配置 `Upgrade` 头与 1h 读超时
 - Nginx 将 `/s/:token` 反代到后端的动态 Open Graph 外壳，再由浏览器进入 `/shared/:token` SPA 页面；该入口和公共分享 API不配置共享缓存，撤销立即生效
-- 应用访问日志会脱敏分享 token；外围 CDN、WAF 和负载均衡也必须对 `/s/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或做等价脱敏
+- 应用访问日志会脱敏分享 token；外围 CDN、WAF 和负载均衡也必须对 `/s/*`、`/shared/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或做等价脱敏
 - 分享 HTML 使用严格 CSP、`Referrer-Policy: no-referrer` 和 `noindex,nofollow`；公开 API 的 gzip 由 Nginx 处理
 - LLM 的 Base URL、API Key 和模型可在前端「设置」页配置，用户配置写入 `llm_settings` 表，平台公共配置写入 `system_settings` 单例
 - 主站当前没有 CSP，客户端直连不受阻；今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效
 - 敏感信息的本机覆盖写 `backend.development.env.local` / `backend.production.env.local`（git 已忽略；如使用需在 compose 的 `env_file` 中追加该文件）
+
+## 日志容量与验收
+
+开发/生产 Compose 所有服务使用 `json-file`，每容器 `max-size: 10m`、`max-file: 3`。需按服务和副本数汇总约 30 MiB/容器的预算；它不限制 PostgreSQL 体积和备份文件。配置修改后需按正常部署流程重建对应容器才会应用；本轮没有重建运行中的服务。旧 `backups/backup.log` 不会自动删除。
+
+后端显式配置 Info/JSON。Nginx 访问日志仅保存安全路由、状态、上游耗时与关联 ID，不记录 query、Referer 或认证字段；站点级原生请求 error log 被抑制以防泄露原始请求行，运行时失败从安全访问摘要排查，配置/启动错误保留镜像主进程默认 stderr。
+
+真实容器验收需检查 `docker inspect` 的 LogConfig、备份成功/失败输出、上游不可用时分享/OAuth/敏感查询的访问日志与 error 输出，以及新 schema 迁移完成后启动后端。代码和配置检查已完成，运行验收于 2026-09-30 交由维护者执行，尚无实测结果。完整规范和待测清单见[日志与诊断](../docs/design/23-logging-and-diagnostics.md)。

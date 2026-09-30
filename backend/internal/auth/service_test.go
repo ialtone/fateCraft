@@ -193,8 +193,8 @@ func (f *fakeRepository) UpdateUserStatus(_ context.Context, _, _ uuid.UUID, sta
 	f.user.Status = status
 	return f.user, nil
 }
-func (f *fakeRepository) ListAdminAuditLogs(context.Context, int) ([]storage.AdminAuditLog, error) {
-	return nil, nil
+func (f *fakeRepository) ListAdminAuditLogs(context.Context, storage.LogQuery) ([]storage.AdminAuditLog, string, bool, error) {
+	return nil, "", false, nil
 }
 
 // newFakeLinuxDOProvider 启动模拟的 LinuxDo token 与用户信息接口，calls 统计被调用次数。
@@ -737,11 +737,15 @@ func TestInvalidVerificationCodeIncrementsAttemptCount(t *testing.T) {
 	}
 }
 
+func authSettingPointer[T any](value T) *T { return &value }
+
 func validSettingsInput(emailAuthEnabled bool) UpdateAuthSettingsInput {
 	return UpdateAuthSettingsInput{
-		EmailAuthEnabled: emailAuthEnabled, LinuxDOLoginEnabled: true, SMTPHost: "smtp.example.com", SMTPPort: 587, SMTPSecurity: "starttls",
-		SenderEmail: "noreply@example.com", SenderName: "Fatecraft", VerificationSubject: "验证码",
-		VerificationTemplate: "验证码：{{code}}", VerificationCodeTTLMinutes: 10, VerificationResendSeconds: 60,
+		EmailAuthEnabled: authSettingPointer(emailAuthEnabled), LinuxDOLoginEnabled: authSettingPointer(true),
+		EmailRegistrationEnabled: authSettingPointer(false), EmailVerificationEnabled: authSettingPointer(false), InvitationRequired: authSettingPointer(false),
+		SMTPHost: authSettingPointer("smtp.example.com"), SMTPPort: authSettingPointer(587), SMTPSecurity: authSettingPointer("starttls"),
+		SenderEmail: authSettingPointer("noreply@example.com"), SenderName: authSettingPointer("Fatecraft"), VerificationSubject: authSettingPointer("验证码"),
+		VerificationTemplate: authSettingPointer("验证码：{{code}}"), VerificationCodeTTLMinutes: authSettingPointer(10), VerificationResendSeconds: authSettingPointer(60),
 	}
 }
 
@@ -749,7 +753,7 @@ func TestSMTPPasswordIsEncryptedAndNeverReturned(t *testing.T) {
 	repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
 	svc := NewService(repo, Config{DataEncryptionKey: strings.Repeat("secret", 6)})
 	input := validSettingsInput(true)
-	input.SMTPUsername = "mailer"
+	input.SMTPUsername = authSettingPointer("mailer")
 	input.SMTPPassword = "plain-password"
 	view, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input)
 	if err != nil {
@@ -808,7 +812,7 @@ func TestUpdateAdminSettingsLinuxDOToggle(t *testing.T) {
 	repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
 	svc := NewService(repo, linuxDOTestConfig(nil))
 	input := validSettingsInput(true)
-	input.LinuxDOLoginEnabled = false
+	input.LinuxDOLoginEnabled = authSettingPointer(false)
 	view, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -822,7 +826,7 @@ func TestUpdateAdminSettingsLinuxDOToggle(t *testing.T) {
 
 	// 双关全灭：允许保存（之后无人能再登录），不检查 owner 绑定。
 	input = validSettingsInput(false)
-	input.LinuxDOLoginEnabled = false
+	input.LinuxDOLoginEnabled = authSettingPointer(false)
 	if _, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input); err != nil {
 		t.Fatalf("disabling both logins error = %v, want nil", err)
 	}

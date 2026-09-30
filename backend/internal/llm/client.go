@@ -28,12 +28,19 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("LLM 请求失败 (%d): %s", e.StatusCode, e.Body)
 }
 
+func (e *HTTPError) SafeLogMessage() string { return fmt.Sprintf("LLM HTTP %d", e.StatusCode) }
+
+type providerMessageError struct{ message string }
+
+func (e *providerMessageError) Error() string        { return "模型响应失败: " + e.message }
+func (*providerMessageError) SafeLogMessage() string { return "模型响应报告失败" }
+
 // Client 是一个支持 Chat Completions 和 Responses 两种 OpenAI 兼容协议的
 // HTTP 客户端。协议由 Params.Protocol 选择，空值按 Responses 处理。
 type Client struct {
 	http         *http.Client
 	auditWriter  RequestAuditWriter
-	auditEnabled func(context.Context) bool
+	auditEnabled func(context.Context, Params) bool
 }
 
 // responseHeaderTimeout 只约束"发出请求到收到响应头"的等待;模型排队或
@@ -48,9 +55,9 @@ func NewClient() *Client {
 	return &Client{http: &http.Client{Transport: transport}}
 }
 
-// SetRequestAudit 安装详细请求日志写入器。enabled 返回 false 时完全不创建日志。
-// 该开关由管理员全局设置控制，默认关闭。
-func (c *Client) SetRequestAudit(writer RequestAuditWriter, enabled func(context.Context) bool) {
+// SetRequestAudit 安装调用摘要写入器。enabled 只控制是否采集详细正文。
+// 由管理员开关和调用归属控制，在每次逻辑调用开始时固定采集决定。
+func (c *Client) SetRequestAudit(writer RequestAuditWriter, enabled func(context.Context, Params) bool) {
 	c.auditWriter = writer
 	c.auditEnabled = enabled
 }
@@ -69,6 +76,7 @@ type chatRequest struct {
 
 // streamChunk 是 Chat Completions 流式响应中单个 SSE 数据块的结构。
 type streamChunk struct {
+	Usage   *agentTokenUsage `json:"usage"`
 	Choices []struct {
 		Delta struct {
 			Content string `json:"content"`
@@ -79,6 +87,7 @@ type streamChunk struct {
 
 // completionResp 是 Chat Completions 非流式响应的结构。
 type completionResp struct {
+	Usage   *agentTokenUsage `json:"usage"`
 	Choices []struct {
 		Message      Message `json:"message"`
 		FinishReason string  `json:"finish_reason"`
@@ -145,6 +154,7 @@ type responsesFormat struct {
 // events. OutputText is raw because a few compatible gateways return an array
 // of strings even though the official API returns a single string.
 type responsesResponse struct {
+	Usage             *agentTokenUsage           `json:"usage"`
 	Output            []responsesOutputItem      `json:"output"`
 	OutputText        json.RawMessage            `json:"output_text"`
 	Status            string                     `json:"status"`
@@ -202,7 +212,7 @@ func (c *Client) streamChat(ctx context.Context, p Params, messages []Message, o
 		ResponseFormat:  p.ResponseFormat,
 	}
 	requestBody, marshalErr := json.Marshal(body)
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	started := time.Now()
 	if marshalErr != nil {
 		c.writeAudit(ctx, auditOn, p, true, nil, "", "", 0, "", false, false, marshalErr, started)
@@ -223,7 +233,7 @@ func (c *Client) streamChat(ctx context.Context, p Params, messages []Message, o
 	}
 
 	var full strings.Builder
-	raw := newAuditBuffer(maxLLMAuditBytes)
+	raw := newCaptureBuffer(auditOn)
 	finishReason := ""
 	receivedDone := false
 	reader := bufio.NewReader(resp.Body)
@@ -252,6 +262,7 @@ func (c *Client) streamChat(ctx context.Context, p Params, messages []Message, o
 					c.writeAudit(ctx, auditOn, p, true, requestBody, raw.String(), full.String(), resp.StatusCode, finishReason, receivedDone, false, err, started)
 					return full.String(), err
 				}
+				auditCall(ctx).setUsage(chunk.Usage)
 				for _, ch := range chunk.Choices {
 					if ch.Delta.Content != "" {
 						if full.Len()+len(ch.Delta.Content) > maxLLMResponseBytes {
@@ -316,7 +327,7 @@ func (c *Client) completeChat(ctx context.Context, p Params, messages []Message)
 		ResponseFormat:  p.ResponseFormat,
 	}
 	requestBody, marshalErr := json.Marshal(body)
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	started := time.Now()
 	if marshalErr != nil {
 		c.writeAudit(ctx, auditOn, p, false, nil, "", "", 0, "", false, false, marshalErr, started)
@@ -369,7 +380,7 @@ func (c *Client) streamResponses(ctx context.Context, p Params, messages []Messa
 		Text:            responsesText(p.ResponseFormat),
 	}
 	requestBody, marshalErr := json.Marshal(body)
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	started := time.Now()
 	if marshalErr != nil {
 		c.writeAudit(ctx, auditOn, p, true, nil, "", "", 0, "", false, false, marshalErr, started)
@@ -389,7 +400,7 @@ func (c *Client) streamResponses(ctx context.Context, p Params, messages []Messa
 	}
 
 	var full strings.Builder
-	raw := newAuditBuffer(maxLLMAuditBytes)
+	raw := newCaptureBuffer(auditOn)
 	var finalResponse *responsesResponse
 	finishReason := ""
 	receivedDone := false
@@ -436,6 +447,9 @@ func (c *Client) streamResponses(ctx context.Context, p Params, messages []Messa
 				streamErr = fmt.Errorf("流式 JSON 解析失败: %w", err)
 				break
 			}
+			if event.Response != nil {
+				auditCall(ctx).setUsage(event.Response.Usage)
+			}
 			{
 				typ := event.Type
 				if typ == "" {
@@ -460,7 +474,7 @@ func (c *Client) streamResponses(ctx context.Context, p Params, messages []Messa
 				case "response.failed":
 					receivedDone = true
 					if event.Error != nil && event.Error.Message != "" {
-						streamErr = fmt.Errorf("模型响应失败: %s", event.Error.Message)
+						streamErr = &providerMessageError{message: event.Error.Message}
 					} else {
 						streamErr = errors.New("模型响应失败")
 					}
@@ -526,7 +540,7 @@ func (c *Client) completeResponses(ctx context.Context, p Params, messages []Mes
 		Text:            responsesText(p.ResponseFormat),
 	}
 	requestBody, marshalErr := json.Marshal(body)
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	started := time.Now()
 	if marshalErr != nil {
 		c.writeAudit(ctx, auditOn, p, false, nil, "", "", 0, "", false, false, marshalErr, started)

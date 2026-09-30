@@ -409,16 +409,37 @@ func (r *AuthRepository) GetAuthSettings(ctx context.Context) (*AuthSettings, er
 
 func (r *AuthRepository) SaveAuthSettings(ctx context.Context, settings *AuthSettings) error {
 	settings.ID = 1
-	settings.UpdatedAt = time.Now()
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"email_auth_enabled", "linuxdo_login_enabled", "email_registration_enabled", "email_verification_enabled", "invitation_required",
-			"smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_password_encrypted",
-			"sender_email", "sender_name", "verification_subject", "verification_template",
-			"verification_code_ttl_minutes", "verification_resend_seconds", "updated_at",
-		}),
-	}).Create(settings).Error
+	expected := settings.UpdatedAt
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var previous AuthSettings
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&previous, "id = ?", 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if configActor(ctx) != nil && !previous.UpdatedAt.Equal(expected) {
+			return ErrSettingsConflict
+		}
+		changes := changedFields(authSnapshot(&previous), authSnapshot(settings))
+		secretChange(changes, "smtp_password", previous.SMTPPasswordEncrypted, settings.SMTPPasswordEncrypted)
+		secretChange(changes, "smtp_host", previous.SMTPHost, settings.SMTPHost)
+		secretChange(changes, "smtp_username", previous.SMTPUsername, settings.SMTPUsername)
+		secretChange(changes, "sender_email", previous.SenderEmail, settings.SenderEmail)
+		secretChange(changes, "sender_name", previous.SenderName, settings.SenderName)
+		secretChange(changes, "verification_subject", previous.VerificationSubject, settings.VerificationSubject)
+		secretChange(changes, "verification_template", previous.VerificationTemplate, settings.VerificationTemplate)
+		settings.UpdatedAt = time.Now().UTC().Truncate(time.Microsecond)
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"email_auth_enabled", "linuxdo_login_enabled", "email_registration_enabled", "email_verification_enabled", "invitation_required",
+				"smtp_host", "smtp_port", "smtp_security", "smtp_username", "smtp_password_encrypted",
+				"sender_email", "sender_name", "verification_subject", "verification_template",
+				"verification_code_ttl_minutes", "verification_resend_seconds", "updated_at",
+			}),
+		}).Create(settings).Error; err != nil {
+			return err
+		}
+		return writeConfigAudit(ctx, tx, "auth_settings_change", changes)
+	})
 }
 
 func (r *AuthRepository) LatestEmailVerification(ctx context.Context, email, purpose string) (*EmailVerificationCode, error) {
@@ -646,13 +667,23 @@ func (r *AuthRepository) UpdateUserStatus(ctx context.Context, actorID, targetID
 }
 
 // ListAdminAuditLogs 按时间倒序读取最近的管理员审计记录；limit 由调用方校验，这里只做兜底。
-func (r *AuthRepository) ListAdminAuditLogs(ctx context.Context, limit int) ([]AdminAuditLog, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+func (r *AuthRepository) ListAdminAuditLogs(ctx context.Context, filter LogQuery) ([]AdminAuditLog, string, bool, error) {
+	query, err := filter.query(ctx, r.db, "audit")
+	if err != nil {
+		return nil, "", false, err
 	}
-	var logs []AdminAuditLog
-	err := r.db.WithContext(ctx).Order("created_at DESC, id DESC").Limit(limit).Find(&logs).Error
-	return logs, err
+	rows := []AdminAuditLog{}
+	if err := query.Find(&rows).Error; err != nil {
+		return nil, "", false, err
+	}
+	more := len(rows) > filter.Limit
+	next := ""
+	if more {
+		rows = rows[:filter.Limit]
+		last := rows[len(rows)-1]
+		next = filter.next("audit", last.CreatedAt, last.ID)
+	}
+	return rows, next, more, nil
 }
 
 func (r *AuthRepository) ListExternalIdentities(ctx context.Context, userID uuid.UUID) ([]ExternalIdentitySummary, error) {

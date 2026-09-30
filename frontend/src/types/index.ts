@@ -67,6 +67,7 @@ export type {
   LLMCapabilityDiagnostic,
   LLMCapabilityCheckResponse,
   AdminSystemSettings,
+  DetailedLLMLoggingScope,
   AdminLLMRequestLogSummary,
   AdminLLMRequestLog,
   AdminContextBuildLogSummary,

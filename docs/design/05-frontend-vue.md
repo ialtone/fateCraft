@@ -34,14 +34,14 @@ Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转�
 | `/` | ConversationListView | 已发布挑战、我的对话、筛选与创建入口 |
 | `/conversations/:id` | ConversationView | 消息、生成、状态、判定、结局和上下文 |
 | `/shares` | ConversationListView + MySharesView | 首页“我的分享”小标签；跨对话检索、分页与管理 |
-| `/rewards` | RewardsView | 余额、领取、积分兑换、获奖记录、订单和流水 |
+| `/rewards` | RewardsView | 积分兑换（默认）、资产概览、奖励记录、兑换记录、余额流水五个小 Tab |
 | `/settings` | SettingsView | 当前用户 LLM 配置、第三方账户绑定 |
 | `/admin/identities` | AdminView | 管理员只读审计站内账号与第三方身份绑定关系 |
 | `/admin` | AdminLayout + AdminDashboardView | 管理后台总览；与普通用户端分离 |
 | `/admin/users` | AdminView(section=users) | 用户角色、账号状态和 owner 转交 |
 | `/admin/settings` | AdminView(section=settings) | 判定系统、平台 LLM 和诊断策略 |
 | `/admin/auth` | AdminView(section=auth) | 登录注册策略、SMTP 和邀请码 |
-| `/admin/logs` | AdminView(section=logs) | 模型请求和上下文构建诊断 |
+| `/admin/logs` | AdminView(section=logs) | 模型、上下文、管理审计和实例诊断状态 |
 | `/admin/gameplay` | AdminView(section=gameplay) | 可信玩法模块、验证器与计算器 |
 | `/admin/rewards` | AdminView(section=rewards) + AdminRewardsPanel | 独立奖励管理、发放、兑换与审计 |
 | `/admin/content` | AdminView(section=content) | 仓库内置挑战导入 |
@@ -143,13 +143,41 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 保存当前有效的 LLM 设置，以及 Responses/Chat Completions 协议、叙事、长期记忆、角色问答三个模型选择。协议默认 Responses；首次进入不预填叙事模型，获取模型列表后选择首项；后两者模型为空时继承叙事模型。用户处于 `user_managed` 时可编辑自己的连接和密钥；处于 `platform_managed` 时显示平台只读投影，隐藏用户 Key、保存和个人模型列表入口。API Key 只显示是否已配置，不回显密文或明文；管理员全局设置提供接入模式和公共模型配置。设置页没有 Provider 选项：填谁的 Base URL 就用谁的服务（官方、OpenRouter、中转站、本地模型均可），OpenAI、DeepSeek、OpenRouter 官方地址由服务端自动适配。“接口协议”下拉框始终提供 Chat Completions 和 Responses 两项，由用户手动选择，服务端永不改写；协议提示分两种：表单 base_url 与已保存值相同、且服务端识别档位不是兼容网关时显示“已识别为 {档位名}，已自动适配请求参数”；其他情况显示“按所选协议请求。不确定时先用‘测试连接’或能力诊断确认”。管理后台公共 LLM 配置同理：无公共 Provider 选项，协议下拉与提示规则相同，识别结果使用 `public_llm_resolved_profile`。前端不写任何按供应商区分协议的提示；DeepSeek + Chat 下记忆/问答不可用的情况，由后端拦截文案和能力诊断结果告知用户。
 
+## 用户奖励页面
+
+`RewardsView` 使用积分兑换、资产概览、奖励记录、兑换记录、余额流水五个小 Tab，积分兑换排在首位并作为进入奖励页的默认页。概览只展示余额/额度和藏品，奖励记录负责领取与获奖历史，商品页只展示可兑换商品及确认窗口；兑换订单与余额明细分别独立。页面顶部提供奖励刷新，每个列表保留自己的刷新、筛选和分页，切换后保留已有筛选与输入。
+
+兑换记录中的「查询兑换结果」打开独立弹窗，校验完整请求 UUID 后查询当前账号的订单，结果及错误只展示在弹窗。查询到历史订单不当作一次新兑换，也不能清除其他请求的待确认状态；只有请求 ID 匹配才结束原待确认兑换。查询未命中不代表兑换没有执行，保留原请求用于查询或同次重试。
+
+兑换控制器随页面挂载以恢复同标签页 sessionStorage 中的原请求，商品仅在首次进入兑换 Tab 时加载。未确认兑换显示页面级「继续确认」入口，切换 Tab 不创建新请求；确认窗口提供「查询本次结果」和「重试同次兑换」。成功后可直接跳到兑换记录，刷新余额、奖励记录与已挂载的订单/流水；余额接口失败不阻止其他记录刷新。交易编号在用户详情中默认折叠，内部账本 ID 仅管理视图显示。
+
+本地回归运行 `npm run test:player-rewards`，覆盖页面分组、查询入口归属、请求 ID 校验及历史查询不误结束其他待确认兑换；真实浏览器联调仍需检查切换、刷新恢复、未知结果查询/重试及移动端。
+
 ## 管理页面
 
-管理页面使用独立侧栏路由，主要区域如下：
+管理页面使用独立侧栏路由，大区域下按操作职责组织小 Tab。单一区域路由隐藏重复的大 Tab 标题，不把所有表单堆在同一小 Tab。
+
+| 管理区域 | 小 Tab / 展示方式 |
+| --- | --- |
+| 总览 | 管理区域入口 |
+| 用户与权限 | 用户管理、最近操作；完整审计进入诊断日志 |
+| 全局设置 | 判定规则、模型服务、日志策略 |
+| 账号与注册 | 登录与注册、发信邮箱、验证码邮件、邀请码 |
+| 第三方账户 | 单一绑定列表 |
+| 诊断日志 | 模型调用、上下文构建、管理审计、诊断状态 |
+| 奖励管理 | 概览、奖励资产、通关规则、注册赠送、用户发放、兑换商品、兑换订单、发放记录、管理审计 |
+| 玩法能力 | 单一可信模块目录 |
+| 内置内容 | 内容列表及导入预览弹窗 |
+| 挑战内容 | 挑战包与版本、版本编辑；选择版本后进入编辑页 |
+| 分享治理 | 公开分享、待处理举报 |
+
+全局和账号设置的保存按钮只提交当前分组，响应也只回填该组，其他 Tab 的未保存输入、待修改密钥及清除标记保留。SMTP 与验证码模板测试使用已保存配置。新拆分的小 Tab 首次访问时挂载，切换后保留表单；高级 JSON 未应用的文本也保留。不同挑战版本通过组件 key 隔离编辑状态。管理员权限沿用服务端边界，普通管理员不能修改平台 LLM 或认证配置。
+
+本地回归运行 `npm run test:admin-tabs`（Node 24），验证设置分组不夹带其他页草稿/凭据，以及小 Tab 归属和保留策略；前端类型检查与生产构建继续使用 `npm run build`。
 
 ### 玩法设置
 
-使用 Switch 控制全局判定开关，Select 选择 easy/normal/hard，保存后以服务端响应覆盖本地值。
+「全局设置 → 判定规则」使用 Switch 控制全局判定开关，单选按钮选择 easy/normal/hard，保存后以服务端响应回填判定字段。公共模型与日志分别在同区域的「模型服务」和「日志策略」维护。
 
 ### 玩法能力
 
@@ -158,9 +186,9 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ### 奖励管理
 
-`AdminRewardsPanel` 按概览、资产、规则、用户、兑换、记录组织操作。规则列表跳转 `/admin/challenges?version=<id>`，已发布版本只读；编辑继续创建草稿并发布。`RewardUserSearch` 调用服务端搜索和分页，`AdminUsersPanel` 使用 `{users,has_more}` 中的 users 数组，不把响应对象当成账号列表。
+`AdminRewardsPanel` 按上表的九个小 Tab 组织操作。通关规则与注册赠送分开，商品配置与兑换订单分开，发放记录与管理审计分开。规则列表跳转 `/admin/challenges?version=<id>` 并打开版本编辑，已发布版本只读；编辑继续创建草稿并发布。`RewardUserSearch` 调用服务端搜索和分页，`AdminUsersPanel` 使用 `{users,has_more}` 中的 users 数组，不把响应对象当成账号列表。
 
-`AdminRewardUserPanel` 绑定选定用户 ID，展示余额、用途、直接/待领取方式、管理原因和公开说明，预览后提交稳定 request ID。`RewardRecordsPanel` 提供来源/状态/时间筛选，管理模式另支持用户和资产筛选、详情审计、撤销、受限冲正和说明；兑换来源不可单边冲正。`RewardLedgerPanel` 用游标展示实际流水。
+`AdminRewardUserPanel` 绑定选定用户 ID，分为账户余额、发放奖励、获奖记录、余额流水，默认进入发放奖励；选择资产后显示该资产余额。发放表单维护用途、直接/待领取方式、管理原因和公开说明，预览后提交稳定 request ID，切换小 Tab 不重建发放请求。`RewardRecordsPanel` 提供来源/状态/时间筛选，管理模式另支持用户和资产筛选、详情审计、撤销、受限冲正和说明；兑换来源不可单边冲正。`RewardLedgerPanel` 用游标展示实际流水。
 
 `AdminRewardExchangePanel` 配置商品及修订；`RewardExchangePanel` 确认价格、份数和所得，未知结果保留原请求并查询或重试；`RewardExchangeOrders` 展示不可变订单。用户领取或兑换后重新读取 rewards Store、记录与流水，顶栏额度随 Store 刷新，不在本地预扣余额。概览总量用十进制字符串避免精度丢失。完整交互边界见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
@@ -181,10 +209,10 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ### 挑战内容
 
-- 左侧列出挑战包及其版本和状态。
+- 「挑战包与版本」列出挑战包及其版本和状态，「版本编辑」承载当前版本表单。
 - 可创建新挑战包。
 - 可从当前版本复制指定版本号的新草稿。
-- 选择版本后加载完整 `manifest + runtime + assets + outcomes + reward_rules` 文档。
+- 选择版本后加载完整 `manifest + runtime + assets + outcomes + reward_rules` 文档并切换到版本编辑；编辑器分为基本信息、叙事资产、玩法定义、玩法运行、状态字段、玩家界面、结局验证、奖励规则、高级 JSON。
 - draft 使用结构化编辑器分区维护入口、资产、运行契约、状态、界面、结局和奖励，published 全部只读。
 - “高级 JSON”用于导入、导出和少量高级维护；导入前先检查顶层结构，业务校验以服务端发布结果为准。
 - 发布成功后刷新挑战列表和当前版本内容。
@@ -215,7 +243,8 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 - 未登录访问受保护路由会到登录页。
 - 普通用户看不到管理入口且直接访问 `/admin` 或任意 `/admin/*` 子路由被守卫拦截；子页面只加载对应管理数据。
-- 模型请求详细日志默认关闭；开启后管理员可按主叙事、判定续写、Memory 和角色询问辨识最近调用，并在详情关联 attempt、Memory job/版本和 Inquiry snapshot；界面不得显示 API Key。管理员页另提供诊断日志自动清理开关和保留天数，明确说明不影响分享治理审计。
+- 后台 `/admin/logs` 由 AdminDiagnostics 提供模型、上下文、管理审计和诊断状态四页，支持筛选、游标加载更多和复制关联 ID。模型摘要始终保存，正文开关默认关闭；关闭、截断、无记录、详情已清理和读取失败分别提示。配置审计展示脱敏差异。完整字段见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
+- 全局设置中的详细日志支持全部、指定用户、指定对话三个范围，仅开启「模型请求详细日志」时显示采集范围；用户复用后台搜索，点击选择后显示目标，对话填写完整 UUID。切换范围清空旧目标，关闭开关隐藏范围并保留配置，保存后应用于后续模型调用，无自动关闭。范围外日志仍有摘要，正文预算与清理策略独立。
 - 普通上下文检查器只显示可理解的占用摘要和当前活动；Prompt 分段、引用 ID 与裁剪诊断仅管理员可见。
 - LinuxDo 登录只用于已绑定身份；首次安装直接在 `/setup` 创建本地账号，第三方绑定从设置页发起，注册作为次级入口；关闭方式提交时有明确提示。
 - 创建表单切换挑战会修正无效 Persona。

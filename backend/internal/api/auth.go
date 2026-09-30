@@ -319,6 +319,7 @@ func (s *Server) requireAuth(c *gin.Context) {
 	}
 	c.Set(authUserKey, user)
 	ctx := identity.WithPlayerID(c.Request.Context(), user.ID.String())
+	ctx = logging.WithFields(ctx, zap.String("player_id", user.ID.String()))
 	c.Request = c.Request.WithContext(ctx)
 	c.Next()
 }
@@ -411,12 +412,15 @@ func authFail(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, authservice.ErrInvalidVerificationCode), errors.Is(err, authservice.ErrInvalidInvitationCode):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, authservice.ErrInvalidAuthSettings), errors.Is(err, authservice.ErrInvalidEmail), errors.Is(err, authservice.ErrInvalidPassword):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, authservice.ErrInvalidUsername), errors.Is(err, authservice.ErrInvalidDisplayName),
 		errors.Is(err, storage.ErrUserNotBindable), errors.Is(err, storage.ErrIdentityAlreadyBound):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, authservice.ErrVerificationCooldown):
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
 	case errors.Is(err, authservice.ErrEmailSendFailed):
+		_ = c.Error(err)
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": authservice.ErrEmailSendFailed.Error()})
 	case errors.Is(err, authservice.ErrEncryptionNotConfigured):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "发信服务尚未配置"})
@@ -429,6 +433,6 @@ func authFail(c *gin.Context, err error) {
 	case errors.Is(err, storage.ErrNotFound):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		fail(c, err)
 	}
 }

@@ -155,7 +155,7 @@ func TestStreamDetailedAuditKeepsRawSSEWithoutSecrets(t *testing.T) {
 	defer server.Close()
 	capture := &requestAuditCapture{}
 	client := NewClient()
-	client.SetRequestAudit(capture.write, func(context.Context) bool { return true })
+	client.SetRequestAudit(capture.write, func(context.Context, Params) bool { return true })
 	params := Params{
 		BaseURL: server.URL, APIKey: "secret-key", Model: "audit-model", Protocol: ProtocolChatCompletions, MaxTokens: 100,
 		ConversationID: "conversation", MessageID: "message",
@@ -193,7 +193,7 @@ func TestStreamAuditTruncationDoesNotTruncateParsedResponse(t *testing.T) {
 
 	capture := &requestAuditCapture{}
 	client := NewClient()
-	client.SetRequestAudit(capture.write, func(context.Context) bool { return true })
+	client.SetRequestAudit(capture.write, func(context.Context, Params) bool { return true })
 	content, err := client.Stream(context.Background(), Params{
 		BaseURL: server.URL, APIKey: "k", Model: "audit-model", Protocol: ProtocolChatCompletions,
 	}, nil, nil)
@@ -210,24 +210,31 @@ func TestStreamAuditTruncationDoesNotTruncateParsedResponse(t *testing.T) {
 	if !audit.Success || !audit.AuditTruncated {
 		t.Fatalf("audit success=%v truncated=%v", audit.Success, audit.AuditTruncated)
 	}
-	if len(audit.RawResponse) != maxLLMAuditBytes || len(audit.ResponseText) != maxLLMAuditBytes {
+	if len(audit.RawResponse) == 0 || len(audit.RawResponse) > auditResponseLimit || len(audit.ResponseText) != auditTextLimit {
 		t.Fatalf("audit bounds: raw=%d text=%d", len(audit.RawResponse), len(audit.ResponseText))
+	}
+	if info := audit.BodyMetadata["raw_response"]; !info.Truncated || info.OriginalBytes <= int64(auditResponseLimit) {
+		t.Fatalf("stream truncation metadata = %+v", info)
 	}
 }
 
-func TestDetailedAuditDisabledCreatesNoRecord(t *testing.T) {
+func TestDetailedAuditDisabledCreatesSummary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"完整内容"},"finish_reason":"stop"}]}`)
 	}))
 	defer server.Close()
 	capture := &requestAuditCapture{}
 	client := NewClient()
-	client.SetRequestAudit(capture.write, func(context.Context) bool { return false })
+	client.SetRequestAudit(capture.write, func(context.Context, Params) bool { return false })
 	if _, err := client.Complete(context.Background(), Params{BaseURL: server.URL, APIKey: "k", Model: "m", Protocol: ProtocolChatCompletions}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(capture.items) != 0 {
-		t.Fatalf("disabled audit wrote %d records", len(capture.items))
+	if len(capture.items) != 1 {
+		t.Fatalf("summary count=%d", len(capture.items))
+	}
+	a := capture.items[0]
+	if a.BodyStatus != "disabled" || string(a.RequestBody) != "{}" || a.RawResponse != "" || a.ResponseText != "" || !a.Success {
+		t.Fatalf("unexpected summary: %+v", a)
 	}
 }
 
@@ -248,9 +255,9 @@ func TestSafeAuditURLRemovesSensitiveParts(t *testing.T) {
 			want: "https://example.com/v1",
 		},
 		{
-			name: "invalid URL is omitted",
+			name: "invalid URL is marked",
 			raw:  "%zz?api_key=secret",
-			want: "",
+			want: "[invalid-url]",
 		},
 	}
 	for _, tt := range tests {

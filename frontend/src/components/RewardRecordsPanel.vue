@@ -164,7 +164,7 @@ defineExpose({ reload: () => load() })
 <template>
   <section class="records">
     <div class="toolbar">
-      <h3>获奖与发放记录</h3>
+      <h3>{{ admin ? '获奖与发放记录' : '奖励记录' }}</h3>
       <NButton :loading="loading" @click="load()">刷新</NButton>
     </div>
     <div v-if="admin && !userId">

@@ -64,28 +64,29 @@ func (g *gormZap) ParamsFilter(_ context.Context, sql string, _ ...any) (string,
 	return sql, nil
 }
 
-func (g *gormZap) Trace(_ context.Context, begin time.Time, fc func() (string, int64), err error) {
+func (g *gormZap) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	if g.level <= gormlogger.Silent {
 		return
 	}
 	elapsed := time.Since(begin)
 	switch {
 	case err != nil && errors.Is(err, gormlogger.ErrRecordNotFound):
-		g.trace(gormlogger.Info, zapcore.DebugLevel, "SQL 未命中", elapsed, fc)
+		g.trace(ctx, gormlogger.Info, zapcore.DebugLevel, "SQL 未命中", elapsed, fc)
 	case err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)):
-		g.trace(gormlogger.Info, zapcore.DebugLevel, "SQL 已取消", elapsed, fc)
+		g.trace(ctx, gormlogger.Info, zapcore.DebugLevel, "SQL 已取消", elapsed, fc)
 	case err != nil && isIntegrityConstraint(err):
-		g.trace(gormlogger.Warn, zapcore.WarnLevel, "SQL 约束拒绝", elapsed, fc, zap.Error(err))
+		g.trace(ctx, gormlogger.Warn, zapcore.WarnLevel, "SQL 约束拒绝", elapsed, fc, zap.String("error", ErrorText(err)))
 	case err != nil:
-		g.trace(gormlogger.Error, zapcore.ErrorLevel, "SQL 执行失败", elapsed, fc, zap.Error(err))
+		g.trace(ctx, gormlogger.Error, zapcore.ErrorLevel, "SQL 执行失败", elapsed, fc, zap.String("error", ErrorText(err)))
 	case g.slowThreshold > 0 && elapsed > g.slowThreshold:
-		g.trace(gormlogger.Warn, zapcore.WarnLevel, "慢查询", elapsed, fc)
+		g.trace(ctx, gormlogger.Warn, zapcore.WarnLevel, "慢查询", elapsed, fc)
 	default:
-		g.trace(gormlogger.Info, zapcore.DebugLevel, "SQL", elapsed, fc)
+		g.trace(ctx, gormlogger.Info, zapcore.DebugLevel, "SQL", elapsed, fc)
 	}
 }
 
 func (g *gormZap) trace(
+	ctx context.Context,
 	minimum gormlogger.LogLevel,
 	level zapcore.Level,
 	message string,
@@ -103,7 +104,7 @@ func (g *gormZap) trace(
 		zap.String("sql", sql),
 	}
 	fields = append(fields, extra...)
-	g.log.Log(level, message, fields...)
+	withContext(g.log, ctx).Log(level, message, fields...)
 }
 
 type sqlStateError interface {

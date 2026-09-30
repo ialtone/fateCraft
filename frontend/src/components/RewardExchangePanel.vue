@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { NAlert, NButton, NEmpty, NInput, NInputNumber, NModal, NSpin, useMessage } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NInputNumber, NModal, NSpin, useMessage } from 'naive-ui'
 import { rewardExchangeApi as api } from '@/api/rewards'
 import { useAuthStore } from '@/stores/auth'
 import { useRewardStore } from '@/stores/rewards'
@@ -10,8 +10,9 @@ import type {
   RewardExchangeOrder,
   RewardExchangeRequest,
 } from '@/types/rewards'
-import RewardExchangeOrders from './RewardExchangeOrders.vue'
-const emit = defineEmits<{ changed: [] }>(),
+import { confirmsPendingExchange } from '@/lib/rewardExchangeState'
+const props = defineProps<{ active: boolean }>()
+const emit = defineEmits<{ changed: []; pendingChange: [pending: boolean]; viewOrders: [] }>(),
   message = useMessage(),
   rewards = useRewardStore()
 const offers = ref<RewardExchangeOfferView[]>([]),
@@ -23,11 +24,11 @@ const offers = ref<RewardExchangeOfferView[]>([]),
   units = ref<number | null>(1),
   pending = ref<RewardExchangeRequest>(),
   result = ref<RewardExchangeOrder>(),
-  lookupID = ref(''),
-  orderRevision = ref(0)
+  loaded = ref(false)
 const auth = useAuthStore()
 const storageKey = () => 'fatecraft:reward-exchange:' + auth.user?.id
 watch(pending, (value) => {
+  emit('pendingChange', !!value)
   try {
     if (value)
       sessionStorage.setItem(
@@ -60,10 +61,12 @@ const balance = computed(
     rewards.items.find((r) => r.definition.id === selected.value?.cost_definition_id)?.balance ?? 0,
 )
 async function load() {
+  if (loading.value) return
   loading.value = true
   error.value = ''
   try {
     offers.value = await api.offers()
+    loaded.value = true
   } catch (err) {
     error.value = rewardError(err)
   } finally {
@@ -85,12 +88,11 @@ function choose(offer: RewardExchangeOfferView) {
 async function completed(order: RewardExchangeOrder) {
   result.value = order
   pending.value = undefined
-  orderRevision.value++
   message.success('兑换完成，奖励已到账')
   emit('changed')
 }
 async function submit() {
-  if (!selected.value || !valid.value) return
+  if (busy.value || !selected.value || !valid.value) return
   if (!pending.value) {
     pending.value = {
       request_id: crypto.randomUUID(),
@@ -115,34 +117,54 @@ async function submit() {
     busy.value = false
   }
 }
-async function lookup() {
+async function queryPending() {
+  if (!pending.value || busy.value) return
   busy.value = true
   error.value = ''
   try {
-    await completed(await api.request(lookupID.value.trim()))
-    open.value = true
+    await completed(await api.request(pending.value.request_id))
   } catch (err) {
-    error.value = rewardError(err)
+    error.value = '暂未确认兑换结果，请保留原请求并稍后查询或重试同次兑换。' + rewardError(err)
   } finally {
     busy.value = false
   }
 }
+function resumePending() {
+  if (pending.value) open.value = true
+}
+function acceptConfirmedOrder(order: RewardExchangeOrder) {
+  if (!confirmsPendingExchange(pending.value, order)) return
+  result.value = order
+  pending.value = undefined
+  error.value = ''
+}
+function viewOrders() {
+  open.value = false
+  emit('viewOrders')
+}
+defineExpose({ resumePending, acceptConfirmedOrder })
+watch(
+  () => props.active,
+  (active) => {
+    if (active && !loaded.value) void load()
+    if (!active && !busy.value) open.value = false
+  },
+  { immediate: true },
+)
 async function refreshPrice() {
-  if (pending.value) return
+  if (pending.value || loading.value) return
   const id = selected.value?.id
   await load()
   selected.value = offers.value.find((o) => o.id === id)
   units.value = 1
 }
-onMounted(async () => {
-  await load()
+onMounted(() => {
   try {
     const saved = JSON.parse(sessionStorage.getItem(storageKey()) || 'null')
     if (saved?.request?.request_id && saved?.offer?.id) {
       selected.value = saved.offer
       pending.value = saved.request
       units.value = saved.request.units
-      open.value = true
     }
   } catch {
     /* Ignore malformed local state. */
@@ -172,22 +194,10 @@ onMounted(async () => {
       </div>
       <NEmpty v-if="!loading && !error && !offers.length" description="暂无可兑换商品"
     /></NSpin>
-    <details>
-      <summary>按请求 ID 查询兑换结果</summary>
-      <div class="toolbar">
-        <NInput v-model:value="lookupID" placeholder="兑换请求 ID" /><NButton
-          :loading="busy"
-          :disabled="!lookupID.trim()"
-          @click="lookup"
-          >查询</NButton
-        >
-      </div>
-    </details>
-    <RewardExchangeOrders :refresh-key="orderRevision" />
     <NModal
       v-model:show="open"
       preset="card"
-      title="确认兑换"
+      :title="result ? '兑换完成' : pending ? '确认兑换结果' : '确认兑换'"
       :mask-closable="!busy"
       :closable="!busy"
       :close-on-esc="!busy"
@@ -200,7 +210,10 @@ onMounted(async () => {
           {{ result.reward_quantity }} {{ result.snapshot.reward_asset.name }}</NAlert
         >
         <p class="identifier">订单 {{ result.id }}</p>
-        <p class="identifier">请求 {{ result.request_id }}</p></template
+        <div class="toolbar">
+          <NButton @click="open = false">继续浏览商品</NButton>
+          <NButton type="primary" @click="viewOrders">查看兑换记录</NButton>
+        </div></template
       >
       <template v-else-if="selected"
         ><h3>{{ selected.name }}</h3>
@@ -226,7 +239,8 @@ onMounted(async () => {
           <p class="identifier">{{ pending.request_id }}</p></NAlert
         >
         <div class="toolbar">
-          <NButton :disabled="busy || !!pending" @click="refreshPrice">刷新价格</NButton
+          <NButton v-if="pending" :loading="busy" @click="queryPending">查询本次结果</NButton
+          ><NButton v-else :disabled="busy || loading" @click="refreshPrice">刷新价格</NButton
           ><NButton type="primary" :loading="busy" :disabled="!valid" @click="submit">{{
             pending ? '重试同次兑换' : '确认扣除并兑换'
           }}</NButton>
@@ -267,13 +281,8 @@ h3,
 p {
   margin: 0;
 }
-p,
-summary {
+p {
   color: var(--text-dim);
-}
-summary {
-  cursor: pointer;
-  margin-bottom: 12px;
 }
 .identifier {
   overflow-wrap: anywhere;

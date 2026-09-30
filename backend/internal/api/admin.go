@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challengeimport"
+	"github.com/ialtone/fatecraft/internal/identity"
+	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/modelcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
@@ -46,28 +48,30 @@ type adminSystemSettingsResponse struct {
 }
 
 type adminSystemSettingsBody struct {
-	Enabled                 *bool    `json:"roll_system_enabled"`
-	DifficultyMode          *string  `json:"roll_difficulty_mode"`
-	DetailedLLMLogging      *bool    `json:"detailed_llm_logging_enabled"`
-	DiagnosticLogCleanup    *bool    `json:"diagnostic_log_cleanup_enabled"`
-	DiagnosticRetentionDays *int     `json:"diagnostic_log_retention_days"`
-	LLMAccessMode           *string  `json:"llm_access_mode"`
-	ClientLLMRouteEnabled   *bool    `json:"client_llm_route_enabled"`
-	PublicBaseURL           *string  `json:"public_llm_base_url"`
-	PublicProtocol          *string  `json:"public_llm_protocol"`
-	PublicAPIKey            *string  `json:"public_llm_api_key"`
-	ClearPublicAPIKey       bool     `json:"clear_public_llm_api_key"`
-	PublicModel             *string  `json:"public_llm_model"`
-	PublicMemoryModel       *string  `json:"public_llm_memory_model"`
-	PublicInquiryModel      *string  `json:"public_llm_inquiry_model"`
-	PublicMaxContext        *int     `json:"public_llm_max_context_tokens"`
-	PublicMaxResponse       *int     `json:"public_llm_max_response_tokens"`
-	PublicTemperature       *float64 `json:"public_llm_temperature"`
-	PublicTopP              *float64 `json:"public_llm_top_p"`
-	PublicStream            *bool    `json:"public_llm_stream_enabled"`
-	PublicReasoning         *string  `json:"public_llm_reasoning_effort"`
-	PublicMemoryReasoning   *string  `json:"public_llm_memory_reasoning_effort"`
-	PublicInquiryReasoning  *string  `json:"public_llm_inquiry_reasoning_effort"`
+	Enabled                    *bool    `json:"roll_system_enabled"`
+	DifficultyMode             *string  `json:"roll_difficulty_mode"`
+	DetailedLLMLogging         *bool    `json:"detailed_llm_logging_enabled"`
+	DetailedLLMLoggingScope    *string  `json:"detailed_llm_logging_scope"`
+	DetailedLLMLoggingTargetID *string  `json:"detailed_llm_logging_target_id"`
+	DiagnosticLogCleanup       *bool    `json:"diagnostic_log_cleanup_enabled"`
+	DiagnosticRetentionDays    *int     `json:"diagnostic_log_retention_days"`
+	LLMAccessMode              *string  `json:"llm_access_mode"`
+	ClientLLMRouteEnabled      *bool    `json:"client_llm_route_enabled"`
+	PublicBaseURL              *string  `json:"public_llm_base_url"`
+	PublicProtocol             *string  `json:"public_llm_protocol"`
+	PublicAPIKey               *string  `json:"public_llm_api_key"`
+	ClearPublicAPIKey          bool     `json:"clear_public_llm_api_key"`
+	PublicModel                *string  `json:"public_llm_model"`
+	PublicMemoryModel          *string  `json:"public_llm_memory_model"`
+	PublicInquiryModel         *string  `json:"public_llm_inquiry_model"`
+	PublicMaxContext           *int     `json:"public_llm_max_context_tokens"`
+	PublicMaxResponse          *int     `json:"public_llm_max_response_tokens"`
+	PublicTemperature          *float64 `json:"public_llm_temperature"`
+	PublicTopP                 *float64 `json:"public_llm_top_p"`
+	PublicStream               *bool    `json:"public_llm_stream_enabled"`
+	PublicReasoning            *string  `json:"public_llm_reasoning_effort"`
+	PublicMemoryReasoning      *string  `json:"public_llm_memory_reasoning_effort"`
+	PublicInquiryReasoning     *string  `json:"public_llm_inquiry_reasoning_effort"`
 }
 
 func (s *Server) updateAdminSystemSettings(c *gin.Context) {
@@ -78,6 +82,9 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 	}
 	actorValue, _ := c.Get(authUserKey)
 	actor, _ := actorValue.(*storage.User)
+	if actor != nil {
+		c.Request = c.Request.WithContext(identity.WithPlayerID(c.Request.Context(), actor.ID.String()))
+	}
 	if actor == nil || !actor.IsOwner() {
 		if body.LLMAccessMode != nil || body.ClientLLMRouteEnabled != nil || body.PublicBaseURL != nil ||
 			body.PublicProtocol != nil || body.PublicAPIKey != nil || body.ClearPublicAPIKey ||
@@ -104,8 +111,9 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 		}
 		settings.RollDifficultyMode = *body.DifficultyMode
 	}
-	if body.DetailedLLMLogging != nil {
-		settings.DetailedLLMLoggingEnabled = *body.DetailedLLMLogging
+	if err := applyDetailedLLMLoggingSettings(settings, body); err != nil {
+		fail(c, err)
+		return
 	}
 	if body.DiagnosticLogCleanup != nil {
 		settings.DiagnosticLogCleanupEnabled = *body.DiagnosticLogCleanup
@@ -180,11 +188,7 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 		}
 		updated, updateErr := s.llmSettings.UpdatePlatform(c.Request.Context(), settings, body.PublicAPIKey, body.ClearPublicAPIKey)
 		if updateErr != nil {
-			status := http.StatusBadRequest
-			if updateErr == llmsettings.ErrEncryptionUnavailable {
-				status = http.StatusServiceUnavailable
-			}
-			c.JSON(status, gin.H{"error": updateErr.Error()})
+			fail(c, updateErr)
 			return
 		}
 		// 关闭客户端直连开关时立刻关闭全部 Relay 连接，在途的客户端直连回合
@@ -202,6 +206,37 @@ func (s *Server) updateAdminSystemSettings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, &adminSystemSettingsResponse{SystemSettings: settings, PublicLLMResolvedProfile: resolveLLMProfile(settings.PublicLLMBaseURL)})
+}
+
+func applyDetailedLLMLoggingSettings(settings *storage.SystemSettings, body adminSystemSettingsBody) error {
+	next := *settings
+	if body.DetailedLLMLogging != nil {
+		next.DetailedLLMLoggingEnabled = *body.DetailedLLMLogging
+	}
+	if body.DetailedLLMLoggingScope != nil {
+		scope := strings.TrimSpace(*body.DetailedLLMLoggingScope)
+		if scope != next.DetailedLLMLoggingScope {
+			// A user ID must never be silently reused as a conversation ID.
+			next.DetailedLLMLoggingTargetID = nil
+		}
+		next.DetailedLLMLoggingScope = scope
+	}
+	if body.DetailedLLMLoggingTargetID != nil {
+		raw := strings.TrimSpace(*body.DetailedLLMLoggingTargetID)
+		next.DetailedLLMLoggingTargetID = nil
+		if raw != "" {
+			id, err := uuid.Parse(raw)
+			if err != nil || id == uuid.Nil {
+				return storage.ErrDetailedLLMLoggingScope
+			}
+			next.DetailedLLMLoggingTargetID = &id
+		}
+	}
+	if err := next.ValidateDetailedLLMLoggingScope(); err != nil {
+		return err
+	}
+	*settings = next
+	return nil
 }
 
 func validateDiagnosticLogRetention(days int) error {
@@ -286,7 +321,7 @@ func (s *Server) fetchAdminPublicModels(c *gin.Context) {
 	}
 	models, err := fetchUpstreamModels(c, baseURL, key)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		upstreamFailure(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"models": models})
@@ -307,8 +342,7 @@ func fetchUpstreamModels(c *gin.Context, baseURL, apiKey string) ([]string, erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("LLM 服务返回错误: %s", strings.TrimSpace(string(body)))
+		return nil, &llm.HTTPError{StatusCode: resp.StatusCode}
 	}
 	var result struct {
 		Data []struct {
@@ -317,7 +351,7 @@ func fetchUpstreamModels(c *gin.Context, baseURL, apiKey string) ([]string, erro
 			Name  string `json:"name"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&result); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 	models := make([]string, 0, len(result.Data))
@@ -337,32 +371,47 @@ func fetchUpstreamModels(c *gin.Context, baseURL, apiKey string) ([]string, erro
 }
 
 type adminLLMRequestLogSummary struct {
-	ID                         uuid.UUID  `json:"id"`
-	ConversationID             *uuid.UUID `json:"conversation_id,omitempty"`
-	MessageID                  *uuid.UUID `json:"message_id,omitempty"`
-	Purpose                    string     `json:"purpose"`
-	AttemptID                  *uuid.UUID `json:"attempt_id,omitempty"`
-	MemoryJobID                *uuid.UUID `json:"memory_job_id,omitempty"`
-	MemoryID                   *uuid.UUID `json:"memory_id,omitempty"`
-	InquiryID                  *uuid.UUID `json:"inquiry_id,omitempty"`
-	InquirySnapshotID          *uuid.UUID `json:"inquiry_snapshot_id,omitempty"`
-	InquirySnapshotBranchEpoch int64      `json:"inquiry_snapshot_branch_epoch"`
-	InquirySnapshotRevision    int64      `json:"inquiry_snapshot_revision"`
-	Model                      string     `json:"model"`
-	Stream                     bool       `json:"stream"`
-	ResponseStatus             *int       `json:"response_status,omitempty"`
-	FinishReason               string     `json:"finish_reason,omitempty"`
-	ReceivedDone               bool       `json:"received_done"`
-	Success                    bool       `json:"success"`
+	TraceID                    *uuid.UUID      `json:"trace_id,omitempty"`
+	Protocol                   string          `json:"protocol"`
+	StartedAt                  string          `json:"started_at"`
+	TransportAttempts          int             `json:"transport_attempts"`
+	InputTokens                *int            `json:"input_tokens"`
+	OutputTokens               *int            `json:"output_tokens"`
+	BodyStatus                 string          `json:"body_status"`
+	ErrorCode                  string          `json:"error_code,omitempty"`
+	BodyMetadata               storage.JSONMap `json:"body_metadata"`
+	ID                         uuid.UUID       `json:"id"`
+	ConversationID             *uuid.UUID      `json:"conversation_id,omitempty"`
+	MessageID                  *uuid.UUID      `json:"message_id,omitempty"`
+	Purpose                    string          `json:"purpose"`
+	AttemptID                  *uuid.UUID      `json:"attempt_id,omitempty"`
+	MemoryJobID                *uuid.UUID      `json:"memory_job_id,omitempty"`
+	MemoryID                   *uuid.UUID      `json:"memory_id,omitempty"`
+	InquiryID                  *uuid.UUID      `json:"inquiry_id,omitempty"`
+	InquirySnapshotID          *uuid.UUID      `json:"inquiry_snapshot_id,omitempty"`
+	InquirySnapshotBranchEpoch int64           `json:"inquiry_snapshot_branch_epoch"`
+	InquirySnapshotRevision    int64           `json:"inquiry_snapshot_revision"`
+	Model                      string          `json:"model"`
+	Stream                     bool            `json:"stream"`
+	ResponseStatus             *int            `json:"response_status,omitempty"`
+	FinishReason               string          `json:"finish_reason,omitempty"`
+	ReceivedDone               bool            `json:"received_done"`
+	Success                    bool            `json:"success"`
 	// 列表状态列依赖这三个字段判断“传输失败 / 结构失败”，必须随摘要返回。
-	TransportSuccess  bool   `json:"transport_success"`
-	StructuredSuccess bool   `json:"structured_success"`
-	OutputMode        string `json:"output_mode,omitempty"`
-	AuditTruncated    bool   `json:"audit_truncated"`
-	Error             string `json:"error,omitempty"`
-	DurationMS        int64  `json:"duration_ms"`
-	CreatedAt         string `json:"created_at"`
-	SettingsSource    string `json:"settings_source"`
+	TransportSuccess    bool     `json:"transport_success"`
+	StructuredSuccess   bool     `json:"structured_success"`
+	OutputMode          string   `json:"output_mode,omitempty"`
+	AuditTruncated      bool     `json:"audit_truncated"`
+	Error               string   `json:"error,omitempty"`
+	DurationMS          int64    `json:"duration_ms"`
+	CreatedAt           string   `json:"created_at"`
+	SettingsSource      string   `json:"settings_source"`
+	SettingsRevision    int64    `json:"settings_revision"`
+	ContractName        string   `json:"contract_name,omitempty"`
+	ContractVersion     string   `json:"contract_version,omitempty"`
+	ContractFingerprint string   `json:"contract_fingerprint,omitempty"`
+	StructuredErrorCode string   `json:"structured_error_code,omitempty"`
+	OutputTypes         []string `json:"output_types"`
 }
 
 type adminContextBuildLogSummary struct {
@@ -397,6 +446,7 @@ func summarizeAdminContextBuildLog(row storage.ContextBuildLog) adminContextBuil
 
 func summarizeAdminLLMRequestLog(row storage.LLMRequestLog) adminLLMRequestLogSummary {
 	return adminLLMRequestLogSummary{
+		TraceID: row.TraceID, Protocol: row.Protocol, TransportAttempts: row.TransportAttempts, InputTokens: row.InputTokens, OutputTokens: row.OutputTokens, BodyStatus: row.BodyStatus, ErrorCode: row.ErrorCode, BodyMetadata: row.BodyMetadata,
 		ID: row.ID, ConversationID: row.ConversationID, MessageID: row.MessageID,
 		Purpose: row.Purpose, AttemptID: row.AttemptID, MemoryJobID: row.MemoryJobID, MemoryID: row.MemoryID,
 		InquiryID: row.InquiryID, InquirySnapshotID: row.InquirySnapshotID,
@@ -405,30 +455,23 @@ func summarizeAdminLLMRequestLog(row storage.LLMRequestLog) adminLLMRequestLogSu
 		FinishReason: row.FinishReason, ReceivedDone: row.ReceivedDone, Success: row.Success, AuditTruncated: row.AuditTruncated,
 		TransportSuccess: row.TransportSuccess, StructuredSuccess: row.StructuredSuccess, OutputMode: row.OutputMode,
 		Error: row.Error, DurationMS: row.DurationMS, CreatedAt: row.CreatedAt.Format(time.RFC3339Nano),
-		SettingsSource: row.SettingsSource,
+		SettingsSource: row.SettingsSource, SettingsRevision: row.SettingsRevision,
+		StartedAt: row.StartedAt.Format(time.RFC3339Nano), ContractName: row.ContractName,
+		ContractVersion: row.ContractVersion, ContractFingerprint: row.ContractFingerprint,
+		StructuredErrorCode: row.StructuredErrorCode, OutputTypes: []string(row.OutputTypes),
 	}
 }
 
 func (s *Server) listAdminLLMRequestLogs(c *gin.Context) {
-	limit, err := optionalInt64(c.Query("limit"), 50)
-	if err != nil || limit < 1 || limit > 200 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "limit 必须是 1 到 200 的整数"})
+	filter, ok := logQuery(c, "llm")
+	if !ok {
 		return
 	}
 	if s.llmRequestLogs == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "模型请求日志服务未配置"})
 		return
 	}
-	var conversationID *uuid.UUID
-	if raw := c.Query("conversation_id"); raw != "" {
-		id, parseErr := uuid.Parse(raw)
-		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "conversation_id 无效"})
-			return
-		}
-		conversationID = &id
-	}
-	rows, err := s.llmRequestLogs.List(c.Request.Context(), int(limit), conversationID)
+	rows, next, more, err := s.llmRequestLogs.List(c.Request.Context(), filter)
 	if err != nil {
 		fail(c, err)
 		return
@@ -437,7 +480,7 @@ func (s *Server) listAdminLLMRequestLogs(c *gin.Context) {
 	for _, row := range rows {
 		out = append(out, summarizeAdminLLMRequestLog(row))
 	}
-	c.JSON(http.StatusOK, gin.H{"logs": out})
+	c.JSON(http.StatusOK, gin.H{"logs": out, "next_cursor": next, "has_more": more})
 }
 
 func (s *Server) getAdminLLMRequestLog(c *gin.Context) {
@@ -458,25 +501,15 @@ func (s *Server) getAdminLLMRequestLog(c *gin.Context) {
 }
 
 func (s *Server) listAdminContextBuildLogs(c *gin.Context) {
-	limit, err := optionalInt64(c.Query("limit"), 50)
-	if err != nil || limit < 1 || limit > 200 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "limit 必须是 1 到 200 的整数"})
+	filter, ok := logQuery(c, "context")
+	if !ok {
 		return
 	}
 	if s.ctxLogs == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "上下文日志服务未配置"})
 		return
 	}
-	var conversationID *uuid.UUID
-	if raw := c.Query("conversation_id"); raw != "" {
-		id, parseErr := uuid.Parse(raw)
-		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "conversation_id 无效"})
-			return
-		}
-		conversationID = &id
-	}
-	rows, err := s.ctxLogs.List(c.Request.Context(), int(limit), conversationID)
+	rows, next, more, err := s.ctxLogs.List(c.Request.Context(), filter)
 	if err != nil {
 		fail(c, err)
 		return
@@ -485,7 +518,7 @@ func (s *Server) listAdminContextBuildLogs(c *gin.Context) {
 	for _, row := range rows {
 		out = append(out, summarizeAdminContextBuildLog(row))
 	}
-	c.JSON(http.StatusOK, gin.H{"logs": out})
+	c.JSON(http.StatusOK, gin.H{"logs": out, "next_cursor": next, "has_more": more})
 }
 
 func (s *Server) getAdminContextBuildLog(c *gin.Context) {

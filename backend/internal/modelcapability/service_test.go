@@ -1,6 +1,7 @@
 package modelcapability
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -51,7 +52,20 @@ func TestAgentDiagnosticUsesProductionRequestShape(t *testing.T) {
 			defer server.Close()
 
 			settings.BaseURL = server.URL
-			result := New(llm.NewClient(), "").Check(t.Context(), uuid.New(), settings, RoleNarrative)
+			playerID := uuid.New()
+			client := llm.NewClient()
+			decisions := 0
+			client.SetRequestAudit(func(context.Context, llm.RequestAudit) error { return nil }, func(_ context.Context, p llm.Params) bool {
+				decisions++
+				if p.PlayerID != playerID.String() || p.ConversationID != "" || p.Purpose != "protocol_test" {
+					t.Error("diagnostic call lost trusted user attribution")
+				}
+				return false
+			})
+			result := New(client, "").Check(t.Context(), playerID, settings, RoleNarrative)
+			if decisions != 2 {
+				t.Fatalf("capture decisions=%d, want two tool steps", decisions)
+			}
 			if result.Status != "supported" || result.Feature != "agent_tools" || step != 2 {
 				t.Fatalf("result=%+v steps=%d", result, step)
 			}

@@ -92,7 +92,7 @@ func TestAgentStreamPreservesTextAndToolArrivalOrder(t *testing.T) {
 			var events []AgentEvent
 			result, _, done, err := parseAgentChatStream(strings.NewReader(tt.sse), func(event AgentEvent) {
 				events = append(events, event)
-			})
+			}, true)
 			if err != nil || !done || result.Text != "draft" || len(result.ToolCalls) != 1 {
 				t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 			}
@@ -115,7 +115,7 @@ func TestChatReasoningArrivesBeforeText(t *testing.T) {
 	var events []AgentEvent
 	result, _, done, err := parseAgentChatStream(strings.NewReader(sse), func(event AgentEvent) {
 		events = append(events, event)
-	})
+	}, true)
 	if err != nil || !done || result.ReasoningContent != "先检查" || result.Text != "叙事" {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -133,14 +133,14 @@ func TestAgentEdgeCases(t *testing.T) {
 	})
 
 	t.Run("stream eof", func(t *testing.T) {
-		_, _, done, err := parseAgentChatStream(strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"), nil)
+		_, _, done, err := parseAgentChatStream(strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"), nil, true)
 		if done || !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("done=%v err=%v", done, err)
 		}
 	})
 
 	t.Run("stream malformed json", func(t *testing.T) {
-		_, _, done, err := parseAgentChatStream(strings.NewReader("data: {not-json}\n\ndata: [DONE]\n\n"), nil)
+		_, _, done, err := parseAgentChatStream(strings.NewReader("data: {not-json}\n\ndata: [DONE]\n\n"), nil, true)
 		if done || err == nil || !strings.Contains(err.Error(), "流式 JSON 解析失败") {
 			t.Fatalf("done=%v err=%v", done, err)
 		}
@@ -149,7 +149,7 @@ func TestAgentEdgeCases(t *testing.T) {
 	t.Run("stream finish reason without done marker is accepted", func(t *testing.T) {
 		// 部分兼容网关在 finish_reason 之后直接关流、不发 [DONE]；
 		// 已拿到 finish_reason 的干净 EOF 必须视为完整响应。
-		result, _, done, err := parseAgentChatStream(strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"完整\"},\"finish_reason\":\"stop\"}]}\n\n"), nil)
+		result, _, done, err := parseAgentChatStream(strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"完整\"},\"finish_reason\":\"stop\"}]}\n\n"), nil, true)
 		if !done || err != nil || result.Text != "完整" || result.FinishReason != "stop" {
 			t.Fatalf("done=%v err=%v result=%+v", done, err, result)
 		}
@@ -225,7 +225,7 @@ func TestAgentParsersCaptureUsage(t *testing.T) {
 		sse := "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n" +
 			"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":80,\"completion_tokens\":20}}\n\n" +
 			"data: [DONE]\n\n"
-		result, _, _, err := parseAgentChatStream(strings.NewReader(sse), nil)
+		result, _, _, err := parseAgentChatStream(strings.NewReader(sse), nil, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -236,7 +236,7 @@ func TestAgentParsersCaptureUsage(t *testing.T) {
 
 	t.Run("responses stream", func(t *testing.T) {
 		sse := "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output_text\":\"ok\",\"usage\":{\"input_tokens\":90,\"output_tokens\":25}}}\n\n"
-		result, _, _, err := parseAgentResponsesStream(strings.NewReader(sse), nil)
+		result, _, _, err := parseAgentResponsesStream(strings.NewReader(sse), nil, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -298,7 +298,7 @@ func TestResponsesStreamCapturesReasoningItem(t *testing.T) {
 		"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"reasoning\",\"id\":\"rs-1\",\"status\":\"completed\",\"content\":[{\"type\":\"reasoning_text\",\"text\":\"检查完成\"}]}}\n\n" +
 		"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"output_index\":1,\"item\":{\"type\":\"function_call\",\"id\":\"item-1\",\"call_id\":\"call-1\",\"name\":\"fc_test\",\"arguments\":\"{}\"}}\n\n" +
 		"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
-	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), nil)
+	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), nil, true)
 	if err != nil || !done {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -320,7 +320,7 @@ func TestResponsesReasoningDeltaArrivesBeforeText(t *testing.T) {
 	var events []AgentEvent
 	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), func(event AgentEvent) {
 		events = append(events, event)
-	})
+	}, true)
 	if err != nil || !done || result.Text != "叙事" {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -333,7 +333,7 @@ func TestResponsesStreamUsesTerminalMessageWhenNoTextDelta(t *testing.T) {
 	var events []AgentEvent
 	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), func(event AgentEvent) {
 		events = append(events, event)
-	})
+	}, true)
 	if err != nil || !done || result.Text != "终止正文" {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -342,14 +342,14 @@ func TestResponsesStreamUsesTerminalMessageWhenNoTextDelta(t *testing.T) {
 }
 
 func TestResponsesStreamRejectsMalformedJSON(t *testing.T) {
-	result, _, done, err := parseAgentResponsesStream(strings.NewReader("data: {not-json}\n\n"), nil)
+	result, _, done, err := parseAgentResponsesStream(strings.NewReader("data: {not-json}\n\n"), nil, true)
 	if done || err == nil || !strings.Contains(err.Error(), "流式 JSON 解析失败") {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
 }
 
 func TestResponsesStreamRequiresTerminalEvent(t *testing.T) {
-	result, _, done, err := parseAgentResponsesStream(strings.NewReader("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"), nil)
+	result, _, done, err := parseAgentResponsesStream(strings.NewReader("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"), nil, true)
 	if done || !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -361,7 +361,7 @@ func TestResponsesStreamCompletesPartialTextFromTerminalProjection(t *testing.T)
 	var events []AgentEvent
 	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), func(event AgentEvent) {
 		events = append(events, event)
-	})
+	}, true)
 	if err != nil || !done || result.Text != "前半后半" {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -377,7 +377,7 @@ func TestResponsesStreamCapturesTerminalFunctionCall(t *testing.T) {
 	var events []AgentEvent
 	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), func(event AgentEvent) {
 		events = append(events, event)
-	})
+	}, true)
 	if err != nil || !done || len(result.ToolCalls) != 1 {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}
@@ -395,7 +395,7 @@ func TestResponsesStreamMergesReasoningDeltaIntoEmptyFinalItem(t *testing.T) {
 		"event: response.reasoning_text.done\ndata: {\"type\":\"response.reasoning_text.done\",\"item_id\":\"rs-1\",\"text\":\"检查完成\"}\n\n" +
 		"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"reasoning\",\"id\":\"rs-1\",\"status\":\"completed\",\"content\":[],\"encrypted_content\":\"opaque\"}}\n\n" +
 		"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
-	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), nil)
+	result, _, done, err := parseAgentResponsesStream(strings.NewReader(sse), nil, true)
 	if err != nil || !done {
 		t.Fatalf("result=%+v done=%v err=%v", result, done, err)
 	}

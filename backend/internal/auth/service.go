@@ -53,6 +53,8 @@ var (
 	ErrLinuxDOLoginDisabled      = errors.New("LinuxDo 登录未启用")
 	ErrInstallationRequired      = errors.New("请先完成首次安装")
 	ErrInvalidCredentials        = errors.New("用户名、邮箱或密码错误")
+	ErrInvalidEmail              = errors.New("请输入有效邮箱")
+	ErrInvalidPassword           = errors.New("密码长度必须为 8-72 字节")
 	// ErrEmailInUse 与存储层共用同一个哨兵，唯一约束冲突和注册前检查可以统一判断。
 	ErrEmailInUse                 = storage.ErrEmailInUse
 	ErrInvalidUsername            = errors.New("用户名无效")
@@ -93,7 +95,7 @@ type Repository interface {
 	ListUsers(context.Context, int, int, string) ([]storage.User, error)
 	UpdateUserRole(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
 	UpdateUserStatus(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
-	ListAdminAuditLogs(context.Context, int) ([]storage.AdminAuditLog, error)
+	ListAdminAuditLogs(context.Context, storage.LogQuery) ([]storage.AdminAuditLog, string, bool, error)
 }
 
 type Config struct {
@@ -595,8 +597,8 @@ func (s *Service) UpdateUserStatus(ctx context.Context, actorID, targetID uuid.U
 	return s.repo.UpdateUserStatus(ctx, actorID, targetID, status)
 }
 
-func (s *Service) ListAdminAuditLogs(ctx context.Context, limit int) ([]storage.AdminAuditLog, error) {
-	return s.repo.ListAdminAuditLogs(ctx, limit)
+func (s *Service) ListAdminAuditLogs(ctx context.Context, filter storage.LogQuery) ([]storage.AdminAuditLog, string, bool, error) {
+	return s.repo.ListAdminAuditLogs(ctx, filter)
 }
 
 func (s *Service) Logout(ctx context.Context, rawToken string) error {
@@ -692,7 +694,7 @@ func normalizeEmail(raw string) (string, error) {
 	email := strings.ToLower(strings.TrimSpace(raw))
 	parsed, err := mail.ParseAddress(email)
 	if err != nil || parsed.Address != email || !strings.Contains(email, "@") || len(email) > 320 {
-		return "", errors.New("请输入有效邮箱")
+		return "", ErrInvalidEmail
 	}
 	return email, nil
 }
@@ -742,7 +744,7 @@ func normalizeDisplayName(raw, fallback string) (string, error) {
 // validatePassword 校验密码长度；bcrypt 最多只使用前 72 字节。
 func validatePassword(password string) error {
 	if len(password) < 8 || len(password) > 72 {
-		return errors.New("密码长度必须为 8-72 字节")
+		return ErrInvalidPassword
 	}
 	return nil
 }

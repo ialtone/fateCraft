@@ -282,7 +282,8 @@ func (s *Service) Ask(ctx context.Context, conversationID uuid.UUID, question st
 	defer cancel()
 	outputSchema := inquiryOutputSchema(sources)
 	params := llm.Params{
-		BaseURL: settings.BaseURL, APIKey: apiKey, Model: model, Protocol: llm.NormalizeProtocol(settings.Protocol),
+		PlayerID: playerID.String(),
+		BaseURL:  settings.BaseURL, APIKey: apiKey, Model: model, Protocol: llm.NormalizeProtocol(settings.Protocol),
 		Temperature: 0.1, TopP: 1, MaxTokens: minPositive(settings.MaxResponseTokens, 2048),
 		ReasoningEffort:  reasoningEffort,
 		Relay:            s.relayForRoute(settings, playerID),

@@ -315,7 +315,7 @@ check 是用户显式触发的同步、无副作用诊断，最长使用独立�
 GET   /api/admin/users?q=...&limit=30&offset=0
 PATCH /api/admin/users/:id/role
 PATCH /api/admin/users/:id/status
-GET   /api/admin/audit-logs?limit=50
+GET   /api/admin/audit-logs?limit=50&cursor=...&actor_id=...&action=...
 ```
 
 用户列表返回 {users,has_more}。q 为 UUID 时精确匹配，包含 @ 时按完整邮箱匹配，其他按用户名/昵称字面包含搜索；大小写不敏感，转义 SQL 通配符，按 created_at DESC,id DESC 排序。limit 上限 200，offset 上限 100000，切换查询重置 offset。用户列表和审计读取需要管理员；角色和账号状态变更只允许 owner。角色只能是 `user`、`admin` 或 `owner`，owner 转交与唯一 owner 保护由后端事务执行。
@@ -328,6 +328,7 @@ GET   /api/admin/llm-request-logs?limit=50&conversation_id=...
 GET   /api/admin/llm-request-logs/:id
 GET   /api/admin/context-build-logs?limit=50&conversation_id=...
 GET   /api/admin/context-build-logs/:id
+GET   /api/admin/diagnostic-status
 
 GET   /api/admin/auth-settings
 PATCH /api/admin/auth-settings
@@ -354,9 +355,13 @@ PUT  /api/admin/challenge-versions/:id
 POST /api/admin/challenge-versions/:id/publish
 ```
 
-认证设置响应不包含 SMTP 密码，只包含 `has_smtp_password`。PATCH 中 `smtp_password` 为空表示保留原值，`clear_smtp_password=true` 表示清除。邀请码创建响应是唯一返回完整 `code` 的时机，后续列表只返回尾号、状态、用量和有效期。
+认证设置响应不包含 SMTP 密码，只包含 `has_smtp_password`。`PATCH /api/admin/auth-settings` 仅更新提供的字段，未提供或为 `null` 的普通配置字段保留原值，显式 `false` 或空字符串按实际值校验；合并当前配置后执行完整校验和事务审计。后台登录、SMTP、验证码分组可以独立保存，不会覆盖其他页草稿。`smtp_password` 为空表示保留原值，`clear_smtp_password=true` 表示清除。邀请码创建响应是唯一返回完整 `code` 的时机，后续列表只返回尾号、状态、用量和有效期。
 
-`PATCH /api/admin/system-settings` 维护判定配置、默认关闭的 `detailed_llm_logging_enabled`，以及 `diagnostic_log_cleanup_enabled` 和 1-3650 天的 `diagnostic_log_retention_days`。详细日志开启后记录每个主叙事模型步骤、Memory、Inquiry 和显式诊断的完整模型请求与原始响应，并用 purpose、attempt、Memory job/version、Inquiry snapshot branch/revision 关联，但永不记录 API Key、Authorization 头或 URL 查询参数。日志列表只返回诊断摘要，单条详情接口才返回请求与响应正文；两者都仅限管理员。自动清理默认开启、保留 30 天，只处理模型请求与上下文构建诊断日志。
+`PATCH /api/admin/system-settings` 维护判定与诊断策略等设置。模型摘要始终提交，`detailed_llm_logging_enabled` 仅控制默认关闭的正文采集；正文按字段预算脱敏、截断，不能称为完整可重放请求。诊断清理默认开启、保留 30 天，仅处理模型和上下文日志。管理员配置审计与更新原子提交；过时并发写入返回 `409/settings_conflict`。
+
+详细正文范围由 `detailed_llm_logging_scope`（`all/user/conversation`，默认 `all`）与 `detailed_llm_logging_target_id` 控制。GET 的目标为 UUID 字符串或 `null`；PATCH 省略字段保留原值，目标传空字符串表示清空。切换范围类型会清除旧目标，指定范围须在同一请求提供有效非零 UUID；`all` 不能携带目标。新目标和重新开启时检查用户存在或对话存在且未删除，参数/目标无效返回 400。只关闭开关会保留范围，不设自动关闭时间。
+
+例如 `{"detailed_llm_logging_enabled":true,"detailed_llm_logging_scope":"user","detailed_llm_logging_target_id":"<用户 UUID>"}` 只采集该用户模型正文。无归属或不匹配的调用继续保留摘要；Memory 按所属用户匹配，无对话归属的模型诊断不匹配对话范围。判断在调用开始时固定，规则变更不回溯在途调用，详细语义见[日志设计](23-logging-and-diagnostics.md)。
 
 上下文构建日志不受详细模型日志开关影响：管理员列表返回最近构建的预算摘要，单条详情返回 Prompt 分段、必选/裁剪结果、历史消息 ID、世界书 entry ID 和 Memory lag。普通玩家上下文接口不会返回这些技术明细。
 
@@ -513,3 +518,11 @@ POST /api/admin/share-reports/:id/resolve
 语义：`head` 前断开/超时（120s）可重试；`head` 后断开、`seq` 乱序、未知 `relay_id` 的后续帧按中断处理（不可重试）；`no_key`/`network` 不可重试。同玩家多连接时请求只派发给最新存活连接，旧连接作候补；每玩家并发上限 4，超限排队（受 ctx 约束）。
 
 错误码：`llm_route_mismatch`（对象路由 ≠ 当前有效路由，REST 409 / WS `notice`）、`llm_relay_unavailable`（无 Relay 连接，问答等同步接口 409）、`llm_relay_lost`、`llm_relay_network`、`llm_relay_no_key`、`llm_client_route_disabled`（平台未开放直连时以 `client` 保存设置，PATCH 403）。`POST /api/settings/fetch-models` 在 `client` 路由返回 409（`code=llm_route_client`）。
+
+## 诊断分页与错误关联
+
+HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂时不可用",code:"internal_error",trace_id:"<UUID>"}`；业务错误保持原语义。该 trace 不作为授权或幂等键。
+
+模型、上下文、管理员审计列表统一返回 `{logs,next_cursor,has_more}`，均支持 `from/until/limit/cursor`，按 `(created_at DESC,id DESC)` 分页并保留时间精度；游标绑定种类与筛选。模型另支持 conversation_id、attempt_id、trace_id、purpose、model、success；上下文支持 conversation_id、attempt_id；管理审计支持 actor_id、action。非法游标返回 400；详情 404 可能是已清理。
+
+诊断状态返回 `{instance_id,writer,cleanup}`，读取进程内队列和最近清理状态，不扫描日志表。具体字段与权限边界见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。

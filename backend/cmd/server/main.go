@@ -135,7 +135,10 @@ func main() {
 	capabilitySvc.SetRelayTransport(relayRegistry.For)
 	auditWriter := llm.NewAsyncRequestAuditWriter(func(ctx context.Context, audit llm.RequestAudit) error {
 		row := &storage.LLMRequestLog{
-			ID: uuid.New(), Model: audit.Model, BaseURL: audit.BaseURL, Stream: audit.Stream,
+			ID: uuid.MustParse(audit.ID), Model: audit.Model, BaseURL: audit.BaseURL, Stream: audit.Stream,
+			Protocol: audit.Protocol, StartedAt: audit.StartedAt, TransportAttempts: audit.TransportAttempts,
+			InputTokens: audit.InputTokens, OutputTokens: audit.OutputTokens, ErrorCode: audit.ErrorCode,
+			BodyStatus: audit.BodyStatus, BodyMetadata: storage.JSONMap{},
 			Purpose:     audit.Purpose,
 			RequestBody: storage.JSONDoc(audit.RequestBody), RawResponse: audit.RawResponse,
 			ResponseText: audit.ResponseText, AuditTruncated: audit.AuditTruncated, FinishReason: audit.FinishReason,
@@ -149,6 +152,12 @@ func main() {
 		}
 		if audit.ResponseStatus > 0 {
 			row.ResponseStatus = &audit.ResponseStatus
+		}
+		if id, err := uuid.Parse(audit.TraceID); err == nil {
+			row.TraceID = &id
+		}
+		for key, value := range audit.BodyMetadata {
+			row.BodyMetadata[key] = value
 		}
 		if id, err := uuid.Parse(audit.ConversationID); err == nil {
 			row.ConversationID = &id
@@ -180,17 +189,17 @@ func main() {
 		row.InquirySnapshotBranchEpoch = audit.InquirySnapshotBranchEpoch
 		row.InquirySnapshotRevision = audit.InquirySnapshotRevision
 		return llmRequestLogRepo.Create(ctx, row)
-	}, 256)
+	}, 128)
 	defer func() {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := auditWriter.Close(closeCtx); err != nil {
-			logger.Warn("关闭异步模型请求日志写入器失败", zap.Error(err))
+			logger.Warn("关闭异步模型请求日志写入器失败", zap.Error(err), zap.Int("unflushed", auditWriter.Status().Unflushed))
 		}
 	}()
-	llmClient.SetRequestAudit(auditWriter.Write, func(ctx context.Context) bool {
+	llmClient.SetRequestAudit(auditWriter.Write, func(ctx context.Context, p llm.Params) bool {
 		settings, err := systemSettingsRepo.Get(ctx)
-		return err == nil && settings.DetailedLLMLoggingEnabled
+		return err == nil && settings.CaptureDetailedLLMLog(p.PlayerID, p.ConversationID)
 	})
 
 	// 玩家身份由认证中间件写入请求 context；领域服务不依赖具体登录方式。
@@ -266,6 +275,9 @@ func main() {
 		Conv: convSvc, Campaigns: campaignSvc, Chat: chatSvc, State: stateSvc, Challenges: challengeSvc, Builtins: builtinImporter,
 		Memory: memSvc, Inquiries: inquirySvc, Settings: settingsRepo, LLMSettings: llmSettingsSvc, System: systemSettingsRepo, CtxLogs: ctxRepo, Messages: msgRepo, Agents: agentRepo,
 		Rewards: rewardRepo, LLMRequestLogs: llmRequestLogRepo, Turns: turnRepo,
+		Diagnostics: func() any {
+			return map[string]any{"instance_id": cfg.InstanceID, "writer": auditWriter.Status(), "cleanup": diagnosticLogRepo.Status()}
+		},
 		Hub: hub, LLMClient: llmClient, Capabilities: capabilitySvc, Shares: shareSvc, Relays: relayRegistry, Counter: counter,
 		Identity: requestIdentity, Auth: authSvc, CookieSecure: cfg.AuthCookieSecure,
 	})
@@ -296,6 +308,7 @@ func main() {
 		AllowOrigins:     corsOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"X-Request-ID"},
 		AllowCredentials: allowCredentials,
 	}))
 	server.Router(r)
@@ -306,39 +319,40 @@ func main() {
 	workerCtx, stopWorker := context.WithCancel(rootCtx)
 	go memoryWorker.Run(workerCtx)
 	memoryWorker.Wake()
-	// 诊断日志清理受管理员开关控制。每小时只处理有限批次，避免与在线
-	// 请求争抢数据库；分享治理审计不属于这项短期诊断数据。
+	// Short bounded cleanup rounds can catch up without monopolizing the database.
 	go func() {
-		cleanup := func() {
-			cleanupCtx, cancel := context.WithTimeout(workerCtx, 45*time.Second)
-			defer cancel()
-			settings, err := systemSettingsRepo.Get(cleanupCtx)
-			if err != nil {
-				logger.Warn("读取诊断日志清理设置失败", zap.Error(err))
-				return
-			}
-			if !settings.DiagnosticLogCleanupEnabled {
-				return
-			}
-			cutoff := time.Now().UTC().AddDate(0, 0, -settings.DiagnosticLogRetentionDays)
-			result, err := diagnosticLogRepo.CleanupExpired(cleanupCtx, cutoff, 500, 20)
-			if err != nil {
-				logger.Warn("清理过期诊断日志失败", zap.Error(err))
-				return
-			}
-			if result.LLMRequests+result.ContextBuilds > 0 {
-				logger.Info("已清理过期诊断日志", zap.Int64("llm_request_logs", result.LLMRequests), zap.Int64("context_build_logs", result.ContextBuilds))
-			}
-		}
-		cleanup()
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
+		delay := time.Duration(0)
 		for {
+			timer := time.NewTimer(delay)
 			select {
 			case <-workerCtx.Done():
+				timer.Stop()
 				return
-			case <-ticker.C:
-				cleanup()
+			case <-timer.C:
+			}
+			delay = time.Hour
+			ctx, cancel := context.WithTimeout(logging.NewTrace(workerCtx), 45*time.Second)
+			settings, err := systemSettingsRepo.Get(ctx)
+			if err != nil {
+				logger.Warn("读取诊断清理设置失败", zap.Error(err))
+				delay = time.Minute
+				cancel()
+				continue
+			}
+			if !settings.DiagnosticLogCleanupEnabled {
+				cancel()
+				continue
+			}
+			result, err := diagnosticLogRepo.CleanupExpired(ctx, time.Now().UTC().AddDate(0, 0, -settings.DiagnosticLogRetentionDays), 500, 20)
+			cancel()
+			if err != nil {
+				logger.Warn("诊断清理未完成", zap.Error(err), zap.Int64("llm_requests", result.LLMRequests), zap.Int64("context_builds", result.ContextBuilds))
+			}
+			if result.HasMore || err != nil {
+				delay = time.Minute
+			}
+			if result.LLMRequests+result.ContextBuilds > 0 {
+				logger.Info("诊断清理完成", zap.Int64("llm_requests", result.LLMRequests), zap.Int64("context_builds", result.ContextBuilds), zap.Bool("backlog", result.HasMore))
 			}
 		}
 	}()
@@ -373,17 +387,26 @@ func main() {
 	select {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			stopWorker()
-			memoryWorker.Wait()
-			logger.Fatal("服务启动失败", zap.Error(err))
+			logger.Error("服务启动失败", zap.Error(err))
 		}
 	case <-rootCtx.Done():
 	}
 	stopWorker()
-	memoryWorker.Wait()
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
+	if err := hub.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("生成任务关闭未完成", zap.Error(err))
+	}
+	relayRegistry.CloseAll()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("HTTP 服务关闭未完成", zap.Error(err))
+		_ = httpServer.Close()
+	}
+	workerDone := make(chan struct{})
+	go func() { memoryWorker.Wait(); close(workerDone) }()
+	select {
+	case <-workerDone:
+	case <-shutdownCtx.Done():
+		logger.Warn("记忆任务关闭未完成", zap.Error(shutdownCtx.Err()))
 	}
 }

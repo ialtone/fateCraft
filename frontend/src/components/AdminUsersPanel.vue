@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -8,6 +8,8 @@ import {
   NSelect,
   NSpin,
   NSwitch,
+  NTabs,
+  NTabPane,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -26,6 +28,9 @@ const auditLogs = ref<AdminAuditLog[]>([])
 const loading = ref(false)
 const savingID = ref('')
 const error = ref('')
+const tab = ref('users')
+const auditError = ref('')
+const loadingAudit = ref(false)
 const isOwner = computed(() => auth.isOwner)
 const USER_PAGE_LIMIT = 30
 const query = ref('')
@@ -44,20 +49,36 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [nextUsers, nextLogs] = await Promise.all([
-      adminApi.listUsers({ q: submittedQuery.value, limit: USER_PAGE_LIMIT, offset: offset.value }),
-      adminApi.listAuditLogs(30),
-    ])
+    const nextUsers = await adminApi.listUsers({
+      q: submittedQuery.value,
+      limit: USER_PAGE_LIMIT,
+      offset: offset.value,
+    })
     if (sequence !== loadSequence) return
     users.value = nextUsers.users
     hasMore.value = nextUsers.has_more
-    auditLogs.value = nextLogs
   } catch (err: any) {
     if (sequence === loadSequence) error.value = err?.message || '读取用户管理数据失败'
   } finally {
     if (sequence === loadSequence) loading.value = false
   }
 }
+
+async function loadAudits() {
+  if (loadingAudit.value) return
+  loadingAudit.value = true
+  auditError.value = ''
+  try {
+    auditLogs.value = (await adminApi.listAuditLogs({ limit: 30 })).logs
+  } catch (err: any) {
+    auditError.value = err?.message || '读取管理操作失败'
+  } finally {
+    loadingAudit.value = false
+  }
+}
+watch(tab, (value) => {
+  if (value === 'audit') void loadAudits()
+})
 
 function searchUsers() {
   submittedQuery.value = query.value.trim()
@@ -135,57 +156,79 @@ function openRewards(user: AdminUser) {
 
 <template>
   <div class="users-panel">
-    <p class="section-sub">
-      首次安装完成后，所有新账号默认为普通用户。只有 owner 可以调整角色和停用管理员。
-    </p>
-    <NAlert v-if="error" type="error" :show-icon="true">{{ error }}</NAlert>
-    <form class="user-search" @submit.prevent="searchUsers">
-      <NInput
-        v-model:value="query"
-        :maxlength="256"
-        aria-label="查找用户"
-        placeholder="用户名、显示名称、完整邮箱或用户 ID"
-      />
-      <NButton attr-type="submit" :loading="loading">查找用户</NButton>
-    </form>
-    <NSpin :show="loading">
-      <div class="user-list">
-        <div v-for="user in users" :key="user.id" class="user-row">
-          <div class="user-main">
-            <strong
-              >{{ user.display_name }} <span class="username">@{{ user.username }}</span></strong
-            >
-            <span class="muted"
-              >{{ user.email || '外部登录账号' }} · {{ roleLabel(user.role) }}</span
-            >
+    <NTabs v-model:value="tab" type="line" animated
+      ><NTabPane name="users" tab="用户管理" display-directive="show:lazy"
+        ><p class="section-sub">
+          首次安装完成后，所有新账号默认为普通用户。只有 owner 可以调整角色和停用管理员。
+        </p>
+        <NAlert v-if="error" type="error" :show-icon="true">{{ error }}</NAlert>
+        <form class="user-search" @submit.prevent="searchUsers">
+          <NInput
+            v-model:value="query"
+            :maxlength="256"
+            aria-label="查找用户"
+            placeholder="用户名、显示名称、完整邮箱或用户 ID"
+          />
+          <NButton attr-type="submit" :loading="loading">查找用户</NButton>
+        </form>
+        <NSpin :show="loading">
+          <div class="user-list">
+            <div v-for="user in users" :key="user.id" class="user-row">
+              <div class="user-main">
+                <strong
+                  >{{ user.display_name }}
+                  <span class="username">@{{ user.username }}</span></strong
+                >
+                <span class="muted"
+                  >{{ user.email || '外部登录账号' }} · {{ roleLabel(user.role) }}</span
+                >
+              </div>
+              <div class="user-actions">
+                <NButton size="small" @click="openRewards(user)">奖励与点数</NButton>
+                <NSelect
+                  v-if="isOwner"
+                  :value="user.role"
+                  :options="roleOptions"
+                  size="small"
+                  :loading="savingID === user.id"
+                  :disabled="user.role === 'owner' && user.id === auth.user?.id"
+                  @update:value="(value) => changeRole(user, value)"
+                />
+                <NSwitch
+                  v-if="isOwner && user.role !== 'owner'"
+                  :value="user.status === 'active'"
+                  :loading="savingID === user.id"
+                  @update:value="(value) => changeStatus(user, value)"
+                />
+              </div>
+            </div>
+            <p v-if="!users.length && !loading && !error" class="muted">没有匹配的用户</p>
           </div>
-          <div class="user-actions">
-            <NButton size="small" @click="openRewards(user)">奖励与点数</NButton>
-            <NSelect
-              v-if="isOwner"
-              :value="user.role"
-              :options="roleOptions"
-              size="small"
-              :loading="savingID === user.id"
-              :disabled="user.role === 'owner' && user.id === auth.user?.id"
-              @update:value="(value) => changeRole(user, value)"
-            />
-            <NSwitch
-              v-if="isOwner && user.role !== 'owner'"
-              :value="user.status === 'active'"
-              :loading="savingID === user.id"
-              @update:value="(value) => changeStatus(user, value)"
-            />
-          </div>
+        </NSpin>
+        <div class="user-search">
+          <NButton :disabled="loading || offset === 0" @click="pageUsers(-1)">上一页</NButton>
+          <NButton :disabled="loading || !hasMore" @click="pageUsers(1)">下一页</NButton>
+        </div> </NTabPane
+      ><NTabPane name="audit" tab="最近操作" display-directive="show:lazy"
+        ><div class="user-search">
+          <NButton :loading="loadingAudit" @click="loadAudits">刷新操作记录</NButton
+          ><NButton @click="$router.push('/admin/logs')">前往完整审计</NButton>
         </div>
-        <p v-if="!users.length && !loading && !error" class="muted">没有匹配的用户</p>
-      </div>
-    </NSpin>
-    <div class="user-search">
-      <NButton :disabled="loading || offset === 0" @click="pageUsers(-1)">上一页</NButton>
-      <NButton :disabled="loading || !hasMore" @click="pageUsers(1)">下一页</NButton>
-    </div>
-
+        <NAlert v-if="auditError" type="error">{{ auditError }}</NAlert
+        ><NSpin :show="loadingAudit"
+          ><h4>最近管理员操作</h4>
+          <div class="audit-list">
+            <div v-for="log in auditLogs" :key="log.id" class="audit-row">
+              <span>{{ log.action }}</span>
+              <span class="muted">{{ log.result }} · {{ formatTime(log.created_at) }}</span>
+            </div>
+            <p v-if="!auditLogs.length && !auditError && !loadingAudit" class="muted">
+              暂无审计记录
+            </p>
+          </div></NSpin
+        ></NTabPane
+      ></NTabs
+    >
     <NModal
       v-model:show="showRewards"
       preset="card"
@@ -193,14 +236,6 @@ function openRewards(user: AdminUser) {
       style="width: min(1040px, 96vw)"
       ><AdminRewardUserPanel v-if="rewardUser" :key="rewardUser.id" :user-id="rewardUser.id"
     /></NModal>
-    <h4>最近管理员操作</h4>
-    <div class="audit-list">
-      <div v-for="log in auditLogs" :key="log.id" class="audit-row">
-        <span>{{ log.action }}</span>
-        <span class="muted">{{ log.result }} · {{ formatTime(log.created_at) }}</span>
-      </div>
-      <p v-if="!auditLogs.length" class="muted">暂无审计记录</p>
-    </div>
   </div>
 </template>
 

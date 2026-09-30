@@ -9,6 +9,8 @@ import {
   NModal,
   NSelect,
   NSpin,
+  NTabs,
+  NTabPane,
   useMessage,
 } from 'naive-ui'
 import { adminApi } from '@/api'
@@ -20,6 +22,7 @@ import RewardRecordsPanel from './RewardRecordsPanel.vue'
 import RewardLedgerPanel from './RewardLedgerPanel.vue'
 const props = defineProps<{ userId: string }>()
 const message = useMessage()
+const tab = ref('grant')
 const data = ref<RewardUserBalance>(),
   definitions = ref<RewardDefinition[]>([]),
   loading = ref(false),
@@ -169,60 +172,71 @@ watch(selected, (def) => {
         <NAlert v-if="data.user.status !== 'active'" type="warning"
           >该账号已停用，可以查看记录，不能新发放奖励。</NAlert
         >
-        <div class="balances">
-          <div v-for="item in data.rewards" :key="item.definition.id">
-            <strong>{{ item.definition.name }}</strong>
-            <p>{{ item.balance.toLocaleString() }}{{ item.definition.unit }}</p>
-          </div>
-          <p v-if="!data.rewards.length">尚无奖励余额，仍可发放奖励。</p>
-        </div>
-        <h3>发放奖励或点数</h3>
-        <div class="form-grid">
-          <NFormItem label="奖励或点数资产"
-            ><NSelect
-              v-model:value="form.reward_definition_id"
-              :options="options"
-              filterable
-              placeholder="选择具体资产"
-          /></NFormItem>
-          <NFormItem :label="`数量${selected?.unit ? `（${selected.unit}）` : ''}`"
-            ><NInputNumber
-              v-model:value="form.quantity"
-              :min="1"
-              :max="selected && !selected.stackable ? 1 : Number.MAX_SAFE_INTEGER"
-              :precision="0"
-              style="width: 100%"
-          /></NFormItem>
-          <NFormItem label="用途"
-            ><NSelect
-              v-model:value="form.purpose"
-              :options="[
-                { label: '赠送', value: 'gift' },
-                { label: '补偿', value: 'compensation' },
-              ]"
-          /></NFormItem>
-          <NFormItem label="发放方式"
-            ><NSelect
-              v-model:value="form.delivery_mode"
-              :options="[
-                { label: '直接到账', value: 'direct' },
-                { label: '用户领取（无期限）', value: 'claim' },
-              ]"
-          /></NFormItem>
-        </div>
-        <NFormItem label="管理原因（必填，仅管理员可见）"
-          ><NInput v-model:value="form.reason" type="textarea" :maxlength="2000" /></NFormItem
-        ><NFormItem label="给用户的说明（可选）"
-          ><NInput v-model:value="form.public_note" :maxlength="2000"
-        /></NFormItem>
-        <NButton type="primary" :disabled="!valid || busy" @click="confirm">预览发放</NButton>
-        <RewardRecordsPanel
-          ref="records"
-          :definitions="definitions"
-          admin
-          :user-id="userId"
-          @changed="load"
-        /><RewardLedgerPanel :user-id="userId" :refresh-key="revision" /> </template
+        <NTabs v-model:value="tab" type="line" animated
+          ><NTabPane name="balances" tab="账户余额" display-directive="show:lazy"
+            ><div class="balances">
+              <div v-for="item in data.rewards" :key="item.definition.id">
+                <strong>{{ item.definition.name }}</strong>
+                <p>{{ item.balance.toLocaleString() }}{{ item.definition.unit }}</p>
+              </div>
+              <p v-if="!data.rewards.length">尚无奖励余额，仍可发放奖励。</p>
+            </div> </NTabPane
+          ><NTabPane name="grant" tab="发放奖励" display-directive="show:lazy"
+            ><h3>发放奖励或点数</h3>
+            <p v-if="selected" class="muted">
+              该资产当前余额：{{ balance.toLocaleString() }}{{ selected.unit }}
+            </p>
+            <div class="form-grid">
+              <NFormItem label="奖励或点数资产"
+                ><NSelect
+                  v-model:value="form.reward_definition_id"
+                  :options="options"
+                  filterable
+                  placeholder="选择具体资产"
+              /></NFormItem>
+              <NFormItem :label="`数量${selected?.unit ? `（${selected.unit}）` : ''}`"
+                ><NInputNumber
+                  v-model:value="form.quantity"
+                  :min="1"
+                  :max="selected && !selected.stackable ? 1 : Number.MAX_SAFE_INTEGER"
+                  :precision="0"
+                  style="width: 100%"
+              /></NFormItem>
+              <NFormItem label="用途"
+                ><NSelect
+                  v-model:value="form.purpose"
+                  :options="[
+                    { label: '赠送', value: 'gift' },
+                    { label: '补偿', value: 'compensation' },
+                  ]"
+              /></NFormItem>
+              <NFormItem label="发放方式"
+                ><NSelect
+                  v-model:value="form.delivery_mode"
+                  :options="[
+                    { label: '直接到账', value: 'direct' },
+                    { label: '用户领取（无期限）', value: 'claim' },
+                  ]"
+              /></NFormItem>
+            </div>
+            <NFormItem label="管理原因（必填，仅管理员可见）"
+              ><NInput v-model:value="form.reason" type="textarea" :maxlength="2000" /></NFormItem
+            ><NFormItem label="给用户的说明（可选）"
+              ><NInput v-model:value="form.public_note" :maxlength="2000"
+            /></NFormItem>
+            <NButton type="primary" :disabled="!valid || busy" @click="confirm"
+              >预览发放</NButton
+            > </NTabPane
+          ><NTabPane name="records" tab="获奖记录" display-directive="show:lazy"
+            ><RewardRecordsPanel
+              ref="records"
+              :definitions="definitions"
+              admin
+              :user-id="userId"
+              @changed="load" /></NTabPane
+          ><NTabPane name="ledger" tab="余额流水" display-directive="show:lazy"
+            ><RewardLedgerPanel :user-id="userId" :refresh-key="revision" /></NTabPane
+        ></NTabs> </template
     ></NSpin>
     <NModal
       v-model:show="preview"

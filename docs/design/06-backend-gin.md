@@ -51,7 +51,7 @@ internal/modelcapability 用户显式触发的无副作用模型诊断
 
 模型 HTTP 传输只在收到响应体之前对连接错误、429、502、503、504 和明确的临时不可用执行有限指数退避重试，并尊重 `Retry-After`。收到 2xx 流后由解析器负责一次性消费；正文、工具调用或结构化结果已经开始后不重放 Agent 步骤，避免重复领域副作用。所有 SSE JSON 解析错误、提前 EOF 和缺少协议终止事件均为失败，不得把临时文本当作最终结果。
 
-模型边界按字节限制：完整响应/累积正文最多 32 MiB，单条 SSE 行最多 1 MiB，HTTP 错误体最多 64 KiB，详细审计请求、原始响应和正文各最多 2 MiB（超出只截断审计副本并标记 `audit_truncated`，不改变真实解析结果），工具参数最多 16 KiB。普通 HTTP JSON body 默认 4 MiB，挑战版本 PUT 明确放宽到 32 MiB；WebSocket 客户端帧最多 64 KiB、生成排队最多 64 条。PostgreSQL 连接池默认限制为 10 个打开连接、3 个空闲连接，连接生命周期默认 30 分钟、空闲回收默认 5 分钟；四项均可通过 `DB_*` 环境变量按实例配置，多实例部署必须汇总连接预算。
+模型边界按字节限制：完整响应/累积正文最多 32 MiB，单条 SSE 行最多 1 MiB，HTTP 错误体最多 64 KiB，诊断请求 JSON/预览和原始响应各最多 512 KiB、合并文本最多 256 KiB、整条估算载荷最多 2 MiB（先脱敏，JSON 预览保持合法；不改变真实解析结果），工具参数最多 16 KiB。普通 HTTP JSON body 默认 4 MiB，挑战版本 PUT 明确放宽到 32 MiB；WebSocket 客户端帧最多 64 KiB、生成排队最多 64 条。PostgreSQL 连接池默认限制为 10 个打开连接、3 个空闲连接，连接生命周期默认 30 分钟、空闲回收默认 5 分钟；四项均可通过 `DB_*` 环境变量按实例配置，多实例部署必须汇总连接预算。
 
 领域服务依赖消费端定义的小接口或专用仓储，API handler 不直接拼装 SQL。组合根在 `cmd/server/main.go` 创建仓储、服务、生成器和 Hub。
 
@@ -163,9 +163,9 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 
 `system_settings` 是单例热读数据，仓储提供 5 秒进程内缓存；当前实例保存后立即刷新，多实例最多在 TTL 内收敛。缓存返回值始终复制，调用方不能修改共享对象，从而避免每次模型调用为了日志开关和接入模式重复查询 PostgreSQL。
 
-模型请求详细日志同样由 `system_settings` 全局控制且默认关闭。开启后，LLM Client 为每个逻辑模型请求保存最终去认证请求 JSON、原始 HTTP/SSE 响应、合并正文、结束原因、`[DONE]` 状态、输出类型、设置修订、`settings_source`、协议、模型、契约指纹、传输/结构成功状态、稳定错误码、耗时与错误，并按 purpose 关联 attempt、Memory job/预分配候选版本或 Inquiry snapshot。响应体交付前的传输重试次数只写入结构化服务端日志，不创建独立业务 attempt。主叙事一个 attempt 可以因真实工具循环产生多条 `purpose=narrative` 调用；显式模型诊断使用 `purpose=protocol_test` 单独记录。日志写入失败只记录服务端告警，不改变模型调用结果。
+模型调用始终保存轻量摘要，详细正文由 `system_settings` 控制且默认关闭。每个逻辑调用在第一次网络尝试前分配 ID，最终摘要记录 trace、协议、用途、设置来源/修订、网络尝试次数、状态、耗时及可用 usage；真实工具循环步骤各有一条摘要。正文开启后只保存有界诊断副本。队列按 128 条、32 MiB（含处理中）限量，诊断失败不改变业务结果。详见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
 
-诊断日志自动清理由独立的 `diagnostic_log_cleanup_enabled` 控制，默认保留 30 天。Worker 每小时读取最新设置，以每批 500 条、单轮最多 20 批的短事务清理 `llm_request_logs` 与 `context_build_logs`；多实例通过 `SKIP LOCKED` 避免争抢同一批记录。分享治理审计不受该短期诊断保留策略影响。
+诊断清理默认开启、保留 30 天。每轮约 45 秒，最多 20 批，每批分别删除至多 500 条模型/上下文诊断，使用 SKIP LOCKED。EXISTS 确认仍有积压或发生错误后冷却 1 分钟继续，无积压时每小时调度；不清理业务审计。
 
 Memory Worker 由进程根 context 驱动，不继承 HTTP/WS 取消，也不占用 durable generation run。它通过 PostgreSQL `SKIP LOCKED`、带 fencing token 的租约和事务 CAS 提交版本；暂时性上游错误可以按持久任务策略后台退避，单次调用不会因解析或契约错误重放，但响应体交付前的临时传输错误仍遵循统一的有限重试边界。Character Inquiry 使用独立 thread 和非流式低温 JSON Schema 调用，读取玩家状态、显式标记为公开的当前版本规则，并在 Campaign 中加入玩家 Snapshot；它不获取主生成 run，不进入主消息、Context Builder、Memory 来源或任何玩法动作 Handler。
 
@@ -216,7 +216,7 @@ API 从认证上下文取用户/操作者，管理写入再次校验权限；用
 
 ## 日志与可观测性
 
-Gin 请求、panic、GORM 慢查询和业务异常统一进入 zap。重要日志应带 `conversation_id`、`challenge_version_id` 或用户 ID，但不得包含密码、会话明文、LinuxDo Secret、LLM API Key 和完整数据库 URL。
+Gin 请求、panic、GORM 慢查询和业务异常统一进入 zap。HTTP、WebSocket 命令和后台任务使用独立 `trace_id`，与业务幂等 `request_id` 分开。未知 500 返回通用提示和 trace；普通访问使用路由模板，成功健康检查不记录；常规模型/工具性能事件降为 Debug，慢步骤保留 Warn。重要日志应带 `conversation_id`、`challenge_version_id` 或用户 ID，但不得包含密码、会话明文、LinuxDo Secret、LLM API Key 和完整数据库 URL。
 
 生成和结算日志按语义分级：
 
@@ -230,7 +230,7 @@ Runtime Presentation 支持题材无关的 `guidance`。发布校验限制分组
 
 GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占位符；普通 SQL 与未命中只在 Debug 展示，SQLSTATE `23` 完整性约束和超过 200ms 的慢查询记 Warn，其他 SQL 执行故障才记 Error。
 
-上下文构建日志是业务级审计数据，记录模型、预算、段、消息 ID、世界书命中和挑战哈希，不等同于应用日志。
+上下文构建日志是可按保留策略清理的诊断数据，记录模型、预算、段、消息 ID、世界书命中和挑战哈希，不等同于应用日志。
 
 ## 并发与事务原则
 
@@ -266,7 +266,7 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 
 公共读取只查询单条不可变 `conversation_shares` 记录，使用 `snapshot_hash` 作为 ETag，不重新装配原对话。响应设置 `noindex`、`no-referrer` 和 `must-revalidate`，首版不启用代理共享缓存，以保证撤销和下架立即生效。公共读取和举报分别受进程内滑动窗口限制；多实例部署时每个实例独立计数，若以后需要全局配额再接入共享限流存储。
 
-`GET /s/:token` 输出服务端 HTML 外壳，只在 Open Graph 中放经过转义的标题与最多 160 个字符的公开摘要，不写入消息全文；浏览器随后进入 `/shared/:token` 的 Vue 只读页。结构化访问日志会把 `/s/*` 和公共 API 中的 token 段整体替换为 `[REDACTED]`。
+`GET /s/:token` 输出服务端 HTML 外壳，只在 Open Graph 中放经过转义的标题与最多 160 个字符的公开摘要，不写入消息全文；浏览器随后进入 `/shared/:token` 的 Vue 只读页。访问日志不记录查询串；分享脱敏同时覆盖 `/s/*`、`/shared/*` 和公共分享 API。
 
 2026-09-18 在 Windows amd64、Intel i5-14600KF 上以 25 次串行迭代执行公开投影加 JSON 编码基准：50 条约 60 us/op，200 条约 238 us/op，500 条约 550 us/op。该数字只用于识别线性增长和回归，不代表生产吞吐量，也没有执行并发压测。
 
@@ -277,3 +277,5 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 - 调用方统一在 `client` 路由且 `Settings.LLMRoute` 为 client 时注入传输：主叙事（Generator）、Memory Worker（无连接不领取，执行中丢失按暂时性失败重试）、角色问答（无连接 409）、能力诊断。`fetchModels` 在 client 路由返回 409，由浏览器直接请求。
 - 路由闸门：`storage.CheckLLMRoute` + `ErrLLMRouteMismatch`；创建入口固化路由；生成/问答/记忆入口校验；`GET /ws/llm-relay`（`requireAuth` + 路由准入）。
 - 有效路由的唯一计算点是 `llmsettings.resolveRoute`（平台开关 × 用户保存值），与接入模式无关：开关关闭恒为 `server`，否则为用户保存值。`EffectiveRoute`/`Get`/`Personal` 都经它计算；`UpdateUser` 以 `client` 保存而开关关闭时返回 `ErrClientRouteDisabled`（用户设置接口映射 403 + `llm_client_route_disabled`）。`Get` 先算有效路由再分派：`client`（任意接入模式）返回用户个人配置且不检查平台完整性；`platform_managed` 的 `server` 返回平台配置；`user_managed` 的 `server` 返回用户个人配置并解密 Key。`Personal` 返回用户保存的个人配置行（不解密，供设置页展示与保存合并基准，`LLMRoute` 为有效路由）；`UserView` 基于 `Personal`，普通用户看不到平台 base_url 与模型，平台不完整时设置页仍可打开；`PlatformRuntime` 直接返回平台配置，供管理员公共配置诊断。管理接口的开关字段只有 owner 可改；关闭开关时调用 `relays.CloseAll()` 立刻断开全部 Relay 连接，切换公共 LLM 不断开（不改变任何用户的有效路由）；在途回合按连接断开收尾。开关不参与 `public_llm_settings_revision` 判断。
+
+配置保存与管理员审计在同一事务内锁行、计算脱敏差异；并发旧版本返回 `409/settings_conflict`。缓存更新和 Relay 关闭发生在提交后。关闭服务先停止生产者，再在有界时间内排空诊断队列；超时记录未排空数量。具体字段和运维边界见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。

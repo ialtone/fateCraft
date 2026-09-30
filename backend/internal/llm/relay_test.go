@@ -104,7 +104,7 @@ func TestRelayEquivalenceWithDirectTransport(t *testing.T) {
 					run := func(relay RelayTransport) (AgentStepResult, []AgentEvent, RequestAudit) {
 						capture := &requestAuditCapture{}
 						client := NewClient()
-						client.SetRequestAudit(capture.write, func(context.Context) bool { return true })
+						client.SetRequestAudit(capture.write, func(context.Context, Params) bool { return true })
 						var events []AgentEvent
 						result, err := client.AgentStep(context.Background(), Params{
 							BaseURL: server.URL, APIKey: "test", Model: "agent-model",

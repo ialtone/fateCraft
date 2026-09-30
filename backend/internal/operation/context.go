@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/ialtone/fatecraft/internal/logging"
+	"go.uber.org/zap"
 )
 
 // Metadata identifies the immutable generation attempt associated with writes.
@@ -30,6 +32,7 @@ type generationContextKey struct{}
 // WithGeneration binds a generation run to a context. Storage write
 // boundaries use this value to reject stale work after End/Archive/Delete.
 func WithGeneration(ctx context.Context, conversationID, generationID uuid.UUID) context.Context {
+	ctx = logging.WithFields(ctx, zap.String("operation_id", generationID.String()))
 	return context.WithValue(ctx, generationContextKey{}, Generation{
 		ConversationID: conversationID,
 		ID:             generationID,
@@ -44,6 +47,7 @@ func GenerationFromContext(ctx context.Context) (Generation, bool) {
 type contextKey struct{}
 
 func WithMetadata(ctx context.Context, metadata Metadata) context.Context {
+	ctx = logging.WithFields(ctx, zap.String("conversation_id", metadata.ConversationID.String()), zap.String("attempt_id", metadata.AttemptID.String()), zap.String("turn_id", metadata.TurnID.String()))
 	return context.WithValue(ctx, contextKey{}, metadata)
 }
 

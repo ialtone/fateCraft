@@ -62,6 +62,7 @@ type Hub struct {
 	upgrader websocket.Upgrader
 
 	mu      sync.Mutex
+	closed  bool
 	conns   map[uuid.UUID]map[*conn]struct{} // 每个对话的连接集合
 	cancels map[uuid.UUID]*genTask           // 每个对话当前生成任务
 	queued  map[uuid.UUID][]queuedGeneration // 显式 steer/follow-up 队列
@@ -77,6 +78,7 @@ type genTask struct {
 }
 
 type queuedGeneration struct {
+	ctx context.Context
 	run func(context.Context, EmitFunc)
 }
 
@@ -162,7 +164,10 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, convID uuid.UUID) er
 	}
 	logging.Named("ws").Debug("WebSocket 连接建立", zap.String("conversation_id", convID.String()))
 	c := newConn(ws, convID)
-	h.register(convID, c)
+	if !h.register(convID, c) {
+		_ = ws.Close()
+		return errHubClosed
+	}
 	defer h.unregister(convID, c)
 
 	go h.writePump(c)
@@ -171,13 +176,17 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, convID uuid.UUID) er
 	return nil
 }
 
-func (h *Hub) register(convID uuid.UUID, c *conn) {
+func (h *Hub) register(convID uuid.UUID, c *conn) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.closed {
+		return false
+	}
 	if h.conns[convID] == nil {
 		h.conns[convID] = map[*conn]struct{}{}
 	}
 	h.conns[convID][c] = struct{}{}
+	return true
 }
 
 func (h *Hub) unregister(convID uuid.UUID, c *conn) {
@@ -508,6 +517,7 @@ func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 		if json.Unmarshal(data, &msg) != nil {
 			continue
 		}
+		commandCtx := logging.NewTrace(baseCtx)
 		switch msg.Type {
 		case TypeUserInput:
 			// 与 REST 入口保持一致：空内容拒绝，避免落一条空用户消息。
@@ -524,7 +534,7 @@ func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 				c.notice(convID, "request_id 必须是有效 UUID")
 				continue
 			}
-			if !h.startGeneration(baseCtx, convID, func(ctx context.Context, emit EmitFunc) {
+			if !h.startGeneration(commandCtx, convID, func(ctx context.Context, emit EmitFunc) {
 				h.gen.Generate(ctx, convID, requestID, msg.Content, emit)
 			}) {
 				// 忙碌提示只回发给发起请求的连接：其他连接正在接收该对话的
@@ -532,7 +542,7 @@ func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 				c.notice(convID, "当前对话正在生成中，请稍候")
 			}
 		case TypeCancelGeneration:
-			h.cancelGeneration(baseCtx, convID)
+			h.cancelGeneration(commandCtx, convID)
 		case TypeSteerGeneration, TypeFollowUp:
 			if strings.TrimSpace(msg.Content) == "" {
 				c.notice(convID, "排队消息内容不能为空")
@@ -547,7 +557,7 @@ func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 				c.notice(convID, "request_id 必须是有效 UUID")
 				continue
 			}
-			if err := h.queueGeneration(baseCtx, convID, func(ctx context.Context, emit EmitFunc) {
+			if err := h.queueGeneration(commandCtx, convID, func(ctx context.Context, emit EmitFunc) {
 				h.gen.Generate(ctx, convID, requestID, msg.Content, emit)
 			}); err != nil {
 				c.notice(convID, err.Error())
@@ -575,7 +585,7 @@ func (h *Hub) startGeneration(baseCtx context.Context, convID uuid.UUID, run fun
 	task := &genTask{cancel: cancel, done: make(chan struct{})}
 	h.mu.Lock()
 	old := h.cancels[convID]
-	if old != nil && !old.finished {
+	if h.closed || old != nil && !old.finished {
 		h.mu.Unlock()
 		cancel()
 		return false
@@ -600,7 +610,11 @@ func (h *Hub) startGeneration(baseCtx context.Context, convID uuid.UUID, run fun
 			if ctx.Err() != nil {
 				return
 			}
-			h.runGuarded(ctx, convID, run, emit)
+			runCtx, cancelRun := context.WithCancel(context.WithoutCancel(baseCtx))
+			stopCancel := context.AfterFunc(ctx, cancelRun)
+			h.runGuarded(runCtx, convID, run, emit)
+			stopCancel()
+			cancelRun()
 			h.mu.Lock()
 			// Marking the task finished and deciding whether to consume the next
 			// queued run happen under the same lock as queueGeneration. A request
@@ -636,6 +650,7 @@ func (h *Hub) startGeneration(baseCtx context.Context, convID uuid.UUID, run fun
 			}
 			h.mu.Unlock()
 			run = next.run
+			baseCtx = next.ctx
 		}
 	}()
 	return true
@@ -646,13 +661,17 @@ func (h *Hub) startGeneration(baseCtx context.Context, convID uuid.UUID, run fun
 // serially, preserving conversation lock and event order.
 func (h *Hub) queueGeneration(baseCtx context.Context, convID uuid.UUID, run func(context.Context, EmitFunc)) error {
 	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return errHubClosed
+	}
 	task := h.cancels[convID]
 	if task != nil && !task.finished {
 		if len(h.queued[convID]) >= maxGenerationQueueLength {
 			h.mu.Unlock()
 			return errGenerationQueueFull
 		}
-		h.queued[convID] = append(h.queued[convID], queuedGeneration{run: run})
+		h.queued[convID] = append(h.queued[convID], queuedGeneration{ctx: context.WithoutCancel(baseCtx), run: run})
 		queuedCount := len(h.queued[convID])
 		h.mu.Unlock()
 		h.Broadcast(convID, Event{Type: TypeAgentQueueUpdated, ConversationID: convID.String(), Payload: map[string]any{"count": queuedCount}})
@@ -667,13 +686,45 @@ func (h *Hub) queueGeneration(baseCtx context.Context, convID uuid.UUID, run fun
 }
 
 var errGenerationQueueFull = errors.New("生成队列已满")
+var errHubClosed = errors.New("生成服务正在关闭")
+
+// Shutdown rejects new producers, disconnects sockets and waits for active runs.
+func (h *Hub) Shutdown(ctx context.Context) error {
+	h.mu.Lock()
+	h.closed = true
+	tasks := make([]*genTask, 0, len(h.cancels))
+	for _, task := range h.cancels {
+		task.cancel()
+		tasks = append(tasks, task)
+	}
+	h.queued = map[uuid.UUID][]queuedGeneration{}
+	connections := []*conn{}
+	for _, set := range h.conns {
+		for c := range set {
+			connections = append(connections, c)
+		}
+	}
+	h.mu.Unlock()
+	for _, c := range connections {
+		_ = c.ws.Close()
+		c.close()
+	}
+	for _, task := range tasks {
+		select {
+		case <-task.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
 
 // runGuarded 执行一次生成并兜住 panic：任何玩法或工具代码的 panic 只能
 // 让这一次生成失败并释放对话，不能拖垮整个进程。
 func (h *Hub) runGuarded(ctx context.Context, convID uuid.UUID, run func(context.Context, EmitFunc), emit EmitFunc) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			logging.Named("ws").Error("生成任务 panic",
+			logging.FromContext(ctx, "ws").Error("生成任务 panic",
 				zap.String("conversation_id", convID.String()),
 				zap.Any("panic", recovered), zap.String("stack", string(debug.Stack())))
 			if h.gen != nil {

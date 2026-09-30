@@ -156,7 +156,8 @@ func (s *Service) checkJSONSchema(ctx context.Context, playerID uuid.UUID, setti
 func (s *Service) params(playerID uuid.UUID, settings *storage.LLMSettings, model string, role Role) llm.Params {
 	apiKey := settings.APIKey
 	return llm.Params{
-		BaseURL: settings.BaseURL, APIKey: apiKey, Model: model,
+		PlayerID: playerID.String(),
+		BaseURL:  settings.BaseURL, APIKey: apiKey, Model: model,
 		Protocol: llm.NormalizeProtocol(settings.Protocol), Temperature: 0, TopP: 1,
 		ReasoningEffort: effortForRole(settings, role),
 		Relay:           s.relayForRoute(playerID, settings),

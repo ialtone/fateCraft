@@ -27,6 +27,7 @@ const model = defineModel<SaveChallengeVersionInput>({ required: true })
 const message = useMessage()
 const activeTab = ref('basic')
 const advanced = ref('')
+const advancedBaseline = ref('')
 
 const manifest = computed<any>(() => model.value.manifest)
 const runtime = computed<any>(() => model.value.runtime)
@@ -330,7 +331,10 @@ function ruleRewardName(id: string) {
 
 function onTabChange(value: string) {
   activeTab.value = value
-  if (value === 'advanced') advanced.value = JSON.stringify(model.value, null, 2)
+  if (value === 'advanced' && advanced.value === advancedBaseline.value) {
+    advanced.value = JSON.stringify(model.value, null, 2)
+    advancedBaseline.value = advanced.value
+  }
 }
 
 function applyAdvanced() {
@@ -347,6 +351,7 @@ function applyAdvanced() {
       throw new Error('缺少必需区域')
     }
     model.value = parsed
+    advancedBaseline.value = advanced.value
     message.success('高级 JSON 已应用到结构化表单，仍需保存草稿')
   } catch (err: any) {
     message.error(`无法应用 JSON：${err.message || '格式无效'}`)
@@ -356,7 +361,7 @@ function applyAdvanced() {
 
 <template>
   <NTabs :value="activeTab" type="line" animated @update:value="onTabChange">
-    <NTabPane name="basic" tab="基本信息">
+    <NTabPane name="basic" tab="基本信息" display-directive="show:lazy">
       <div class="form-grid">
         <NFormItem label="玩法 ID"
           ><NInput v-model:value="manifest.id" :readonly="readonly"
@@ -430,7 +435,7 @@ function applyAdvanced() {
       </NFormItem>
     </NTabPane>
 
-    <NTabPane name="assets" tab="叙事资产">
+    <NTabPane name="assets" tab="叙事资产" display-directive="show:lazy">
       <div class="section-toolbar">
         <p>角色卡、玩家人设、场景、Prompt 与世界书仍使用各自稳定 JSON 格式。</p>
         <NButton v-if="!readonly" size="small" @click="addAsset">新增资产</NButton>
@@ -474,7 +479,7 @@ function applyAdvanced() {
       </article>
     </NTabPane>
 
-    <NTabPane name="definitions" tab="玩法定义">
+    <NTabPane name="definitions" tab="玩法定义" display-directive="show:lazy">
       <div class="section-toolbar">
         <p>境界、功法、物品、地点、NPC 与势力使用版本化稳定 key；正文只负责叙事。</p>
         <NButton v-if="!readonly" size="small" @click="addDefinition">新增定义</NButton>
@@ -540,7 +545,7 @@ function applyAdvanced() {
       </article>
     </NTabPane>
 
-    <NTabPane name="runtime" tab="玩法运行">
+    <NTabPane name="runtime" tab="玩法运行" display-directive="show:lazy">
       <div class="form-grid">
         <NFormItem label="可信玩法模块">
           <NSelect
@@ -574,6 +579,10 @@ function applyAdvanced() {
       <NFormItem v-if="runtime.mode === 'campaign'" label="长期世界配置">
         <JsonValueInput v-model="campaignConfig" :readonly="readonly" :min-rows="8" />
       </NFormItem>
+      <NFormItem label="玩家能力配置">
+        <JsonValueInput v-model="actionConfig.capabilities" :readonly="readonly" :min-rows="4" />
+      </NFormItem> </NTabPane
+    ><NTabPane name="state" tab="状态字段" display-directive="show:lazy">
       <div class="section-toolbar">
         <div>
           <h4>状态 Schema</h4>
@@ -629,12 +638,9 @@ function applyAdvanced() {
           /></NFormItem>
         </div>
       </article>
-      <NFormItem label="玩家能力配置">
-        <JsonValueInput v-model="actionConfig.capabilities" :readonly="readonly" :min-rows="4" />
-      </NFormItem>
     </NTabPane>
 
-    <NTabPane name="presentation" tab="玩家界面">
+    <NTabPane name="presentation" tab="玩家界面" display-directive="show:lazy">
       <div class="form-grid">
         <NFormItem label="状态栏标题"
           ><NInput v-model:value="presentation.state_panel_title" :readonly="readonly"
@@ -724,7 +730,7 @@ function applyAdvanced() {
       </NFormItem>
     </NTabPane>
 
-    <NTabPane name="outcomes" tab="结局验证">
+    <NTabPane name="outcomes" tab="结局验证" display-directive="show:lazy">
       <div class="section-toolbar">
         <p>模型只提交 outcome_key，标题、类别和验证器均由这里的固定版本决定。</p>
         <NButton v-if="!readonly" size="small" @click="addOutcome">新增结局</NButton>
@@ -776,7 +782,7 @@ function applyAdvanced() {
       </article>
     </NTabPane>
 
-    <NTabPane name="rewards" tab="奖励规则">
+    <NTabPane name="rewards" tab="奖励规则" display-directive="show:lazy">
       <div class="section-toolbar">
         <p>奖励必须选择全局定义，数量由已安装的可信计算器产生。</p>
         <NButton v-if="!readonly" size="small" @click="addRewardRule">新增奖励规则</NButton>
@@ -826,7 +832,7 @@ function applyAdvanced() {
       </article>
     </NTabPane>
 
-    <NTabPane name="advanced" tab="高级 JSON">
+    <NTabPane name="advanced" tab="高级 JSON" display-directive="show:lazy">
       <NAlert type="warning" :bordered="false"
         >高级模式用于导入、导出和少量特殊配置。应用后仍会经过与结构化表单相同的后端发布校验。</NAlert
       >

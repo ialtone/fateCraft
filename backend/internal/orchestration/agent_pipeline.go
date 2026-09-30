@@ -77,7 +77,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 	settings, err := g.settings.Get(ctx, g.identity.CurrentPlayerID(ctx))
 	if err != nil {
 		markGenerationFailure(ctx, "settings", "settings_unavailable")
-		emit(errorEvent(convID, "读取 LLM 设置失败: "+err.Error()))
+		logging.FromContext(ctx, "orchestration").Error("读取 LLM 设置失败", zap.Error(err))
+		emit(errorEvent(convID, "模型设置暂时不可用（关联 ID："+logging.TraceID(ctx)+"）"))
 		return
 	}
 	apiKey := settings.APIKey
@@ -232,7 +233,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 		modelStartedAt := time.Now()
 		firstEventMS, firstTextMS, firstToolMS := int64(-1), int64(-1), int64(-1)
 		params := llm.Params{
-			BaseURL: settings.BaseURL, APIKey: apiKey, Model: settings.Model,
+			PlayerID: conv.PlayerID,
+			BaseURL:  settings.BaseURL, APIKey: apiKey, Model: settings.Model,
 			Protocol: llm.NormalizeProtocol(settings.Protocol), Temperature: settings.Temperature,
 			TopP: settings.TopP, MaxTokens: settings.MaxResponseTokens, ReasoningEffort: settings.ReasoningEffort,
 			ConversationID: convID.String(), MessageID: displayID.String(), Purpose: "narrative",
@@ -313,7 +315,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			ModelDurationMS: modelDurationMS, GenerationMS: generationMS,
 		}
 		if callErr != nil {
-			logAgentStepTiming(convID, metadata.AttemptID, stepNo, stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt,
+			logAgentStepTiming(ctx, convID, metadata.AttemptID, stepNo, stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt,
 				firstEventMS, firstTextMS, firstToolMS, lane, built.UsedPromptTokens, completionTokens,
 				len(toolCalls), callErr)
 			status := storage.AgentStepFailed
@@ -326,7 +328,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			return
 		}
 		lane = resolveAgentLane(result)
-		logAgentStepTiming(convID, metadata.AttemptID, stepNo, stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt,
+		logAgentStepTiming(ctx, convID, metadata.AttemptID, stepNo, stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt,
 			firstEventMS, firstTextMS, firstToolMS, lane, built.UsedPromptTokens, completionTokens,
 			len(toolCalls), nil)
 		turnAssembleMS += assembleDoneAt.Sub(stepStartedAt).Milliseconds()
@@ -405,7 +407,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			runtimeEvents.send(realtime.TypeGuidanceUpdated, stepNo, map[string]any{"guidance": activeGuidance})
 			runtimeEvents.send(realtime.TypeAgentTurnCompleted, stepNo, map[string]any{"message_id": displayID.String()})
 			totalMS := time.Since(turnStartedAt).Milliseconds()
-			logging.Named("performance").Info("Agent 回合完成",
+			logging.FromContext(ctx, "performance").Info("Agent 回合完成",
 				zap.String("conversation_id", convID.String()),
 				zap.String("attempt_id", metadata.AttemptID.String()),
 				zap.Int("steps", stepNo),
@@ -451,12 +453,12 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 					mutatingCount < maxAgentMutatingTools && !settled, blocks, runtimeEvents, emit,
 				)
 				if err != nil {
-					logAgentToolTiming(convID, metadata.AttemptID, stepNo, call.Name, toolStartedAt, err)
+					logAgentToolTiming(ctx, convID, metadata.AttemptID, stepNo, call.Name, toolStartedAt, err)
 					markGenerationFailure(ctx, "tool_execute", agentErrorCode(err))
 					g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 					return
 				}
-				logAgentToolTiming(convID, metadata.AttemptID, stepNo, call.Name, toolStartedAt, nil,
+				logAgentToolTiming(ctx, convID, metadata.AttemptID, stepNo, call.Name, toolStartedAt, nil,
 					zap.String("status", outcome.Status), zap.String("code", outcome.Code))
 				turnToolMS += time.Since(toolStartedAt).Milliseconds()
 				if outcome.Mutating && outcome.Status == storage.ToolInvocationCommitted {
@@ -645,6 +647,7 @@ func (g *Generator) processAgentToolCall(
 }
 
 func logAgentStepTiming(
+	ctx context.Context,
 	conversationID, attemptID uuid.UUID,
 	stepNo int,
 	stepStartedAt, assembleDoneAt, buildDoneAt, modelStartedAt time.Time,
@@ -674,10 +677,18 @@ func logAgentStepTiming(
 	if callErr != nil {
 		fields = append(fields, zap.String("error_code", agentErrorCode(callErr)))
 	}
-	logging.Named("performance").Info("Agent 模型步骤耗时", fields...)
+	log := logging.FromContext(ctx, "performance")
+	if callErr != nil {
+		log.Error("Agent 模型步骤失败", fields...)
+	} else if time.Since(modelStartedAt) >= 60*time.Second {
+		log.Warn("Agent 模型步骤较慢", fields...)
+	} else {
+		log.Debug("Agent 模型步骤耗时", fields...)
+	}
 }
 
 func logAgentToolTiming(
+	ctx context.Context,
 	conversationID, attemptID uuid.UUID,
 	stepNo int,
 	toolName string,
@@ -696,7 +707,14 @@ func logAgentToolTiming(
 		fields = append(fields, zap.String("error_code", agentErrorCode(callErr)))
 	}
 	fields = append(fields, extra...)
-	logging.Named("performance").Info("Agent 工具执行耗时", fields...)
+	log := logging.FromContext(ctx, "performance")
+	if callErr != nil {
+		log.Warn("Agent 工具执行未成功", fields...)
+	} else if time.Since(startedAt) >= time.Second {
+		log.Warn("Agent 工具执行较慢", fields...)
+	} else {
+		log.Debug("Agent 工具执行耗时", fields...)
+	}
 }
 
 func toolMayChangeConversationState(kind agentToolKind) bool {
@@ -808,7 +826,10 @@ func (g *Generator) finishAgentFailure(
 		g.refundRewriteReservation(ctx, "agent_failure")
 	}
 	kind := realtime.TypeAgentTurnFailed
-	message := "模型请求失败: " + err.Error()
+	message := "本轮生成未完成，请重试或联系管理员。"
+	if errors.Is(err, llm.ErrTruncated) || errors.Is(err, llm.ErrLLMStreamStalled) || errors.Is(err, llm.ErrRelayUnavailable) || errors.Is(err, llm.ErrRelayLost) || errors.Is(err, storage.ErrLLMRouteMismatch) {
+		message = logging.ErrorText(err)
+	}
 	if mutated {
 		kind = realtime.TypeAgentTurnPartial
 		message = "动作已执行，但叙事未完成。请使用继续叙事。"
@@ -816,7 +837,11 @@ func (g *Generator) finishAgentFailure(
 		kind = realtime.TypeAgentTurnCancelled
 		message = "生成已取消"
 	}
-	runtimeEvents.send(kind, stepNo, map[string]any{"message_id": runtimeEvents.messageID, "code": agentErrorCode(err), "message": message})
+	if !isCancellation(err) {
+		logging.FromContext(ctx, "performance").Error("Agent 回合未完成", zap.String("conversation_id", conversationID.String()), zap.Bool("partial", mutated), zap.String("error_code", agentErrorCode(err)), zap.Error(err))
+		message += "（关联 ID：" + logging.TraceID(ctx) + "）"
+	}
+	runtimeEvents.send(kind, stepNo, map[string]any{"message_id": runtimeEvents.messageID, "code": agentErrorCode(err), "message": message, "trace_id": logging.TraceID(ctx)})
 	if mutated {
 		emit(infoEvent(conversationID, message))
 	} else if isCancellation(err) {

@@ -51,6 +51,50 @@ import type {
 } from '@/types'
 import type { AuthConfig, AuthUser, ExternalIdentity } from '@/types'
 
+export interface DiagnosticQuery {
+  limit?: number
+  cursor?: string
+  from?: string
+  until?: string
+  conversation_id?: string
+  attempt_id?: string
+  trace_id?: string
+  purpose?: string
+  model?: string
+  success?: boolean
+  actor_id?: string
+  action?: string
+}
+export interface LogPage<T> {
+  logs: T[]
+  next_cursor: string
+  has_more: boolean
+}
+export interface DiagnosticStatus {
+  instance_id: string
+  writer: {
+    pending: number
+    bytes: number
+    capacity: number
+    byte_limit: number
+    written: number
+    failed: number
+    dropped: Record<string, number>
+    last_failure_at?: string
+    closed: boolean
+    unflushed: number
+  }
+  cleanup: {
+    last_run?: string
+    duration_ms: number
+    error?: string
+    llm_requests: number
+    context_builds: number
+    has_more: boolean
+    backlog_known: boolean
+    limit_reached: boolean
+  }
+}
 const http = axios.create({ baseURL: '/api', timeout: 30000, withCredentials: true })
 
 export const guidanceApi = {
@@ -72,7 +116,13 @@ http.interceptors.response.use(
   (res) => res,
   (err) => {
     const backendMsg = err.response?.data?.error
-    if (backendMsg) err.message = backendMsg
+    if (backendMsg) {
+      const trace = err.response?.data?.trace_id
+      err.message =
+        typeof trace === 'string' && err.response.status >= 500
+          ? `${backendMsg}（关联 ID：${trace}）`
+          : backendMsg
+    }
     return Promise.reject(err)
   },
 )
@@ -275,16 +325,16 @@ export const adminApi = {
     http.patch<AdminUser>(`/admin/users/${id}/role`, { role }).then((r) => r.data),
   updateUserStatus: (id: string, status: AdminUser['status']) =>
     http.patch<AdminUser>(`/admin/users/${id}/status`, { status }).then((r) => r.data),
-  listAuditLogs: (limit = 50) =>
-    http
-      .get<{ logs: AdminAuditLog[] }>('/admin/audit-logs', { params: { limit } })
-      .then((r) => r.data.logs),
+  listAuditLogs: (params: DiagnosticQuery = {}) =>
+    http.get<LogPage<AdminAuditLog>>('/admin/audit-logs', { params }).then((r) => r.data),
   getSystemSettings: () =>
     http.get<AdminSystemSettings>('/admin/system-settings').then((r) => r.data),
   updateSystemSettings: (body: {
-    roll_system_enabled: boolean
-    roll_difficulty_mode: string
+    roll_system_enabled?: boolean
+    roll_difficulty_mode?: string
     detailed_llm_logging_enabled?: boolean
+    detailed_llm_logging_scope?: 'all' | 'user' | 'conversation'
+    detailed_llm_logging_target_id?: string
     diagnostic_log_cleanup_enabled?: boolean
     diagnostic_log_retention_days?: number
     llm_access_mode?: 'user_managed' | 'platform_managed'
@@ -318,16 +368,18 @@ export const adminApi = {
         { timeout: 180000 },
       )
       .then((r) => r.data),
-  listLLMRequestLogs: (params?: { limit?: number; conversation_id?: string }) =>
+  listLLMRequestLogs: (params?: DiagnosticQuery) =>
     http
-      .get<{ logs: AdminLLMRequestLogSummary[] }>('/admin/llm-request-logs', { params })
-      .then((r) => r.data.logs),
+      .get<LogPage<AdminLLMRequestLogSummary>>('/admin/llm-request-logs', { params })
+      .then((r) => r.data),
+  getDiagnosticStatus: () =>
+    http.get<DiagnosticStatus>('/admin/diagnostic-status').then((r) => r.data),
   getLLMRequestLog: (id: string) =>
     http.get<AdminLLMRequestLog>(`/admin/llm-request-logs/${id}`).then((r) => r.data),
-  listContextBuildLogs: (params?: { limit?: number; conversation_id?: string }) =>
+  listContextBuildLogs: (params?: DiagnosticQuery) =>
     http
-      .get<{ logs: AdminContextBuildLogSummary[] }>('/admin/context-build-logs', { params })
-      .then((r) => r.data.logs),
+      .get<LogPage<AdminContextBuildLogSummary>>('/admin/context-build-logs', { params })
+      .then((r) => r.data),
   getContextBuildLog: (id: string) =>
     http.get<AdminContextBuildLog>(`/admin/context-build-logs/${id}`).then((r) => r.data),
   listConversationShares: (params?: { status?: string; limit?: number }) =>

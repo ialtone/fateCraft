@@ -241,7 +241,8 @@ type Params struct {
 	ContractName               string
 	ContractVersion            string
 	ContractFingerprint        string
-	ConversationID             string // 可选，仅用于详细请求日志关联
+	PlayerID                   string `json:"-"` // 服务端归属，用于正文采集范围；不发送给模型或 Relay
+	ConversationID             string // 可选，用于诊断关联与正文采集范围
 	MessageID                  string // 可选，仅用于详细请求日志关联
 	Purpose                    string
 	AttemptID                  string
@@ -270,6 +271,16 @@ type RetryPolicy struct {
 // RequestAudit 是一次 LLM HTTP 调用的诊断快照。RequestBody 不包含 API Key
 // 或 Authorization 头；RawResponse 保留上游原始响应，便于分析流式截断和协议漂移。
 type RequestAudit struct {
+	ID                         string
+	TraceID                    string
+	Protocol                   string
+	StartedAt                  time.Time
+	TransportAttempts          int
+	InputTokens                *int
+	OutputTokens               *int
+	ErrorCode                  string
+	BodyStatus                 string
+	BodyMetadata               map[string]AuditFieldInfo
 	ConversationID             string
 	MessageID                  string
 	Purpose                    string

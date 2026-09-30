@@ -149,9 +149,9 @@ Handler 返回 `rejected` 或 `failed` 时使用内部哨兵错误回滚整个�
 
 ## 审计
 
-管理员详细日志默认关闭。开启后，每个模型请求记录最终 HTTP 调用结果的去认证请求体、原始 HTTP/SSE、归一化文本、HTTP 状态、finish reason、终止标记、耗时、协议、模型、settings revision、`settings_source` 和关联业务 ID；传输层重试次数目前只写入结构化服务端日志，不伪装成独立业务 attempt。结构化 Agent 额外记录 Schema 契约、输出类型和稳定错误码。
+每次逻辑模型调用默认提交轻量摘要。详细正文默认关闭，开启后保存预算内的请求 JSON/预览、原始响应和归一化文本；字段含 trace、设置来源、契约及可用 usage。传输重试复用 llm_call_id，最终摘要保存尝试次数；业务 attempt 不变。
 
-详细日志写入使用有界后台队列，不阻塞模型响应或工具循环；队列满时丢弃该条诊断并写入告警，不能为了审计拖住叙事。服务正常关闭时先停止接收新日志，再等待队列排空。
+诊断队列最多 128 条、32 MiB，包含正在写入的条目；满载立即丢弃并累计原因，不重放模型或工具。正常关闭先停止 HTTP、WebSocket 和后台任务生产者，再限时排空 writer。
 
 编排器的 `performance` 结构化日志额外记录每个 Agent 步骤的上下文装配、模型请求、首个事件、首段文本、首个工具和总耗时，以及工具提交耗时；首步上下文装配会并行读取互不依赖的固定包、State、历史和 Memory，Campaign/世界书仍按依赖顺序处理。这些数据用于区分模型 TTFT、工具事务和后端重复读取，不进入玩家正文。
 
@@ -214,3 +214,5 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 ### 工具快照与字段所有权
 
 每个 Agent 工具快照都绑定 Runtime 编译出的 Ownership Registry hash。Campaign 模式只生成 `narrative.*` conversation 字段的 `fc_state_*` 工具；Campaign 权威字段不会出现在状态工具目录，必须通过对应的 `fc_action_*`。服务端执行时再次解析 Registry，未知路径或跨域路径统一返回 `state_path_forbidden`，拒绝状态、revision 和领域事件副作用。该校验不能只依赖模型收到的 JSON Schema，因为旧步骤、兼容网关或伪造调用都可能绕过目录。
+
+性能日志的正常模型步骤/工具耗时为 Debug，模型达到 60 秒、工具达到 1 秒记 Warn，失败和回合摘要保留。脱敏、正文状态和容量细则见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。

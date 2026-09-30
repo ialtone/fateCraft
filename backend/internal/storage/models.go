@@ -884,6 +884,8 @@ type SystemSettings struct {
 	RollSystemEnabled           bool       `gorm:"column:roll_system_enabled;not null;default:true" json:"roll_system_enabled"`
 	RollDifficultyMode          string     `gorm:"column:roll_difficulty_mode;size:10;not null;default:normal" json:"roll_difficulty_mode"`
 	DetailedLLMLoggingEnabled   bool       `gorm:"column:detailed_llm_logging_enabled;not null;default:false" json:"detailed_llm_logging_enabled"`
+	DetailedLLMLoggingScope     string     `gorm:"column:detailed_llm_logging_scope;not null;default:all" json:"detailed_llm_logging_scope"`
+	DetailedLLMLoggingTargetID  *uuid.UUID `gorm:"column:detailed_llm_logging_target_id;type:uuid" json:"detailed_llm_logging_target_id"`
 	DiagnosticLogCleanupEnabled bool       `gorm:"column:diagnostic_log_cleanup_enabled;not null;default:true" json:"diagnostic_log_cleanup_enabled"`
 	DiagnosticLogRetentionDays  int        `gorm:"column:diagnostic_log_retention_days;not null;default:30" json:"diagnostic_log_retention_days"`
 	LLMAccessMode               string     `gorm:"column:llm_access_mode;size:32;not null;default:user_managed" json:"llm_access_mode"`
@@ -913,6 +915,7 @@ func (SystemSettings) TableName() string { return "system_settings" }
 // AdminAuditLog records security-sensitive role, installation, and account operations.
 // It intentionally contains only redacted request metadata.
 type AdminAuditLog struct {
+	TraceID       *uuid.UUID `gorm:"column:trace_id;type:uuid" json:"trace_id,omitempty"`
 	ID            uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
 	ActorUserID   *uuid.UUID `gorm:"column:actor_user_id;type:uuid" json:"actor_user_id,omitempty"`
 	TargetUserID  *uuid.UUID `gorm:"column:target_user_id;type:uuid" json:"target_user_id,omitempty"`
@@ -932,6 +935,7 @@ func (AdminAuditLog) TableName() string { return "admin_audit_logs" }
 func DefaultSystemSettings() *SystemSettings {
 	return &SystemSettings{
 		ID: 1, RollSystemEnabled: true, RollDifficultyMode: "normal",
+		DetailedLLMLoggingScope:     "all",
 		DiagnosticLogCleanupEnabled: true, DiagnosticLogRetentionDays: 30,
 		PublicLLMBaseURL: "https://api.openai.com/v1",
 		LLMAccessMode:    "user_managed", PublicLLMProtocol: DefaultLLMProtocol,
@@ -942,6 +946,15 @@ func DefaultSystemSettings() *SystemSettings {
 
 // LLMRequestLog 保存一次模型请求的详细诊断快照。请求体不含认证头和 API Key。
 type LLMRequestLog struct {
+	TraceID                    *uuid.UUID     `gorm:"column:trace_id;type:uuid" json:"trace_id,omitempty"`
+	Protocol                   string         `gorm:"column:protocol;not null;default:responses" json:"protocol"`
+	StartedAt                  time.Time      `gorm:"column:started_at;not null;default:CURRENT_TIMESTAMP" json:"started_at"`
+	TransportAttempts          int            `gorm:"column:transport_attempts;not null" json:"transport_attempts"`
+	InputTokens                *int           `gorm:"column:input_tokens" json:"input_tokens"`
+	OutputTokens               *int           `gorm:"column:output_tokens" json:"output_tokens"`
+	ErrorCode                  string         `gorm:"column:error_code" json:"error_code,omitempty"`
+	BodyStatus                 string         `gorm:"column:body_status;not null;default:disabled" json:"body_status"`
+	BodyMetadata               JSONMap        `gorm:"column:body_metadata;type:jsonb;not null" json:"body_metadata"`
 	ID                         uuid.UUID      `gorm:"column:id;primaryKey" json:"id"`
 	ConversationID             *uuid.UUID     `gorm:"column:conversation_id;type:uuid" json:"conversation_id,omitempty"`
 	MessageID                  *uuid.UUID     `gorm:"column:message_id;type:uuid" json:"message_id,omitempty"`

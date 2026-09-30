@@ -19,6 +19,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/llmrelay"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
+	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/memory"
 	"github.com/ialtone/fatecraft/internal/modelcapability"
 	"github.com/ialtone/fatecraft/internal/realtime"
@@ -62,6 +63,7 @@ type Server struct {
 	identity       identity.Provider // 当前玩家身份来源（由认证中间件写入 context）
 	auth           *authservice.Service
 	cookieSecure   bool
+	diagnostics    func() any
 }
 
 // Deps 是构造 Server 所需的依赖集合。
@@ -92,6 +94,7 @@ type Deps struct {
 	Identity       identity.Provider // 当前玩家身份来源（由认证中间件写入 context）
 	Auth           *authservice.Service
 	CookieSecure   bool
+	Diagnostics    func() any
 }
 
 type BodyLimitOverride struct {
@@ -127,7 +130,7 @@ func NewServer(d Deps) *Server {
 		settings: d.Settings, llmSettings: d.LLMSettings, system: d.System, ctxLogs: d.CtxLogs, messages: d.Messages, agents: d.Agents, rewards: d.Rewards,
 		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns,
 		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
-		auth: d.Auth, cookieSecure: d.CookieSecure,
+		auth: d.Auth, cookieSecure: d.CookieSecure, diagnostics: d.Diagnostics,
 	}
 }
 
@@ -241,6 +244,7 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.POST("/admin/system-settings/fetch-models", s.requireOwner, s.fetchAdminPublicModels)
 	protected.POST("/admin/system-settings/capabilities/check", s.requireOwner, s.checkAdminPublicCapability)
 	protected.GET("/admin/llm-request-logs", s.requireAdmin, s.listAdminLLMRequestLogs)
+	protected.GET("/admin/diagnostic-status", s.requireAdmin, s.diagnosticStatus)
 	protected.GET("/admin/llm-request-logs/:id", s.requireAdmin, s.getAdminLLMRequestLog)
 	protected.GET("/admin/context-build-logs", s.requireAdmin, s.listAdminContextBuildLogs)
 	protected.GET("/admin/context-build-logs/:id", s.requireAdmin, s.getAdminContextBuildLog)
@@ -332,6 +336,10 @@ func paramUUIDFromString(c *gin.Context, raw string) (uuid.UUID, bool) {
 // fail 按错误类型返回合适的 HTTP 状态码。
 func fail(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, storage.ErrSettingsConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "settings_conflict"})
+	case errors.Is(err, storage.ErrLogQuery), errors.Is(err, storage.ErrDetailedLLMLoggingScope), errors.Is(err, storage.ErrDetailedLLMLoggingTarget):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, storage.ErrNotFound), errors.Is(err, challenge.ErrNotPublished), errors.Is(err, challengeimport.ErrBuiltinNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "资源不存在"})
 	case challengeFailureStatus(err):
@@ -388,6 +396,7 @@ func fail(c *gin.Context, err error) {
 	case errors.Is(err, storage.ErrRewardDefinitionConflict), errors.Is(err, storage.ErrRewardDefinitionInUse):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务暂时不可用", "code": "internal_error", "trace_id": logging.TraceID(c.Request.Context())})
 	}
 }

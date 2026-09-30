@@ -53,7 +53,7 @@ func Init(level, format string) *zap.Logger {
 	}
 
 	core := zapcore.NewCore(enc, zapcore.Lock(os.Stdout), lv)
-	logger := zap.New(core, zap.AddCaller())
+	logger := zap.New(safeCore{core}, zap.AddCaller())
 	global.Store(logger)
 	return logger
 }

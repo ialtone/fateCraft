@@ -69,9 +69,9 @@ func (b *idleBody) Close() error {
 // are much larger than the configured token budget. They are deliberately
 // byte-based because the transport has not decoded a provider payload yet.
 const (
-	maxLLMResponseBytes = 32 << 20 // 32 MiB complete response or accumulated text
-	maxSSELineBytes     = 1 << 20  // 1 MiB per event/data line
-	maxLLMAuditBytes    = 2 << 20  // detailed logs are diagnostic, not a second payload store
+	maxLLMResponseBytes = 32 << 20  // 32 MiB complete response or accumulated text
+	maxSSELineBytes     = 1 << 20   // 1 MiB per event/data line
+	maxLLMAuditBytes    = 512 << 10 // detailed logs are diagnostic, not a second payload store
 	maxHTTPErrorBytes   = 64 << 10
 )
 
@@ -101,6 +101,13 @@ type auditBuffer struct {
 	max       int
 	total     int64
 	truncated bool
+}
+
+func newCaptureBuffer(enabled bool) *auditBuffer {
+	if !enabled {
+		return &auditBuffer{max: -1}
+	}
+	return newAuditBuffer(maxLLMAuditBytes)
 }
 
 func newAuditBuffer(max int) *auditBuffer {
@@ -145,18 +152,9 @@ func (b *auditBuffer) TooLarge() bool {
 	return b != nil && b.total > maxLLMResponseBytes
 }
 
-func boundedAuditBytes(value []byte) ([]byte, bool) {
-	if len(value) <= maxLLMAuditBytes {
-		return value, false
-	}
-	return value[:maxLLMAuditBytes], true
-}
-
 func boundedAuditString(value string) (string, bool) {
-	if len(value) <= maxLLMAuditBytes {
-		return value, false
-	}
-	return value[:maxLLMAuditBytes], true
+	text, info := safeAuditText(value, "", maxLLMAuditBytes)
+	return text, info.Truncated
 }
 
 // readSSELine bounds a complete SSE line while still accepting a line that is

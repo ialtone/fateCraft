@@ -34,6 +34,7 @@ type structuredChatResponse struct {
 }
 
 type structuredChatChunk struct {
+	Usage   *agentTokenUsage `json:"usage"`
 	Choices []struct {
 		Delta struct {
 			Content   string         `json:"content"`
@@ -53,6 +54,7 @@ type structuredResponsesItem struct {
 }
 
 type structuredResponsesResponse struct {
+	Usage             *agentTokenUsage           `json:"usage"`
 	Output            []structuredResponsesItem  `json:"output"`
 	OutputText        json.RawMessage            `json:"output_text"`
 	Status            string                     `json:"status"`
@@ -119,7 +121,7 @@ func (c *Client) callStructuredChat(ctx context.Context, p Params, messages []Me
 		return result, err
 	}
 	started := time.Now()
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	resp, err := c.doRaw(ctx, p, "/chat/completions", requestBody, stream)
 	if err != nil {
 		c.writeStructuredAudit(ctx, auditOn, p, stream, requestBody, "", result, 0, "", false, false, err, started)
@@ -133,8 +135,8 @@ func (c *Client) callStructuredChat(ctx context.Context, p Params, messages []Me
 		return result, httpErr
 	}
 	if stream {
-		raw := newAuditBuffer(maxLLMAuditBytes)
-		result, resultErr = parseStructuredChatStream(io.TeeReader(resp.Body, raw), p.StructuredOutput, onDelta)
+		raw := newCaptureBuffer(auditOn)
+		result, resultErr = parseStructuredChatStream(io.TeeReader(resp.Body, raw), p.StructuredOutput, onDelta, auditCall(ctx).setUsage)
 		resultErr = validateDeliveredPayload(p.StructuredOutput, result, resultErr)
 		c.writeStructuredAudit(ctx, auditOn, p, stream, requestBody, raw.String(), result, resp.StatusCode, "", result.receivedDone, true, resultErr, started)
 		return result, resultErr
@@ -171,7 +173,7 @@ func parseStructuredChatComplete(reader io.Reader, output *StructuredOutput) ([]
 	return raw, result, err
 }
 
-func parseStructuredChatStream(reader io.Reader, output *StructuredOutput, onDelta func(string)) (StructuredResult, error) {
+func parseStructuredChatStream(reader io.Reader, output *StructuredOutput, onDelta func(string), usage ...func(*agentTokenUsage)) (StructuredResult, error) {
 	var text strings.Builder
 	calls := map[int]*accumulatedToolCall{}
 	finishReason := ""
@@ -204,6 +206,9 @@ func parseStructuredChatStream(reader io.Reader, output *StructuredOutput, onDel
 		var chunk structuredChatChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			return StructuredResult{}, fmt.Errorf("流式 JSON 解析失败: %w", err)
+		}
+		for _, save := range usage {
+			save(chunk.Usage)
 		}
 		for _, choice := range chunk.Choices {
 			if choice.Delta.Content != "" {
@@ -382,7 +387,7 @@ func (c *Client) callStructuredResponses(ctx context.Context, p Params, messages
 		return result, err
 	}
 	started := time.Now()
-	auditOn := c.shouldAudit(ctx)
+	ctx, auditOn := c.beginAudit(ctx, p)
 	resp, err := c.doRaw(ctx, p, "/responses", requestBody, stream)
 	if err != nil {
 		c.writeStructuredAudit(ctx, auditOn, p, stream, requestBody, "", result, 0, "", false, false, err, started)
@@ -397,8 +402,8 @@ func (c *Client) callStructuredResponses(ctx context.Context, p Params, messages
 	}
 	var raw string
 	if stream {
-		streamed := newAuditBuffer(maxLLMAuditBytes)
-		result, resultErr = parseStructuredResponsesStream(io.TeeReader(resp.Body, streamed), p.StructuredOutput, onDelta)
+		streamed := newCaptureBuffer(auditOn)
+		result, resultErr = parseStructuredResponsesStream(io.TeeReader(resp.Body, streamed), p.StructuredOutput, onDelta, auditCall(ctx).setUsage)
 		resultErr = validateDeliveredPayload(p.StructuredOutput, result, resultErr)
 		raw = streamed.String()
 	} else {
@@ -472,7 +477,7 @@ func extractResponsesDelivery(response structuredResponsesResponse) (string, []c
 	return text.String(), calls
 }
 
-func parseStructuredResponsesStream(reader io.Reader, output *StructuredOutput, onDelta func(string)) (StructuredResult, error) {
+func parseStructuredResponsesStream(reader io.Reader, output *StructuredOutput, onDelta func(string), usage ...func(*agentTokenUsage)) (StructuredResult, error) {
 	var text strings.Builder
 	calls := map[int]*accumulatedToolCall{}
 	receivedDone := false
@@ -519,6 +524,11 @@ func parseStructuredResponsesStream(reader io.Reader, output *StructuredOutput, 
 		typ := event.Type
 		if typ == "" {
 			typ = eventName
+		}
+		if event.Response != nil {
+			for _, save := range usage {
+				save(event.Response.Usage)
+			}
 		}
 		switch typ {
 		case "response.output_text.delta":
@@ -615,7 +625,7 @@ func parseStructuredResponsesStream(reader io.Reader, output *StructuredOutput, 
 				}
 			}
 			if event.Error != nil && event.Error.Message != "" {
-				return StructuredResult{receivedDone: true}, fmt.Errorf("模型响应失败: %s", event.Error.Message)
+				return StructuredResult{receivedDone: true}, &providerMessageError{message: event.Error.Message}
 			}
 			return StructuredResult{receivedDone: true}, errors.New("模型响应未完成")
 		}
@@ -677,21 +687,18 @@ func structuredItemText(item structuredResponsesItem) string {
 }
 
 func (c *Client) writeStructuredAudit(ctx context.Context, auditOn bool, p Params, stream bool, requestBody []byte, raw string, result StructuredResult, status int, finishReason string, done, transport bool, callErr error, started time.Time) {
-	if !auditOn || c.auditWriter == nil {
+	if c.auditWriter == nil {
 		return
 	}
-	requestBody, requestTruncated := boundedAuditBytes(requestBody)
-	raw, rawTruncated := boundedAuditString(raw)
-	responseText, textTruncated := boundedAuditString(result.Payload)
 	detail := RequestAudit{
 		ConversationID: p.ConversationID, MessageID: p.MessageID, Purpose: p.Purpose,
 		AttemptID: p.AttemptID, MemoryJobID: p.MemoryJobID, MemoryID: p.MemoryID,
 		InquiryID: p.InquiryID, InquirySnapshotID: p.InquirySnapshotID,
 		InquirySnapshotBranchEpoch: p.InquirySnapshotBranchEpoch, InquirySnapshotRevision: p.InquirySnapshotRevision,
 		Model: p.Model, BaseURL: safeAuditURL(p.BaseURL), Stream: stream, RequestBody: requestBody,
-		RawResponse: raw, ResponseText: responseText, AuditTruncated: requestTruncated || rawTruncated || textTruncated,
+		RawResponse: raw, ResponseText: result.Payload, AuditTruncated: false,
 		ResponseStatus: status, FinishReason: finishReason,
-		ReceivedDone: done, Success: transport, TransportSuccess: transport, StructuredSuccess: callErr == nil,
+		ReceivedDone: done, Success: transport && callErr == nil, TransportSuccess: transport, StructuredSuccess: callErr == nil,
 		DurationMS: time.Since(started).Milliseconds(), SettingsRevision: p.SettingsRevision, SettingsSource: p.SettingsSource,
 		OutputMode: result.Mode, ContractName: p.ContractName,
 		ContractVersion: p.ContractVersion, ContractFingerprint: p.ContractFingerprint,
@@ -700,10 +707,5 @@ func (c *Client) writeStructuredAudit(ctx context.Context, auditOn bool, p Param
 	if p.StructuredOutput != nil && detail.OutputMode == "" {
 		detail.OutputMode = p.StructuredOutput.Mode
 	}
-	if callErr != nil {
-		detail.Error = callErr.Error()
-	}
-	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
-	_ = c.auditWriter(auditCtx, detail)
+	c.finishAudit(ctx, auditOn, p, detail, callErr)
 }
