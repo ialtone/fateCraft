@@ -40,3 +40,7 @@
 ```
 
 `fields.path` 只能引用公开 Campaign Snapshot；数组或对象使用 `item_fields` 显式标注可读字段。`actions` 可用 `source_path + item_path` 展开嵌套集合，并以 `item.*`、`parent.*` 绑定参数。动作只能引用当前 Runtime 已允许的稳定 key，`visible_when` 只影响体验，不能替代后端授权和事务校验。新增题材只需提供自己的投影和 View，不应修改玩家端组件。
+
+## 账号积分
+
+各包在 pack.json.outcomes 配置 reward_points，默认 0；百年飞升劫三条成功路线为 300/200/150，青河修仙志两条终局各 1000。账号只使用平台积分和剧情改写次数；包内局部资源不折算账号余额。不提供独立奖励定义文件。完整规则见 [奖励管理](../../../docs/design/22-reward-management-and-exchange.md)。

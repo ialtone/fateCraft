@@ -18,7 +18,7 @@ const areas = [
   {
     to: '/admin/rewards',
     title: '奖励管理',
-    description: '管理通关奖励、用户点数、积分兑换和发放记录。',
+    description: '管理通关积分、改写套餐、用户发放和收支记录。',
   },
   {
     to: '/admin/gameplay',

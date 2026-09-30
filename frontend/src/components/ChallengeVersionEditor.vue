@@ -15,12 +15,10 @@ import {
   useMessage,
 } from 'naive-ui'
 import JsonValueInput from '@/components/JsonValueInput.vue'
-import RewardCalculatorInput from '@/components/RewardCalculatorInput.vue'
-import type { GameplayModuleDescriptor, RewardDefinition, SaveChallengeVersionInput } from '@/types'
+import type { GameplayModuleDescriptor, SaveChallengeVersionInput } from '@/types'
 
 const props = defineProps<{
   modules: GameplayModuleDescriptor[]
-  rewards: RewardDefinition[]
   readonly?: boolean
 }>()
 const model = defineModel<SaveChallengeVersionInput>({ required: true })
@@ -78,9 +76,6 @@ const actionOptions = computed(() =>
 const verifierOptions = computed(() =>
   (selectedModule.value?.verifiers || []).map((value) => ({ label: value, value })),
 )
-const calculatorOptions = computed(() =>
-  (selectedModule.value?.calculators || []).map((value) => ({ label: value, value })),
-)
 const settlementOptions = computed(() =>
   (selectedModule.value?.settlement_handlers || []).map((value) => ({ label: value, value })),
 )
@@ -89,9 +84,6 @@ const modeOptions = computed(() =>
     label: value === 'campaign' ? '长期世界' : '单局挑战',
     value,
   })),
-)
-const rewardOptions = computed(() =>
-  props.rewards.map((item) => ({ label: `${item.name} · ${item.key}`, value: item.id })),
 )
 const outcomeOptions = computed(() =>
   model.value.outcomes.map((item) => ({
@@ -268,6 +260,7 @@ function addOutcome() {
   model.value.outcomes.push({
     id: crypto.randomUUID(),
     challenge_version_id: runtime.value.challenge_version_id,
+    reward_points: 0,
     outcome_key: `outcome_${model.value.outcomes.length + 1}`,
     category: 'success',
     title: '新结局',
@@ -282,51 +275,6 @@ function addOutcome() {
 
 function removeOutcome(index: number) {
   const [removed] = model.value.outcomes.splice(index, 1)
-  model.value.reward_rules = model.value.reward_rules.filter(
-    (item) => item.outcome_rule_id !== removed.id,
-  )
-}
-
-function addRewardRule() {
-  const outcome = model.value.outcomes[0]
-  const definition = props.rewards[0]
-  if (!outcome || !definition) {
-    message.warning('请先创建结局和奖励定义')
-    return
-  }
-  model.value.reward_rules.push({
-    id: crypto.randomUUID(),
-    challenge_version_id: runtime.value.challenge_version_id,
-    outcome_rule_id: outcome.id,
-    reward_definition_id: definition.id,
-    calculator_key: calculatorOptions.value[0]?.value || 'core.fixed',
-    calculator_config: { amount: 1 },
-    public_snapshot: rewardSnapshot(definition),
-    enabled: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-}
-
-function changeRewardDefinition(rule: any, id: string) {
-  rule.reward_definition_id = id
-  const definition = props.rewards.find((item) => item.id === id)
-  if (definition) rule.public_snapshot = rewardSnapshot(definition)
-}
-
-function rewardSnapshot(definition: RewardDefinition) {
-  return {
-    key: definition.key,
-    kind: definition.kind,
-    name: definition.name,
-    description: definition.description,
-    unit: definition.unit,
-    icon: definition.icon,
-  }
-}
-
-function ruleRewardName(id: string) {
-  return props.rewards.find((item) => item.id === id)?.name || '未知奖励'
 }
 
 function onTabChange(value: string) {
@@ -345,8 +293,7 @@ function applyAdvanced() {
       !parsed.runtime ||
       !Array.isArray(parsed.assets) ||
       !Array.isArray(parsed.definitions) ||
-      !Array.isArray(parsed.outcomes) ||
-      !Array.isArray(parsed.reward_rules)
+      !Array.isArray(parsed.outcomes)
     ) {
       throw new Error('缺少必需区域')
     }
@@ -766,6 +713,14 @@ function applyAdvanced() {
           <NFormItem label="色调"
             ><NSelect v-model:value="outcome.tone" :options="toneOptions" :disabled="readonly"
           /></NFormItem>
+          <NFormItem label="通关积分（0 表示不发放）"
+            ><NInputNumber
+              v-model:value="outcome.reward_points"
+              :min="0"
+              :max="Number.MAX_SAFE_INTEGER"
+              :precision="0"
+              :disabled="readonly"
+          /></NFormItem>
           <NFormItem label="可信验证器"
             ><NSelect
               v-model:value="outcome.verifier_key"
@@ -778,56 +733,6 @@ function applyAdvanced() {
         </div>
         <NFormItem label="验证器配置"
           ><JsonValueInput v-model="outcome.verifier_config" :readonly="readonly" :min-rows="3"
-        /></NFormItem>
-      </article>
-    </NTabPane>
-
-    <NTabPane name="rewards" tab="奖励规则" display-directive="show:lazy">
-      <div class="section-toolbar">
-        <p>奖励必须选择全局定义，数量由已安装的可信计算器产生。</p>
-        <NButton v-if="!readonly" size="small" @click="addRewardRule">新增奖励规则</NButton>
-      </div>
-      <article v-for="(rule, index) in model.reward_rules" :key="rule.id" class="editor-card">
-        <div class="card-head">
-          <strong>{{ ruleRewardName(rule.reward_definition_id) }}</strong>
-          <NButton
-            v-if="!readonly"
-            size="tiny"
-            type="error"
-            secondary
-            @click="model.reward_rules.splice(index, 1)"
-            >删除</NButton
-          >
-        </div>
-        <div class="form-grid compact">
-          <NFormItem label="对应结局"
-            ><NSelect
-              v-model:value="rule.outcome_rule_id"
-              :options="outcomeOptions"
-              :disabled="readonly"
-          /></NFormItem>
-          <NFormItem label="奖励定义"
-            ><NSelect
-              :value="rule.reward_definition_id"
-              :options="rewardOptions"
-              :disabled="readonly"
-              @update:value="(value) => changeRewardDefinition(rule, value)"
-          /></NFormItem>
-          <NFormItem label="数量计算器"
-            ><NSelect
-              v-model:value="rule.calculator_key"
-              :options="calculatorOptions"
-              :disabled="readonly"
-          /></NFormItem>
-          <NFormItem label="启用"
-            ><NSwitch v-model:value="rule.enabled" :disabled="readonly"
-          /></NFormItem>
-        </div>
-        <NFormItem label="计算器配置"
-          ><RewardCalculatorInput
-            v-model="rule.calculator_config"
-            :calculator="rule.calculator_key"
-            :readonly="readonly"
         /></NFormItem>
       </article>
     </NTabPane>

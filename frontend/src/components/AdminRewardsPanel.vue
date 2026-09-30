@@ -1,326 +1,259 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
   NEmpty,
   NFormItem,
-  NInput,
   NInputNumber,
   NModal,
-  NSelect,
-  NSwitch,
-  NTabPane,
+  NSpin,
   NTabs,
-  NTag,
-  useMessage,
+  NTabPane,
 } from 'naive-ui'
 import { rewardManagementApi as api } from '@/api/rewards'
-import type { AdminUser, RewardDefinition, AdminAuditLog } from '@/types'
-import type {
-  RegistrationRewardRule,
-  RewardRecord,
-  RewardAssetOverview,
-  RewardRuleCatalogEntry,
-} from '@/types/rewards'
-import { rewardError, rewardStatus } from '@/lib/rewards'
+import { rewardError } from '@/lib/rewards'
+import type { AdminUser, AdminAuditLog } from '@/types'
+import type { RegistrationRewardRule, RewardRuleCatalogEntry } from '@/types/rewards'
 import RewardUserSearch from './RewardUserSearch.vue'
 import AdminRewardUserPanel from './AdminRewardUserPanel.vue'
-import RewardRecordsPanel from './RewardRecordsPanel.vue'
 import AdminRewardExchangePanel from './AdminRewardExchangePanel.vue'
 import RewardExchangeOrders from './RewardExchangeOrders.vue'
-const props = defineProps<{ definitions: RewardDefinition[] }>(),
-  emit = defineEmits<{ openVersion: [id: string] }>(),
-  message = useMessage()
-const selected = ref<AdminUser>(),
-  userOpen = ref(false),
-  errors = ref<Record<string, string>>({}),
-  saving = ref(false),
-  tab = ref('overview')
-const rule = ref<RegistrationRewardRule>(),
-  requestID = ref(''),
-  found = ref<RewardRecord>(),
-  assets = ref<RewardAssetOverview[]>([]),
+import RewardLedgerPanel from './RewardLedgerPanel.vue'
+const emit = defineEmits<{ openVersion: [id: string] }>()
+const secondaryTabTheme = {
+  barColor: 'transparent',
+  tabFontSizeSmall: '13px',
+  tabGapSmallBar: '6px',
+  tabPaddingSmallBar: '6px 12px',
+  tabTextColorBar: 'var(--text-dim)',
+  tabFontWeightActive: '600',
+  panePaddingSmall: '16px 0 0',
+}
+const tab = ref('rules'),
+  rulesTab = ref('outcomes'),
+  recordsTab = ref('users'),
   rules = ref<RewardRuleCatalogEntry[]>([]),
-  ruleAsset = ref<string>(),
-  ruleOffset = ref(0),
-  ruleMore = ref(false),
+  more = ref(false),
+  offset = ref(0),
+  registration = ref<RegistrationRewardRule>(),
+  selected = ref<AdminUser>(),
+  userOpen = ref(false),
   audits = ref<AdminAuditLog[]>([]),
   auditCursor = ref(''),
-  loading = ref<Record<string, boolean>>({})
-const error = computed(() => errors.value[tab.value] || '')
-const busy = computed(() => loading.value[tab.value] || false)
-const options = computed(() =>
-  props.definitions.map((d) => ({
-    label: `${d.name} · ${d.key}${d.disabled ? '（已停用）' : ''}`,
-    value: d.id,
-  })),
+  error = ref(''),
+  busy = ref(false),
+  saved = ref(false)
+const valid = computed(
+  () =>
+    !!registration.value &&
+    [registration.value.points, registration.value.rewrite_credits].every(
+      (n) => Number.isSafeInteger(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER,
+    ),
 )
-const registrationOptions = computed(() =>
-  options.value.map((o) => ({
-    ...o,
-    disabled: props.definitions.find((d) => d.id === o.value)?.disabled,
-  })),
-)
-function select(user: AdminUser) {
-  selected.value = user
-  userOpen.value = true
-}
-async function overview() {
-  errors.value.overview = ''
-  loading.value.overview = true
+async function loadRules(next = false) {
+  busy.value = true
+  error.value = ''
   try {
-    assets.value = await api.overview()
+    const newOffset = next ? offset.value + 30 : 0
+    const page = await api.rules(newOffset)
+    rules.value = next ? [...rules.value, ...page.rules] : page.rules
+    offset.value = newOffset
+    more.value = page.has_more
   } catch (err) {
-    errors.value.overview = rewardError(err)
+    error.value = rewardError(err)
   } finally {
-    loading.value.overview = false
-  }
-}
-async function loadRules(more = false) {
-  loading.value.rules = true
-  errors.value.rules = ''
-  try {
-    const offset = more ? ruleOffset.value + 30 : 0
-    const page = await api.rules(ruleAsset.value, offset)
-    rules.value = more ? [...rules.value, ...page.rules] : page.rules
-    ruleOffset.value = offset
-    ruleMore.value = page.has_more
-  } catch (err) {
-    errors.value.rules = rewardError(err)
-  } finally {
-    loading.value.rules = false
+    busy.value = false
   }
 }
 async function loadRegistration() {
-  if (loading.value.registration) return
-  loading.value.registration = true
-  errors.value.registration = ''
+  busy.value = true
+  error.value = ''
+  saved.value = false
   try {
-    rule.value = await api.registration()
+    registration.value = await api.registration()
   } catch (err) {
-    errors.value.registration = rewardError(err)
+    error.value = rewardError(err)
   } finally {
-    loading.value.registration = false
+    busy.value = false
   }
 }
 async function save() {
-  if (!rule.value) return
-  saving.value = true
-  errors.value.registration = ''
+  if (!registration.value || !valid.value) return
+  busy.value = true
+  error.value = ''
+  saved.value = false
   try {
-    rule.value = await api.saveRegistration(rule.value)
-    message.success('规则已保存，新注册用户按新规则执行')
+    registration.value = await api.saveRegistration(registration.value)
+    saved.value = true
   } catch (err) {
-    errors.value.registration = rewardError(err)
+    error.value = rewardError(err)
   } finally {
-    saving.value = false
+    busy.value = false
   }
 }
-async function lookup() {
-  errors.value.records = ''
-  found.value = undefined
+async function loadAudits(next = false) {
+  busy.value = true
+  error.value = ''
   try {
-    found.value = await api.request(requestID.value.trim())
-  } catch (err) {
-    errors.value.records = rewardError(err)
-  }
-}
-async function loadAudits(more = false) {
-  loading.value.audit = true
-  errors.value.audit = ''
-  try {
-    const page = await api.audits(more ? auditCursor.value : undefined)
-    audits.value = more ? [...audits.value, ...page.audits] : page.audits
+    const page = await api.audits(next ? auditCursor.value : undefined)
+    audits.value = next ? [...audits.value, ...page.audits] : page.audits
     auditCursor.value = page.next_cursor
   } catch (err) {
-    errors.value.audit = rewardError(err)
+    error.value = rewardError(err)
   } finally {
-    loading.value.audit = false
+    busy.value = false
   }
+}
+function select(user: AdminUser) {
+  selected.value = user
+  userOpen.value = true
 }
 function auditLabel(action: string) {
   return (
     (
       {
-        reward_grant: '发放奖励',
-        reward_cancel: '撤销待领取',
-        reward_reverse: '整笔冲正',
-        reward_note: '处理说明',
-        reward_definition_create: '创建奖励资产',
-        reward_definition_update: '编辑奖励资产',
-        reward_registration_rule: '调整注册赠送',
-        reward_registration_disable: '停用注册赠送',
-        reward_builtin_import: '导入玩法奖励',
-        reward_exchange_offer: '调整兑换商品',
+        reward_grant: '发放积分或次数',
+        reward_reverse: '撤回发放',
+        reward_registration_rule: '修改注册赠送',
+        reward_exchange_offer: '修改兑换商品',
+        reward_builtin_import: '导入玩法',
       } as Record<string, string>
     )[action] || action
   )
 }
-watch(tab, (value) => {
-  if (value === 'overview') void overview()
-  if (value === 'rules') void loadRules()
-  if (value === 'registration' && !rule.value) void loadRegistration()
+watch(rulesTab, (value) => {
+  error.value = ''
+  if (value === 'registration' && !registration.value) void loadRegistration()
+})
+watch(recordsTab, (value) => {
+  error.value = ''
   if (value === 'audit') void loadAudits()
 })
-watch(ruleAsset, () => loadRules())
-onMounted(overview)
+watch(tab, () => {
+  error.value = ''
+})
+void loadRules()
 </script>
 <template>
   <div class="admin-rewards">
-    <p class="intro">通关发奖、积累点数、兑换账号奖励。这里统一管理资产、规则与每笔发放。</p>
+    <p class="intro">管理通关积分、改写套餐和用户收支。</p>
     <NAlert v-if="error" type="error">{{ error }}</NAlert>
     <NTabs v-model:value="tab" type="line" animated>
-      <NTabPane name="overview" tab="概览" display-directive="show:lazy"
-        ><div class="toolbar">
-          <h3>按资产统计</h3>
-          <NButton :loading="busy" @click="overview">刷新</NButton>
-        </div>
-        <p>各资产独立核算；待领取不计入可用余额。累计授予包含兑换所得，累计消费包含兑换支出。</p>
-        <div class="overview-grid">
-          <article v-for="asset in assets" :key="asset.id" class="asset-card">
-            <div class="toolbar">
-              <h3>{{ asset.name }}</h3>
-              <NTag v-if="asset.disabled" type="warning" size="small">停用</NTag>
+      <NTabPane name="rules" tab="积分规则" display-directive="show:lazy"
+        ><NTabs
+          v-model:value="rulesTab"
+          class="secondary-tabs"
+          type="bar"
+          size="small"
+          :theme-overrides="secondaryTabTheme"
+        >
+          <NTabPane name="outcomes" tab="通关积分" display-directive="show:lazy"
+            ><div class="toolbar">
+              <p>积分随玩法版本发布。修改已发布玩法请先创建草稿，已有存档按原版本结算。</p>
+              <NButton :loading="busy" @click="loadRules()">刷新</NButton>
             </div>
-            <small>{{ asset.key }} · {{ asset.unit }}</small>
-            <dl>
-              <dt>当前总余额</dt>
-              <dd>{{ asset.balance }}</dd>
-              <dt>累计授予 / 消费</dt>
-              <dd>{{ asset.granted }} / {{ asset.consumed }}</dd>
-              <dt>累计返还 / 冲正</dt>
-              <dd>{{ asset.refunded }} / {{ asset.reversed }}</dd>
-              <dt>待领取数量</dt>
-              <dd>{{ asset.pending }}</dd>
-              <dt>兑换支出 / 所得</dt>
-              <dd>{{ asset.exchange_cost }} / {{ asset.exchange_reward }}</dd>
-            </dl>
-          </article>
-        </div>
-        <NEmpty v-if="!busy && !error && !assets.length" description="暂无奖励资产"
-      /></NTabPane>
-      <NTabPane name="assets" tab="奖励资产" display-directive="show:lazy"
-        ><slot name="assets"
-      /></NTabPane>
-      <NTabPane name="rules" tab="通关规则" display-directive="show:lazy"
-        ><h3>玩法发奖规则</h3>
-        <p>规则随玩法版本发布；已发布版本和已有存档保持固定。点击版本可查看，编辑时创建草稿。</p>
-        <NSelect
-          v-model:value="ruleAsset"
-          :options="options"
-          clearable
-          filterable
-          placeholder="按奖励资产筛选"
-        />
-        <article v-for="item in rules" :key="item.id" class="rule-row">
-          <div>
-            <strong>{{ item.pack_name }} · {{ item.version }}</strong>
-            <p>
-              {{ item.reward_name }} · {{ item.calculator_key }} ·
-              {{ item.enabled ? '启用' : '停用' }}
-            </p>
-            <small
-              >{{
-                item.current
-                  ? '当前入口版本'
-                  : item.version_status === 'published'
-                    ? '历史发布版本'
-                    : '草稿'
-              }}
-              · {{ JSON.stringify(item.calculator_config) }}</small
-            >
-          </div>
-          <NButton @click="emit('openVersion', item.challenge_version_id)">查看 / 编辑版本</NButton>
-        </article>
-        <NEmpty v-if="!busy && !error && !rules.length" description="暂无玩法发奖规则" /><NButton
-          v-if="ruleMore"
-          :loading="busy"
-          @click="loadRules(true)"
-          >加载更多规则</NButton
-        > </NTabPane
-      ><NTabPane name="registration" tab="注册赠送" display-directive="show:lazy"
-        ><NButton v-if="!rule" :loading="busy" @click="loadRegistration">读取注册赠送规则</NButton>
-        <section v-if="rule">
-          <h3>注册赠送</h3>
-          <p>保存后影响新注册账号，已有赠送记录保留原规则。</p>
-          <div class="rule-form">
-            <NFormItem label="启用"><NSwitch v-model:value="rule.enabled" /></NFormItem
-            ><NFormItem label="赠送资产"
-              ><NSelect
-                v-model:value="rule.reward_definition_id"
-                :options="registrationOptions"
-                filterable /></NFormItem
-            ><NFormItem label="数量"
-              ><NInputNumber
-                v-model:value="rule.quantity"
-                :min="1"
-                :max="Number.MAX_SAFE_INTEGER"
-                :precision="0"
-            /></NFormItem>
-          </div>
-          <NButton :loading="saving" @click="save">保存注册赠送规则</NButton
-          ><small>当前修订 {{ rule.id }} · {{ new Date(rule.created_at).toLocaleString() }}</small>
-        </section></NTabPane
+            <NSpin :show="busy && !rules.length"
+              ><article v-for="rule in rules" :key="rule.id">
+                <div>
+                  <strong>{{ rule.pack_name }} · {{ rule.title }}</strong>
+                  <p>
+                    {{ rule.reward_points }} 积分 · {{ rule.version }} ·
+                    {{
+                      rule.current
+                        ? '当前版本'
+                        : rule.version_status === 'draft'
+                          ? '草稿'
+                          : '历史版本'
+                    }}{{ rule.enabled ? '' : ' · 结局已停用' }}
+                  </p>
+                </div>
+                <NButton @click="emit('openVersion', rule.challenge_version_id)"
+                  >查看 / 编辑版本</NButton
+                >
+              </article>
+              <NEmpty v-if="!busy && !error && !rules.length" description="暂无通关规则" /></NSpin
+            ><NButton v-if="more" :loading="busy" @click="loadRules(true)"
+              >加载更多</NButton
+            ></NTabPane
+          >
+          <NTabPane name="registration" tab="注册赠送" display-directive="show:lazy"
+            ><div class="toolbar">
+              <p>只影响新账号。数量为 0 表示不赠送该项。</p>
+              <NButton :loading="busy" @click="loadRegistration">重新读取</NButton>
+            </div>
+            <template v-if="registration"
+              ><NFormItem label="赠送积分"
+                ><NInputNumber
+                  v-model:value="registration.points"
+                  :min="0"
+                  :max="Number.MAX_SAFE_INTEGER"
+                  :precision="0" /></NFormItem
+              ><NFormItem label="赠送剧情改写次数"
+                ><NInputNumber
+                  v-model:value="registration.rewrite_credits"
+                  :min="0"
+                  :max="Number.MAX_SAFE_INTEGER"
+                  :precision="0" /></NFormItem
+              ><NAlert v-if="saved" type="success">已保存，新注册用户将按此规则赠送。</NAlert
+              ><NButton type="primary" :loading="busy" :disabled="!valid" @click="save"
+                >保存注册赠送</NButton
+              ></template
+            ></NTabPane
+          >
+        </NTabs></NTabPane
       >
-      <NTabPane name="users" tab="用户发放" display-directive="show:lazy"
-        ><h3>查找用户，发放奖励与点数</h3>
-        <p>支持用户名、显示名称、完整邮箱或用户 ID。选定账号后可直接发放或创建待领取奖励。</p>
-        <RewardUserSearch @select="select"
-      /></NTabPane>
       <NTabPane name="exchange" tab="兑换商品" display-directive="show:lazy"
-        ><AdminRewardExchangePanel :definitions="definitions"
+        ><AdminRewardExchangePanel
       /></NTabPane>
-      <NTabPane name="orders" tab="兑换订单" display-directive="show:lazy">
-        <RewardExchangeOrders admin />
-      </NTabPane>
-      <NTabPane name="records" tab="发放记录" display-directive="show:lazy"
-        ><section>
-          <h3>查询原发放请求</h3>
-          <div class="request">
-            <NInput v-model:value="requestID" placeholder="粘贴发放请求 ID" /><NButton
-              :disabled="!requestID.trim()"
-              @click="lookup"
-              >查询</NButton
-            >
-          </div>
-          <NAlert v-if="found" type="info"
-            >{{ found.snapshot.name }} · {{ found.quantity }}{{ found.snapshot.unit }} ·
-            {{ rewardStatus(found) }} · 用户 {{ found.user_id }}</NAlert
+      <NTabPane name="records" tab="用户与记录" display-directive="show:lazy"
+        ><NTabs
+          v-model:value="recordsTab"
+          class="secondary-tabs"
+          type="bar"
+          size="small"
+          :theme-overrides="secondaryTabTheme"
+        >
+          <NTabPane name="users" tab="用户查询" display-directive="show:lazy"
+            ><p>搜索用户后，可发放积分、剧情改写次数或查看其收支。</p>
+            <RewardUserSearch @select="select"
+          /></NTabPane>
+          <NTabPane name="ledger" tab="收支记录" display-directive="show:lazy"
+            ><RewardLedgerPanel admin
+          /></NTabPane>
+          <NTabPane name="orders" tab="兑换订单" display-directive="show:lazy"
+            ><RewardExchangeOrders admin
+          /></NTabPane>
+          <NTabPane name="audit" tab="管理操作" display-directive="show:lazy"
+            ><div class="toolbar">
+              <h3>管理操作记录</h3>
+              <NButton :loading="busy" @click="loadAudits()">刷新</NButton>
+            </div>
+            <details v-for="audit in audits" :key="audit.id">
+              <summary>
+                {{ auditLabel(audit.action) }} · {{ new Date(audit.created_at).toLocaleString() }}
+              </summary>
+              <p>
+                操作者 {{ audit.actor_user_id
+                }}<span v-if="audit.target_user_id"> · 目标用户 {{ audit.target_user_id }}</span>
+              </p>
+              <pre>{{ JSON.stringify(audit.metadata, null, 2) }}</pre>
+            </details>
+            <NEmpty v-if="!busy && !error && !audits.length" description="暂无管理操作" /><NButton
+              v-if="auditCursor"
+              :loading="busy"
+              @click="loadAudits(true)"
+              >加载更多</NButton
+            ></NTabPane
           >
-        </section>
-        <RewardRecordsPanel admin :definitions="definitions" /> </NTabPane
-      ><NTabPane name="audit" tab="管理审计" display-directive="show:lazy"
-        ><section>
-          <div class="toolbar">
-            <h3>管理审计</h3>
-            <NButton :loading="busy" @click="loadAudits()">刷新</NButton>
-          </div>
-          <details v-for="audit in audits" :key="audit.id">
-            <summary>
-              {{ auditLabel(audit.action) }} · {{ new Date(audit.created_at).toLocaleString() }}
-            </summary>
-            <p>
-              操作者 {{ audit.actor_user_id
-              }}<span v-if="audit.target_user_id"> · 目标用户 {{ audit.target_user_id }}</span>
-            </p>
-            <p>请求 {{ audit.request_id }}</p>
-            <pre>{{ JSON.stringify(audit.metadata, null, 2) }}</pre>
-          </details>
-          <NEmpty v-if="!busy && !error && !audits.length" description="暂无奖励管理操作" /><NButton
-            v-if="auditCursor"
-            :loading="busy"
-            @click="loadAudits(true)"
-            >加载更多审计</NButton
-          >
-        </section></NTabPane
+        </NTabs></NTabPane
       >
     </NTabs>
     <NModal
       v-model:show="userOpen"
       preset="card"
-      title="用户奖励与点数"
-      style="width: min(1040px, 96vw)"
+      title="用户积分与改写次数"
+      style="width: min(1000px, 96vw)"
       ><AdminRewardUserPanel v-if="selected" :key="selected.id" :user-id="selected.id"
     /></NModal>
   </div>
@@ -329,88 +262,50 @@ onMounted(overview)
 .admin-rewards {
   display: grid;
   gap: 16px;
+  min-width: 0;
+}
+.secondary-tabs > :deep(.n-tabs-nav .n-tabs-tab) {
+  border-radius: var(--radius);
+}
+.secondary-tabs > :deep(.n-tabs-nav .n-tabs-tab:hover) {
+  background: var(--bg-soft);
+}
+.secondary-tabs > :deep(.n-tabs-nav .n-tabs-tab--active) {
+  background: var(--accent-soft);
 }
 .intro,
-p,
-small {
+p {
   color: var(--text-dim);
 }
 .toolbar,
-.rule-row {
+article {
   display: flex;
-  justify-content: space-between;
   gap: 14px;
   align-items: center;
+  justify-content: space-between;
+}
+article {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-soft);
 }
 h3 {
   margin: 0;
 }
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-}
-.asset-card {
-  padding: 18px;
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: var(--bg-soft);
-}
-dl {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  font-size: 13px;
-}
-dd {
-  margin: 0;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-dt {
-  color: var(--text-dim);
-}
-.rule-row {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border-soft);
-}
-section {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-soft);
-}
-small {
-  display: block;
-  margin-top: 8px;
-}
-.rule-form {
-  display: grid;
-  grid-template-columns: 80px 1fr 180px;
-  gap: 14px;
-}
-.request {
-  display: flex;
-  gap: 12px;
-  margin: 12px 0;
-}
 details {
-  padding: 12px 0;
+  padding: 14px 0;
   overflow-wrap: anywhere;
-}
-summary {
-  cursor: pointer;
 }
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 12px;
 }
-@media (max-width: 640px) {
-  .rule-form {
-    grid-template-columns: 1fr;
-  }
-  .rule-row {
-    align-items: start;
+p {
+  margin: 8px 0 14px;
+}
+@media (max-width: 600px) {
+  .toolbar,
+  article {
+    align-items: flex-start;
     flex-direction: column;
   }
 }

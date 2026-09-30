@@ -1,7 +1,6 @@
 package cultivation
 
 import (
-	"github.com/ialtone/fatecraft/internal/campaignreward"
 	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaigncontract"
 )
@@ -20,7 +19,6 @@ func Register(registry *gameplay.Registry) {
 		Modes:                      []string{gameplay.RuntimeModeCampaign},
 		Actions:                    []string{"update_state", "roll", "domain_action"},
 		Verifiers:                  []string{"core.always", "core.conditions"},
-		Calculators:                []string{"core.fixed", "core.state_multiplier", campaignreward.ItemStackCalculatorKey},
 		CampaignLifecycleHandlers:  []string{CampaignLifecycleHandler},
 		CampaignProjectionHandlers: []string{CampaignProjectionHandler},
 		CampaignContextPolicies:    []string{CampaignContextPolicy},

@@ -17,8 +17,7 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	db := testdb.Open(t, "campaign_verify")
 
 	playerID, packID, versionID, campaignID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	rewardID, extractedRewardID, valuedRewardID := uuid.New(), uuid.New(), uuid.New()
-	outcomeID, rewardRuleID, extractedRuleID, valuedRuleID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	outcomeID := uuid.New()
 	extractedItemID, valuedItemID := uuid.New(), uuid.New()
 	hash := strings.Repeat("0", 64)
 	if err := db.Exec(`INSERT INTO users (id, username, display_name) VALUES (?, 'test-player', 'Test Player')`, playerID).Error; err != nil {
@@ -32,19 +31,6 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
         VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, versionID, packID, hash).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec(`INSERT INTO reward_definitions
-        (id, key, kind, name, description, unit, icon, stackable, consumable, featured, sort_order)
-        VALUES (?, 'integration.world-seal', 'badge', 'World Seal', '', 'seal', 'ribbon', TRUE, FALSE, TRUE, 1)`, rewardID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO reward_definitions
-        (id, key, kind, name, description, unit, icon, stackable, consumable, featured, sort_order)
-        VALUES
-        (?, 'integration.extracted', 'currency', 'Extracted', '', 'unit', 'sparkles', TRUE, TRUE, TRUE, 2),
-        (?, 'integration.valued', 'currency', 'Valued', '', 'unit', 'diamond', TRUE, TRUE, TRUE, 3)`,
-		extractedRewardID, valuedRewardID).Error; err != nil {
-		t.Fatal(err)
-	}
 	if err := db.Exec(`INSERT INTO gameplay_definitions
         (id, challenge_version_id, kind, key, name, content)
         VALUES
@@ -54,22 +40,8 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO challenge_outcome_rules
-        (id, challenge_version_id, outcome_key, category, title, tone, verifier_key, verifier_config)
-        VALUES (?, ?, 'world_warden', 'success', 'World Warden', 'success', 'core.always', '{}'::jsonb)`, outcomeID, versionID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO challenge_reward_rules
-        (id, challenge_version_id, outcome_rule_id, reward_definition_id, calculator_key, calculator_config, public_snapshot)
-        VALUES (?, ?, ?, ?, 'core.fixed', '{"amount":1}'::jsonb, '{"key":"integration.world-seal"}'::jsonb)`, rewardRuleID, versionID, outcomeID, rewardID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`INSERT INTO challenge_reward_rules
-        (id, challenge_version_id, outcome_rule_id, reward_definition_id, calculator_key, calculator_config, public_snapshot)
-        VALUES
-        (?, ?, ?, ?, 'campaign.extract_item_stack', '{"item_key":"forged","quality_key":"common","source_quantity":3,"reward_quantity":2,"maximum_reward_quantity":6,"consume":true}'::jsonb, '{"key":"integration.extracted","kind":"currency","name":"Published Extracted","unit":"unit","icon":"sparkles"}'::jsonb),
-        (?, ?, ?, ?, 'campaign.extract_item_stack', '{"item_key":"proof","quality_key":"common","source_quantity":2,"reward_quantity":1,"maximum_reward_quantity":4,"consume":false}'::jsonb, '{"key":"integration.valued"}'::jsonb)`,
-		extractedRuleID, versionID, outcomeID, extractedRewardID,
-		valuedRuleID, versionID, outcomeID, valuedRewardID).Error; err != nil {
+        (id, challenge_version_id, outcome_key, category, title, tone, verifier_key, verifier_config, reward_points)
+        VALUES (?, ?, 'world_warden', 'success', 'World Warden', 'success', 'core.always', '{}'::jsonb, 1000)`, outcomeID, versionID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO campaigns
@@ -344,40 +316,15 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 		if err != nil {
 			t.Fatalf("grant campaign outcome reward: %v", err)
 		}
-		if result.Campaign.Revision != expectedRevision+1 || len(granted) != 3 {
+		if result.Campaign.Revision != expectedRevision+1 || len(granted) != 1 {
 			t.Fatalf("unexpected campaign outcome grant: result=%+v rewards=%+v", result, granted)
 		}
 		return granted
 	}
 	firstGrant := grantOutcome(1, "outcome-reward-a")
-	if err := db.Model(&RewardDefinition{}).Where("id = ?", extractedRewardID).Update("name", "Renamed Extracted").Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Model(&GameplayDefinition{}).Where("id = ?", extractedItemID).Update("name", "Renamed Material").Error; err != nil {
-		t.Fatal(err)
-	}
 	secondGrant := grantOutcome(2, "outcome-reward-b")
-	firstByKey, secondByKey := map[string]CampaignOutcomeReward{}, map[string]CampaignOutcomeReward{}
-	for _, reward := range firstGrant {
-		firstByKey[reward.Key] = reward
-	}
-	for _, reward := range secondGrant {
-		secondByKey[reward.Key] = reward
-	}
-	if firstByKey["integration.world-seal"].Balance != 1 || secondByKey["integration.world-seal"].Balance != 1 ||
-		firstByKey["integration.extracted"].Quantity != 6 || secondByKey["integration.extracted"].Balance != 6 ||
-		firstByKey["integration.valued"].Quantity != 2 || secondByKey["integration.valued"].Balance != 2 ||
-		firstByKey["integration.extracted"].Name != "Published Extracted" || secondByKey["integration.extracted"].Name != "Published Extracted" {
-		t.Fatalf("campaign outcome reward was not idempotent: first=%+v second=%+v", firstGrant, secondGrant)
-	}
-	if source := firstByKey["integration.extracted"].Source; source == nil || source.AvailableQuantity != 20 || source.ConsumedQuantity != 9 {
-		t.Fatalf("consumed extraction source = %+v", source)
-	}
-	if source := secondByKey["integration.extracted"].Source; source == nil || source.Name != "Forged Material" {
-		t.Fatalf("replayed extraction source snapshot = %+v", source)
-	}
-	if source := firstByKey["integration.valued"].Source; source == nil || source.AvailableQuantity != 5 || source.ConsumedQuantity != 0 {
-		t.Fatalf("non-consuming valuation source = %+v", source)
+	if firstGrant[0].Key != PointsKey || firstGrant[0].Quantity != 1000 || secondGrant[0].Balance != 1000 {
+		t.Fatalf("duplicate campaign points: %+v / %+v", firstGrant, secondGrant)
 	}
 	var forgedStack, proofStack CampaignItemStack
 	if err := db.First(&forgedStack, "campaign_id = ? AND item_key = ? AND quality_key = ?", campaignID, "forged", "common").Error; err != nil {
@@ -386,8 +333,8 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	if err := db.First(&proofStack, "campaign_id = ? AND item_key = ? AND quality_key = ?", campaignID, "proof", "common").Error; err != nil {
 		t.Fatal(err)
 	}
-	if forgedStack.Quantity != 11 || proofStack.Quantity != 5 {
-		t.Fatalf("campaign extraction was applied more than once: forged=%d proof=%d", forgedStack.Quantity, proofStack.Quantity)
+	if forgedStack.Quantity != 20 || proofStack.Quantity != 5 {
+		t.Fatalf("fixed points changed local inventory: forged=%d proof=%d", forgedStack.Quantity, proofStack.Quantity)
 	}
 	if err := db.Model(&Campaign{}).Where("id = ?", campaignID).Updates(map[string]any{
 		"status": CampaignStatusCompleted, "outcome_key": "world_warden", "completed_at_game_time": int64(0),
@@ -402,21 +349,20 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	for _, reward := range domain.OutcomeRewards {
 		reloadedRewards[reward.Key] = reward
 	}
-	if len(reloadedRewards) != 3 || reloadedRewards["integration.extracted"].Name != "Published Extracted" ||
-		reloadedRewards["integration.extracted"].Source == nil || reloadedRewards["integration.extracted"].Source.Name != "Forged Material" {
-		t.Fatalf("reloaded campaign outcome rewards = %+v", domain.OutcomeRewards)
+	if len(reloadedRewards) != 1 || reloadedRewards[PointsKey].Quantity != 1000 {
+		t.Fatalf("reloaded points: %+v", domain.OutcomeRewards)
 	}
 	var balance PlayerRewardBalance
-	if err := db.First(&balance, "player_id = ? AND reward_definition_id = ?", playerID, rewardID).Error; err != nil {
+	if err := db.First(&balance, "player_id = ? AND reward_key = ?", playerID, PointsKey).Error; err != nil {
 		t.Fatal(err)
 	}
 	var ledgerCount int64
 	if err := db.Model(&RewardLedgerEntry{}).
-		Where("player_id = ? AND reward_definition_id = ?", playerID, rewardID).
+		Where("player_id = ? AND reward_key = ?", playerID, PointsKey).
 		Count(&ledgerCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if balance.Balance != 1 || balance.GrantedTotal != 1 || ledgerCount != 1 {
+	if balance.Balance != 1000 || balance.GrantedTotal != 1000 || ledgerCount != 1 {
 		t.Fatalf("unexpected account reward state: balance=%+v ledger_count=%d", balance, ledgerCount)
 	}
 	var outcomeLedgerCount int64
@@ -425,7 +371,7 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 		Count(&outcomeLedgerCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if outcomeLedgerCount != 3 {
-		t.Fatalf("campaign outcome ledger count = %d, want 3", outcomeLedgerCount)
+	if outcomeLedgerCount != 1 {
+		t.Fatalf("campaign outcome ledger count = %d, want 1", outcomeLedgerCount)
 	}
 }

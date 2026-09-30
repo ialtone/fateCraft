@@ -76,7 +76,7 @@ Handler 负责 HTTP 语义，不实现业务授权。领域服务不能相信请
 
 会话令牌使用加密安全随机数生成，响应只通过 HttpOnly Cookie 发送。数据库保存 SHA-256 哈希和过期时间。密码使用 bcrypt 哈希。
 
-邮箱认证策略和 SMTP 配置来自单行 `auth_settings`，每次登录、发码或注册都读取服务端设置。验证码只保存 bcrypt 摘要并限制有效期、重发和尝试次数；邀请码只保存 SHA-256 摘要。注册事务负责消费验证码与邀请码、创建用户，并按最新 registration_reward_rules 修订写入获奖记录、奖励余额和账本；任何一步失败都会整体回滚。SMTP 密码通过部署环境变量 `AUTH_DATA_ENCRYPTION_KEY` 加密，管理 API 只暴露是否已经配置。
+邮箱认证策略和 SMTP 配置来自单行 `auth_settings`，每次登录、发码或注册都读取服务端设置。验证码只保存 bcrypt 摘要并限制有效期、重发和尝试次数；邀请码只保存 SHA-256 摘要。注册事务负责消费验证码与邀请码、创建用户，并按最新 registration_reward_rules 修订写入两项赠送余额、账本与用户注册规则标记；任何一步失败都会整体回滚。SMTP 密码通过部署环境变量 `AUTH_DATA_ENCRYPTION_KEY` 加密，管理 API 只暴露是否已经配置。
 
 用户角色固定为 `owner`、`admin`、`user`。空库通过 `/setup` 首次安装向导直接提交本地用户名、邮箱和密码，服务端在事务中创建唯一 `owner`，同时写入 `system_settings.installation_completed_at`、初始奖励和管理员审计记录；安装完成前邮箱和 LinuxDo 登录关闭，完成后普通注册开放且后续用户默认都是 `user`。`requireAdmin` 允许 owner/admin 访问日常运营接口，`requireOwner` 保护角色、认证策略和平台密钥等最高权限接口。认证中间件每次从数据库读取当前用户状态和角色，因此停用或降权会立即使旧会话失去对应权限。
 
@@ -96,7 +96,7 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 
 ### 玩法注册表与 Runtime
 
-`gameplay.Registry` 在 server 组合根显式注册可用 engine、model/player actions、Campaign actions、outcome verifier、reward calculator 和 settlement handler。挑战版本只能引用已安装的稳定 key 和版本，管理员不能上传代码、SQL 或任意表达式。
+`gameplay.Registry` 在 server 组合根显式注册可用 engine、model/player actions、Campaign actions、outcome verifier 和 settlement handler。挑战版本只能引用已安装的稳定 key 和版本，管理员不能上传代码、SQL 或任意表达式。
 
 每个版本的 Runtime Contract 声明 State Schema、动作、玩家能力、结算处理器和 Presentation。State Schema 决定字段类型、默认值、约束、可见性与更新权限；普通用户状态接口只返回 `player` 可见投影，`model` 和 `internal` 字段不能因返回父对象而泄漏。Presentation 只允许引用玩家可见字段。
 
@@ -110,7 +110,7 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 
 1. 对版本行加 `FOR UPDATE`。
 2. 读取同一事务内的 Manifest、资产和奖励规则。
-3. 校验挑战包元数据、Manifest 引用、资产 ID、Runtime 模块、State Schema、三个核心 Prompt 分段、世界书、Outcome、verifier、calculator 和奖励规则。
+3. 校验挑战包元数据、Manifest 引用、资产 ID、Runtime 模块、State Schema、三个核心 Prompt 分段、世界书、Outcome、verifier 和固定结局积分。
 4. 对 JSON 规范化并计算 SHA-256。
 5. 把版本设为 published，并更新挑战包当前版本。
 
@@ -191,17 +191,19 @@ Campaign 生产与经济动作使用同一可信入口。`craft.learn_recipe`、
 
 市场补货只依赖 Campaign 游戏时间。读取投影可以预测已跨过的完整补货周期，实际买卖会在同一事务中先持久化补货，再结算库存和价格；不启动现实时间后台任务。买卖价格统一复用 `marketrules`，依次应用版本市场修正、动态市场修正、商品修正、库存稀缺和势力声望，避免展示价与结算价使用两套算法。
 
-结算工具在事务内锁定对话并重建证据，执行固定版本的 outcome verifier 和全部 reward calculator。`challenge_runs`、`reward_records`、`challenge_run_rewards`、`player_reward_balances`、只增不改的 `reward_ledger`、对话状态、invocation 与 tool 消息原子更新；动作 Handler 不直接写余额。条件不满足是可观察的业务拒绝，数据库、事务或持久化失败才是系统错误。
+结算工具在事务内锁定对话并重建证据，执行固定版本的 outcome verifier 并读取固定 reward_points。`challenge_runs`、`challenge_run_rewards`、`player_reward_balances`、只增不改的 `reward_ledger`、对话状态、invocation 与 tool 消息原子更新；动作 Handler 不直接写余额。条件不满足是可观察的业务拒绝，数据库、事务或持久化失败才是系统错误。
 
 消息改写与重新生成共享平台级能力，公开描述通过 Runtime API 的 `platform_capabilities` 返回，但授权策略不由 Runtime Contract 决定。其奖励扣除、新分支创建、旧 turn/message/Memory 失效和新用户消息必须在一个仓储事务中完成；存在已提交 Campaign 动作或事件的回合不能通过普通 regenerate/rewrite 回滚。
 
 ## 统一奖励业务
 
-`RewardRepository.AwardInCurrentTx` 复用挑战、Campaign 和注册原事务，AdminGrant/ClaimReward/ManageReward 封装独立发放、领取和管理操作；mutateCurrentTx 统一维护 grant/consume/refund/reverse 账本与余额。获奖记录表达资格和结果，不能直接当作余额。
+`RewardRepository.GrantInCurrentTx` 复用挑战、Campaign 和注册原事务；AdminGrant/ReverseAdminGrant 封装管理发放和整笔撤回，mutateCurrentTx 统一维护两项固定余额及 grant/consume/refund/reverse 账本。来源、幂等键与请求 ID 分别约束防重，金额和累计值均防溢出。
 
-SaveDefinition、SaveRegistrationRule、SaveExchangeOffer 在配置锁内校验并保存管理审计，审计失败整体回滚。内置导入使用 PreviewBuiltin/ConfirmBuiltin，在同一锁域核对预览 token。Exchange 核对用户、商品和修订，按资产 ID 顺序锁余额，将支付、目标获奖与订单同事务提交；重放核对请求内容，已拥有非叠加目标在扣款前拒绝，多资产通关结算遵循相同锁顺序。
+SaveRegistrationRule、SaveExchangeOffer 在配置锁内核对当前修订并追加审计，审计失败整体回滚。内置导入仍使用预览 token 和确认流程，预览展示结局积分。Exchange 核对用户、商品、价格修订，再按固定 key 顺序锁余额，将支付、所得与订单同事务提交。
 
-API 从认证上下文取用户/操作者，管理写入再次校验权限；用户响应剔除管理原因和审计。详情见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+注册无论赠送数量是否为 0，均保存用户实际采用的规则修订，防止重复赠送和套用新配置。管理发放按用户 ID 顺序锁定操作者和目标，自己给自己发放也使用同一顺序。改写失败仅关联实际原消费返还一次；兑换不允许单边退款。
+
+API 从认证上下文取用户/操作者，管理写入再次校验权限；玩家响应剔除内部原因、操作者与元数据。详见 [22 奖励管理](22-reward-management-and-exchange.md)。
 
 ## 错误映射
 

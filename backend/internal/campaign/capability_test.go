@@ -33,7 +33,7 @@ func TestSnapshotAddsPlatformOutcomeRewardsAndRejectsProviderOverride(t *testing
 	domain := &storage.CampaignDomainState{
 		Definitions: map[string]storage.GameplayDefinition{},
 		OutcomeRewards: []storage.CampaignOutcomeReward{{
-			Key: "world-essence", Name: "世界精粹", Unit: "份", Quantity: 3, Balance: 7,
+			Key: storage.PointsKey, Name: "积分", Unit: "份", Quantity: 3, Balance: 7,
 		}},
 	}
 	repo := &campaignRepoStub{row: storage.Campaign{
@@ -50,8 +50,16 @@ func TestSnapshotAddsPlatformOutcomeRewardsAndRejectsProviderOverride(t *testing
 		t.Fatal(err)
 	}
 	rewards, ok := snapshot["outcome_rewards"].([]storage.CampaignOutcomeReward)
-	if !ok || len(rewards) != 1 || rewards[0].Key != "world-essence" {
+	if !ok || len(rewards) != 1 || rewards[0].Key != storage.PointsKey {
 		t.Fatalf("platform outcome rewards = %#v", snapshot["outcome_rewards"])
+	}
+	if snapshot["reward_points"] != int64(3) {
+		t.Fatalf("fixed points: %#v", snapshot["reward_points"])
+	}
+	domain.OutcomeRewards = nil
+	snapshot, err = service.Snapshot(ctx, repo.row.ID)
+	if err != nil || snapshot["reward_points"] != int64(0) {
+		t.Fatalf("zero points: %+v %v", snapshot, err)
 	}
 
 	contract.Campaign.ProjectionHandler = "test.reserved"

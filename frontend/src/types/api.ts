@@ -424,6 +424,7 @@ export interface CampaignSnapshot {
   encounters: CampaignEncounterView[]
   available_encounters: CampaignAvailableEncounterView[]
   outcome_rewards: CampaignOutcomeReward[]
+  reward_points: number
   /** 客户端直连终局不发放奖励时后端填写，前端据此展示替代文案。 */
   rewards_disabled_reason?: string
 }
@@ -766,6 +767,8 @@ export interface LLMSettings {
   protocol: 'chat_completions' | 'responses'
   /** 是否已设置 API Key */
   has_api_key: boolean
+  /** 服务端可见的模型配置是否完整；客户端直连仍需检查本设备 Key */
+  configuration_ready: boolean
   access_mode: 'user_managed' | 'platform_managed'
   source: 'user' | 'platform' | 'client'
   editable: boolean
@@ -838,7 +841,7 @@ export interface AdminSystemSettings {
   diagnostic_log_cleanup_enabled: boolean
   diagnostic_log_retention_days: number
   llm_access_mode: 'user_managed' | 'platform_managed'
-  /** 是否允许用户选择客户端直连（默认关闭，由 owner 开启） */
+  /** 是否允许用户选择客户端直连（默认开启，由 owner 管理） */
   client_llm_route_enabled: boolean
   public_llm_base_url: string
   /** 公共 base_url 的端点档位识别结果（只读） */
@@ -1059,17 +1062,13 @@ export interface ChallengePersonaOption {
 }
 
 export interface ChallengeRewardOverview {
-  reward_key: string
-  name: string
-  description: string
-  kind: string
-  unit: string
-  icon: string
+  points: number
   outcome_key: string
   outcome_title: string
 }
 
 export interface ChallengeOutcome {
+  reward_points: number
   key: string
   category: 'success' | 'failure' | 'neutral'
   title: string
@@ -1260,45 +1259,35 @@ export interface PublicChallenge {
   unavailable_reason?: string
 }
 
-export interface RewardDefinition {
-  disabled: boolean
-  id: string
-  key: string
-  kind: 'currency' | 'item' | 'badge' | 'entitlement' | 'credit'
+export interface RewardAsset {
+  key: 'fatecraft.points' | 'fatecraft.message-rewrite-credit'
   name: string
-  description: string
   unit: string
   icon: string
-  stackable: boolean
-  consumable: boolean
-  featured: boolean
-  sort_order: number
-  metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
 }
 
 export interface PlayerReward {
-  refunded_total: number
-  reversed_total: number
-  definition: RewardDefinition
+  asset: RewardAsset
   balance: number
-  granted_total: number
-  consumed_total: number
-  updated_at: string
 }
 
 export interface RewardLedgerEntry {
   id: string
-  definition: RewardDefinition
+  reward_key: 'fatecraft.points' | 'fatecraft.message-rewrite-credit'
   operation: 'grant' | 'consume' | 'refund' | 'reverse'
   related_entry_id?: string
+  reversal_id?: string
   quantity_delta: number
+  balance_after: number
   source_type: string
-  source_id: string
+  source_id?: string
   challenge_run_id?: string
-  metadata: Record<string, unknown>
+  public_note: string
   created_at: string
+  user_id?: string
+  operator_id?: string
+  request_id?: string
+  reason?: string
 }
 
 export interface ChallengePack {
@@ -1367,20 +1356,8 @@ export interface GameplayDefinition {
   updated_at: string
 }
 
-export interface ChallengeRewardRule {
-  id: string
-  challenge_version_id: string
-  outcome_rule_id: string
-  reward_definition_id: string
-  calculator_key: string
-  calculator_config: Record<string, any>
-  public_snapshot: Record<string, any>
-  enabled: boolean
-  created_at: string
-  updated_at: string
-}
-
 export interface ChallengeOutcomeRule {
+  reward_points: number
   id: string
   challenge_version_id: string
   outcome_key: string
@@ -1417,7 +1394,6 @@ export interface ChallengeVersionDocument {
   assets: ChallengeAsset[]
   definitions: GameplayDefinition[]
   outcomes: ChallengeOutcomeRule[]
-  reward_rules: ChallengeRewardRule[]
 }
 
 export interface SaveChallengeVersionInput {
@@ -1426,7 +1402,6 @@ export interface SaveChallengeVersionInput {
   assets: ChallengeAsset[]
   definitions: GameplayDefinition[]
   outcomes: ChallengeOutcomeRule[]
-  reward_rules: ChallengeRewardRule[]
 }
 
 export type BuiltinChallengeStatus = 'available' | 'imported' | 'update_available'
@@ -1459,7 +1434,6 @@ export interface GameplayModuleDescriptor {
   modes: Array<'challenge' | 'campaign'>
   actions: string[]
   verifiers: string[]
-  calculators: string[]
   settlement_handlers: string[]
   campaign_lifecycle_handlers?: string[]
   campaign_projection_handlers?: string[]
@@ -1657,7 +1631,6 @@ export interface ConversationEndedEvent extends SocketEventBase {
 
 export interface ChallengeRunReward {
   challenge_run_id: string
-  reward_definition_id: string
   reward_key: string
   name: string
   unit: string

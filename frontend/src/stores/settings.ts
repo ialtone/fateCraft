@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { settingsApi } from '@/api'
 import type { LLMSettings } from '@/types'
+import { useAuthStore } from '@/stores/auth'
+import { getLocalKey } from '@/llm/localKey'
+import { playConfigurationIssue } from '@/lib/playReadiness'
 
 export type LLMRoute = 'server' | 'client'
 
@@ -23,10 +26,21 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value = await settingsApi.update(body)
   }
 
+  /** 开始游戏前重新读取配置，避免沿用旧开关或旧设备密钥状态。 */
+  async function checkPlayReadiness(): Promise<string> {
+    try {
+      await load()
+    } catch {
+      return playConfigurationIssue(null, false)
+    }
+    const userId = useAuthStore().user?.id
+    return playConfigurationIssue(settings.value, !!userId && !!getLocalKey(userId).trim())
+  }
+
   /** 账号切换（含登出/会话过期）时丢弃旧账号设置，由 App 重新加载。 */
   function reset() {
     settings.value = null
   }
 
-  return { settings, effectiveRoute, load, update, reset }
+  return { settings, effectiveRoute, load, update, checkPlayReadiness, reset }
 })

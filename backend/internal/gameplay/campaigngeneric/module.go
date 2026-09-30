@@ -4,7 +4,6 @@
 package campaigngeneric
 
 import (
-	"github.com/ialtone/fatecraft/internal/campaignreward"
 	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaignactions"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaignview"
@@ -43,7 +42,6 @@ func Register(registry *gameplay.Registry) {
 		Modes:                      []string{gameplay.RuntimeModeCampaign},
 		Actions:                    []string{"update_state", "roll", "domain_action"},
 		Verifiers:                  []string{"core.always", "core.conditions"},
-		Calculators:                []string{"core.fixed", "core.state_multiplier", campaignreward.ItemStackCalculatorKey},
 		CampaignLifecycleHandlers:  []string{LifecycleHandler},
 		CampaignProjectionHandlers: []string{ProjectionHandler},
 		CampaignContextPolicies:    []string{ContextPolicy},

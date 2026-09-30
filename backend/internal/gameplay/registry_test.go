@@ -53,10 +53,6 @@ func TestPublishedRulesRejectUnknownOrUntypedNumericStatePaths(t *testing.T) {
 	if err := registry.ValidateVerifier(&contract, "core.conditions", unknown); err == nil {
 		t.Fatal("unknown numeric condition path was accepted")
 	}
-	calculator := storage.JSONMap{"state_path": "investigation.missing", "multiplier_bps": float64(10000)}
-	if err := registry.ValidateCalculator(&contract, "core.state_multiplier", calculator); err == nil {
-		t.Fatal("unknown calculator state path was accepted")
-	}
 }
 
 func TestCoreConditionsSupportStateIn(t *testing.T) {
@@ -94,19 +90,5 @@ func TestCoreConditionsRejectInvalidStateIn(t *testing.T) {
 		if err := registry.ValidateVerifier(&contract, "core.conditions", config); err == nil {
 			t.Fatalf("invalid state_in config %d was accepted", index)
 		}
-	}
-}
-
-func TestCampaignItemStackCalculatorUsesBoundedEvidence(t *testing.T) {
-	registry := NewCoreRegistry()
-	config := storage.JSONMap{
-		"item_key": "relic", "source_quantity": int64(3), "reward_quantity": int64(2),
-		"maximum_reward_quantity": int64(6), "consume": true,
-	}
-	amount, err := registry.Calculate("campaign.extract_item_stack", Evidence{
-		Facts: map[string]any{"campaign.item_stack.quantity": int64(20)},
-	}, config)
-	if err != nil || amount != 6 {
-		t.Fatalf("campaign item extraction = %d, %v", amount, err)
 	}
 }

@@ -30,7 +30,7 @@ func TestPostgresConcurrentChallengePublishKeepsOneCurrentVersion(t *testing.T) 
 	}
 
 	repository := NewChallengeRepository(db)
-	validator := func(ChallengePack, ChallengeVersion, ChallengeRuntimeConfig, []ChallengeAsset, []GameplayDefinition, []ChallengeOutcomeRule, []ChallengeRewardRule) (string, error) {
+	validator := func(ChallengePack, ChallengeVersion, ChallengeRuntimeConfig, []ChallengeAsset, []GameplayDefinition, []ChallengeOutcomeRule) (string, error) {
 		return strings.Repeat("a", 64), nil
 	}
 	var wg sync.WaitGroup

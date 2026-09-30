@@ -51,17 +51,18 @@ var (
 // User 是站内用户。Username 是本地登录标识，按 lower(username) 大小写不敏感唯一；
 // PasswordHash 用于本地密码登录，外部身份用户可为空。
 type User struct {
-	ID           uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
-	Username     string     `gorm:"column:username;not null" json:"username"`
-	Email        *string    `gorm:"column:email;uniqueIndex" json:"email,omitempty"`
-	PasswordHash *string    `gorm:"column:password_hash" json:"-"`
-	DisplayName  string     `gorm:"column:display_name;not null" json:"display_name"`
-	AvatarURL    *string    `gorm:"column:avatar_url" json:"avatar_url,omitempty"`
-	Status       string     `gorm:"column:status;not null;default:active" json:"status"`
-	Role         string     `gorm:"column:role;size:16;not null;default:user" json:"role"`
-	LastLoginAt  *time.Time `gorm:"column:last_login_at" json:"last_login_at,omitempty"`
-	CreatedAt    time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt    time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	RegistrationRewardRevision *int64     `json:"-"`
+	ID                         uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
+	Username                   string     `gorm:"column:username;not null" json:"username"`
+	Email                      *string    `gorm:"column:email;uniqueIndex" json:"email,omitempty"`
+	PasswordHash               *string    `gorm:"column:password_hash" json:"-"`
+	DisplayName                string     `gorm:"column:display_name;not null" json:"display_name"`
+	AvatarURL                  *string    `gorm:"column:avatar_url" json:"avatar_url,omitempty"`
+	Status                     string     `gorm:"column:status;not null;default:active" json:"status"`
+	Role                       string     `gorm:"column:role;size:16;not null;default:user" json:"role"`
+	LastLoginAt                *time.Time `gorm:"column:last_login_at" json:"last_login_at,omitempty"`
+	CreatedAt                  time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt                  time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (User) TableName() string { return "users" }

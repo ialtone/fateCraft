@@ -329,7 +329,7 @@ func (s *actionStoreStub) EncounterWinCount(_ uuid.UUID, encounterKey string) (i
 	return count, nil
 }
 func (s *actionStoreStub) GrantCampaignOutcomeRewards(_ context.Context, _ storage.Campaign, _ string) ([]storage.CampaignOutcomeReward, error) {
-	return []storage.CampaignOutcomeReward{{Key: "fate-mark", Name: "命痕", Unit: "枚", Quantity: 1, Balance: 1}}, nil
+	return []storage.CampaignOutcomeReward{{Key: storage.PointsKey, Name: "积分", Unit: "枚", Quantity: 1, Balance: 1}}, nil
 }
 
 func newActionStore() *actionStoreStub {

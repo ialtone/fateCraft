@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/craftingrules"
@@ -96,36 +94,8 @@ func TestBundledMortalPathCampaignLoads(t *testing.T) {
 	if _, ok := contract.Actions.Capabilities["message_rewrite"]; ok {
 		t.Fatalf("mortal-path must not declare platform message rewrite capability: %#v", contract.Actions.Capabilities)
 	}
-	if len(loaded.document.Outcomes) != 2 || len(loaded.document.RewardRules) != 6 || len(loaded.rewards) != 3 {
-		t.Fatalf("campaign endings are incomplete: outcomes=%d rules=%d rewards=%d", len(loaded.document.Outcomes), len(loaded.document.RewardRules), len(loaded.rewards))
-	}
-}
-
-func TestCampaignExtractionRejectsDuplicateOutcomeSource(t *testing.T) {
-	directory := filepath.Join("..", "..", "data", "preset_packs", "mortal-path")
-	loaded, err := loadDirectory(directory, time.Now(), defaultRegistry())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var duplicate storage.ChallengeRewardRule
-	for _, rule := range loaded.document.RewardRules {
-		if rule.CalculatorKey == "campaign.extract_item_stack" {
-			duplicate = rule
-			break
-		}
-	}
-	if duplicate.ID == uuid.Nil {
-		t.Fatal("bundled campaign has no extraction rule")
-	}
-	duplicate.ID = uuid.New()
-	duplicate.RewardDefinitionID = uuid.New()
-	duplicate.PublicSnapshot = storage.JSONMap{
-		"key": "duplicate.reward", "kind": "currency", "name": "Duplicate",
-		"description": "", "unit": "", "icon": "", "stackable": true, "consumable": true,
-	}
-	loaded.document.RewardRules = append(loaded.document.RewardRules, duplicate)
-	if err := challenge.ValidateDocument(&loaded.document, defaultRegistry()); err == nil || !strings.Contains(err.Error(), "重复提取同一局内来源") {
-		t.Fatalf("duplicate extraction source error = %v", err)
+	if len(loaded.document.Outcomes) != 2 || loaded.document.Outcomes[0].RewardPoints != 1000 || loaded.document.Outcomes[1].RewardPoints != 1000 {
+		t.Fatal("missing fixed campaign points")
 	}
 }
 
@@ -699,8 +669,8 @@ func TestLoadGenericMidnightCaseFixture(t *testing.T) {
 	if loaded.document.Runtime.EngineKey != "core.generic" {
 		t.Fatalf("engine = %q, want core.generic", loaded.document.Runtime.EngineKey)
 	}
-	if len(loaded.document.RewardRules) != 2 {
-		t.Fatalf("reward rules = %d, want 2", len(loaded.document.RewardRules))
+	if len(loaded.document.Outcomes) == 0 || loaded.document.Outcomes[0].RewardPoints != 100 {
+		t.Fatal("missing generic fixed points")
 	}
 	for _, forbidden := range []string{"修仙", "境界", "灵石", "飞升", "天道"} {
 		if strings.Contains(string(loaded.document.Version.Manifest), forbidden) {

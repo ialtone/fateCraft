@@ -68,9 +68,9 @@ type Service struct {
 	routes    routeResolver
 }
 
-// routeResolver 解析当前用户的有效 LLM 路由（llmsettings.Service 实现）。
+// routeResolver 校验模型配置并解析创建游戏所用路由（llmsettings.Service 实现）。
 type routeResolver interface {
-	EffectiveRoute(ctx context.Context, playerID string) (string, error)
+	ReadyRoute(ctx context.Context, playerID string) (string, error)
 }
 
 func (s *Service) SetTurnRepo(turns *storage.TurnRepo) { s.turns = turns }
@@ -78,12 +78,12 @@ func (s *Service) SetTurnRepo(turns *storage.TurnRepo) { s.turns = turns }
 // SetRouteResolver 注入路由解析器；未注入时创建默认走 server 路由（仅测试路径）。
 func (s *Service) SetRouteResolver(routes routeResolver) { s.routes = routes }
 
-// effectiveRoute 返回当前用户的有效路由。
+// effectiveRoute 仅在模型配置完整时返回当前用户的有效路由。
 func (s *Service) effectiveRoute(ctx context.Context) (string, error) {
 	if s.routes == nil {
 		return storage.LLMRouteServer, nil
 	}
-	return s.routes.EffectiveRoute(ctx, s.identity.CurrentPlayerID(ctx))
+	return s.routes.ReadyRoute(ctx, s.identity.CurrentPlayerID(ctx))
 }
 
 func NewService(repo conversationRepo, stateSvc *state.Service, msgRepo messageSeeder, challengeSvc *challenge.Service, ident identity.Provider) *Service {
@@ -104,16 +104,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversa
 	if err != nil {
 		return nil, storage.ErrNotFound
 	}
+	route, err := s.effectiveRoute(ctx)
+	if err != nil {
+		return nil, err
+	}
 	selection, err := s.challenge.ResolveSelection(ctx, in.ChallengeSlug, in.PersonaSlug, playerID)
 	if err != nil {
 		return nil, err
 	}
 	if gameplay.NormalizeRuntimeMode(selection.Contract.Mode) == gameplay.RuntimeModeCampaign {
 		return nil, ErrCampaignRequired
-	}
-	route, err := s.effectiveRoute(ctx)
-	if err != nil {
-		return nil, err
 	}
 	now := time.Now()
 	title := in.Title

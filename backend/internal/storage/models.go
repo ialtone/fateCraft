@@ -275,6 +275,7 @@ type ChallengeAsset struct {
 func (ChallengeAsset) TableName() string { return "challenge_assets" }
 
 type ChallengeOutcomeRule struct {
+	RewardPoints       int64     `json:"reward_points"`
 	ID                 uuid.UUID `gorm:"column:id;primaryKey;type:uuid" json:"id"`
 	ChallengeVersionID uuid.UUID `gorm:"column:challenge_version_id;type:uuid;not null;index" json:"challenge_version_id"`
 	OutcomeKey         string    `gorm:"column:outcome_key;not null" json:"outcome_key"`
@@ -289,21 +290,6 @@ type ChallengeOutcomeRule struct {
 }
 
 func (ChallengeOutcomeRule) TableName() string { return "challenge_outcome_rules" }
-
-type ChallengeRewardRule struct {
-	ID                 uuid.UUID `gorm:"column:id;primaryKey;type:uuid" json:"id"`
-	ChallengeVersionID uuid.UUID `gorm:"column:challenge_version_id;type:uuid;not null;index" json:"challenge_version_id"`
-	OutcomeRuleID      uuid.UUID `gorm:"column:outcome_rule_id;type:uuid;not null" json:"outcome_rule_id"`
-	RewardDefinitionID uuid.UUID `gorm:"column:reward_definition_id;type:uuid;not null;index" json:"reward_definition_id"`
-	CalculatorKey      string    `gorm:"column:calculator_key;not null" json:"calculator_key"`
-	CalculatorConfig   JSONMap   `gorm:"column:calculator_config;type:jsonb;not null" json:"calculator_config"`
-	PublicSnapshot     JSONMap   `gorm:"column:public_snapshot;type:jsonb;not null" json:"public_snapshot"`
-	Enabled            bool      `gorm:"column:enabled;not null;default:true" json:"enabled"`
-	CreatedAt          time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt          time.Time `gorm:"column:updated_at" json:"updated_at"`
-}
-
-func (ChallengeRewardRule) TableName() string { return "challenge_reward_rules" }
 
 type ChallengeRun struct {
 	ID                 uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
@@ -323,67 +309,52 @@ type ChallengeRun struct {
 
 func (ChallengeRun) TableName() string { return "challenge_runs" }
 
-type RewardDefinition struct {
-	Disabled    bool       `json:"disabled"`
-	ID          uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
-	Key         string     `gorm:"column:key;uniqueIndex;not null" json:"key"`
-	Kind        string     `gorm:"column:kind;not null" json:"kind"`
-	Name        string     `gorm:"column:name;not null" json:"name"`
-	Description string     `gorm:"column:description;not null" json:"description"`
-	Unit        string     `gorm:"column:unit;not null" json:"unit"`
-	Icon        string     `gorm:"column:icon;not null" json:"icon"`
-	Stackable   bool       `gorm:"column:stackable;not null" json:"stackable"`
-	Consumable  bool       `gorm:"column:consumable;not null" json:"consumable"`
-	Featured    bool       `gorm:"column:featured;not null" json:"featured"`
-	SortOrder   int        `gorm:"column:sort_order;not null" json:"sort_order"`
-	Metadata    JSONMap    `gorm:"column:metadata;type:jsonb;not null" json:"metadata"`
-	CreatedBy   *uuid.UUID `gorm:"column:created_by;type:uuid" json:"created_by,omitempty"`
-	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at"`
-}
-
-func (RewardDefinition) TableName() string { return "reward_definitions" }
-
 type PlayerRewardBalance struct {
-	RefundedTotal      int64     `json:"refunded_total"`
-	ReversedTotal      int64     `json:"reversed_total"`
-	PlayerID           uuid.UUID `gorm:"column:player_id;primaryKey;type:uuid" json:"player_id"`
-	RewardDefinitionID uuid.UUID `gorm:"column:reward_definition_id;primaryKey;type:uuid" json:"reward_definition_id"`
-	Balance            int64     `gorm:"column:balance;not null" json:"balance"`
-	GrantedTotal       int64     `gorm:"column:granted_total;not null" json:"granted_total"`
-	ConsumedTotal      int64     `gorm:"column:consumed_total;not null" json:"consumed_total"`
-	UpdatedAt          time.Time `gorm:"column:updated_at" json:"updated_at"`
+	RefundedTotal int64     `json:"refunded_total"`
+	ReversedTotal int64     `json:"reversed_total"`
+	PlayerID      uuid.UUID `gorm:"column:player_id;primaryKey;type:uuid" json:"player_id"`
+	RewardKey     string    `gorm:"primaryKey" json:"reward_key"`
+	Balance       int64     `gorm:"column:balance;not null" json:"balance"`
+	GrantedTotal  int64     `gorm:"column:granted_total;not null" json:"granted_total"`
+	ConsumedTotal int64     `gorm:"column:consumed_total;not null" json:"consumed_total"`
+	UpdatedAt     time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (PlayerRewardBalance) TableName() string { return "player_reward_balances" }
 
 type RewardLedgerEntry struct {
-	RelatedEntryID     *uuid.UUID `gorm:"type:uuid" json:"related_entry_id,omitempty"`
-	ID                 uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
-	PlayerID           uuid.UUID  `gorm:"column:player_id;type:uuid;not null;index" json:"player_id"`
-	RewardDefinitionID uuid.UUID  `gorm:"column:reward_definition_id;type:uuid;not null" json:"reward_definition_id"`
-	Operation          string     `gorm:"column:operation;not null" json:"operation"`
-	QuantityDelta      int64      `gorm:"column:quantity_delta;not null" json:"quantity_delta"`
-	SourceType         string     `gorm:"column:source_type;not null" json:"source_type"`
-	SourceID           string     `gorm:"column:source_id;not null" json:"source_id"`
-	ChallengeRunID     *uuid.UUID `gorm:"column:challenge_run_id;type:uuid" json:"challenge_run_id,omitempty"`
-	IdempotencyKey     string     `gorm:"column:idempotency_key;uniqueIndex;not null" json:"idempotency_key"`
-	Metadata           JSONMap    `gorm:"column:metadata;type:jsonb;not null" json:"metadata"`
-	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
+	BalanceAfter   int64      `json:"balance_after"`
+	ActorID        *uuid.UUID `gorm:"type:uuid" json:"-"`
+	RequestID      *uuid.UUID `gorm:"type:uuid" json:"-"`
+	RequestHash    string     `json:"-"`
+	Reason         string     `json:"-"`
+	PublicNote     string     `json:"public_note"`
+	ReversalID     *uuid.UUID `gorm:"column:reversal_id;->" json:"reversal_id,omitempty"`
+	RelatedEntryID *uuid.UUID `gorm:"type:uuid" json:"related_entry_id,omitempty"`
+	ID             uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
+	PlayerID       uuid.UUID  `gorm:"column:player_id;type:uuid;not null;index" json:"-"`
+	RewardKey      string     `json:"reward_key"`
+	Operation      string     `gorm:"column:operation;not null" json:"operation"`
+	QuantityDelta  int64      `gorm:"column:quantity_delta;not null" json:"quantity_delta"`
+	SourceType     string     `gorm:"column:source_type;not null" json:"source_type"`
+	SourceID       string     `gorm:"column:source_id;not null" json:"-"`
+	ChallengeRunID *uuid.UUID `gorm:"column:challenge_run_id;type:uuid" json:"challenge_run_id,omitempty"`
+	IdempotencyKey string     `gorm:"column:idempotency_key;uniqueIndex;not null" json:"-"`
+	Metadata       JSONMap    `gorm:"column:metadata;type:jsonb;not null" json:"-"`
+	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at"`
 }
 
 func (RewardLedgerEntry) TableName() string { return "reward_ledger" }
 
 type ChallengeRunReward struct {
-	ChallengeRunID     uuid.UUID `gorm:"column:challenge_run_id;primaryKey;type:uuid" json:"challenge_run_id"`
-	RewardDefinitionID uuid.UUID `gorm:"column:reward_definition_id;primaryKey;type:uuid" json:"reward_definition_id"`
-	LedgerID           uuid.UUID `gorm:"column:ledger_id;type:uuid;not null;uniqueIndex" json:"ledger_id"`
-	Quantity           int64     `gorm:"column:quantity;not null" json:"quantity"`
-	RewardKeySnapshot  string    `gorm:"column:reward_key_snapshot;not null" json:"reward_key"`
-	NameSnapshot       string    `gorm:"column:name_snapshot;not null" json:"name"`
-	UnitSnapshot       string    `gorm:"column:unit_snapshot;not null" json:"unit"`
-	IconSnapshot       string    `gorm:"column:icon_snapshot;not null" json:"icon"`
-	BalanceAfter       int64     `gorm:"column:balance_after;not null" json:"balance_after"`
+	ChallengeRunID    uuid.UUID `gorm:"column:challenge_run_id;primaryKey;type:uuid" json:"challenge_run_id"`
+	LedgerID          uuid.UUID `gorm:"column:ledger_id;type:uuid;not null;uniqueIndex" json:"ledger_id"`
+	Quantity          int64     `gorm:"column:quantity;not null" json:"quantity"`
+	RewardKeySnapshot string    `gorm:"column:reward_key_snapshot;not null" json:"reward_key"`
+	NameSnapshot      string    `gorm:"column:name_snapshot;not null" json:"name"`
+	UnitSnapshot      string    `gorm:"column:unit_snapshot;not null" json:"unit"`
+	IconSnapshot      string    `gorm:"column:icon_snapshot;not null" json:"icon"`
+	BalanceAfter      int64     `gorm:"column:balance_after;not null" json:"balance_after"`
 }
 
 func (ChallengeRunReward) TableName() string { return "challenge_run_rewards" }
@@ -868,11 +839,13 @@ type LLMSettings struct {
 	MemoryReasoningEffort  string `gorm:"column:memory_reasoning_effort" json:"memory_reasoning_effort"`
 	InquiryReasoningEffort string `gorm:"column:inquiry_reasoning_effort" json:"inquiry_reasoning_effort"`
 	SettingsRevision       int64  `gorm:"column:settings_revision;not null" json:"settings_revision"`
-	// LLMRoute 为有效路由（platform_managed 时恒为 server）；client 时服务端不保存 Key。
+	// LLMRoute 为按平台直连开关和用户选择计算的有效路由；client 时服务端不保存 Key。
 	LLMRoute string `gorm:"column:llm_route;not null;default:server" json:"llm_route"`
 	// ClientRouteEnabled 告诉前端是否展示路由选择；非持久化，由 llmsettings.Get 填充。
 	ClientRouteEnabled bool      `gorm:"-" json:"client_route_enabled"`
 	UpdatedAt          time.Time `gorm:"column:updated_at" json:"updated_at"`
+	// ConfigurationReady covers server-visible configuration; client keys are checked on the device.
+	ConfigurationReady bool `gorm:"-" json:"configuration_ready"`
 }
 
 func (LLMSettings) TableName() string { return "llm_settings" }
@@ -889,8 +862,9 @@ type SystemSettings struct {
 	DiagnosticLogCleanupEnabled bool       `gorm:"column:diagnostic_log_cleanup_enabled;not null;default:true" json:"diagnostic_log_cleanup_enabled"`
 	DiagnosticLogRetentionDays  int        `gorm:"column:diagnostic_log_retention_days;not null;default:30" json:"diagnostic_log_retention_days"`
 	LLMAccessMode               string     `gorm:"column:llm_access_mode;size:32;not null;default:user_managed" json:"llm_access_mode"`
-	// ClientLLMRouteEnabled 决定是否允许用户选择客户端直连（与接入模式相互独立）；默认关闭，由 owner 开启。
-	ClientLLMRouteEnabled           bool      `gorm:"column:client_llm_route_enabled;not null;default:false" json:"client_llm_route_enabled"`
+	// ClientLLMRouteEnabled 默认开启，由 owner 管理；默认值由初始化 SQL 和 DefaultSystemSettings 提供。
+	// 不使用 GORM default:true，避免 upsert 时将管理员显式保存的 false 替换为 true。
+	ClientLLMRouteEnabled           bool      `gorm:"column:client_llm_route_enabled;not null" json:"client_llm_route_enabled"`
 	PublicLLMBaseURL                string    `gorm:"column:public_llm_base_url" json:"public_llm_base_url"`
 	PublicLLMProtocol               string    `gorm:"column:public_llm_protocol;size:32;not null;default:responses" json:"public_llm_protocol"`
 	PublicLLMAPIKeyEncrypted        string    `gorm:"column:public_llm_api_key_encrypted" json:"-"`
@@ -935,6 +909,7 @@ func (AdminAuditLog) TableName() string { return "admin_audit_logs" }
 func DefaultSystemSettings() *SystemSettings {
 	return &SystemSettings{
 		ID: 1, RollSystemEnabled: true, RollDifficultyMode: "normal",
+		ClientLLMRouteEnabled:       true,
 		DetailedLLMLoggingScope:     "all",
 		DiagnosticLogCleanupEnabled: true, DiagnosticLogRetentionDays: 30,
 		PublicLLMBaseURL: "https://api.openai.com/v1",

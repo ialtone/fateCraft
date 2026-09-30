@@ -21,13 +21,14 @@ const (
 )
 
 var (
-	ErrUserSettingsDisabled  = errors.New("平台当前统一提供模型配置，用户设置不可修改")
-	ErrEncryptionUnavailable = errors.New("服务端尚未配置 AUTH_DATA_ENCRYPTION_KEY，LLM API Key 无论是用户配置还是平台公共配置都必须先加密后保存")
-	ErrMissingAPIKey         = errors.New("API Key 不能为空")
-	ErrInvalidAccessMode     = errors.New("llm_access_mode 必须是 user_managed 或 platform_managed")
-	ErrPlatformIncomplete    = errors.New("平台模型模式需要完整配置 Base URL、API Key 和叙事模型")
-	ErrInvalidLLMRoute       = errors.New("llm_route 必须是 server 或 client")
-	ErrClientRouteDisabled   = errors.New("平台未开放客户端直连")
+	ErrUserSettingsDisabled    = errors.New("平台当前统一提供模型配置，用户设置不可修改")
+	ErrEncryptionUnavailable   = errors.New("服务端尚未配置 AUTH_DATA_ENCRYPTION_KEY，LLM API Key 无论是用户配置还是平台公共配置都必须先加密后保存")
+	ErrMissingAPIKey           = errors.New("API Key 不能为空")
+	ErrConfigurationIncomplete = errors.New("模型 API 尚未配置完整，请先在设置中填写 Base URL、API Key 和模型")
+	ErrInvalidAccessMode       = errors.New("llm_access_mode 必须是 user_managed 或 platform_managed")
+	ErrPlatformIncomplete      = errors.New("平台模型模式需要完整配置 Base URL、API Key 和叙事模型")
+	ErrInvalidLLMRoute         = errors.New("llm_route 必须是 server 或 client")
+	ErrClientRouteDisabled     = errors.New("平台未开放客户端直连")
 )
 
 type userRepository interface {
@@ -88,6 +89,24 @@ func (s *Service) EffectiveRoute(ctx context.Context, playerID string) (string, 
 		return "", err
 	}
 	return resolveRoute(global, stored.LLMRoute), nil
+}
+
+// ReadyRoute checks configuration before creating any game state and returns
+// the route from the same runtime snapshot. Client keys never reach the server:
+// their presence must be checked on the device before submitting creation.
+func (s *Service) ReadyRoute(ctx context.Context, playerID string) (string, error) {
+	settings, err := s.Get(ctx, playerID)
+	if err != nil {
+		return "", err
+	}
+	if !configurationReady(settings.BaseURL, settings.Model, settings.LLMRoute == storage.LLMRouteClient || strings.TrimSpace(settings.APIKey) != "") {
+		return "", ErrConfigurationIncomplete
+	}
+	return settings.LLMRoute, nil
+}
+
+func configurationReady(baseURL, model string, hasKey bool) bool {
+	return strings.TrimSpace(baseURL) != "" && strings.TrimSpace(model) != "" && hasKey
 }
 
 // Get returns a runtime-ready configuration. APIKey is populated only in
@@ -178,10 +197,13 @@ func (s *Service) Personal(ctx context.Context, playerID string) (*storage.LLMSe
 	switch {
 	case out.LLMRoute == storage.LLMRouteClient:
 		out.Source = SourceClient
+		out.ConfigurationReady = configurationReady(out.BaseURL, out.Model, true)
 	case mode == AccessModePlatformManaged:
 		out.Source = SourcePlatform
+		out.ConfigurationReady = configurationReady(global.PublicLLMBaseURL, global.PublicLLMModel, global.PublicLLMAPIKeyEncrypted != "")
 	default:
 		out.Source = SourceUser
+		out.ConfigurationReady = configurationReady(out.BaseURL, out.Model, out.HasAPIKey)
 	}
 	return out, nil
 }

@@ -26,14 +26,7 @@ type PublicationValidator func(
 	[]ChallengeAsset,
 	[]GameplayDefinition,
 	[]ChallengeOutcomeRule,
-	[]ChallengeRewardRule,
 ) (string, error)
-
-type ChallengeRewardGrant struct {
-	Definition RewardDefinition
-	Quantity   int64
-	Snapshot   JSONMap
-}
 
 func NewChallengeRepository(db *gorm.DB) *ChallengeRepository {
 	return &ChallengeRepository{db: db}
@@ -280,25 +273,6 @@ func (r *ChallengeRepository) OutcomeRule(ctx context.Context, versionID uuid.UU
 	return &row, err
 }
 
-func (r *ChallengeRepository) ListRewardRules(ctx context.Context, versionID uuid.UUID) ([]ChallengeRewardRule, error) {
-	var rows []ChallengeRewardRule
-	err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).
-		Order("outcome_rule_id ASC, reward_definition_id ASC").Find(&rows).Error
-	return rows, err
-}
-
-func (r *ChallengeRepository) RewardRulesForOutcome(ctx context.Context, outcomeID uuid.UUID) ([]ChallengeRewardRule, error) {
-	var rows []ChallengeRewardRule
-	err := r.db.WithContext(ctx).
-		Where("outcome_rule_id = ? AND enabled = ?", outcomeID, true).
-		Order("reward_definition_id ASC").Find(&rows).Error
-	return rows, err
-}
-
-func (r *ChallengeRepository) RewardDefinition(ctx context.Context, id uuid.UUID) (*RewardDefinition, error) {
-	return r.Rewards().DefinitionByID(ctx, id)
-}
-
 func (r *ChallengeRepository) ReplaceDraft(
 	ctx context.Context,
 	versionID uuid.UUID,
@@ -307,10 +281,9 @@ func (r *ChallengeRepository) ReplaceDraft(
 	assets []ChallengeAsset,
 	definitions []GameplayDefinition,
 	outcomes []ChallengeOutcomeRule,
-	rules []ChallengeRewardRule,
 ) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
-		return tx.replaceDraft(ctx, versionID, manifest, runtime, assets, definitions, outcomes, rules)
+		return tx.replaceDraft(ctx, versionID, manifest, runtime, assets, definitions, outcomes)
 	})
 }
 
@@ -322,7 +295,6 @@ func (r *ChallengeRepository) replaceDraft(
 	assets []ChallengeAsset,
 	definitions []GameplayDefinition,
 	outcomes []ChallengeOutcomeRule,
-	rules []ChallengeRewardRule,
 ) error {
 	version, err := r.LockVersion(ctx, versionID)
 	if err != nil {
@@ -334,9 +306,6 @@ func (r *ChallengeRepository) replaceDraft(
 	now := time.Now()
 	if err := r.db.WithContext(ctx).Model(&ChallengeVersion{}).Where("id = ?", versionID).
 		Updates(map[string]any{"manifest": manifest, "content_hash": "", "updated_at": now}).Error; err != nil {
-		return err
-	}
-	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeRewardRule{}).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeOutcomeRule{}).Error; err != nil {
@@ -400,19 +369,6 @@ func (r *ChallengeRepository) replaceDraft(
 			return err
 		}
 	}
-	for index := range rules {
-		rules[index].ChallengeVersionID = versionID
-		if rules[index].ID == uuid.Nil {
-			rules[index].ID = uuid.New()
-		}
-		if rules[index].CreatedAt.IsZero() {
-			rules[index].CreatedAt = now
-		}
-		rules[index].UpdatedAt = now
-		if err := r.db.WithContext(ctx).Create(&rules[index]).Error; err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -423,13 +379,12 @@ func (r *ChallengeRepository) CreateDraftWithContent(
 	assets []ChallengeAsset,
 	definitions []GameplayDefinition,
 	outcomes []ChallengeOutcomeRule,
-	rules []ChallengeRewardRule,
 ) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
 		if err := tx.CreateVersion(ctx, version); err != nil {
 			return err
 		}
-		return tx.replaceDraft(ctx, version.ID, version.Manifest, runtime, assets, definitions, outcomes, rules)
+		return tx.replaceDraft(ctx, version.ID, version.Manifest, runtime, assets, definitions, outcomes)
 	})
 }
 
@@ -465,16 +420,7 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		if err != nil {
 			return err
 		}
-		rules, err := tx.ListRewardRules(ctx, versionID)
-		if err != nil {
-			return err
-		}
-		for _, rule := range rules {
-			if err := tx.Rewards().ValidateNewRuleReference(ctx, rule.RewardDefinitionID); err != nil {
-				return err
-			}
-		}
-		contentHash, err := validate(*pack, *version, *runtime, assets, definitions, outcomes, rules)
+		contentHash, err := validate(*pack, *version, *runtime, assets, definitions, outcomes)
 		if err != nil {
 			return err
 		}
@@ -585,8 +531,11 @@ func (r *ChallengeRepository) CompleteRun(
 	ctx context.Context,
 	conv *Conversation,
 	run *ChallengeRun,
-	grants []ChallengeRewardGrant,
+	points int64,
 ) ([]ChallengeRunReward, error) {
+	if points < 0 || points > MaxRewardQuantity {
+		return nil, ErrRewardQuantity
+	}
 	var existing ChallengeRun
 	err := r.db.WithContext(ctx).First(&existing, "conversation_id = ?", conv.ID).Error
 	if err == nil {
@@ -603,45 +552,18 @@ func (r *ChallengeRepository) CompleteRun(
 	if err != nil {
 		return nil, fmt.Errorf("玩家 ID 无效: %w", err)
 	}
-	rewards := make([]ChallengeRunReward, 0, len(grants))
-	// client 路由：结局校验、challenge_runs 写入与对话结束照常，只跳过奖励授予。
-	// 路由在事务内直接取自已加行锁的对话行，不在调用方判断，保证所有入口一致。
-	if conv.LLMRoute != LLMRouteClient {
-		ids := make([]uuid.UUID, 0, len(grants))
-		for _, grant := range grants {
-			ids = append(ids, grant.Definition.ID)
-		}
-		if err := r.Rewards().LockBalances(ctx, playerID, ids); err != nil {
+	rewards := []ChallengeRunReward{}
+	if conv.LLMRoute != LLMRouteClient && points > 0 {
+		result, err := r.Rewards().GrantInCurrentTx(ctx, RewardMutation{PlayerID: playerID, RewardKey: PointsKey, Quantity: points, SourceType: "challenge_run", SourceID: conv.ID.String(), IdempotencyKey: "challenge_run:" + conv.ID.String(), ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey, "challenge_version_id": run.ChallengeVersionID}})
+		if err != nil {
 			return nil, err
 		}
-		for _, grant := range grants {
-			result, err := r.Rewards().GrantInCurrentTx(ctx, RewardMutation{
-				PlayerID: playerID, RewardKey: grant.Definition.Key, Quantity: grant.Quantity,
-				SourceType: "challenge_run", SourceID: run.ID.String(),
-				IdempotencyKey: "challenge_run:" + run.ID.String() + ":" + grant.Definition.Key,
-				ChallengeRunID: &run.ID, Metadata: JSONMap{"outcome_key": run.OutcomeKey, "challenge_version_id": run.ChallengeVersionID.String(), "reward_snapshot": grant.Snapshot},
-			})
-			if err != nil {
-				return nil, err
-			}
-			if !result.Applied || result.Ledger == nil {
-				continue
-			}
-			snapshot := grant.Snapshot
-			row := ChallengeRunReward{
-				ChallengeRunID: run.ID, RewardDefinitionID: grant.Definition.ID,
-				LedgerID: result.Ledger.ID, Quantity: grant.Quantity,
-				RewardKeySnapshot: grant.Definition.Key,
-				NameSnapshot:      stringFromMap(snapshot, "name", grant.Definition.Name),
-				UnitSnapshot:      stringFromMap(snapshot, "unit", grant.Definition.Unit),
-				IconSnapshot:      stringFromMap(snapshot, "icon", grant.Definition.Icon),
-				BalanceAfter:      result.Balance,
-			}
-			if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-				return nil, err
-			}
-			rewards = append(rewards, row)
+		asset := RewardAssetFor(PointsKey)
+		row := ChallengeRunReward{ChallengeRunID: run.ID, LedgerID: result.Ledger.ID, Quantity: points, RewardKeySnapshot: asset.Key, NameSnapshot: asset.Name, UnitSnapshot: asset.Unit, IconSnapshot: asset.Icon, BalanceAfter: result.Balance}
+		if err := r.db.Create(&row).Error; err != nil {
+			return nil, err
 		}
+		rewards = append(rewards, row)
 	}
 	if err := r.db.WithContext(ctx).Model(&Conversation{}).Where("id = ?", conv.ID).
 		Updates(map[string]any{

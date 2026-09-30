@@ -118,13 +118,13 @@ async function logout() {
                 aria-label="查看我的奖励"
               >
                 <span
-                  v-for="item in rewards.featured.slice(0, 2)"
-                  :key="item.definition.key"
+                  v-for="item in rewards.items"
+                  :key="item.asset.key"
                   class="stat-item"
-                  :title="item.definition.description || item.definition.name"
+                  :title="item.asset.name"
                 >
                   <NIcon class="stat-icon" :component="GiftOutline" />
-                  <span class="stat-name">{{ item.definition.name }}</span>
+                  <span class="stat-name">{{ item.asset.name }}</span>
                   <span class="stat-value">{{ item.balance.toLocaleString() }}</span>
                 </span>
               </RouterLink>
@@ -147,7 +147,7 @@ async function logout() {
           </header>
           <main
             :class="{
-              full: isConversation || isSharedPage,
+              full: isConversation || isSharedPage || isAdminPage,
               'auth-main': isAuthPage || isSetupPage,
             }"
           >

@@ -26,7 +26,7 @@ ChallengePack
         |-- Runtime Contract
         |-- Prompt / WorldBook / Persona / Scenario
         |-- Gameplay Definitions
-        `-- Outcome / Account Reward Rules
+        `-- Outcome（含固定积分）
 
 Campaign（单个玩家的长期权威存档）
   |-- Character / Techniques / Inventory / Equipment
@@ -206,7 +206,7 @@ JSONB 仅保存有界扩展属性；数量、状态、位置、时间、revision
 - 相同初始状态和动作序列可复现，不接受模型提交命中、伤害或胜负；
 - `encounter_win` 可作为任务目标，只有已持久化的胜利记录满足条件；
 - 终局任务提交会在同一事务完成任务、写里程碑事件、设置 `completed`、记录稳定 outcome key 并授予账号奖励；
-- 长期 Campaign 结局可同时使用 `core.fixed` 和通用 `campaign.extract_item_stack`；后者按终局时权威库存有界转换并可扣除来源，两类奖励都通过不可变账本幂等发放。
+- 长期 Campaign 结局直接使用 reward_points，通关积分通过不可变账本幂等发放，不进行局内库存折算或额外扣除。
 
 ## 7. 模型上下文和限制
 
@@ -273,7 +273,7 @@ Context Provider 同时声明顶层主题优先级；完整投影超出当前模
 - `world_warden`：完成守住天关的终局任务；
 - `law_seeker`：完成携律远行的终局任务。
 
-两条结局都授予账号级徽章 `mortal-path.world-seal`，并把剩余 `law-fragment` 按 1:1 转为最多 12 缕 `mortal-path.law-essence`、把 `low-spirit-stone` 按 100:1 转为最多 20 份 `mortal-path.spirit-essence`。两种提取都扣除实际兑换来源；每个 Campaign、结局和奖励 key 组合只记一笔授予账本。
+两条结局初始各发放 1000 积分，数量固定在本版本 pack.json 的 outcome 中。每个 Campaign 只结算一次；局内法则碎片和灵石保持原玩法用途，不折算账号余额。
 
 ## 10. 内容包扩展规则
 
@@ -285,7 +285,6 @@ Context Provider 同时声明顶层主题优先级；完整投影超出当前模
 - `runtime/state-schema.json`、`runtime/actions.json`、`runtime/settlement.json`、`runtime/presentation.json`：状态、模型动作、结算和玩家展示契约；
 - `definitions.json`：基础定义；
 - `definitions/*.json`：按文件名字典序加载的扩展分片；
-- `rewards.json`：账号级奖励定义；
 - `characters/`、`personas/`、`scenarios/`、`prompts/`、`worldbooks/`：叙事资产。
 
 扩展内容时遵循以下顺序：
@@ -312,7 +311,7 @@ Context Provider 同时声明顶层主题优先级；完整投影超出当前模
 - 事件与动作提交记录只追加；
 - 玩家 snapshot 不泄漏 NPC 私密状态、远端区域私密信息或隐藏任务条件；
 - 失败动作不能留下领域事实，也不能让叙事声称结果已提交；
-- 账号奖励与 Campaign 局内资产不能直接互相替代；只有固定版本声明的终局提取规则能在同一事务完成有界转换。
+- 账号奖励与 Campaign 局内资产不能直接互相替代；结局固定积分与存档完成同事务提交，局内库存不折算为积分。
 
 ## 12. 验证与发布基线
 
@@ -332,8 +331,8 @@ PostgreSQL 集成测试读取 `FATECRAFT_TEST_DATABASE_URL`，为每次测试创
 - revision 并发只有一个提交成功；
 - action id 幂等重放；
 - 数据库拒绝负库存；
-- Campaign 固定奖励、消耗式带出、非消耗估值、来源扣除和账本幂等；
-- `mortal-path 3.6.2` 完整发布、225 条定义、统一九阶境界、双结局、三种账号奖励、六条结局规则和 Campaign 内置天命判定；剧情改写/重新生成使用平台级统一额度，不属于该玩法包。
+- Campaign 固定积分、0 分、直连不发放、事务回滚和账本幂等；
+- `mortal-path 3.6.2` 完整发布、225 条定义、统一九阶境界、双结局、两项终局固定积分配置和 Campaign 内置天命判定；剧情改写/重新生成使用平台级统一额度，不属于该玩法包。
 
 `.github/workflows/verify.yml` 在 PostgreSQL 17 服务上运行后端测试和 vet，并在 Node 22 上运行前端构建。当前前端没有 Playwright/Cypress 浏览器 E2E；自动化 UI 基线是 `vue-tsc --noEmit + vite build`，交互和多视口仍需手工验收或后续单独补充浏览器测试套件，不能在交付说明中声称已有 E2E。
 

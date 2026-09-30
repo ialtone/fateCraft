@@ -90,21 +90,13 @@ test('sub-tabs belong to their management area and retain mounted drafts', () =>
 
 test('reward, user, and challenge panels separate independent workflows', () => {
   assert.deepEqual(tabGroups('../src/components/AdminRewardsPanel.vue')[0].names, [
-    'overview',
-    'assets',
     'rules',
-    'registration',
-    'users',
     'exchange',
-    'orders',
     'records',
-    'audit',
   ])
   assert.deepEqual(tabGroups('../src/components/AdminUsersPanel.vue')[0].names, ['users', 'audit'])
   assert.deepEqual(tabGroups('../src/components/AdminRewardUserPanel.vue')[0].names, [
-    'balances',
     'grant',
-    'records',
     'ledger',
   ])
   const editor = tabGroups('../src/components/ChallengeVersionEditor.vue')[0].names

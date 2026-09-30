@@ -373,6 +373,13 @@ function emptyText(section: CampaignViewSection): string {
       <NAlert v-if="rewardsDisabledReason" type="warning" :bordered="false">
         客户端直连模式不发放奖励
       </NAlert>
+      <NAlert
+        v-else-if="campaign.snapshot?.campaign.status === 'completed'"
+        type="success"
+        :bordered="false"
+      >
+        本次获得 {{ snapshot?.reward_points ?? 0 }} 积分
+      </NAlert>
       <template v-if="campaign.loading && !snapshot">
         <NSkeleton v-for="index in 5" :key="index" text :repeat="2" />
       </template>

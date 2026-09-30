@@ -50,18 +50,16 @@ users
   |             `-- challenge_run_rewards
   |-- player_reward_balances
   |-- reward_ledger
-  |-- reward_records
   `-- reward_exchange_orders -> reward_exchange_revisions -> reward_exchange_offers
 
 challenge_packs
   `-- challenge_versions
         |-- challenge_runtime_configs（一对一）
         |-- challenge_assets
-        |-- challenge_outcome_rules
-        `-- challenge_reward_rules -> reward_definitions
+        `-- challenge_outcome_rules（含 reward_points）
 ~~~
 
-基线 migration 当前包含 66 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
+基线 migration 当前包含 63 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
 
 ## 认证与平台设置
 
@@ -111,7 +109,7 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 ### `llm_settings`、`system_settings` 与 `llm_request_logs`
 
-`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。该表没有 provider 列，端点能力档位只由服务端按 `base_url` 识别。`system_settings` 是主键固定为 1 的管理员单例，同时保存 `installation_completed_at`（首次安装向导完成时间）、判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置（公共配置没有 `public_llm_provider` 列）；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。`client_llm_route_enabled`（默认 FALSE）决定是否在服务端选项之外额外给用户“客户端直连”选项，与 `llm_access_mode` 相互独立，由 owner 开启。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
+`llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。该表没有 provider 列，端点能力档位只由服务端按 `base_url` 识别。`system_settings` 是主键固定为 1 的管理员单例，同时保存 `installation_completed_at`（首次安装向导完成时间）、判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置（公共配置没有 `public_llm_provider` 列）；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。`client_llm_route_enabled`（默认 TRUE）决定是否在服务端选项之外额外给用户“客户端直连”选项，与 `llm_access_mode` 相互独立，由 owner 管理。修改初始默认值不会覆盖已有实例保存的开关状态。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
 
 `admin_audit_logs` 保存首次安装、角色变更、账号状态变更、全局/平台/认证配置更新等操作的脱敏记录；trace_id 独立于业务 request_id，配置审计与更新在同一事务，密钥/私有端点仅记录 set/replace/clear，不保存密码、Cookie、Authorization、初始化凭证或 LLM Key。奖励操作也在此保存审计，使用请求唯一部分索引、(created_at,id) 奖励分页索引和 record_id 表达式索引。
 
@@ -170,17 +168,7 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 模型提交 outcome 只是一项候选，后端必须用可信状态和判定流水执行 verifier。
 
-### `challenge_reward_rules`
-
-把一个结局绑定到一个全局奖励定义，并保存：
-
-- `calculator_key` 与版本化配置；
-- 发布时奖励公开展示快照；
-- 是否启用。
-
-同一结局不能重复绑定同一奖励定义。一次结算可以命中多条规则，因而可以同时发放货币、物品和徽章。
-
-Campaign 的 `campaign.extract_item_stack` 规则把当前版本中的可堆叠局内物按有界比例转换为可叠加账号奖励。规则仍保存在本表，不新增题材专属奖励表；终局事务从 Campaign 领域表读取来源并将扣除、余额和账本原子提交。
+结局规则直接保存 `reward_points`，数据库 CHECK 限制为非负安全整数。积分属于版本快照，结局、可信条件和积分共同进入内容哈希；不再单独建立账号奖励规则表。
 
 ## 长期存档与对话运行时
 
@@ -250,48 +238,33 @@ Campaign 的 `campaign.extract_item_stack` 规则把当前版本中的可堆叠�
 
 ### `roll_history`
 
-服务端判定证据。`roll_key` 是稳定规则键，`title_snapshot` 是当局展示标题，`category` 用于计算器与审计。结局 verifier 只读取成功的稳定 key，不用中文标题作为安全标识。
+服务端判定证据。`roll_key` 是稳定规则键，`title_snapshot` 是当局展示标题，`category` 用于判定与审计。结局 verifier 只读取成功的稳定 key，不用中文标题作为安全标识。
 
-## 通用奖励与结算
-
-### `reward_definitions`
-
-全局稳定奖励目录：
-
-- `key` 使用命名空间，如 `reincarnation-trials.spirit-stone`；
-- `kind` 为 `currency/item/badge/entitlement/credit`；
-- 名称、说明、单位、图标和 featured 属于展示；
-- `stackable/consumable` 定义长期语义。
-
-非堆叠奖励不能同时标记为 consumable。奖励被玩法、余额、账本、获奖、注册或兑换配置/修订使用后，key、kind、stackable、consumable 不能原地改变；需要新语义时创建新 key。disabled 限制新增发放和新配置引用，不取消已有资格。
+## 积分、改写次数与结算
 
 ### `player_reward_balances`
 
-`player_id + reward_definition_id` 主键的余额投影，保存当前余额、累计授予、累计消费、累计返还和累计冲正。它用于快速查询，不能脱离账本单独修改。
+`player_id + reward_key` 主键的余额投影。数据库与服务端只允许 `fatecraft.points`、`fatecraft.message-rewrite-credit`；不存在通用账号资产定义表。保存当前余额、授予/消费/返还/撤回累计值，全部为非负安全整数，余额等于累计净额。不能脱离账本修改。
 
 ### `reward_ledger`
 
-不可变奖励账本，操作为 `grant/consume/refund/reverse`，每行保存数量变化、来源、可选挑战结算 ID、幂等键、元数据和时间。数据库触发器拒绝 UPDATE/DELETE；正常业务只能追加记录。
+只追加的实际收支事实，操作为 `grant/consume/refund/reverse`。保存 reward_key、quantity_delta、balance_after、来源、可选结算 ID、原流水关联、请求 ID/指纹、操作者、内部原因与公开说明。普通用户响应不包含管理字段和内部 metadata。
 
-幂等键全局唯一，防止重试或并发导致重复发奖/扣费。账本与余额必须位于同一事务。refund/reverse 的 related_entry_id 分别关联原 consume/grant；部分唯一索引限制原操作只处理一次，业务层禁止兑换来源单边返还和冲正。
+幂等键、管理员请求 ID、`(player_id,reward_key,operation,source_type,source_id)` 分别唯一。返还关联改写消费，撤回只关联原管理员发放；每笔各最多处理一次，触发器验证用户、项目、金额、原操作与来源并拒绝账本 UPDATE/DELETE。余额、账本、原业务事实和必要管理审计共同提交。
 
-Campaign 终局授予使用 `source_type=campaign_outcome` 和 Campaign ID 作为 `source_id`。metadata 保存 outcome、固定版本、奖励展示快照及可选提取来源快照；完成态玩家快照据此恢复本次带出，不依赖聊天文本。完整语义见 `21-campaign-outcome-rewards.md`。
+Campaign 来源为 `campaign_outcome`，source_id 为 Campaign ID，metadata 保存结局与固定版本。完成态据账本恢复积分；0 分保存于完成事实，不写零金额账本。参见 [21 终局积分](21-campaign-outcome-rewards.md)。
 
-### 获奖、注册修订与兑换
+### 注册与兑换
 
-reward_records 保存来源唯一身份、不可变资产快照、quantity、delivery_mode 和 pending/granted/skipped/cancelled 单一状态。成功关联 ledger_id，冲正关联 reversal_ledger_id；零数量或已拥有非叠加资产保存 skip_reason，无授予流水。source_key 与 (player_id,source_type,source_id,reward_definition_id) 各自唯一。管理员请求保存唯一 request_id、内容哈希、目标、操作者、内部原因及公开说明；触发器保护身份、快照和终态。
+`registration_reward_rules` 只追加两项赠送数量的修订，最新 ID 生效，初始为 0 积分/10 次。`users.registration_reward_revision` 引用注册实际采用的规则，即使两项为 0 也保存，用于防止重试套用新规则。
 
-registration_reward_rules 只追加修订，最新 ID 为当前规则，初始赠送 10 份剧情改写额度。reward_exchange_offers 保存当前商品及 revision；reward_exchange_revisions 保存不可变配置和操作者。reward_exchange_orders 外键关联 (offer_id,offer_revision)，保存不可变价格/资产快照、份数和两端实际流水关联，request_id 唯一；订单与扣分、获奖同事务，修订与订单拒绝 UPDATE/DELETE。
+`reward_exchange_offers` 固定积分支付、改写次数所得，保存当前配置和 revision。`reward_exchange_revisions` 保存不可变配置与操作者，初始商品为 100 积分兑换 1 次，系统初始化 actor_id 为空。`reward_exchange_orders` 引用商品修订、支付和所得两条 ledger，保存单价、份数和合计快照，request_id 唯一。注册修订、商品修订、订单都拒绝 UPDATE/DELETE。扣积分、加次数与订单同事务；没有兑换退款接口。
 
-奖励记录、账本、订单和审计按 (created_at,id) 游标分页。用户搜索按 created_at/id 排序，username/display_name 使用 trigram GIN 索引，完整邮箱使用 lower(email) 索引。数字业务上限 9007199254740991，跨账号聚合返回十进制字符串。完整状态、停用影响与权限见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+账本、订单和管理审计按 (created_at,id) 游标分页。账本可筛选用户、项目、来源和时间；用户搜索保持字面匹配与分页索引。数字业务上限为 9007199254740991。详见 [22 奖励管理](22-reward-management-and-exchange.md)。
 
-### `challenge_runs`
+### `challenge_runs` 与 `challenge_run_rewards`
 
-每个对话最多一条的结算主记录，保存固定版本、outcome 快照、类别、摘要、可信结算详情和结算时间。它不保存单一奖励字段。
-
-### `challenge_run_rewards`
-
-某次挑战实际发放的零到多项奖励快照，关联奖励账本，并保存 reward key、名称、单位、图标、数量与 `balance_after`。前端完成弹窗以这里的结果为准，不自行计算余额。
+每个对话最多一条结算，保存固定版本、outcome、摘要和可信结算详情，detail.reward_points 为实际所得；直连实际为 0 并记录原因。实际正积分生成至多一条 `challenge_run_rewards` 投影，引用账本并保存积分名称、数量和入账后余额。0 分不写该投影。
 
 ## 关键事务边界
 
@@ -309,15 +282,15 @@ registration_reward_rules 只追加修订，最新 ID 为当前规则，初始�
 
 列表读取统一采用有界、稳定顺序：conversation 按 `updated_at DESC, id DESC`，消息按 `(created_at, id)` 复合游标，Campaign 事件按定义的时间/优先级/模板/occurrence/id，奖励账本按 `created_at DESC, id DESC`。API 层拒绝非法或超限 `limit`，仓储层再次执行上限保护；不存在的消息 anchor 不会静默退化为第一页。
 
-奖励展示和账本查询一次性 JOIN 奖励定义；Campaign 结算在事务开始时批量预取涉及的定义、余额、物品栈和物品定义，统一获奖服务仍逐项校验来源、记录与入账，不承诺查询数与奖励项数无关。余额行按稳定资产 ID 顺序加锁并串行写入账本，以保持并发扣费和发奖正确性。
+奖励展示使用两项平台常量；收支从账本读取并关联原发放的撤回记录。跨余额操作按固定 reward key 顺序加锁，以保持并发扣费与发放正确性。
 
 ### 挑战结算
 
 1. 锁定 conversation，确认仍 active 且尚无 run。
 2. 读取可信状态与成功判定 key，执行固定版本 verifier。
-3. 执行每条可信 calculator。
+3. 读取固定结局积分，直连实际所得为 0。
 4. 写 `challenge_runs`。
-5. 对每条规则写统一获奖记录；实际发放才追加 ledger、更新 balance、写 run reward 快照，零数量或已拥有记录 skipped。
+5. 正积分追加 ledger、更新 balance、写 run reward 快照；0 分仅记录于结算详情。
 6. 将 conversation 置为 ended。
 
 ### 奖励消费型功能

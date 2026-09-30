@@ -416,7 +416,9 @@ func ValidateContract(contract *RuntimeContract) error {
 		return fmt.Errorf("settlement.handler 不能为空")
 	}
 	for key, capability := range contract.Actions.Capabilities {
-		if capability.CostQuantity < 0 || (capability.CostQuantity > 0 && capability.CostRewardKey == "") {
+		if capability.CostQuantity < 0 || capability.CostQuantity > storage.MaxRewardQuantity ||
+			(capability.CostQuantity > 0 && capability.CostRewardKey == "") ||
+			(capability.CostRewardKey != "" && !storage.ValidRewardKey(capability.CostRewardKey)) {
 			return fmt.Errorf("能力 %s 的消耗配置无效", key)
 		}
 	}

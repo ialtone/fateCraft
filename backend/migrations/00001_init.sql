@@ -114,49 +114,6 @@ CREATE TABLE invitation_codes (
 );
 CREATE INDEX idx_invitation_codes_status ON invitation_codes(enabled, expires_at);
 
-CREATE TABLE reward_definitions (
-    disabled BOOLEAN NOT NULL DEFAULT FALSE,
-    id UUID PRIMARY KEY,
-    key VARCHAR(160) NOT NULL UNIQUE CHECK (key ~ '^[a-z0-9][a-z0-9._-]*$'),
-    kind VARCHAR(24) NOT NULL CHECK (kind IN ('currency', 'item', 'badge', 'entitlement', 'credit')),
-    name VARCHAR(128) NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    unit VARCHAR(32) NOT NULL DEFAULT '',
-    icon VARCHAR(64) NOT NULL DEFAULT '',
-    stackable BOOLEAN NOT NULL DEFAULT TRUE,
-    consumable BOOLEAN NOT NULL DEFAULT FALSE,
-    featured BOOLEAN NOT NULL DEFAULT FALSE,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata) = 'object'),
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT reward_definition_shape CHECK (
-        (stackable = TRUE)
-        OR
-        (stackable = FALSE AND consumable = FALSE)
-    )
-);
-CREATE INDEX idx_reward_definitions_featured ON reward_definitions(featured, sort_order, name);
-
--- 平台能力使用的初始改写额度。它不是任何题材专属奖励。
-INSERT INTO reward_definitions (
-    id, key, kind, name, description, unit, icon, stackable, consumable, featured, sort_order
-) VALUES (
-    '00000000-0000-0000-0000-000000000001',
-    'fatecraft.message-rewrite-credit',
-    'credit',
-    '剧情改写次数',
-    '编辑历史选择并从该处重新生成剧情时消耗。',
-    '次',
-    'refresh',
-    TRUE,
-    TRUE,
-    TRUE,
-    10
-);
-
--- 挑战是运行时内容的聚合根。current_version_id 的外键在版本表创建后补上。
 CREATE TABLE challenge_packs (
     id UUID PRIMARY KEY,
     slug VARCHAR(128) NOT NULL UNIQUE,
@@ -255,6 +212,7 @@ CREATE INDEX idx_gameplay_definitions_catalog
 CREATE INDEX idx_gameplay_definitions_tags ON gameplay_definitions USING GIN(tags);
 
 CREATE TABLE challenge_outcome_rules (
+    reward_points BIGINT NOT NULL DEFAULT 0 CHECK (reward_points BETWEEN 0 AND 9007199254740991),
     id UUID PRIMARY KEY,
     challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE CASCADE,
     outcome_key VARCHAR(128) NOT NULL CHECK (outcome_key ~ '^[a-z0-9][a-z0-9._-]*$'),
@@ -271,24 +229,6 @@ CREATE TABLE challenge_outcome_rules (
 );
 CREATE INDEX idx_challenge_outcomes_version ON challenge_outcome_rules(challenge_version_id, enabled);
 
-CREATE TABLE challenge_reward_rules (
-    id UUID PRIMARY KEY,
-    challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE CASCADE,
-    outcome_rule_id UUID NOT NULL,
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
-    calculator_key VARCHAR(128) NOT NULL,
-    calculator_config JSONB NOT NULL CHECK (jsonb_typeof(calculator_config) = 'object'),
-    public_snapshot JSONB NOT NULL CHECK (jsonb_typeof(public_snapshot) = 'object'),
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (outcome_rule_id, reward_definition_id),
-    CONSTRAINT fk_challenge_reward_outcome_version
-        FOREIGN KEY (outcome_rule_id, challenge_version_id)
-        REFERENCES challenge_outcome_rules(id, challenge_version_id) ON DELETE CASCADE
-);
-CREATE INDEX idx_challenge_reward_rules_version ON challenge_reward_rules(challenge_version_id);
-CREATE INDEX idx_challenge_reward_rules_definition ON challenge_reward_rules(reward_definition_id);
 
 CREATE TABLE campaigns (
     id UUID PRIMARY KEY,
@@ -1101,8 +1041,8 @@ CREATE TABLE system_settings (
     diagnostic_log_cleanup_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     diagnostic_log_retention_days INTEGER NOT NULL DEFAULT 30 CHECK (diagnostic_log_retention_days BETWEEN 1 AND 3650),
     llm_access_mode VARCHAR(32) NOT NULL DEFAULT 'user_managed' CHECK (llm_access_mode IN ('user_managed', 'platform_managed')),
-    -- 是否允许用户选择客户端直连（与 llm_access_mode 相互独立）；默认关闭，由 owner 开启。
-    client_llm_route_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    -- 是否允许用户选择客户端直连（与 llm_access_mode 相互独立）；默认开启，由 owner 管理。
+    client_llm_route_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     public_llm_base_url VARCHAR(512) NOT NULL DEFAULT 'https://api.openai.com/v1',
     public_llm_protocol VARCHAR(32) NOT NULL DEFAULT 'responses' CHECK (public_llm_protocol IN ('chat_completions', 'responses')),
     public_llm_api_key_encrypted TEXT,
@@ -1234,14 +1174,14 @@ CREATE TABLE player_reward_balances (
     refunded_total BIGINT NOT NULL DEFAULT 0 CHECK (refunded_total >= 0),
     reversed_total BIGINT NOT NULL DEFAULT 0 CHECK (reversed_total >= 0),
     player_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
+    reward_key VARCHAR(64) NOT NULL CHECK (reward_key IN ('fatecraft.points','fatecraft.message-rewrite-credit')),
     balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),
     granted_total BIGINT NOT NULL DEFAULT 0 CHECK (granted_total >= 0),
     consumed_total BIGINT NOT NULL DEFAULT 0 CHECK (consumed_total >= 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (player_id, reward_definition_id)
+    PRIMARY KEY (player_id, reward_key)
 );
-CREATE INDEX idx_player_reward_balances_reward ON player_reward_balances(reward_definition_id, balance DESC);
+CREATE INDEX idx_player_reward_balances_reward ON player_reward_balances(reward_key, balance DESC);
 
 CREATE TABLE roll_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1284,12 +1224,18 @@ CREATE INDEX idx_challenge_runs_player ON challenge_runs(player_id, settled_at D
 CREATE INDEX idx_challenge_runs_version ON challenge_runs(challenge_version_id);
 
 CREATE TABLE reward_ledger (
+    balance_after BIGINT NOT NULL CHECK (balance_after BETWEEN 0 AND 9007199254740991),
+    actor_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+    request_id UUID UNIQUE,
+    request_hash VARCHAR(64) NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    public_note TEXT NOT NULL DEFAULT '',
     related_entry_id UUID REFERENCES reward_ledger(id) ON DELETE RESTRICT,
     id UUID PRIMARY KEY,
     player_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
+    reward_key VARCHAR(64) NOT NULL CHECK (reward_key IN ('fatecraft.points','fatecraft.message-rewrite-credit')),
     operation VARCHAR(16) NOT NULL CHECK (operation IN ('grant', 'consume', 'refund', 'reverse')),
-    quantity_delta BIGINT NOT NULL CHECK (quantity_delta <> 0),
+    quantity_delta BIGINT NOT NULL CHECK (quantity_delta <> 0 AND quantity_delta BETWEEN -9007199254740991 AND 9007199254740991),
     source_type VARCHAR(64) NOT NULL,
     source_id VARCHAR(160) NOT NULL,
     challenge_run_id UUID REFERENCES challenge_runs(id) ON DELETE RESTRICT,
@@ -1308,6 +1254,39 @@ CREATE UNIQUE INDEX reward_ledger_one_reversal ON reward_ledger(related_entry_id
 CREATE INDEX idx_reward_ledger_player ON reward_ledger(player_id, created_at DESC, id DESC);
 CREATE INDEX idx_reward_ledger_source ON reward_ledger(source_type, source_id);
 CREATE INDEX idx_reward_ledger_run ON reward_ledger(challenge_run_id);
+
+CREATE UNIQUE INDEX reward_ledger_source_identity ON reward_ledger(player_id,reward_key,operation,source_type,source_id);
+ALTER TABLE reward_ledger ADD CONSTRAINT reward_ledger_admin CHECK (
+ (source_type IN ('admin_grant','admin_reversal') AND actor_id IS NOT NULL AND request_id IS NOT NULL AND length(request_hash) = 64 AND btrim(reason) <> '')
+ OR (source_type NOT IN ('admin_grant','admin_reversal') AND actor_id IS NULL AND request_id IS NULL AND request_hash = '' AND reason = '')
+);
+ALTER TABLE reward_ledger ADD CONSTRAINT reward_ledger_admin_operation CHECK (
+ (source_type <> 'admin_grant' OR operation = 'grant') AND (source_type <> 'admin_reversal' OR operation = 'reverse')
+);
+ALTER TABLE player_reward_balances ADD CONSTRAINT reward_balance_totals CHECK (
+ balance = granted_total - consumed_total + refunded_total - reversed_total
+ AND balance <= 9007199254740991 AND granted_total <= 9007199254740991 AND consumed_total <= 9007199254740991
+ AND refunded_total <= 9007199254740991 AND reversed_total <= 9007199254740991
+);
+-- +goose StatementBegin
+CREATE FUNCTION validate_reward_related_entry() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original reward_ledger%ROWTYPE;
+BEGIN
+ IF NEW.related_entry_id IS NULL THEN RETURN NEW; END IF;
+ SELECT * INTO original FROM reward_ledger WHERE id = NEW.related_entry_id FOR UPDATE;
+ IF NOT FOUND OR original.player_id <> NEW.player_id OR original.reward_key <> NEW.reward_key OR original.quantity_delta <> -NEW.quantity_delta THEN
+  RAISE EXCEPTION 'related reward entry mismatch';
+ END IF;
+ IF NEW.operation = 'refund' AND (original.operation <> 'consume' OR original.source_type NOT IN ('message_rewrite','message_regenerate') OR original.reward_key <> 'fatecraft.message-rewrite-credit' OR NEW.source_type <> 'message_rewrite_refund') THEN
+  RAISE EXCEPTION 'only rewrite consumption can be refunded';
+ END IF;
+ IF NEW.operation = 'reverse' AND (original.operation <> 'grant' OR original.source_type <> 'admin_grant' OR NEW.source_type <> 'admin_reversal') THEN
+  RAISE EXCEPTION 'only admin grant can be reversed';
+ END IF;
+ RETURN NEW;
+END; $$;
+-- +goose StatementEnd
+CREATE TRIGGER reward_related_entry_valid BEFORE INSERT ON reward_ledger FOR EACH ROW EXECUTE FUNCTION validate_reward_related_entry();
 
 -- +goose StatementBegin
 CREATE FUNCTION reject_reward_ledger_mutation() RETURNS trigger
@@ -1366,15 +1345,14 @@ CREATE TRIGGER trg_campaigns_llm_route_immutable
 
 CREATE TABLE challenge_run_rewards (
     challenge_run_id UUID NOT NULL REFERENCES challenge_runs(id) ON DELETE RESTRICT,
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
     ledger_id UUID NOT NULL UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
-    quantity BIGINT NOT NULL CHECK (quantity > 0),
-    reward_key_snapshot VARCHAR(160) NOT NULL,
+    quantity BIGINT NOT NULL CHECK (quantity BETWEEN 1 AND 9007199254740991),
+    reward_key_snapshot VARCHAR(64) NOT NULL CHECK (reward_key_snapshot = 'fatecraft.points'),
     name_snapshot VARCHAR(128) NOT NULL,
     unit_snapshot VARCHAR(32) NOT NULL DEFAULT '',
     icon_snapshot VARCHAR(64) NOT NULL DEFAULT '',
-    balance_after BIGINT NOT NULL CHECK (balance_after >= 0),
-    PRIMARY KEY (challenge_run_id, reward_definition_id)
+    balance_after BIGINT NOT NULL CHECK (balance_after BETWEEN 0 AND 9007199254740991),
+    PRIMARY KEY (challenge_run_id)
 );
 
 COMMENT ON TABLE users IS '平台用户主记录，仅保存登录无关的展示资料与平台权限，不保存任何玩法角色或状态';
@@ -1384,14 +1362,12 @@ COMMENT ON TABLE oauth_login_flows IS 'OAuth 授权过程使用的一次性 stat
 COMMENT ON TABLE auth_settings IS '管理员维护的邮箱认证策略、SMTP 与验证码模板；SMTP 密码仅保存应用层密文';
 COMMENT ON TABLE email_verification_codes IS '短期邮箱验证码，仅保存 bcrypt 摘要并限制尝试次数';
 COMMENT ON TABLE invitation_codes IS '管理员创建的邀请码，仅保存高熵邀请码的 SHA-256 摘要';
-COMMENT ON TABLE reward_definitions IS '全局稳定奖励定义；被引用后不得改变 kind、stackable 或 consumable 语义';
 COMMENT ON TABLE challenge_packs IS '稳定的挑战入口；运行时内容由 current_version_id 指向已发布快照';
 COMMENT ON TABLE challenge_versions IS '不可原地修改的挑战版本；草稿发布时计算完整 content_hash';
 COMMENT ON TABLE challenge_runtime_configs IS '挑战版本拥有的玩法引擎、状态 Schema、动作能力和玩家展示契约';
 COMMENT ON TABLE challenge_assets IS '挑战版本拥有的角色、Persona、场景、Prompt 与世界书 JSON';
 COMMENT ON TABLE gameplay_definitions IS '挑战版本拥有的结构化玩法目录，按 kind 与稳定 key 供可信领域动作引用';
 COMMENT ON TABLE challenge_outcome_rules IS '版本化结局定义及其后端可信验证器配置';
-COMMENT ON TABLE challenge_reward_rules IS '结局与全局奖励定义之间的版本化计算和展示快照';
 COMMENT ON TABLE campaigns IS '长期玩法权威存档头，固定挑战版本并维护生命周期、游戏时钟和并发 revision';
 COMMENT ON TABLE campaign_characters IS 'Campaign 主角的可信成长、生存资源、伤势与长期效果投影';
 COMMENT ON TABLE campaign_techniques IS 'Campaign 已掌握功法及其层数、熟练度和唯一装配槽';
@@ -1433,11 +1409,11 @@ COMMENT ON TABLE llm_request_logs IS '模型逻辑调用摘要与按需采集的
 COMMENT ON TABLE character_inquiry_threads IS '与主叙事隔离的角色状态只读问答线程';
 COMMENT ON TABLE character_inquiry_messages IS '只读角色问答消息、固定快照版本与公开来源引用';
 COMMENT ON TABLE character_inquiry_rate_limits IS '角色问答独立持久速率窗口，不受清空问答历史影响';
-COMMENT ON TABLE player_reward_balances IS '玩家对每种奖励的当前余额及累计授予和消费投影';
+COMMENT ON TABLE player_reward_balances IS '玩家积分与剧情改写次数的余额及授予、消费、返还、撤回累计投影';
 COMMENT ON TABLE roll_history IS '服务端执行的可信判定结果及当时展示标题快照';
 COMMENT ON TABLE challenge_runs IS '每个挑战对话唯一的原子结算流水和结局快照';
 COMMENT ON TABLE reward_ledger IS '不可变奖励账本，记录所有授予、消费和管理员调整';
-COMMENT ON TABLE challenge_run_rewards IS '挑战结算实际发放的多奖励快照及结算后余额';
+COMMENT ON TABLE challenge_run_rewards IS '单局实际发放的固定积分快照及入账后余额，零积分不写入';
 COMMENT ON COLUMN conversations.challenge_hash IS '创建对话时固定的已发布内容哈希';
 COMMENT ON COLUMN conversations.campaign_id IS '为空表示普通单局挑战；非空时唯一绑定一个长期 Campaign';
 COMMENT ON COLUMN campaigns.revision IS '每次成功领域动作递增一次，用于乐观并发控制';
@@ -1454,87 +1430,46 @@ COMMENT ON COLUMN system_settings.public_llm_api_key_encrypted IS '平台公共�
 COMMENT ON COLUMN reward_ledger.idempotency_key IS '调用方生成的唯一业务幂等键，防止重复授予或消费';
 
 
-CREATE TABLE reward_records (
-    id UUID PRIMARY KEY,
-    player_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
-    source_type VARCHAR(64) NOT NULL,
-    source_id VARCHAR(160) NOT NULL,
-    source_key VARCHAR(255) NOT NULL UNIQUE,
-    snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot) = 'object'),
-    metadata JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(metadata) = 'object'),
-    quantity BIGINT NOT NULL CHECK (quantity BETWEEN 0 AND 9007199254740991),
-    delivery_mode VARCHAR(16) NOT NULL CHECK (delivery_mode IN ('direct', 'claim')),
-    status VARCHAR(16) NOT NULL CHECK (status IN ('pending', 'granted', 'skipped', 'cancelled')),
-    skip_reason VARCHAR(32) NOT NULL DEFAULT '',
-    ledger_id UUID UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
-    reversal_ledger_id UUID UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
-    balance_after BIGINT NOT NULL DEFAULT 0,
-    actor_id UUID REFERENCES users(id) ON DELETE RESTRICT,
-    request_id UUID UNIQUE,
-    request_hash VARCHAR(64) NOT NULL DEFAULT '',
-    purpose VARCHAR(32) NOT NULL DEFAULT '',
-    reason TEXT NOT NULL DEFAULT '',
-    public_note TEXT NOT NULL DEFAULT '',
-    cancelled_reason TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMPTZ,
-    CONSTRAINT reward_record_result CHECK (
-        (status = 'granted' AND ledger_id IS NOT NULL AND completed_at IS NOT NULL AND skip_reason = '' AND quantity > 0)
-        OR (status = 'pending' AND ledger_id IS NULL AND completed_at IS NULL AND skip_reason = '' AND quantity > 0)
-        OR (status = 'cancelled' AND ledger_id IS NULL AND completed_at IS NOT NULL AND skip_reason = '' AND quantity > 0)
-        OR (status = 'skipped' AND ledger_id IS NULL AND completed_at IS NOT NULL AND
-            ((skip_reason = 'zero_quantity' AND quantity = 0) OR (skip_reason = 'already_owned' AND quantity > 0)))
-    ),
-    CONSTRAINT reward_record_reversal CHECK (reversal_ledger_id IS NULL OR status = 'granted'),
-    CONSTRAINT reward_record_admin CHECK ((source_type = 'admin_grant') = (request_id IS NOT NULL AND actor_id IS NOT NULL)),
-    CONSTRAINT reward_record_claim CHECK (delivery_mode <> 'claim' OR source_type = 'admin_grant')
-);
-CREATE INDEX reward_records_player_page ON reward_records(player_id, created_at DESC, id DESC);
-CREATE INDEX reward_records_admin_page ON reward_records(created_at DESC, id DESC);
-CREATE INDEX reward_records_source ON reward_records(source_type, source_id);
-CREATE INDEX reward_records_definition ON reward_records(reward_definition_id);
-
 CREATE TABLE registration_reward_rules (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
-    quantity BIGINT NOT NULL CHECK (quantity BETWEEN 1 AND 9007199254740991),
-    enabled BOOLEAN NOT NULL,
-    actor_id UUID REFERENCES users(id) ON DELETE RESTRICT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+ id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+ points BIGINT NOT NULL CHECK (points BETWEEN 0 AND 9007199254740991),
+ rewrite_credits BIGINT NOT NULL CHECK (rewrite_credits BETWEEN 0 AND 9007199254740991),
+ actor_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT INTO registration_reward_rules(reward_definition_id, quantity, enabled)
-SELECT id, 10, TRUE FROM reward_definitions WHERE key = 'fatecraft.message-rewrite-credit';
+INSERT INTO registration_reward_rules(points,rewrite_credits) VALUES (0,10);
+ALTER TABLE users ADD COLUMN registration_reward_revision BIGINT REFERENCES registration_reward_rules(id) ON DELETE RESTRICT;
 CREATE INDEX users_admin_page ON users(created_at DESC, id DESC);
 CREATE INDEX users_admin_username_search ON users USING gin (username public.gin_trgm_ops);
 CREATE INDEX users_admin_display_search ON users USING gin (display_name public.gin_trgm_ops);
 CREATE INDEX users_admin_email_search ON users(lower(email));
-CREATE UNIQUE INDEX reward_record_source_identity ON reward_records(player_id, source_type, source_id, reward_definition_id);
 CREATE UNIQUE INDEX reward_admin_request_identity ON admin_audit_logs(request_id) WHERE action LIKE 'reward_%' AND request_id <> '';
 
 CREATE TABLE reward_exchange_offers (
     id UUID PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    cost_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
     cost_quantity BIGINT NOT NULL CHECK (cost_quantity BETWEEN 1 AND 9007199254740991),
-    reward_definition_id UUID NOT NULL REFERENCES reward_definitions(id) ON DELETE RESTRICT,
     reward_quantity BIGINT NOT NULL CHECK (reward_quantity BETWEEN 1 AND 9007199254740991),
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
     revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (cost_definition_id <> reward_definition_id)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE reward_exchange_revisions (
     offer_id UUID NOT NULL REFERENCES reward_exchange_offers(id) ON DELETE RESTRICT,
     revision BIGINT NOT NULL,
     snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot) = 'object'),
-    actor_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    actor_id UUID REFERENCES users(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (offer_id, revision)
 );
+INSERT INTO reward_exchange_offers(id,name,description,cost_quantity,reward_quantity,enabled,sort_order)
+VALUES ('00000000-0000-0000-0000-000000000001','剧情改写 1 次','使用积分兑换剧情改写次数。',100,1,TRUE,0);
+INSERT INTO reward_exchange_revisions(offer_id,revision,snapshot,actor_id)
+SELECT id,revision,to_jsonb(reward_exchange_offers),NULL FROM reward_exchange_offers;
+
 CREATE TABLE reward_exchange_orders (
     id UUID PRIMARY KEY,
     request_id UUID NOT NULL UNIQUE,
@@ -1546,7 +1481,7 @@ CREATE TABLE reward_exchange_orders (
     reward_quantity BIGINT NOT NULL CHECK (reward_quantity BETWEEN 1 AND 9007199254740991),
     snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot) = 'object'),
     cost_ledger_id UUID NOT NULL UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
-    reward_record_id UUID NOT NULL UNIQUE REFERENCES reward_records(id) ON DELETE RESTRICT,
+    reward_ledger_id UUID NOT NULL UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (offer_id, offer_revision) REFERENCES reward_exchange_revisions(offer_id, revision) ON DELETE RESTRICT
 );
@@ -1554,35 +1489,13 @@ CREATE INDEX reward_exchange_orders_player_page ON reward_exchange_orders(player
 CREATE INDEX reward_exchange_orders_offer_page ON reward_exchange_orders(offer_id, created_at DESC, id DESC);
 CREATE INDEX reward_exchange_orders_admin_page ON reward_exchange_orders(created_at DESC, id DESC);
 CREATE INDEX reward_audit_page ON admin_audit_logs(created_at DESC, id DESC) WHERE action LIKE 'reward_%';
-CREATE INDEX reward_audit_record ON admin_audit_logs((metadata->>'record_id'), created_at, id) WHERE metadata ? 'record_id';
+CREATE INDEX reward_audit_ledger ON admin_audit_logs((metadata->>'ledger_id'), created_at, id) WHERE metadata ? 'ledger_id';
 
-COMMENT ON TABLE reward_records IS '统一获奖资格与结果，保存来源、快照、管理请求及到账/冲正关联';
 COMMENT ON TABLE registration_reward_rules IS '只追加注册赠送规则修订，新账号使用最新修订';
 COMMENT ON TABLE reward_exchange_offers IS '管理员配置的账号积分兑换商品与当前修订';
 COMMENT ON TABLE reward_exchange_revisions IS '只追加兑换商品修订快照与操作者';
-COMMENT ON TABLE reward_exchange_orders IS '只追加兑换订单，支付账本与获奖记录在同一事务提交';
+COMMENT ON TABLE reward_exchange_orders IS '只追加兑换订单，支付与所得账本在同一事务提交';
 
--- +goose StatementBegin
-CREATE FUNCTION protect_reward_record() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'reward records cannot be deleted'; END IF;
-    IF ROW(OLD.id, OLD.player_id, OLD.reward_definition_id, OLD.source_type, OLD.source_id, OLD.source_key, OLD.snapshot, OLD.metadata,
-           OLD.quantity, OLD.delivery_mode, OLD.actor_id, OLD.request_id, OLD.request_hash, OLD.purpose, OLD.reason, OLD.public_note, OLD.created_at)
-       IS DISTINCT FROM ROW(NEW.id, NEW.player_id, NEW.reward_definition_id, NEW.source_type, NEW.source_id, NEW.source_key, NEW.snapshot, NEW.metadata,
-           NEW.quantity, NEW.delivery_mode, NEW.actor_id, NEW.request_id, NEW.request_hash, NEW.purpose, NEW.reason, NEW.public_note, NEW.created_at) THEN
-        RAISE EXCEPTION 'reward identity and snapshot are immutable';
-    END IF;
-    IF OLD.status <> 'pending' AND ROW(OLD.status, OLD.ledger_id, OLD.skip_reason, OLD.balance_after, OLD.completed_at, OLD.cancelled_reason)
-       IS DISTINCT FROM ROW(NEW.status, NEW.ledger_id, NEW.skip_reason, NEW.balance_after, NEW.completed_at, NEW.cancelled_reason) THEN
-        RAISE EXCEPTION 'reward terminal result is immutable';
-    END IF;
-    IF OLD.reversal_ledger_id IS NOT NULL AND OLD.reversal_ledger_id IS DISTINCT FROM NEW.reversal_ledger_id THEN
-        RAISE EXCEPTION 'reward reversal is immutable';
-    END IF;
-    RETURN NEW;
-END; $$;
--- +goose StatementEnd
-CREATE TRIGGER reward_record_immutable BEFORE UPDATE OR DELETE ON reward_records FOR EACH ROW EXECUTE FUNCTION protect_reward_record();
 CREATE TRIGGER reward_exchange_order_immutable BEFORE UPDATE OR DELETE ON reward_exchange_orders FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER reward_exchange_revision_immutable BEFORE UPDATE OR DELETE ON reward_exchange_revisions FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER registration_reward_revision_immutable BEFORE UPDATE OR DELETE ON registration_reward_rules FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();

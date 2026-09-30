@@ -150,9 +150,14 @@ func submitQuest(ctx context.Context, execution campaign.ActionExecution, argume
 		result["campaign_status"] = status
 		result["campaign_outcome_key"] = parsed.CampaignOutcomeKey
 		result["account_rewards"] = rewards
+		var points int64
+		for _, reward := range rewards {
+			points += reward.Quantity
+		}
+		result["reward_points"] = points
 		completedPayload := storage.JSONMap{
 			"outcome_key": parsed.CampaignOutcomeKey, "milestone_key": parsed.MilestoneKey,
-			"quest_key": key, "account_rewards": rewards,
+			"quest_key": key, "account_rewards": rewards, "reward_points": points,
 		}
 		// client 路由不发放奖励：原因随结果与事件下发，前端据此展示替代文案。
 		if execution.Campaign.LLMRoute == storage.LLMRouteClient {

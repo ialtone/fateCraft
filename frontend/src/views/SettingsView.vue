@@ -474,8 +474,13 @@ function clearDeviceKey() {
     <section class="card">
       <div class="card-head">LLM 接入</div>
       <div v-if="platformModel && !routeChoiceVisible" class="managed-state">
-        <div class="managed-state-title">模型服务已准备就绪</div>
-        <p>平台已经为你配置好模型服务，无需填写 API Key 或选择模型，直接开始使用即可。</p>
+        <div class="managed-state-title">
+          {{ store.settings?.configuration_ready ? '模型服务已准备就绪' : '平台模型尚未配置完成' }}
+        </div>
+        <p v-if="store.settings?.configuration_ready">
+          平台已经为你配置好模型服务，无需填写 API Key 或选择模型，直接开始使用即可。
+        </p>
+        <p v-else>请联系管理员完成模型配置后再开始游戏，无需填写个人 API Key。</p>
         <p class="managed-state-hint">如需调整模型服务，请联系管理员。</p>
       </div>
       <NForm v-else label-placement="top" size="small">
@@ -485,7 +490,7 @@ function clearDeviceKey() {
               <p>
                 <strong>服务端转发（平台统一模型时叫“平台模型”）</strong>
                 由服务器向模型服务商发请求。挑战与 Campaign 正常发放奖励，重新生成消耗额度；个人模式下 API
-                Key 保存在服务器。
+                Key 加密保存在服务器。
               </p>
               <p>
                 <strong>客户端直连</strong>
@@ -518,8 +523,14 @@ function clearDeviceKey() {
           不发放奖励，重新生成不消耗额度；发给模型的完整提示词（含隐藏剧情信息）可在浏览器中查看。该模式只用于体验对话玩法。
         </NAlert>
         <div v-if="platformModel && !clientRoute" class="managed-state">
-          <div class="managed-state-title">模型服务已准备就绪</div>
-          <p>当前使用平台统一配置的模型，直接开始使用即可；个人配置会保留，切回客户端直连时可继续使用。</p>
+          <div class="managed-state-title">平台统一提供模型服务</div>
+          <p v-if="store.settings?.source !== 'platform'">
+            保存后将使用平台统一配置的模型，无需填写个人 API Key。
+          </p>
+          <p v-else-if="store.settings?.configuration_ready">
+            当前使用平台统一配置的模型，直接开始使用即可；个人配置会保留，切回客户端直连时可继续使用。
+          </p>
+          <p v-else>请联系管理员完成模型配置，或切换到客户端直连并配置自己的 API。</p>
         </div>
         <template v-if="!platformModel || clientRoute">
         <NFormItem label="Base URL（OpenAI 兼容）">
@@ -549,6 +560,7 @@ function clearDeviceKey() {
           class="route-note"
         >
           平台已关闭客户端直连，请填写 API Key 以使用服务端转发。
+          您的密钥会在服务端加密保存，请放心配置。
         </NAlert>
         <NFormItem
           v-if="!clientRoute"
@@ -560,6 +572,9 @@ function clearDeviceKey() {
             show-password-on="click"
             placeholder="sk-…"
           />
+          <template #feedback>
+            API Key 经服务端加密后存入数据库，不以明文保存，保存后也不会在页面中回显。
+          </template>
         </NFormItem>
         <template v-else>
           <NFormItem label="本设备 API Key（只保存在本设备，不会发送到服务器）">

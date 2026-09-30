@@ -1,139 +1,73 @@
-# 21. Campaign 终局带出与账号奖励
+# 21. Campaign 终局积分
 
-> 本文描述当前已经实现的通用 Campaign 终局闭环。它不属于修仙模块；破界、撤离、远征归来、赛季结算等题材都使用同一平台协议。
+## 固定版本、固定积分
 
-## 1. 核心语义
+Campaign 的成长、库存、装备和市场属于单个存档。账号收益只取固定版本结局的 `reward_points`，不读取财富倍率或终局库存来决定积分，也不会为了账号收益额外扣除来源物。正常任务交付、消耗和局内奖励仍由原领域动作执行。
 
-Campaign 中的库存、装备和角色成长属于单个长期存档，账号奖励属于玩家账号。两者不能直接共用余额，也不能由模型宣告互换。
+带有 `campaign_outcome_key` 的终局任务经过后端目标核验后，在原 Campaign 动作事务内完成任务结算、积分发放、终局事件与 Campaign 完成。模型只能提出动作，不能提交积分金额。
 
-玩法包通过版本化 `challenge_reward_rules` 声明终局奖励。带有 `campaign_outcome_key` 的终局任务通过后端目标核验后，平台在同一 Campaign 动作事务内依次完成任务结算、终局确认、账号奖励计算、局内来源扣除、不可变账本写入和 Campaign 完成。任一步失败都会整体回滚。
+`pack.json` 中示例：
 
-当前结算是规则驱动的自动带出：所有满足条件的启用规则都会执行，不要求玩家在终局时手动挑选。玩家或模型都不能提交奖励数量。
-
-## 2. 支持的计算器
-
-### `core.fixed`
-
-授予固定正整数，适合徽章、通关凭证和固定货币：
-
-~~~json
+```json
 {
-  "calculator_key": "core.fixed",
-  "calculator_config": {"amount": 1}
+  "outcomes": [{
+    "outcome_key": "world_warden",
+    "category": "success",
+    "title": "执掌天关",
+    "tone": "success",
+    "verifier_key": "core.always",
+    "verifier_config": {},
+    "reward_points": 1000
+  }]
 }
-~~~
+```
 
-不可叠加奖励已经拥有时不会重复入账，也不会阻止 Campaign 完成。
+此处 `core.always` 不替代终局任务的领域核验。发布时要求终局任务引用当前版本已启用结局，正积分结局必须有真实终局任务。金额为非负安全整数，缺省或 0 表示不发积分，完成事实仍保存 `reward_points: 0`。
 
-### `campaign.extract_item_stack`
+积分值进入内容哈希并随版本复制；编辑已发布内容需要创建新草稿。青河修仙志的“执掌天关”和“携律远行”初始各 1000 积分，数值维护在内置 `pack.json`。
 
-把终局结算时实际存在的局内堆叠物按有界比例转为账号资源：
+## 事务与幂等
 
-~~~json
+`GrantCampaignOutcomeRewards` 使用当前动作的 GORM 事务调用统一 `GrantInCurrentTx`。来源固定为 `campaign_outcome`，`source_id` 为 Campaign ID，幂等键为 `campaign:{campaign_id}:points`。metadata 保存结局 key 与固定版本 ID。
+
+Campaign 行锁、动作提交记录、来源唯一约束和账本幂等共同防止重复终局。更换动作请求 ID 或重复调用同一终局不能重新发分。余额、账本、领域变更、事件与 Campaign 完成中任何一步失败，全部回滚。
+
+0 积分不产生账本，正常终局结果和 `campaign.completed` 事件仍保存实际积分。完成态重新加载从真实账本恢复收益，不从聊天、Memory、自由状态或模型上下文推断。
+
+## 玩家投影
+
+平台在玩法 Projection Provider 返回后追加保留字段 `outcome_rewards`、`reward_points`，并按路由追加 `rewards_disabled_reason`；Provider 不能覆盖这些字段。
+
+```json
 {
-  "calculator_key": "campaign.extract_item_stack",
-  "calculator_config": {
-    "item_key": "world-fragment",
-    "quality_key": "common",
-    "source_quantity": 3,
-    "reward_quantity": 2,
-    "maximum_reward_quantity": 12,
-    "consume": true
-  }
+  "reward_points": 1000,
+  "outcome_rewards": [{
+    "key": "fatecraft.points",
+    "name": "积分",
+    "unit": "分",
+    "icon": "sparkles",
+    "quantity": 1000,
+    "balance": 1300
+  }]
 }
-~~~
+```
 
-- `source_quantity`：每批需要的局内数量；
-- `reward_quantity`：每批授予的账号数量；
-- `maximum_reward_quantity`：单个 Campaign 对该规则的最大授予量，必须是每批奖励的整数倍；
-- `consume=true`：只扣除实际参与兑换且未超过上限的来源物，余数和超出上限部分保留；
-- `consume=false`：只按局内事实估值，不扣除来源物；
-- 数量不足一批时跳过该规则，不视为结算失败。
+`balance` 为入账后的余额快照，当前总余额以账号余额接口为准。没有正积分流水时列表为空，`reward_points` 为 0。通用 Campaign 视图在完成态显示本次所得；玩家奖励页汇总账号余额、兑换订单和收支。
 
-终局任务目标消耗和任务局内奖励先执行，提取规则读取两者完成后的权威库存。例如终局任务先交付 6 个碎片、再奖励 1 个碎片，带出计算看到的是交付和任务奖励后的数量。
+## 直连边界
 
-## 3. 发布约束
+`client` 路由的任务与终局照常核验和完成，存储层直接跳过通关入账。结果、完成事件和玩家快照包含 `rewards_disabled_reason=client_llm_route`，界面显示“客户端直连模式不发放奖励”。正常任务消耗继续生效。
 
-发布校验必须同时满足：
+后续排行、积分统计和解锁不得把直连结局当成可信积分来源。注册赠送、管理员发放与已有合法余额依然可用。
 
-- Runtime 是 `campaign`，且所选可信模块明确允许该计算器；
-- 奖励绑定的 outcome 被当前版本中的真实终局任务引用；
-- `item_key` 引用当前固定版本中的可堆叠 `item`；
-- 目标账号奖励是可叠加定义；
-- 所有 key、整数、布尔值和上限合法，未知配置字段直接拒绝；
-- 同一 outcome 不能配置两条规则读取相同 item key 和 quality，以免规则竞争同一来源；
-- 同一 outcome 不能对同一账号奖励定义重复绑定规则。
-
-平台不会执行玩法包携带的脚本、表达式或 SQL。新增其他来源类型必须先实现可信计算器和存储事务，再由模块 descriptor 显式开放。
-
-## 4. 事务、幂等与审计
-
-每笔实际授予使用稳定幂等键：
-
-~~~text
-campaign:{campaign_id}:outcome:{outcome_key}:{reward_key}
-~~~
-
-即使终局动作以不同 action ID 再次到达，账号余额、来源扣除和账本都只发生一次。账本 `source_type=campaign_outcome`、`source_id=campaign_id`，metadata 固定记录：
-
-- outcome key 与 challenge version ID；
-- 奖励 key、类型、名称、单位和图标快照；
-- 提取来源 key、名称、品质、结算前数量和实际扣除数量。
-
-Campaign 在原领域事务中调用统一 AwardInCurrentTx；来源扣除、reward_records、余额和账本共同提交。零数量与已拥有非叠加奖励保留 skipped 记录，不造授予流水；client 路由不创建获奖资格。
-
-`reward_ledger` 只追加；余额是账本的当前投影。Campaign 加载完成态时按账本恢复本次带出列表，不依赖聊天消息、Memory 或模型上下文。
-
-## 5. 玩家快照
-
-平台在玩法 Projection Provider 返回后追加保留字段 `outcome_rewards`，Provider 不能覆盖。完成态示例：
-
-~~~json
-{
-  "outcome_rewards": [
-    {
-      "key": "some-pack.world-essence",
-      "kind": "currency",
-      "name": "世界精粹",
-      "unit": "份",
-      "icon": "sparkles",
-      "quantity": 4,
-      "balance": 11,
-      "source": {
-        "type": "item_stack",
-        "key": "world-fragment",
-        "name": "世界碎片",
-        "quality_key": "common",
-        "available_quantity": 7,
-        "consumed_quantity": 6
-      }
-    }
-  ]
-}
-~~~
-
-前端终局状态展示本次带出数量、来源转换和当前账号余额。普通奖励页展示跨 Campaign 的总余额、获奖与账本，并支持点数兑换账号奖励或额度。
-
-## 6. 当前边界
-
-当前提取来源只支持堆叠物，不直接携带局内装备实例、角色状态或任意 JSON。需要把法宝、队员、科技蓝图等带出时，应先定义明确的账号奖励语义和可信计算器，不能把整个 Campaign 领域行复制到账户层。
-
-当前没有终局手动选择、容量格或多来源配方。若玩法需要“在若干战利品中选 N 件撤离”，应增加独立的终局选择状态和服务端提交动作，并继续复用相同账本与最终事务，不应把选择权交给 Prompt。
-
-管理员可对允许的点数/额度作余额足够时的整笔冲正，只改变账号资产，不恢复局内来源或重开结算。账号积分兑换不读取局内库存，也不允许单边冲正兑换所得。参见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
-
-## 7. 关键入口
+## 维护与验证
 
 | 关注点 | 入口 |
 | --- | --- |
-| 配置解析与有界计算 | `backend/internal/campaignreward/rules.go` |
-| 计算器注册与模块白名单 | `backend/internal/gameplay/registry.go`、对应模块 descriptor |
-| 玩法包发布校验 | `backend/internal/challenge/service.go` |
-| 事务内扣除、授予和历史加载 | `backend/internal/storage/campaign_domain.go` |
-| 终局任务调用 | `backend/internal/gameplay/cultivation/campaignactions/world_actions.go` |
-| 平台 Snapshot 保留字段 | `backend/internal/campaign/service.go` |
-| 玩家终局展示 | `frontend/src/components/CampaignViewRenderer.vue` |
+| 版本校验与内容哈希 | `backend/internal/challenge/service.go` |
+| 事务入账与完成态加载 | `backend/internal/storage/campaign_domain.go` |
+| 可信终局任务与事件 | `backend/internal/gameplay/cultivation/campaignactions/world_actions.go` |
+| 平台保留字段 | `backend/internal/campaign/service.go` |
+| 完成态显示 | `frontend/src/components/CampaignViewRenderer.vue` |
 
-## 8. 客户端直连不带出
-
-`client` 路由的 Campaign 照常完成任务与终局（状态、事件、结局展示不变），但 `GrantCampaignOutcomeRewards` 在事务内直接返回空：不计算奖励、不扣来源物、不写账本。结果与 `campaign.completed` 事件、`outcome_rewards` 快照附 `rewards_disabled_reason=client_llm_route`，前端据此显示“客户端直连模式不发放奖励”替代奖励列表。今后任何跨 Campaign 读取终局奖励（统计、排行、成就、解锁）必须排除 `client` 路由对象。
+真实环境应验证两条内置结局、0 积分、直连、重复终局、事务失败回滚以及局内库存未被奖励层额外扣除。环境验收仍由用户执行，完整分工和检查表见 [22 奖励管理](22-reward-management-and-exchange.md)。积分兑换和误发撤回只操作账号层，不重开 Campaign；只有原管理员发放可撤回，终局积分没有管理员通用冲正入口。

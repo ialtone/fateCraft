@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { rewardsApi } from '@/api'
 import type { PlayerReward } from '@/types'
@@ -7,11 +7,10 @@ export const useRewardStore = defineStore('rewards', () => {
   const items = ref<PlayerReward[]>([])
   const loading = ref(false)
   const loaded = ref(false)
-  const featured = computed(() => items.value.filter((item) => item.definition.featured))
 
   function balanceFor(key?: string) {
     if (!key) return 0
-    return items.value.find((item) => item.definition.key === key)?.balance ?? 0
+    return items.value.find((item) => item.asset.key === key)?.balance ?? 0
   }
 
   async function load() {
@@ -29,5 +28,5 @@ export const useRewardStore = defineStore('rewards', () => {
     loaded.value = false
   }
 
-  return { items, featured, loading, loaded, balanceFor, load, reset }
+  return { items, loading, loaded, balanceFor, load, reset }
 })

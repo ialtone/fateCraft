@@ -28,7 +28,6 @@ type Manifest struct {
 	CreatedAt        string         `json:"created_at,omitempty"`
 	UpdatedAt        string         `json:"updated_at,omitempty"`
 	Outcomes         []OutcomeSpec  `json:"outcomes,omitempty"`
-	RewardRules      []RewardSpec   `json:"reward_rules,omitempty"`
 }
 
 type DefaultConfig struct {
@@ -41,6 +40,7 @@ type DefaultConfig struct {
 }
 
 type OutcomeSpec struct {
+	RewardPoints   int64          `json:"reward_points"`
 	OutcomeKey     string         `json:"outcome_key"`
 	Category       string         `json:"category"`
 	Title          string         `json:"title"`
@@ -48,14 +48,6 @@ type OutcomeSpec struct {
 	VerifierKey    string         `json:"verifier_key"`
 	VerifierConfig map[string]any `json:"verifier_config"`
 	Enabled        *bool          `json:"enabled,omitempty"`
-}
-
-type RewardSpec struct {
-	OutcomeKey       string         `json:"outcome_key"`
-	RewardKey        string         `json:"reward_key"`
-	CalculatorKey    string         `json:"calculator_key"`
-	CalculatorConfig map[string]any `json:"calculator_config"`
-	Enabled          *bool          `json:"enabled,omitempty"`
 }
 
 type AssetOption struct {
@@ -66,19 +58,15 @@ type AssetOption struct {
 }
 
 type OutcomeView struct {
-	Key      string `json:"key"`
-	Category string `json:"category"`
-	Title    string `json:"title"`
-	Tone     string `json:"tone"`
+	RewardPoints int64  `json:"reward_points"`
+	Key          string `json:"key"`
+	Category     string `json:"category"`
+	Title        string `json:"title"`
+	Tone         string `json:"tone"`
 }
 
 type RewardView struct {
-	RewardKey    string `json:"reward_key"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Kind         string `json:"kind"`
-	Unit         string `json:"unit"`
-	Icon         string `json:"icon"`
+	Points       int64  `json:"points"`
 	OutcomeKey   string `json:"outcome_key"`
 	OutcomeTitle string `json:"outcome_title"`
 }
@@ -145,7 +133,6 @@ type VersionDocument struct {
 	Assets      []storage.ChallengeAsset       `json:"assets"`
 	Definitions []storage.GameplayDefinition   `json:"definitions"`
 	Outcomes    []storage.ChallengeOutcomeRule `json:"outcomes"`
-	RewardRules []storage.ChallengeRewardRule  `json:"reward_rules"`
 }
 
 type SaveVersionInput struct {
@@ -154,7 +141,6 @@ type SaveVersionInput struct {
 	Assets      []storage.ChallengeAsset       `json:"assets"`
 	Definitions []storage.GameplayDefinition   `json:"definitions"`
 	Outcomes    []storage.ChallengeOutcomeRule `json:"outcomes"`
-	RewardRules []storage.ChallengeRewardRule  `json:"reward_rules"`
 }
 
 type CreatePackInput struct {

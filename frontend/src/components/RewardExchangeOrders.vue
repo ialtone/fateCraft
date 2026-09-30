@@ -24,17 +24,16 @@ const rows = ref<RewardExchangeOrder[]>([]),
   detail = ref<RewardExchangeOrder>(),
   open = ref(false)
 let sequence = 0
+let appliedUserID: string | undefined
 async function load(more = false) {
   const token = ++sequence
   loading.value = true
   error.value = ''
   try {
-    const result = await api.orders(
-      !!props.admin,
-      more ? cursor.value : undefined,
-      userID.value.trim() || undefined,
-    )
+    const filterUser = more ? appliedUserID : userID.value.trim() || undefined
+    const result = await api.orders(!!props.admin, more ? cursor.value : undefined, filterUser)
     if (token !== sequence) return
+    appliedUserID = filterUser
     rows.value = more ? [...rows.value, ...result.orders] : result.orders
     cursor.value = result.next_cursor
   } catch (err) {
@@ -104,10 +103,7 @@ function viewLookupDetail() {
       <article v-for="row in rows" :key="row.id">
         <div>
           <strong>{{ row.snapshot.name }} × {{ row.units }}</strong>
-          <p>
-            支付 {{ row.cost_quantity }} {{ row.snapshot.cost_asset.name }} → 获得
-            {{ row.reward_quantity }} {{ row.snapshot.reward_asset.name }}
-          </p>
+          <p>支付 {{ row.cost_quantity }} 积分 → 获得 {{ row.reward_quantity }} 次剧情改写</p>
           <small
             >{{ new Date(row.created_at).toLocaleString() }} · 已完成<span v-if="admin">
               · 用户 {{ row.user_id }}</span
@@ -124,10 +120,7 @@ function viewLookupDetail() {
       ><div v-if="detail" class="detail">
         <h3>{{ detail.snapshot.name }} × {{ detail.units }}</h3>
         <p>{{ detail.snapshot.description }}</p>
-        <p>
-          支付 {{ detail.cost_quantity }} {{ detail.snapshot.cost_asset.name }}；获得
-          {{ detail.reward_quantity }} {{ detail.snapshot.reward_asset.name }}
-        </p>
+        <p>支付 {{ detail.cost_quantity }} 积分；获得 {{ detail.reward_quantity }} 次剧情改写</p>
         <p>兑换时间：{{ new Date(detail.created_at).toLocaleString() }}</p>
         <details>
           <summary>交易编号</summary>
@@ -136,7 +129,7 @@ function viewLookupDetail() {
           <template v-if="admin">
             <p>商品修订：{{ detail.offer_revision }}</p>
             <p>支付流水：{{ detail.cost_ledger_id }}</p>
-            <p>获奖记录：{{ detail.reward_record_id }}</p>
+            <p>所得流水：{{ detail.reward_ledger_id }}</p>
           </template>
         </details>
       </div></NModal
@@ -173,8 +166,8 @@ function viewLookupDetail() {
           >已确认兑换完成：{{ lookupResult.snapshot.name }} × {{ lookupResult.units }}</NAlert
         >
         <p>
-          支付 {{ lookupResult.cost_quantity }} {{ lookupResult.snapshot.cost_asset.name }}；获得
-          {{ lookupResult.reward_quantity }} {{ lookupResult.snapshot.reward_asset.name }}。
+          支付 {{ lookupResult.cost_quantity }} 积分；获得
+          {{ lookupResult.reward_quantity }} 次剧情改写。
         </p>
         <NButton @click="viewLookupDetail">查看兑换详情</NButton>
       </div>

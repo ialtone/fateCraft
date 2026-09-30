@@ -34,7 +34,7 @@ Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转�
 | `/` | ConversationListView | 已发布挑战、我的对话、筛选与创建入口 |
 | `/conversations/:id` | ConversationView | 消息、生成、状态、判定、结局和上下文 |
 | `/shares` | ConversationListView + MySharesView | 首页“我的分享”小标签；跨对话检索、分页与管理 |
-| `/rewards` | RewardsView | 积分兑换（默认）、资产概览、奖励记录、兑换记录、余额流水五个小 Tab |
+| `/rewards` | RewardsView | 两项余额；积分兑换（默认）、兑换记录、收支记录三个小 Tab |
 | `/settings` | SettingsView | 当前用户 LLM 配置、第三方账户绑定 |
 | `/admin/identities` | AdminView | 管理员只读审计站内账号与第三方身份绑定关系 |
 | `/admin` | AdminLayout + AdminDashboardView | 管理后台总览；与普通用户端分离 |
@@ -42,7 +42,7 @@ Axios 使用 `withCredentials: true`，响应拦截器把后端 `{ error }` 转�
 | `/admin/settings` | AdminView(section=settings) | 判定系统、平台 LLM 和诊断策略 |
 | `/admin/auth` | AdminView(section=auth) | 登录注册策略、SMTP 和邀请码 |
 | `/admin/logs` | AdminView(section=logs) | 模型、上下文、管理审计和实例诊断状态 |
-| `/admin/gameplay` | AdminView(section=gameplay) | 可信玩法模块、验证器与计算器 |
+| `/admin/gameplay` | AdminView(section=gameplay) | 可信玩法模块与验证器 |
 | `/admin/rewards` | AdminView(section=rewards) + AdminRewardsPanel | 独立奖励管理、发放、兑换与审计 |
 | `/admin/content` | AdminView(section=content) | 仓库内置挑战导入 |
 | `/admin/challenges` | AdminView(section=challenges) | 挑战包、草稿和发布版本 |
@@ -52,11 +52,13 @@ Character、WorldBook 和 Prompt 不再拥有普通用户独立路由。旧页�
 
 ## 主导航
 
-已登录用户固定显示首页、奖励和设置；`auth.isAdmin` 为真时额外显示管理入口。进入 `/admin/*` 后隐藏普通用户顶栏，使用独立的 `AdminLayout` 侧栏导航。顶栏可以展示奖励定义中标记为 featured 的少量余额，但不能写死灵石、回溯次数等题材字段。用户菜单展示当前名称并提供退出登录。
+已登录用户固定显示首页、奖励和设置；`auth.isAdmin` 为真时额外显示管理入口。进入 `/admin/*` 后隐藏普通用户顶栏，使用独立的 `AdminLayout` 侧栏导航。顶栏展示平台积分与剧情改写次数，不混入局内灵石等题材资源。用户菜单展示当前名称并提供退出登录。
 
 导航不读取或缓存角色权限以外的管理数据。管理员身份仍以 `/auth/me` 返回的服务端用户为准。
 
 ## 首页与创建流程
+
+打开“开始玩法”弹窗和提交创建时都重新读取模型设置。个人服务端模式要求已保存 API 地址、模型和 Key；客户端直连还要求当前账号在本设备保存 Key；平台模型使用后端的 `configuration_ready`，不要求个人 Key。配置缺失或读取失败时禁用开始按钮，提供“前往设置 / 重新检查”；基于新版本创建对话也进行同样的检查。此检查只验证配置齐全，不自动调用收费模型或保证 Key 仍有效。
 
 首页同时承载挑战发现和对话管理：
 
@@ -129,7 +131,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ### `rewards`
 
-保存当前用户的奖励定义与余额，提供 featured 投影和按稳定 key 查余额。奖励流水由奖励页面按需读取，不允许本地修改余额。
+保存当前用户的两项固定余额，按稳定 key 查询。奖励流水由奖励页面按需读取，不允许本地修改余额。
 
 ### `campaign`
 
@@ -145,13 +147,11 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ## 用户奖励页面
 
-`RewardsView` 使用积分兑换、资产概览、奖励记录、兑换记录、余额流水五个小 Tab，积分兑换排在首位并作为进入奖励页的默认页。概览只展示余额/额度和藏品，奖励记录负责领取与获奖历史，商品页只展示可兑换商品及确认窗口；兑换订单与余额明细分别独立。页面顶部提供奖励刷新，每个列表保留自己的刷新、筛选和分页，切换后保留已有筛选与输入。
+`RewardsView` 顶部展示积分与剧情改写次数，三个小 Tab 为“积分兑换、兑换记录、收支记录”，默认积分兑换。商品、订单和收支分开，各列表保留独立筛选与分页；切换不丢输入。
 
-兑换记录中的「查询兑换结果」打开独立弹窗，校验完整请求 UUID 后查询当前账号的订单，结果及错误只展示在弹窗。查询到历史订单不当作一次新兑换，也不能清除其他请求的待确认状态；只有请求 ID 匹配才结束原待确认兑换。查询未命中不代表兑换没有执行，保留原请求用于查询或同次重试。
+兑换结果查询位于订单页独立弹窗。兑换控制器随页面挂载，恢复按账号隔离的 sessionStorage 待确认请求；保留“查询本次结果”和“重试同次兑换”，成功后刷新余额和已挂载记录并可跳转订单。历史查询不能结束另一笔待确认兑换。
 
-兑换控制器随页面挂载以恢复同标签页 sessionStorage 中的原请求，商品仅在首次进入兑换 Tab 时加载。未确认兑换显示页面级「继续确认」入口，切换 Tab 不创建新请求；确认窗口提供「查询本次结果」和「重试同次兑换」。成功后可直接跳到兑换记录，刷新余额、奖励记录与已挂载的订单/流水；余额接口失败不阻止其他记录刷新。交易编号在用户详情中默认折叠，内部账本 ID 仅管理视图显示。
-
-本地回归运行 `npm run test:player-rewards`，覆盖页面分组、查询入口归属、请求 ID 校验及历史查询不误结束其他待确认兑换；真实浏览器联调仍需检查切换、刷新恢复、未知结果查询/重试及移动端。
+本地运行 `npm run test:player-rewards` 验证分组及请求恢复语义；真实浏览器大小屏、切换、刷新和通信异常由用户验收。
 
 ## 管理页面
 
@@ -165,7 +165,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 | 账号与注册 | 登录与注册、发信邮箱、验证码邮件、邀请码 |
 | 第三方账户 | 单一绑定列表 |
 | 诊断日志 | 模型调用、上下文构建、管理审计、诊断状态 |
-| 奖励管理 | 概览、奖励资产、通关规则、注册赠送、用户发放、兑换商品、兑换订单、发放记录、管理审计 |
+| 奖励管理 | 积分规则、兑换商品、用户与记录（分别按业务拆分子页） |
 | 玩法能力 | 单一可信模块目录 |
 | 内置内容 | 内容列表及导入预览弹窗 |
 | 挑战内容 | 挑战包与版本、版本编辑；选择版本后进入编辑页 |
@@ -181,16 +181,16 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 ### 玩法能力
 
-- 只读展示后端已经注册的 engine、动作、verifier、calculator 和 settlement handler。
-奖励资产维护集中在独立“奖励管理”入口。
+- 只读展示后端已经注册的 engine、动作、verifier 和 settlement handler。
+积分规则、注册赠送与兑换套餐维护集中在独立“奖励管理”入口。
 
 ### 奖励管理
 
-`AdminRewardsPanel` 按上表的九个小 Tab 组织操作。通关规则与注册赠送分开，商品配置与兑换订单分开，发放记录与管理审计分开。规则列表跳转 `/admin/challenges?version=<id>` 并打开版本编辑，已发布版本只读；编辑继续创建草稿并发布。`RewardUserSearch` 调用服务端搜索和分页，`AdminUsersPanel` 使用 `{users,has_more}` 中的 users 数组，不把响应对象当成账号列表。
+`AdminRewardsPanel` 顶层为积分规则、兑换商品、用户与记录。规则内分通关积分、注册赠送；用户与记录内分用户查询、收支、订单、管理操作。
 
-`AdminRewardUserPanel` 绑定选定用户 ID，分为账户余额、发放奖励、获奖记录、余额流水，默认进入发放奖励；选择资产后显示该资产余额。发放表单维护用途、直接/待领取方式、管理原因和公开说明，预览后提交稳定 request ID，切换小 Tab 不重建发放请求。`RewardRecordsPanel` 提供来源/状态/时间筛选，管理模式另支持用户和资产筛选、详情审计、撤销、受限冲正和说明；兑换来源不可单边冲正。`RewardLedgerPanel` 用游标展示实际流水。
+`AdminRewardUserPanel` 顶部显示目标用户与两项余额，下设发放、收支。发放只有项目、数量、内部原因和公开说明，确认后使用稳定请求 ID，按操作者/目标用户隔离保存待确认请求。`RewardLedgerPanel` 支持项目、来源、时间和管理员用户筛选，详情中可整笔撤回原管理员发放。
 
-`AdminRewardExchangePanel` 配置商品及修订；`RewardExchangePanel` 确认价格、份数和所得，未知结果保留原请求并查询或重试；`RewardExchangeOrders` 展示不可变订单。用户领取或兑换后重新读取 rewards Store、记录与流水，顶栏额度随 Store 刷新，不在本地预扣余额。概览总量用十进制字符串避免精度丢失。完整交互边界见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+`AdminRewardExchangePanel` 只配置积分价格和改写次数，保留上下架、排序和修订历史。兑换后重新读取余额，顶栏同步；不本地预扣。完整交互与验收见 [22 奖励管理](22-reward-management-and-exchange.md)。
 
 ### 账号与注册
 
@@ -205,21 +205,21 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 - `available` 可由管理员确认后导入并立即发布。
 - `imported` 表示数据库当前版本与仓库版本、哈希一致，不重复导入。
 - `update_available` 表示仓库内容与数据库当前快照不同，展示“覆盖现有内容”并要求二次确认。已使用版本应先提升版本号；发布新版本后，旧普通对话自动变为只读，详情页提供“基于新版本继续”入口。
-- 前端先展示奖励差异、引用和前后规则，再提交 slug、preview_token 和显式 overwrite；预览过期重新确认，不能指定服务器路径、上传内容或绕过校验。
+- 前端先展示结局积分和前后规则，再提交 slug、preview_token 和显式 overwrite；预览过期重新确认，不能指定服务器路径、上传内容或绕过校验。
 
 ### 挑战内容
 
 - 「挑战包与版本」列出挑战包及其版本和状态，「版本编辑」承载当前版本表单。
 - 可创建新挑战包。
 - 可从当前版本复制指定版本号的新草稿。
-- 选择版本后加载完整 `manifest + runtime + assets + outcomes + reward_rules` 文档并切换到版本编辑；编辑器分为基本信息、叙事资产、玩法定义、玩法运行、状态字段、玩家界面、结局验证、奖励规则、高级 JSON。
+- 选择版本后加载完整 `manifest + runtime + assets + outcomes` 文档并切换到版本编辑；编辑器分为基本信息、叙事资产、玩法定义、玩法运行、状态字段、玩家界面、结局验证（含通关积分）、高级 JSON。
 - draft 使用结构化编辑器分区维护入口、资产、运行契约、状态、界面、结局和奖励，published 全部只读。
 - “高级 JSON”用于导入、导出和少量高级维护；导入前先检查顶层结构，业务校验以服务端发布结果为准。
 - 发布成功后刷新挑战列表和当前版本内容。
 
 ## 类型契约
 
-`src/types/api.ts` 维护后端模型与 WebSocket 事件；`src/types/auth.ts` 维护认证公开类型；`src/types/rewards.ts` 维护获奖、兑换和管理响应。删除后端字段或路由时，应同时删除前端类型、Store 和页面引用，避免“类型还在但功能已不存在”。
+`src/types/api.ts` 维护后端模型与 WebSocket 事件；`src/types/auth.ts` 维护认证公开类型；`src/types/rewards.ts` 维护两项余额、兑换和管理响应。删除后端字段或路由时，应同时删除前端类型、Store 和页面引用，避免“类型还在但功能已不存在”。
 
 对话创建类型不得重新加入 Character、Prompt 或 WorldBook ID。管理员完整版本类型不得复用于普通挑战公开响应。
 
@@ -257,7 +257,7 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 - 管理员玩法定义支持 `recipe` 和 `market`，发布错误能定位悬空材料、产物、技艺、地点、货币或商品引用。
 - 长期存档只展示当前位置市场和持有载体对应的可学习配方；领域动作执行中不能重复提交。
 - 长期存档任务与承诺分组展示状态、截止游戏时间、目标进度和奖励；接受/提交后重新读取权威快照。
-- 长期存档完成后从平台保留的 `outcome_rewards` 展示本次带出、来源转换和当前账号余额，不从叙事文本猜测奖励。
+- 长期存档完成后从平台保留的 `reward_points` 展示本次积分，0 分也明确展示，不从叙事文本猜测奖励。
 - 尘缘视图只展示当前 region 聚合局势和最近已发生事件，不展示未来计划事件或 NPC 私密目标。
 - 类型检查和生产构建通过。
 
@@ -279,7 +279,7 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 - `src/llm/localKey.ts`：本设备 Key 的 get/set/clear（`localStorage`，按用户隔离），不经过 pinia，不进日志；登出时清除。
 - `src/stores/settings.ts`：账号设置；App.vue 按 `auth.user?.id` 监听，切换账号（含登出/会话过期）时先重置设置并断开 Relay，再加载新账号设置，防止新账号沿用旧账号的 `base_url` 与路由判断。
 - `src/stores/llmRelay.ts`：应用级用户 WebSocket（`/ws/llm-relay`），满足“已登录 && 有效路由为 client”时连接（App.vue 监听启停，1s→30s 指数退避），与接入模式无关。`relay.request` 只接受白名单 endpoint，URL 由**本地** base_url 拼接；无 Key 回 `no_key`；SSE 按 UTF-8 字节 32KiB/50ms 合并回传（50ms 兜底定时器防尾部滞留），单次读取过大时拆成多个 ≤64KiB 帧、seq 连续；`bufferedAmount > 1MiB` 时背压暂停；`relay.cancel` 中止 fetch 并回 `aborted`。
-- `SettingsView`：LLM 接入卡片按四种状态渲染。`platform_managed` + 开关关：只显示“模型服务已准备就绪”；`platform_managed` + 开关开：路由二选一（平台模型（推荐）/客户端直连），选平台模型时显示已就绪卡片（不显示配置表单），选直连时显示个人配置表单 + 本设备 Key + 测试连接；`user_managed` + 开关关：个人配置表单 + 服务端 API Key（无路由选择）；`user_managed` + 开关开：路由二选一（服务端转发（推荐）/客户端直连）。切换确认框文案按接入模式区分（平台模式不提“删除服务端 Key”，切回平台模型提示“无需填写 Key”）；`platform_managed` 下选服务端保存时只提交 `{ llm_route: 'server' }`。client 模式 Key 只写本设备、可浏览器获取模型列表、可测试连接（区分鉴权失败/跨域网络失败/成功，https 配 http 非回环给混合内容提示）、可清除本设备 Key；能力诊断走同一接口（服务端经 Relay 执行）。`user_managed` 下开关关闭时路由选择、本设备 Key 区与测试连接全部隐藏，保存固定提交 `server`；服务端返回 `server` 且无 Key 时在 Key 框上方提示“平台已关闭客户端直连，请填写 API Key”（`platform_managed` 下无此提示，关闭开关会自动回到平台模型）。
+- `SettingsView`：LLM 接入卡片按四种状态渲染。`platform_managed` + 开关关：只显示平台模型状态，未配置完成时提示联系管理员；`platform_managed` + 开关开：路由二选一（平台模型（推荐）/客户端直连），选平台模型时显示平台模型状态（不显示个人配置表单，保存后按 `configuration_ready` 判断是否就绪），选直连时显示个人配置表单 + 本设备 Key + 测试连接；`user_managed` + 开关关：个人配置表单 + 服务端 API Key（无路由选择）；`user_managed` + 开关开：路由二选一（服务端转发（推荐）/客户端直连）。切换确认框文案按接入模式区分（平台模式不提“删除服务端 Key”，切回平台模型提示“无需填写 Key”）；`platform_managed` 下选服务端保存时只提交 `{ llm_route: 'server' }`。client 模式 Key 只写本设备、可浏览器获取模型列表、可测试连接（区分鉴权失败/跨域网络失败/成功，https 配 http 非回环给混合内容提示）、可清除本设备 Key；能力诊断走同一接口（服务端经 Relay 执行）。`user_managed` 下开关关闭时路由选择、本设备 Key 区与测试连接全部隐藏，保存固定提交 `server`；服务端返回 `server` 且无 Key 时在 Key 框上方提示“平台已关闭客户端直连，请填写 API Key”（`platform_managed` 下无此提示，关闭开关会自动回到平台模型）。
 - 会话页：页头路由徽标（`LlmRouteTag`）+ client 路由 Relay 状态点；路由不匹配时输入/重生成/续写/改写/guidance 全禁用并给横幅（新建对话、前往设置）；平台关闭开关导致的直连对话不可用时横幅文案为“平台已关闭客户端直连……”，只保留“新建对话”按钮；client 未连接时发送禁用；`server` 路由在界面上随接入模式显示为“平台模型”或“服务端转发”（不匹配横幅、创建弹窗的“本对话将使用”）；`challenge_completed` 带 `rewards_disabled_reason` 时显示“客户端直连模式不发放奖励”，Campaign 快照带该字段时同样在视图顶部显示替代横幅。列表页同样徽标；创建弹窗只读展示本次固化路由；分享公开页对 client 快照显示未校验标记。
-- 管理后台全局设置：“允许用户选择客户端直连”开关独立显示（与接入模式无关，位于公共 LLM 开关之外），只有 owner 可操作；关闭时弹确认框（中断在途回合、直连对话只读；`user_managed` 下用户需填 Key，`platform_managed` 下自动回到平台模型）。公共 LLM 能力检测走独立的 owner 接口 `POST /api/admin/system-settings/capabilities/check`，直接使用平台配置，与检测者本人的路由无关。
+- 管理后台全局设置：“允许用户选择客户端直连”开关独立显示（与接入模式无关，位于公共 LLM 开关之外），默认开启，只有 owner 可操作；关闭时弹确认框（中断在途回合、直连对话只读；`user_managed` 下用户需填 Key，`platform_managed` 下自动回到平台模型）。公共 LLM 能力检测走独立的 owner 接口 `POST /api/admin/system-settings/capabilities/check`，直接使用平台配置，与检测者本人的路由无关。
 - 今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效。

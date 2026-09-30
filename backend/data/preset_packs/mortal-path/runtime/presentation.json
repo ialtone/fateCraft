@@ -196,41 +196,6 @@
           ]
         },
         {
-          "key": "rewards",
-          "title": "本次带出",
-          "order": 5,
-          "visible_when": {
-            "path": "outcome_rewards",
-            "exists": true
-          },
-          "fields": [
-            {
-              "path": "outcome_rewards",
-              "label": "所得",
-              "widget": "item_list",
-              "order": 10,
-              "item_fields": [
-                {
-                  "path": "name",
-                  "label": "奖励"
-                },
-                {
-                  "path": "quantity",
-                  "label": "数量"
-                },
-                {
-                  "path": "unit",
-                  "label": "单位"
-                },
-                {
-                  "path": "balance",
-                  "label": "当前持有"
-                }
-              ]
-            }
-          ]
-        },
-        {
           "key": "character",
           "title": "角色",
           "order": 10,

@@ -38,7 +38,6 @@ func validVersionDocument(t testing.TB) *VersionDocument {
 		t.Fatal(err)
 	}
 	outcomeID := uuid.New()
-	rewardID := uuid.New()
 	return &VersionDocument{
 		Version: storage.ChallengeVersion{Version: manifest.Version, Manifest: storage.JSONDoc(manifestJSON)},
 		Runtime: storage.ChallengeRuntimeConfig{
@@ -56,13 +55,7 @@ func validVersionDocument(t testing.TB) *VersionDocument {
 		},
 		Outcomes: []storage.ChallengeOutcomeRule{{
 			ID: outcomeID, OutcomeKey: "success", Category: "success", Title: "Success", Tone: "success",
-			VerifierKey: "core.always", VerifierConfig: storage.JSONMap{}, Enabled: true,
-		}},
-		RewardRules: []storage.ChallengeRewardRule{{
-			ID: uuid.New(), OutcomeRuleID: outcomeID, RewardDefinitionID: rewardID,
-			CalculatorKey: "core.fixed", CalculatorConfig: storage.JSONMap{"amount": 10},
-			PublicSnapshot: storage.JSONMap{"key": "reward-a", "kind": "currency", "name": "Reward", "description": "", "unit": "", "icon": ""},
-			Enabled:        true,
+			VerifierKey: "core.always", RewardPoints: 10, VerifierConfig: storage.JSONMap{}, Enabled: true,
 		}},
 	}
 }
@@ -72,7 +65,6 @@ func TestContentHashCanonicalizesJSONAndDoesNotMutateInput(t *testing.T) {
 	docB := *docA
 	docB.Assets = append([]storage.ChallengeAsset(nil), docA.Assets...)
 	docB.Outcomes = append([]storage.ChallengeOutcomeRule(nil), docA.Outcomes...)
-	docB.RewardRules = append([]storage.ChallengeRewardRule(nil), docA.RewardRules...)
 	for left, right := 0, len(docB.Assets)-1; left < right; left, right = left+1, right-1 {
 		docB.Assets[left], docB.Assets[right] = docB.Assets[right], docB.Assets[left]
 	}
@@ -193,7 +185,6 @@ func TestValidateDocumentCampaignDoesNotRequireSingleRunSettlement(t *testing.T)
 			Content: storage.JSONMap{"node_type": "location", "parent_key": "world.region", "connections": []any{}}},
 	}
 	doc.Outcomes = nil
-	doc.RewardRules = nil
 	prompt := &doc.Assets[len(doc.Assets)-1]
 	prompt.Content = storage.JSONDoc(strings.ReplaceAll(string(prompt.Content), "settlement_security", "campaign_rules"))
 	if err := ValidateDocument(doc, testRegistry()); err != nil {
@@ -236,13 +227,11 @@ func TestValidateDocumentGenericCampaignWithoutRealm(t *testing.T) {
 			Content: storage.JSONMap{"node_type": "location", "parent_key": "world.region", "connections": []any{}}},
 	}
 	doc.Outcomes = nil
-	doc.RewardRules = nil
 	registry := gameplay.NewCoreRegistry()
 	registry.RegisterModule(gameplay.ModuleDescriptor{
 		Key: "campaign.generic", Version: 1, Modes: []string{gameplay.RuntimeModeCampaign},
 		Actions:                    []string{"update_state", "roll", "domain_action"},
 		Verifiers:                  []string{"core.always", "core.conditions"},
-		Calculators:                []string{"core.fixed", "core.state_multiplier"},
 		CampaignLifecycleHandlers:  []string{"campaign.generic_lifecycle"},
 		CampaignProjectionHandlers: []string{"campaign.generic_projection"},
 		CampaignContextPolicies:    []string{"campaign.generic_context"},
@@ -273,8 +262,6 @@ func TestValidateDocumentRequiresRecommendedPersonaToBeAllowed(t *testing.T) {
 
 type settlementReaderStub struct {
 	outcome    storage.ChallengeOutcomeRule
-	rules      []storage.ChallengeRewardRule
-	definition storage.RewardDefinition
 	successful []string
 	runtime    storage.ChallengeRuntimeConfig
 }
@@ -284,12 +271,6 @@ func (s settlementReaderStub) GetRun(context.Context, uuid.UUID) (*storage.Chall
 }
 func (s settlementReaderStub) OutcomeRule(context.Context, uuid.UUID, string) (*storage.ChallengeOutcomeRule, error) {
 	return &s.outcome, nil
-}
-func (s settlementReaderStub) RewardRulesForOutcome(context.Context, uuid.UUID) ([]storage.ChallengeRewardRule, error) {
-	return s.rules, nil
-}
-func (s settlementReaderStub) RewardDefinition(context.Context, uuid.UUID) (*storage.RewardDefinition, error) {
-	return &s.definition, nil
 }
 func (s settlementReaderStub) SuccessfulRollKeys(context.Context, uuid.UUID) ([]string, error) {
 	return s.successful, nil
@@ -302,11 +283,10 @@ func cultivationSettlementFixture() (settlementReaderStub, *storage.Conversation
 	playerID := uuid.New()
 	versionID := uuid.New()
 	outcomeID := uuid.New()
-	rewardID := uuid.New()
 	return settlementReaderStub{
 			outcome: storage.ChallengeOutcomeRule{
 				ID: outcomeID, OutcomeKey: "affinity_ascension", Category: "success", Title: "仙缘飞升", Tone: "success",
-				VerifierKey: "core.conditions",
+				VerifierKey: "core.conditions", RewardPoints: 150,
 				VerifierConfig: storage.JSONMap{"conditions": []any{
 					map[string]any{"type": "state_in", "path": "profile.cultivation_realm_key", "values": []any{"golden-core", "nascent-soul"}},
 					map[string]any{"type": "successful_roll", "key": "筑基突破判定"},
@@ -315,12 +295,6 @@ func cultivationSettlementFixture() (settlementReaderStub, *storage.Conversation
 				}},
 				Enabled: true,
 			},
-			rules: []storage.ChallengeRewardRule{{
-				OutcomeRuleID: outcomeID, RewardDefinitionID: rewardID,
-				CalculatorKey: "core.state_multiplier", CalculatorConfig: storage.JSONMap{"state_path": "attributes.灵石", "multiplier_bps": 15000},
-				PublicSnapshot: storage.JSONMap{"key": "stone", "name": "灵石"}, Enabled: true,
-			}},
-			definition: storage.RewardDefinition{ID: rewardID, Key: "stone", Name: "灵石", Stackable: true},
 			successful: []string{"筑基突破判定", "结丹突破判定", "仙缘获取判定"},
 			runtime: storage.ChallengeRuntimeConfig{
 				EngineKey: "core.generic", EngineVersion: 1,
@@ -346,7 +320,7 @@ func TestEvaluateSettlementRejectsFabricatedAffinityEndingAtQiRefining(t *testin
 	}
 }
 
-func TestEvaluateSettlementUsesTrustedStateForReward(t *testing.T) {
+func TestEvaluateSettlementUsesPublishedFixedPoints(t *testing.T) {
 	repo, conv, playerID := cultivationSettlementFixture()
 	service := NewService(nil, testRegistry())
 	evaluation, err := service.evaluateSettlement(context.Background(), repo, conv, SettlementInput{
@@ -356,8 +330,8 @@ func TestEvaluateSettlementUsesTrustedStateForReward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(evaluation.grants) != 1 || evaluation.grants[0].Quantity != 150 {
-		t.Fatalf("grants = %#v", evaluation.grants)
+	if evaluation.points != 150 {
+		t.Fatalf("grants = %#v", evaluation.points)
 	}
 }
 

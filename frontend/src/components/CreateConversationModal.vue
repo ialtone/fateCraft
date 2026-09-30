@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
+  NAlert,
   NButton,
   NForm,
   NFormItem,
@@ -29,6 +30,9 @@ const challenges = useChallengeStore()
 const conversations = useConversationStore()
 const settings = useSettingsStore()
 const creating = ref(false)
+const checkingConfiguration = ref(false)
+const configurationChecked = ref(false)
+const configurationIssue = ref('')
 const form = ref({ title: '', challenge_slug: '', persona_slug: '' })
 
 // 本次创建将固化的路由（只读展示），有效路由由后端计算；server 名称随接入模式变化。
@@ -55,9 +59,29 @@ const personaOptions = computed(() =>
     value: persona.slug,
   })),
 )
-const canCreate = computed(() => Boolean(selected.value?.available && form.value.persona_slug))
+const canCreate = computed(
+  () =>
+    Boolean(selected.value?.available && form.value.persona_slug) &&
+    configurationChecked.value &&
+    !checkingConfiguration.value &&
+    !configurationIssue.value &&
+    !creating.value,
+)
+
+async function checkConfiguration() {
+  checkingConfiguration.value = true
+  configurationChecked.value = false
+  try {
+    configurationIssue.value = await settings.checkPlayReadiness()
+    configurationChecked.value = true
+    return !configurationIssue.value
+  } finally {
+    checkingConfiguration.value = false
+  }
+}
 
 async function reset() {
+  const configurationCheck = checkConfiguration()
   if (!challenges.list.length) {
     try {
       await challenges.load()
@@ -65,11 +89,7 @@ async function reset() {
       message.error(`读取玩法失败：${err.message || '未知错误'}`)
     }
   }
-  try {
-    await settings.load()
-  } catch {
-    // 设置读取失败时按服务端转发展示，后端创建时仍以有效路由为准。
-  }
+  await configurationCheck
   const target =
     challenges.list.find((item) => item.slug === props.challengeSlug) ?? challenges.list[0]
   form.value = {
@@ -84,6 +104,7 @@ watch(
   (show) => {
     if (show) void reset()
   },
+  { immediate: true },
 )
 
 watch(
@@ -99,6 +120,7 @@ async function submit() {
   if (!canCreate.value) return
   creating.value = true
   try {
+    if (!(await checkConfiguration())) return
     const body: CreateConversationInput = {
       challenge_slug: form.value.challenge_slug,
       persona_slug: form.value.persona_slug,
@@ -130,8 +152,17 @@ async function submit() {
     style="width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
     @update:show="emit('update:show', $event)"
   >
-    <NSpin :show="challenges.loading">
+    <NSpin :show="challenges.loading || checkingConfiguration">
       <NForm label-placement="top" class="form">
+        <NAlert v-if="configurationIssue" type="warning" class="configuration-note">
+          {{ configurationIssue }}
+          <div class="configuration-actions">
+            <RouterLink to="/settings" @click="emit('update:show', false)">前往设置</RouterLink>
+            <NButton text :disabled="checkingConfiguration" @click="checkConfiguration">
+              重新检查
+            </NButton>
+          </div>
+        </NAlert>
         <NFormItem label="玩法">
           <NSelect v-model:value="form.challenge_slug" :options="challengeOptions" />
         </NFormItem>
@@ -151,11 +182,11 @@ async function submit() {
           <div class="reward-row">
             <NTag
               v-for="reward in selected.reward_overview"
-              :key="reward.reward_key"
+              :key="reward.outcome_key"
               size="small"
               type="warning"
             >
-              {{ reward.outcome_title }}：{{ reward.name }}
+              {{ reward.outcome_title }}：{{ reward.points }} 积分
             </NTag>
           </div>
         </div>
@@ -198,6 +229,16 @@ async function submit() {
 
 <style scoped>
 .form {
+  margin-top: 8px;
+}
+
+.configuration-note {
+  margin-bottom: 18px;
+}
+
+.configuration-actions {
+  display: flex;
+  gap: 16px;
   margin-top: 8px;
 }
 

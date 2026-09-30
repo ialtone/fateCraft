@@ -115,7 +115,7 @@ Nginx access log 使用安全路径和后端 `X-Request-ID`；未到达后端的
 
 `diagnostic_log_cleanup_enabled` 默认开启，`diagnostic_log_retention_days` 默认 30，范围 1–3650。每轮在约 45 秒内最多执行 20 个批次，每批分别从模型和上下文表删除至多 500 条。按最旧 `(created_at,id)` 选行并 `SKIP LOCKED`，通过 `EXISTS` 判断积压；仍有积压或出错时至少冷却 1 分钟，无积压时每小时调度。
 
-只清理模型/上下文诊断，不删除奖励账本、领取/兑换订单、获奖记录、管理员审计、分享治理和 Campaign 事件。普通 DELETE 与 autovacuum 使空间可复用，不保证数据库文件立即缩小；不在线执行 VACUUM FULL。
+只清理模型/上下文诊断，不删除奖励账本、兑换订单、管理员审计、分享治理和 Campaign 事件。普通 DELETE 与 autovacuum 使空间可复用，不保证数据库文件立即缩小；不在线执行 VACUUM FULL。
 
 `llm_request_logs` 增加 trace、protocol、started_at、transport_attempts、usage、error_code、body_status 和 body_metadata；`admin_audit_logs` 增加独立的 trace_id。补充模型 trace/attempt、上下文全局时间/attempt、管理审计全局时间/actor 索引。全局游标与清理使用 `(created_at,id)`。
 
@@ -155,7 +155,7 @@ Nginx access log 使用安全路径和后端 `X-Request-ID`；未到达后端的
 
 以下项目于 2026-09-30 交接维护者执行，尚无实测结果。测试数据放在专用测试环境；数据库测试工具创建并清理随机隔离 schema，不修改已有业务 schema 或 Goose 版本。执行过旧版 00001 的库不会自动获得此次基线字段，不能直接用它代替全新 schema 验收。
 
-- [ ] **数据库与业务回归**：设置 `FATECRAFT_TEST_DATABASE_URL` 后运行 `task backend:test:postgres`，确认完整 00001、JSONB/text 边界、权限、发奖/领取/兑换/结算和客户端直连用例真实执行，无数据库测试跳过。
+- [ ] **数据库与业务回归**：设置 `FATECRAFT_TEST_DATABASE_URL` 后运行 `task backend:test:postgres`，确认完整 00001、JSONB/text 边界、权限、发奖/撤回/兑换/结算和客户端直连用例真实执行，无数据库测试跳过。
 - [ ] **分页**：同一时间戳多条记录逐页读取不重不漏；新增或清理记录后继续翻页；非法游标、筛选变化、越权访问被拒绝。
 - [ ] **配置审计**：配置和脱敏审计同时提交；强制审计失败时配置与缓存不提前改变、Relay 不关闭；并发旧版本返回 409，刷新后可重试。
 - [ ] **采集范围**：分别保存全部、指定用户、指定对话；叙事、Memory、角色询问和模型诊断按归属采集，服务端/客户端直连行为一致，范围外只留摘要。检查无效/已删除目标、关闭后保留范围、配置审计及多实例缓存生效时间，无自动关闭。

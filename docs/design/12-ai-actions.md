@@ -85,7 +85,7 @@ Handler 会基于调用工具前已经持久化的可信状态、成功判定和
 
 结算事务原子写入 `challenge_runs`、奖励账本、余额、结算奖励快照和 conversation ended 状态。`challenge_runs.conversation_id` 唯一，重复、并发或重放不能产生第二份奖励。
 
-通用验证器包括 `core.always`、受限条件树 `core.conditions`；题材模块可注册自己的 verifier。通用计算器包括 `core.fixed` 和 `core.state_multiplier`。平台层不读取题材字段。
+通用验证器包括 `core.always`、受限条件树 `core.conditions`；题材模块可注册自己的 verifier。账号收益直接读取结局固定 reward_points；平台奖励层不读取题材字段或局内财富。
 
 ## 工具结果
 

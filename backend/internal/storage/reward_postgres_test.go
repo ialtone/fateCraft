@@ -2,22 +2,17 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
-	"sync"
-	"testing"
-
 	"github.com/google/uuid"
 	"github.com/ialtone/fatecraft/internal/testdb"
 	"gorm.io/gorm"
+	"sync"
+	"testing"
 )
 
-func rewardFixture(t *testing.T) (*gorm.DB, *RewardRepository, User, User, RewardDefinition) {
+func rewardFixture(t *testing.T) (*gorm.DB, *RewardRepository, User, User) {
 	t.Helper()
 	db := testdb.Open(t, "rewards")
-	repo := NewRewardRepository(db)
 	actor := User{ID: uuid.New(), Username: "admin", DisplayName: "管理员", Role: UserRoleAdmin, Status: UserStatusActive}
 	player := User{ID: uuid.New(), Username: "player", DisplayName: "玩家", Role: UserRoleUser, Status: UserStatusActive}
 	for _, user := range []*User{&actor, &player} {
@@ -25,281 +20,213 @@ func rewardFixture(t *testing.T) (*gorm.DB, *RewardRepository, User, User, Rewar
 			t.Fatal(err)
 		}
 	}
-	def, err := repo.DefinitionByKey(context.Background(), MessageRewriteCreditKey)
-	if err != nil {
+	return db, NewRewardRepository(db), actor, player
+}
+func grantRequest(key string, quantity int64) AdminRewardGrant {
+	return AdminRewardGrant{RequestID: uuid.New(), RewardKey: key, Quantity: quantity, Reason: "内部补偿原因", PublicNote: "感谢参与"}
+}
+func checkRewardBalance(t *testing.T, db *gorm.DB, player uuid.UUID, key string, want int64) {
+	t.Helper()
+	var row PlayerRewardBalance
+	err := db.Where("player_id = ? AND reward_key = ?", player, key).First(&row).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatal(err)
 	}
-	return db, repo, actor, player, *def
-}
-
-func grantRequest(def RewardDefinition, quantity int64, mode string) AdminRewardGrant {
-	return AdminRewardGrant{RequestID: uuid.New(), RewardDefinitionID: def.ID, Quantity: quantity, Purpose: "gift", DeliveryMode: mode, Reason: "internal support reason", PublicNote: "感谢参与"}
-}
-
-func TestPostgresRewardGrantConcurrencyAndContentIdentity(t *testing.T) {
-	db, repo, actor, player, def := rewardFixture(t)
-	ctx := context.Background()
-	request := grantRequest(def, 24, "direct")
-	var group sync.WaitGroup
-	results := make(chan error, 12)
-	for n := 0; n < 12; n++ {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			_, err := repo.AdminGrant(ctx, actor.ID, player.ID, request)
-			results <- err
-		}()
+	var sum int64
+	if err := db.Model(&RewardLedgerEntry{}).Select("COALESCE(sum(quantity_delta),0)").Where("player_id = ? AND reward_key = ?", player, key).Scan(&sum).Error; err != nil {
+		t.Fatal(err)
 	}
-	group.Wait()
-	close(results)
-	for err := range results {
+	if row.Balance != want || sum != want {
+		t.Fatalf("%s balance=%d ledger=%d want=%d", key, row.Balance, sum, want)
+	}
+}
+func concurrentRewards(t *testing.T, n int, fn func() error) {
+	t.Helper()
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); errs <- fn() }()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	var balance PlayerRewardBalance
-	if err := db.First(&balance, "player_id = ? AND reward_definition_id = ?", player.ID, def.ID).Error; err != nil {
+}
+
+func TestPostgresRewardDirectGrantIdentityAndReversal(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	ctx := context.Background()
+	in := grantRequest(PointsKey, 200)
+	concurrentRewards(t, 8, func() error { _, err := repo.AdminGrant(ctx, actor.ID, player.ID, in); return err })
+	checkRewardBalance(t, db, player.ID, PointsKey, 200)
+	in.Quantity++
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, in); !errors.Is(err, ErrRewardRequestConflict) {
+		t.Fatalf("changed request accepted: %v", err)
+	}
+	in.Quantity--
+	if _, err := repo.AdminGrant(ctx, player.ID, player.ID, in); !errors.Is(err, ErrRewardAdminRequired) {
+		t.Fatalf("non-admin replay: %v", err)
+	}
+	row, err := repo.GrantByRequest(ctx, in.RequestID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if balance.Balance != 24 {
-		t.Fatalf("duplicate grant: %d", balance.Balance)
+	request := uuid.New()
+	concurrentRewards(t, 4, func() error { _, err := repo.ReverseAdminGrant(ctx, actor.ID, row.ID, request, "误发"); return err })
+	checkRewardBalance(t, db, player.ID, PointsKey, 0)
+	if _, err := repo.ReverseAdminGrant(ctx, actor.ID, row.ID, uuid.New(), "再次撤回"); !errors.Is(err, ErrRewardState) {
+		t.Fatalf("double reversal: %v", err)
 	}
-	for _, table := range []string{"reward_records", "reward_ledger", "admin_audit_logs"} {
-		var count int64
-		if err := db.Table(table).Count(&count).Error; err != nil || count != 1 {
-			t.Fatalf("%s count=%d err=%v", table, count, err)
-		}
-	}
-	request.Quantity++
-	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, request); !errors.Is(err, ErrRewardRequestConflict) {
-		t.Fatalf("changed request: %v", err)
-	}
-	request.Quantity--
 	if err := db.Model(&player).Update("status", UserStatusDisabled).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, request); err != nil {
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, in); err != nil {
 		t.Fatalf("committed replay after disable: %v", err)
 	}
-	request.RequestID = uuid.New()
-	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, request); !errors.Is(err, ErrTargetUserDisabled) {
-		t.Fatalf("new grant to disabled account: %v", err)
+	in.RequestID = uuid.New()
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, in); !errors.Is(err, ErrTargetUserDisabled) {
+		t.Fatalf("new grant to disabled user: %v", err)
+	}
+	var auditCount int64
+	if err := db.Model(&AdminAuditLog{}).Count(&auditCount).Error; err != nil || auditCount != 2 {
+		t.Fatalf("audit count=%d %v", auditCount, err)
 	}
 }
-
-func TestPostgresRewardClaimCancellationAndPrivateFields(t *testing.T) {
-	db, repo, actor, player, def := rewardFixture(t)
+func TestPostgresRewardRegistrationRevisionAndRollback(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
-	for n := 0; n < 8; n++ {
-		row, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(def, 3, "claim"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := repo.Record(ctx, &actor.ID, row.ID); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("cross-user read: %v", err)
-		}
-		if _, err := repo.ClaimReward(ctx, actor.ID, row.ID); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("cross-user claim: %v", err)
-		}
-		encoded, _ := json.Marshal(row)
-		for _, secret := range []string{"internal support reason", "request_hash", "operator_id", "actor_id"} {
-			if strings.Contains(string(encoded), secret) {
-				t.Fatalf("private field leaked: %s", secret)
-			}
-		}
-		var group sync.WaitGroup
-		results := make(chan error, 2)
-		group.Add(2)
-		go func() { defer group.Done(); _, err := repo.ClaimReward(ctx, player.ID, row.ID); results <- err }()
-		go func() {
-			defer group.Done()
-			_, err := repo.ManageReward(ctx, actor.ID, row.ID, "cancel", "撤销误发", uuid.New())
-			results <- err
-		}()
-		group.Wait()
-		close(results)
-		for err := range results {
-			if err != nil && !errors.Is(err, ErrRewardState) {
-				t.Fatal(err)
-			}
-		}
-		current, err := repo.Record(ctx, &player.ID, row.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var count int64
-		db.Model(&RewardLedgerEntry{}).Where("source_id = ?", row.SourceID).Count(&count)
-		if current.Status == "cancelled" && count != 0 || current.Status == "granted" && count != 1 {
-			t.Fatalf("inconsistent terminal result: %s ledgers=%d", current.Status, count)
-		}
-		if current.Status != "cancelled" && current.Status != "granted" {
-			t.Fatalf("nonterminal record: %s", current.Status)
-		}
-	}
-}
-
-func TestPostgresRewardRefundAndReversalRelations(t *testing.T) {
-	db, repo, actor, player, def := rewardFixture(t)
-	ctx := context.Background()
-	row, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(def, 10, "direct"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	consume := RewardMutation{PlayerID: player.ID, RewardKey: def.Key, Quantity: 7, SourceType: "message_rewrite", SourceID: "turn", IdempotencyKey: "consume:turn"}
-	if _, err := repo.Consume(ctx, consume); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.ManageReward(ctx, actor.ID, row.ID, "reverse", "wrong grant", uuid.New()); !errors.Is(err, ErrInsufficientReward) {
-		t.Fatalf("reversal with insufficient balance: %v", err)
-	}
-	refund := RewardRefund{PlayerID: player.ID, RewardKey: def.Key, ConsumeIdempotencyKey: consume.IdempotencyKey, RefundIdempotencyKey: "refund-one", SourceID: "turn"}
-	if _, err := repo.RefundConsumed(ctx, refund); err != nil {
-		t.Fatal(err)
-	}
-	refund.RefundIdempotencyKey = "another-refund-request"
-	if _, err := repo.RefundConsumed(ctx, refund); err != nil {
-		t.Fatal(err)
-	}
-	reversalID := uuid.New()
-	if _, err := repo.ManageReward(ctx, actor.ID, row.ID, "reverse", "wrong grant", reversalID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.ManageReward(ctx, actor.ID, row.ID, "reverse", "wrong grant", reversalID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.ManageReward(ctx, actor.ID, row.ID, "reverse", "wrong grant", uuid.New()); !errors.Is(err, ErrRewardState) {
-		t.Fatalf("duplicate reversal: %v", err)
-	}
-	var balance PlayerRewardBalance
-	db.First(&balance, "player_id = ? AND reward_definition_id = ?", player.ID, def.ID)
-	if balance.Balance != 0 || balance.GrantedTotal != 10 || balance.ConsumedTotal != 7 || balance.RefundedTotal != 7 || balance.ReversedTotal != 10 {
-		t.Fatalf("incorrect projections: %+v", balance)
-	}
-	var counts []struct {
-		Operation string
-		Count     int
-	}
-	db.Model(&RewardLedgerEntry{}).Select("operation,count(*) AS count").Group("operation").Scan(&counts)
-	for _, count := range counts {
-		if count.Count != 1 {
-			t.Fatalf("duplicate %s: %d", count.Operation, count.Count)
-		}
-	}
-}
-
-func TestPostgresRewardAuditFailureRollsBackEverything(t *testing.T) {
-	db, repo, actor, player, def := rewardFixture(t)
-	ctx := context.Background()
-	if err := db.Exec(`CREATE FUNCTION fail_reward_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END $$;
-	CREATE TRIGGER fail_reward_audit BEFORE INSERT ON admin_audit_logs FOR EACH ROW EXECUTE FUNCTION fail_reward_audit();`).Error; err != nil {
-		t.Fatal(err)
-	}
-	request := grantRequest(def, 10, "direct")
-	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, request); err == nil {
-		t.Fatal("audit failure did not fail grant")
-	}
-	for _, table := range []string{"reward_records", "reward_ledger", "player_reward_balances"} {
-		var count int64
-		db.Table(table).Count(&count)
-		if count != 0 {
-			t.Fatalf("transaction leaked %s: %d", table, count)
-		}
-	}
-	if err := db.Exec("DROP TRIGGER fail_reward_audit ON admin_audit_logs").Error; err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, request); err != nil {
-		t.Fatalf("same request after rollback: %v", err)
-	}
-}
-
-func TestPostgresRewardSnapshotsSkipsAndConfiguration(t *testing.T) {
-	db, repo, actor, player, def := rewardFixture(t)
-	ctx := context.Background()
-	row, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(def, 2, "claim"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldName := def.Name
-	def.Name = "新版额度名称"
-	if _, err := repo.SaveDefinition(ctx, actor.ID, def.ID, def, false); err != nil {
-		t.Fatal(err)
-	}
-	def.Disabled = true
-	if _, err := repo.SaveDefinition(ctx, actor.ID, def.ID, def, false); !errors.Is(err, ErrRewardState) {
-		t.Fatalf("registration rule was silently disabled: %v", err)
-	}
-	if _, err := repo.SaveDefinition(ctx, actor.ID, def.ID, def, true); err != nil {
-		t.Fatal(err)
-	}
-	claimed, err := repo.ClaimReward(ctx, player.ID, row.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if claimed.Snapshot["name"] != oldName {
-		t.Fatal("existing snapshot changed")
-	}
 	rule, err := repo.RegistrationRule(ctx)
-	if err != nil || rule.Enabled {
-		t.Fatalf("registration disable: %+v %v", rule, err)
-	}
-	if err := repo.WithTx(ctx, func(tx *RewardRepository) error { return tx.GrantRegistrationInCurrentTx(ctx, player.ID) }); err != nil {
-		t.Fatal(err)
-	}
-	var count int64
-	db.Model(&RewardRecord{}).Where("source_type = 'user_registration'").Count(&count)
-	if count != 0 {
-		t.Fatal("disabled registration rule granted rewards")
-	}
-	badge := RewardDefinition{Key: "test.badge", Kind: "badge", Name: "纪念章", Metadata: JSONMap{}}
-	if err := repo.CreateDefinition(ctx, &badge); err != nil {
-		t.Fatal(err)
-	}
-	first, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(badge, 1, "direct"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(badge, 1, "direct"))
+	stale := *rule
+	rule.Points = 300
+	rule.RewriteCredits = 4
+	if _, err = repo.SaveRegistrationRule(ctx, actor.ID, *rule); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repo.SaveRegistrationRule(ctx, actor.ID, stale); !errors.Is(err, ErrRewardRequestConflict) {
+		t.Fatalf("stale rule: %v", err)
+	}
+	aborted := errors.New("abort source transaction")
+	err = repo.WithTx(ctx, func(tx *RewardRepository) error {
+		if err := tx.GrantRegistrationInCurrentTx(ctx, player.ID); err != nil {
+			return err
+		}
+		return aborted
+	})
+	if !errors.Is(err, aborted) {
+		t.Fatal(err)
+	}
+	checkRewardBalance(t, db, player.ID, PointsKey, 0)
+	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 0)
+	concurrentRewards(t, 4, func() error {
+		return repo.WithTx(ctx, func(tx *RewardRepository) error { return tx.GrantRegistrationInCurrentTx(ctx, player.ID) })
+	})
+	checkRewardBalance(t, db, player.ID, PointsKey, 300)
+	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 4)
+	current, err := repo.RegistrationRule(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Status != "granted" || second.Status != "skipped" || second.SkipReason != "already_owned" || second.LedgerID != nil {
-		t.Fatalf("bad badge results: %+v %+v", first, second)
+	current.Points = 0
+	current.RewriteCredits = 0
+	if _, err := repo.SaveRegistrationRule(ctx, actor.ID, *current); err != nil {
+		t.Fatal(err)
 	}
-	zero, err := repo.Grant(ctx, RewardMutation{PlayerID: player.ID, RewardKey: def.Key, Quantity: 0, SourceType: "challenge_run", SourceID: "zero-run", IdempotencyKey: "zero-run"})
-	if err != nil || zero.Ledger != nil {
-		t.Fatalf("zero award: %+v %v", zero, err)
+	other := User{ID: uuid.New(), Username: "zero", Role: UserRoleUser, Status: UserStatusActive}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
 	}
-	var skipped RewardRecord
-	if err := db.First(&skipped, "source_key = 'zero-run'").Error; err != nil || skipped.SkipReason != "zero_quantity" {
-		t.Fatalf("zero record: %+v %v", skipped, err)
+	if err := repo.WithTx(ctx, func(tx *RewardRepository) error { return tx.GrantRegistrationInCurrentTx(ctx, other.ID) }); err != nil {
+		t.Fatal(err)
 	}
+	checkRewardBalance(t, db, other.ID, PointsKey, 0)
+	checkRewardBalance(t, db, other.ID, MessageRewriteCreditKey, 0)
+	latest, err := repo.RegistrationRule(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest.Points, latest.RewriteCredits = 50, 10
+	if _, err := repo.SaveRegistrationRule(ctx, actor.ID, *latest); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.WithTx(ctx, func(tx *RewardRepository) error { return tx.GrantRegistrationInCurrentTx(ctx, other.ID) }); err != nil {
+		t.Fatal(err)
+	}
+	checkRewardBalance(t, db, other.ID, PointsKey, 0)
+	checkRewardBalance(t, db, other.ID, MessageRewriteCreditKey, 0)
 }
 
-func TestPostgresAdminUserSearchBeyondFirstPage(t *testing.T) {
-	db, _, _, player, _ := rewardFixture(t)
+func TestPostgresAdminSelfGrantConcurrency(t *testing.T) {
+	db, repo, actor, _ := rewardFixture(t)
 	ctx := context.Background()
-	repo := NewAuthRepository(db)
-	for n := 0; n < 205; n++ {
-		user := User{ID: uuid.New(), Username: fmt.Sprintf("user_%03d", n), DisplayName: "同名用户", Role: UserRoleUser, Status: UserStatusActive}
-		if err := db.Create(&user).Error; err != nil {
-			t.Fatal(err)
+	concurrentRewards(t, 4, func() error {
+		_, err := repo.AdminGrant(ctx, actor.ID, actor.ID, grantRequest(PointsKey, 10))
+		return err
+	})
+	checkRewardBalance(t, db, actor.ID, PointsKey, 40)
+}
+func TestPostgresRewardConsumptionRefundAndConstraints(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	ctx := context.Background()
+	grant, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(MessageRewriteCreditKey, 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	consume := RewardMutation{PlayerID: player.ID, RewardKey: MessageRewriteCreditKey, Quantity: 1, SourceType: "message_rewrite", SourceID: "operation-1", IdempotencyKey: "consume-1"}
+	if _, err = repo.Consume(ctx, consume); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = repo.ReverseAdminGrant(ctx, actor.ID, grant.ID, uuid.New(), "余额不足"); !errors.Is(err, ErrInsufficientReward) {
+		t.Fatalf("insufficient reversal: %v", err)
+	}
+	refund := RewardRefund{PlayerID: player.ID, RewardKey: MessageRewriteCreditKey, ConsumeIdempotencyKey: "consume-1"}
+	concurrentRewards(t, 6, func() error { _, err := repo.RefundConsumed(ctx, refund); return err })
+	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 3)
+	if err := db.Model(&RewardLedgerEntry{}).Where("id = ?", grant.ID).Update("quantity_delta", 10).Error; err == nil {
+		t.Fatal("mutable ledger")
+	}
+	if err := db.Exec("INSERT INTO player_reward_balances(player_id,reward_key) VALUES (?, 'custom.coin')", player.ID).Error; err == nil {
+		t.Fatal("custom asset accepted")
+	}
+	bad := consume
+	bad.RewardKey = "custom.coin"
+	if _, err := repo.Consume(ctx, bad); !errors.Is(err, ErrRewardKey) {
+		t.Fatal(err)
+	}
+	rows, err := repo.ListLedger(ctx, &player.ID, 30, RewardPageCursor{RewardKey: MessageRewriteCreditKey})
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("ledger filter: %+v %v", rows, err)
+	}
+}
+func TestPostgresRewardAuditFailureRollsBack(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	if err := db.Exec(`CREATE FUNCTION reject_test_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END; $$; CREATE TRIGGER reject_test_audit BEFORE INSERT ON admin_audit_logs FOR EACH ROW EXECUTE FUNCTION reject_test_audit();`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AdminGrant(context.Background(), actor.ID, player.ID, grantRequest(PointsKey, 10)); err == nil {
+		t.Fatal("audit failure ignored")
+	}
+	checkRewardBalance(t, db, player.ID, PointsKey, 0)
+}
+func TestPostgresRewardGrantAmountBounds(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	ctx := context.Background()
+	for _, amount := range []int64{0, -1, MaxRewardQuantity + 1} {
+		if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, amount)); !errors.Is(err, ErrRewardQuantity) {
+			t.Fatalf("amount %d: %v", amount, err)
 		}
 	}
-	users, err := repo.ListUsers(ctx, 30, 0, "PLAYER")
-	if err != nil || len(users) != 1 || users[0].ID != player.ID {
-		t.Fatalf("old account search: %+v %v", users, err)
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, MaxRewardQuantity)); err != nil {
+		t.Fatal(err)
 	}
-	users, err = repo.ListUsers(ctx, 30, 0, "user_001")
-	if err != nil || len(users) != 1 || users[0].Username != "user_001" {
-		t.Fatalf("literal underscore search: %+v %v", users, err)
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 1)); !errors.Is(err, ErrRewardQuantity) {
+		t.Fatalf("overflow: %v", err)
 	}
-	users, err = repo.ListUsers(ctx, 30, 200, "同名用户")
-	if err != nil || len(users) != 5 {
-		t.Fatalf("search pagination: %d %v", len(users), err)
-	}
-	users, err = repo.ListUsers(ctx, 30, 0, "%")
-	if err != nil || len(users) != 0 {
-		t.Fatalf("wildcard escaped: %d %v", len(users), err)
-	}
+	checkRewardBalance(t, db, player.ID, PointsKey, MaxRewardQuantity)
 }

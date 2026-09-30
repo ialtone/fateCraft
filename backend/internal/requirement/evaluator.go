@@ -53,25 +53,6 @@ func Decode(raw any) (Rule, error) {
 	return rule, nil
 }
 
-func RewardKeys(rule Rule) []string {
-	found := map[string]bool{}
-	var visit func(Rule)
-	visit = func(current Rule) {
-		if current.Type == "reward_balance" {
-			found[current.RewardKey] = true
-		}
-		for _, child := range current.Conditions {
-			visit(child)
-		}
-	}
-	visit(rule)
-	keys := make([]string, 0, len(found))
-	for key := range found {
-		keys = append(keys, key)
-	}
-	return keys
-}
-
 func (e *Evaluator) Check(ctx context.Context, playerID uuid.UUID, rule Rule) error {
 	ok, err := e.evaluate(ctx, playerID, rule)
 	if err != nil {
@@ -118,7 +99,7 @@ func validate(rule Rule, depth int, count *int) error {
 	}
 	switch rule.Type {
 	case "reward_balance":
-		if rule.RewardKey == "" || rule.Quantity <= 0 {
+		if !storage.ValidRewardKey(rule.RewardKey) || rule.Quantity <= 0 || rule.Quantity > storage.MaxRewardQuantity {
 			return fmt.Errorf("奖励余额条件缺少 reward_key 或 quantity")
 		}
 		if rule.Operator != "" && rule.Operator != "gte" {

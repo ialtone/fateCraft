@@ -55,15 +55,18 @@ const roleLabel = computed(() => (auth.isOwner ? '平台拥有者' : '管理员'
 .admin-shell {
   display: grid;
   grid-template-columns: 216px minmax(0, 1fr);
-  min-height: 100%;
-  margin: -28px -24px;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
   background: var(--bg);
 }
 
 .admin-sidebar {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
+  overflow-y: auto;
   padding: 28px 14px 20px;
   border-right: 1px solid var(--border-soft);
   background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
@@ -113,14 +116,15 @@ h1 {
 
 .admin-content {
   min-width: 0;
+  min-height: 0;
   padding: 28px 32px 48px;
   overflow: auto;
 }
 
 @media (max-width: 760px) {
   .admin-shell {
-    display: block;
-    margin: -16px -12px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .admin-sidebar {

@@ -54,7 +54,7 @@
       {"path": "obligations", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_quests"},
       {"path": "encounters", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_encounters"},
       {"path": "available_encounters", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_encounters"},
-      {"path": "outcome_rewards", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "challenge_run_rewards"}
+      {"path": "outcome_rewards", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "reward_ledger"}
     ],
     "initial_location_key": "green-river-village",
     "world_clock": {

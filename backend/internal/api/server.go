@@ -224,9 +224,9 @@ func (s *Server) Router(r *gin.Engine) {
 	// 玩家奖励与不可变账本
 	protected.GET("/me/rewards", s.listRewards)
 	protected.GET("/me/reward-ledger", s.listRewardLedger)
-	protected.GET("/me/reward-records", s.listRewardRecords)
-	protected.GET("/me/reward-records/:id", s.getRewardRecord)
-	protected.POST("/me/reward-records/:id/claim", s.claimReward)
+	protected.GET("/admin/reward-ledger", s.requireAdmin, s.listAdminRewardLedger)
+	protected.GET("/admin/reward-ledger/:id", s.requireAdmin, s.getAdminRewardLedgerEntry)
+	protected.POST("/admin/reward-ledger/:id/reverse", s.requireAdmin, s.reverseAdminRewardGrant)
 	protected.GET("/me/reward-exchange/offers", s.listExchangeOffers)
 	protected.POST("/me/reward-exchange/orders", s.exchangeReward)
 	protected.GET("/me/reward-exchange/orders", s.listExchangeOrders)
@@ -260,13 +260,9 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.PATCH("/admin/invitation-codes/:id", s.requireAdmin, s.updateAdminInvitation)
 	protected.GET("/admin/users", s.requireAdmin, s.listAdminUsers)
 	protected.GET("/admin/users/:id/rewards", s.requireAdmin, s.getAdminUserRewards)
-	protected.GET("/admin/users/:id/reward-records", s.requireAdmin, s.listAdminRewardRecords)
 	protected.GET("/admin/users/:id/reward-ledger", s.requireAdmin, s.listAdminRewardLedger)
 	protected.POST("/admin/users/:id/reward-grants", s.requireAdmin, s.createAdminRewardGrant)
 	protected.GET("/admin/reward-grants/by-request/:request_id", s.requireAdmin, s.getAdminRewardRequest)
-	protected.GET("/admin/reward-records", s.requireAdmin, s.listAdminRewardRecords)
-	protected.GET("/admin/reward-records/:id", s.requireAdmin, s.getAdminRewardRecord)
-	protected.POST("/admin/reward-records/:id/:action", s.requireAdmin, s.manageReward)
 	protected.GET("/admin/registration-reward-rule", s.requireAdmin, s.getRegistrationRewardRule)
 	protected.PUT("/admin/registration-reward-rule", s.requireAdmin, s.saveRegistrationRewardRule)
 	protected.GET("/admin/auth-identities", s.requireAdmin, s.listAdminAuthIdentities)
@@ -277,11 +273,6 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.POST("/admin/builtin-challenges/:slug/import", s.requireAdmin, s.importAdminBuiltin)
 	protected.GET("/admin/builtin-challenges/:slug/preview", s.requireAdmin, s.previewAdminBuiltin)
 	protected.GET("/admin/gameplay-modules", s.requireAdmin, s.listAdminGameplayModules)
-	protected.GET("/admin/reward-definitions", s.requireAdmin, s.listAdminRewardDefinitions)
-	protected.POST("/admin/reward-definitions", s.requireAdmin, s.createAdminRewardDefinition)
-	protected.PATCH("/admin/reward-definitions/:id", s.requireAdmin, s.updateAdminRewardDefinition)
-	protected.GET("/admin/reward-definitions/:id/impact", s.requireAdmin, s.getRewardImpact)
-	protected.GET("/admin/rewards/overview", s.requireAdmin, s.rewardOverview)
 	protected.GET("/admin/rewards/rules", s.requireAdmin, s.rewardRuleCatalog)
 	protected.GET("/admin/rewards/audits", s.requireAdmin, s.rewardAuditPage)
 	protected.GET("/admin/reward-exchange/offers", s.requireAdmin, s.listAdminExchangeOffers)
@@ -372,6 +363,8 @@ func fail(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, llmsettings.ErrUserSettingsDisabled):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, llmsettings.ErrConfigurationIncomplete):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "llm_configuration_incomplete"})
 	case errors.Is(err, llmsettings.ErrPlatformIncomplete), errors.Is(err, llmsettings.ErrMissingAPIKey), errors.Is(err, llmsettings.ErrInvalidAccessMode):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, llmsettings.ErrEncryptionUnavailable):
@@ -392,8 +385,6 @@ func fail(c *gin.Context, err error) {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, storage.ErrAlreadySettled), errors.Is(err, storage.ErrPublishedVersion),
 		errors.Is(err, storage.ErrVersionInUse), errors.Is(err, challengeimport.ErrOverwriteRequired):
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, storage.ErrRewardDefinitionConflict), errors.Is(err, storage.ErrRewardDefinitionInUse):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
 		_ = c.Error(err)

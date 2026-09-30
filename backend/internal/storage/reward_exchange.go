@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,37 +15,27 @@ import (
 var (
 	ErrExchangeChanged     = errors.New("兑换商品已变更，请刷新后重新确认")
 	ErrExchangeUnavailable = errors.New("兑换商品当前不可用")
-	ErrExchangeOwned       = errors.New("已经拥有该奖励，本次未扣除积分")
 )
 
 type RewardExchangeOffer struct {
-	ID                 uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description"`
-	CostDefinitionID   uuid.UUID `gorm:"type:uuid" json:"cost_definition_id"`
-	CostQuantity       int64     `json:"cost_quantity"`
-	RewardDefinitionID uuid.UUID `gorm:"type:uuid" json:"reward_definition_id"`
-	RewardQuantity     int64     `json:"reward_quantity"`
-	Enabled            bool      `json:"enabled"`
-	Revision           int64     `json:"revision"`
-	SortOrder          int       `json:"sort_order"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-}
-
-type RewardExchangeOfferView struct {
-	RewardExchangeOffer
-	CostAsset   JSONMap `json:"cost_asset"`
-	RewardAsset JSONMap `json:"reward_asset"`
-	Available   bool    `json:"available"`
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	CostQuantity   int64     `json:"cost_quantity"`
+	RewardQuantity int64     `json:"reward_quantity"`
+	Enabled        bool      `json:"enabled"`
+	Revision       int64     `json:"revision"`
+	SortOrder      int       `json:"sort_order"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type RewardExchangeRevision struct {
-	OfferID   uuid.UUID `gorm:"type:uuid;primaryKey" json:"offer_id"`
-	Revision  int64     `gorm:"primaryKey" json:"revision"`
-	Snapshot  JSONMap   `gorm:"type:jsonb" json:"snapshot"`
-	ActorID   uuid.UUID `gorm:"type:uuid" json:"actor_id"`
-	CreatedAt time.Time `json:"created_at"`
+	OfferID   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"offer_id"`
+	Revision  int64      `gorm:"primaryKey" json:"revision"`
+	Snapshot  JSONMap    `gorm:"type:jsonb" json:"snapshot"`
+	ActorID   *uuid.UUID `gorm:"type:uuid" json:"actor_id"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type RewardExchangeRequest struct {
@@ -67,69 +56,33 @@ type RewardExchangeOrder struct {
 	RewardQuantity int64     `json:"reward_quantity"`
 	Snapshot       JSONMap   `gorm:"type:jsonb" json:"snapshot"`
 	CostLedgerID   uuid.UUID `gorm:"type:uuid" json:"cost_ledger_id"`
-	RewardRecordID uuid.UUID `gorm:"type:uuid" json:"reward_record_id"`
+	RewardLedgerID uuid.UUID `gorm:"type:uuid" json:"reward_ledger_id"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-func (r *RewardRepository) ListExchangeOffers(ctx context.Context, admin bool) ([]RewardExchangeOfferView, error) {
+func (r *RewardRepository) ListExchangeOffers(ctx context.Context, admin bool) ([]RewardExchangeOffer, error) {
 	rows := []RewardExchangeOffer{}
 	q := r.db.WithContext(ctx)
 	if !admin {
 		q = q.Where("enabled = true")
 	}
-	if err := q.Order("sort_order ASC, id ASC").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	defs, err := r.ListDefinitions(ctx)
-	if err != nil {
-		return nil, err
-	}
-	byID := map[uuid.UUID]RewardDefinition{}
-	for _, def := range defs {
-		byID[def.ID] = def
-	}
-	views := make([]RewardExchangeOfferView, 0, len(rows))
-	for _, row := range rows {
-		cost, costOK := byID[row.CostDefinitionID]
-		reward, rewardOK := byID[row.RewardDefinitionID]
-		available := costOK && rewardOK && row.Enabled && !cost.Disabled && !reward.Disabled
-		if admin || available {
-			views = append(views, RewardExchangeOfferView{row, rewardSnapshot(cost), rewardSnapshot(reward), available})
-		}
-	}
-	return views, nil
+	err := q.Order("sort_order ASC,id ASC").Find(&rows).Error
+	return rows, err
 }
 
 func (r *RewardRepository) SaveExchangeOffer(ctx context.Context, actor uuid.UUID, id uuid.UUID, wanted RewardExchangeOffer) (*RewardExchangeOffer, error) {
-	if strings.TrimSpace(wanted.Name) == "" || len(wanted.Name) > 128 || len(wanted.Description) > 4000 || wanted.CostDefinitionID == wanted.RewardDefinitionID {
+	if strings.TrimSpace(wanted.Name) == "" || len(wanted.Name) > 128 || len(wanted.Description) > 4000 || wanted.SortOrder < -2147483648 || wanted.SortOrder > 2147483647 {
 		return nil, ErrExchangeUnavailable
 	}
 	if wanted.CostQuantity < 1 || wanted.CostQuantity > MaxRewardQuantity || wanted.RewardQuantity < 1 || wanted.RewardQuantity > MaxRewardQuantity {
 		return nil, ErrRewardQuantity
 	}
 	err := r.WithTx(ctx, func(tx *RewardRepository) error {
-		if err := tx.requireRewardAdmin(ctx, actor); err != nil {
-			return err
-		}
 		if err := tx.LockConfiguration(ctx); err != nil {
 			return err
 		}
-		cost, err := tx.DefinitionByID(ctx, wanted.CostDefinitionID)
-		if err != nil {
+		if err := tx.requireRewardAdmin(ctx, actor); err != nil {
 			return err
-		}
-		reward, err := tx.DefinitionByID(ctx, wanted.RewardDefinitionID)
-		if err != nil {
-			return err
-		}
-		if !cost.Stackable || !cost.Consumable || cost.Kind != "currency" && cost.Kind != "credit" {
-			return ErrExchangeUnavailable
-		}
-		if !reward.Stackable && wanted.RewardQuantity != 1 {
-			return ErrRewardQuantity
-		}
-		if wanted.Enabled && (cost.Disabled || reward.Disabled) {
-			return ErrRewardDisabled
 		}
 		before := RewardExchangeOffer{}
 		if id != uuid.Nil {
@@ -159,7 +112,7 @@ func (r *RewardRepository) SaveExchangeOffer(ctx context.Context, actor uuid.UUI
 		if err := json.Unmarshal(encoded, &snapshot); err != nil {
 			return err
 		}
-		if err := tx.db.Create(&RewardExchangeRevision{OfferID: wanted.ID, Revision: wanted.Revision, Snapshot: snapshot, ActorID: actor, CreatedAt: wanted.UpdatedAt}).Error; err != nil {
+		if err := tx.db.Create(&RewardExchangeRevision{OfferID: wanted.ID, Revision: wanted.Revision, Snapshot: snapshot, ActorID: &actor, CreatedAt: wanted.UpdatedAt}).Error; err != nil {
 			return err
 		}
 		return tx.rewardAudit(ctx, actor, nil, "reward_exchange_offer", uuid.NewString(), JSONMap{"before": before, "after": wanted})
@@ -207,59 +160,25 @@ func (r *RewardRepository) Exchange(ctx context.Context, player uuid.UUID, in Re
 		if offer.Revision != in.Revision {
 			return ErrExchangeChanged
 		}
-		cost, err := tx.DefinitionByID(ctx, offer.CostDefinitionID)
-		if err != nil {
-			return err
-		}
-		reward, err := tx.DefinitionByID(ctx, offer.RewardDefinitionID)
-		if err != nil {
-			return err
-		}
-		if cost.Disabled || reward.Disabled {
-			return ErrRewardDisabled
-		}
-		if !cost.Stackable || !cost.Consumable || cost.ID == reward.ID {
-			return ErrExchangeUnavailable
-		}
-		if in.Units > MaxRewardQuantity/offer.CostQuantity || in.Units > MaxRewardQuantity/offer.RewardQuantity || !reward.Stackable && in.Units != 1 {
+		if offer.CostQuantity < 1 || offer.RewardQuantity < 1 || in.Units > MaxRewardQuantity/offer.CostQuantity || in.Units > MaxRewardQuantity/offer.RewardQuantity {
 			return ErrRewardQuantity
 		}
-		ids := []uuid.UUID{cost.ID, reward.ID}
-		sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
-		for _, id := range ids {
-			if err := tx.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&PlayerRewardBalance{PlayerID: player, RewardDefinitionID: id, UpdatedAt: time.Now()}).Error; err != nil {
-				return err
-			}
-		}
-		balances := []PlayerRewardBalance{}
-		if err := tx.db.Clauses(clause.Locking{Strength: "UPDATE"}).Where("player_id = ? AND reward_definition_id IN ?", player, ids).Order("reward_definition_id ASC").Find(&balances).Error; err != nil {
+		if err := tx.LockBalances(ctx, player, []string{PointsKey, MessageRewriteCreditKey}); err != nil {
 			return err
 		}
-		for _, balance := range balances {
-			if balance.RewardDefinitionID == reward.ID && !reward.Stackable && balance.Balance > 0 {
-				return ErrExchangeOwned
-			}
-		}
 		order = RewardExchangeOrder{ID: uuid.New(), RequestID: in.RequestID, PlayerID: player, OfferID: offer.ID, OfferRevision: offer.Revision, Units: in.Units, CostQuantity: offer.CostQuantity * in.Units, RewardQuantity: offer.RewardQuantity * in.Units,
-			Snapshot: JSONMap{"name": offer.Name, "description": offer.Description, "cost_asset": rewardSnapshot(*cost), "reward_asset": rewardSnapshot(*reward), "cost_per_unit": offer.CostQuantity, "reward_per_unit": offer.RewardQuantity}, CreatedAt: time.Now()}
-		paid, err := tx.ConsumeInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: cost.Key, Quantity: order.CostQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:cost:" + order.ID.String(), Metadata: JSONMap{"reward_snapshot": rewardSnapshot(*cost)}})
+			Snapshot: JSONMap{"name": offer.Name, "description": offer.Description, "cost_per_unit": offer.CostQuantity, "reward_per_unit": offer.RewardQuantity}, CreatedAt: time.Now()}
+		paid, err := tx.ConsumeInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: PointsKey, Quantity: order.CostQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:cost:" + order.ID.String()})
 		if err != nil {
 			return err
 		}
 		awardKey := "exchange:reward:" + order.ID.String()
-		awarded, err := tx.AwardInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: reward.Key, Quantity: order.RewardQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: awardKey, Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision}})
+		awarded, err := tx.GrantInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: MessageRewriteCreditKey, Quantity: order.RewardQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: awardKey, Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision}})
 		if err != nil {
 			return err
 		}
-		if awarded.Ledger == nil || paid.Ledger == nil {
-			return ErrExchangeOwned
-		}
-		var record RewardRecord
-		if err := tx.db.First(&record, "source_key = ?", awardKey).Error; err != nil {
-			return err
-		}
 		order.CostLedgerID = paid.Ledger.ID
-		order.RewardRecordID = record.ID
+		order.RewardLedgerID = awarded.Ledger.ID
 		return tx.db.Create(&order).Error
 	})
 	return &order, err

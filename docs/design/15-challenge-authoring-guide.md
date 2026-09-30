@@ -8,7 +8,7 @@
 
 1. 叙事内容：Character、Persona、Scenario、Prompt、WorldBook。
 2. 运行契约：State Schema、允许动作、玩家能力和展示布局。
-3. 可信规则：后端已注册的 verifier、calculator 和可选题材模块。
+3. 可信规则：后端已注册的 verifier 和可选题材模块。
 4. 结果资产：稳定 outcome 和全局 reward definitions。
 
 ## 先判断是否需要新后端模块
@@ -36,7 +36,7 @@
 - 需要新的后端动作或奖励计算方法；
 - 结果必须由服务端专用算法产生。
 
-模块必须在 server 组合根显式注册，并通过 descriptor 声明允许的 action、verifier、calculator 和 settlement handler。管理员不能上传 Go、JavaScript、SQL 或任意表达式。
+模块必须在 server 组合根显式注册，并通过 descriptor 声明允许的 action、verifier 和 settlement handler。管理员不能上传 Go、JavaScript、SQL 或任意表达式。
 
 ## 标准目录
 
@@ -50,7 +50,6 @@ backend/data/preset_packs/<challenge-slug>/
     actions.json
     settlement.json
     presentation.json
-  rewards.json
   GAMEPLAY_DESIGN.md
   characters/
     narrator.json
@@ -75,8 +74,8 @@ backend/data/preset_packs/<challenge-slug>/
 - 资产 slug：版本内按 kind 唯一。
 - outcome key：版本内稳定，例如 `case_solved`。
 - roll key：服务端证据稳定，例如 `investigation.final-accusation`。
-- reward key：全局命名空间，例如 `midnight-case.case-token`。
-- gameplay engine/verifier/calculator key：只能使用后端目录返回的已安装值。
+- reward key：全局命名空间，例如 `fatecraft.points`。
+- gameplay engine/verifier key：只能使用后端目录返回的已安装值。
 
 标题和中文文案可以调整，安全规则只能引用稳定 key。
 
@@ -103,7 +102,7 @@ backend/data/preset_packs/<challenge-slug>/
     "allowed_personas": ["private-investigator"]
   },
   "quick_start_guide": "检查现场、保护线索并在时间耗尽前提出最终指控。",
-  "features": ["证据完整度", "倒计时", "服务端判定", "多奖励"],
+  "features": ["证据完整度", "倒计时", "服务端判定", "通关积分"],
   "dependencies": []
 }
 ~~~
@@ -118,7 +117,7 @@ Manifest 的 ID、名称和说明必须与 Challenge Pack 一致。所有推荐�
 {
   "entry_requirement": {
     "type": "reward_balance",
-    "reward_key": "midnight-case.case-token",
+    "reward_key": "fatecraft.points",
     "operator": "gte",
     "quantity": 1
   }
@@ -132,8 +131,8 @@ Manifest 的 ID、名称和说明必须与 Challenge Pack 一致。所有推荐�
   "entry_requirement": {
     "type": "any",
     "conditions": [
-      {"type": "reward_balance", "reward_key": "guild.detective-license", "quantity": 1},
-      {"type": "reward_balance", "reward_key": "midnight-case.case-token", "quantity": 3}
+      {"type": "reward_balance", "reward_key": "fatecraft.message-rewrite-credit", "quantity": 1},
+      {"type": "reward_balance", "reward_key": "fatecraft.points", "quantity": 3}
     ]
   }
 }
@@ -153,6 +152,7 @@ Manifest 的 ID、名称和说明必须与 Challenge Pack 一致。所有推荐�
       "category": "success",
       "title": "真相大白",
       "tone": "success",
+      "reward_points": 100,
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
@@ -175,48 +175,11 @@ Manifest 的 ID、名称和说明必须与 Challenge Pack 一致。所有推荐�
 
 `values` 必须包含 1 到 64 个不重复的 JSON 标量，`path` 必须在本版本 State Schema 中声明。等级顺序及哪些值满足门槛必须由玩法包明确列出，不要依赖平台代码解释题材名称。
 
-### Reward rule
+### 通关积分
 
-~~~json
-{
-  "reward_rules": [
-    {
-      "outcome_key": "case_solved",
-      "reward_key": "midnight-case.truth-seeker",
-      "calculator_key": "core.fixed",
-      "calculator_config": {"amount": 1}
-    },
-    {
-      "outcome_key": "case_solved",
-      "reward_key": "midnight-case.case-token",
-      "calculator_key": "core.fixed",
-      "calculator_config": {"amount": 2}
-    }
-  ]
-}
-~~~
+在上述 outcome 中填写 `reward_points`（例如 100）。非负安全整数，省略或 0 均不发积分；0 积分结局仍正常完成。单局与 Campaign 使用同一字段，发布后随版本固定。Campaign 的正积分结局必须由本版本真实终局任务引用。
 
-一项成功结局可以同时授予徽章和货币。不要在 Prompt、action 或 narrative 中计算平台奖励。
-
-Campaign 可把局内堆叠物转换为跨存档账号资源：
-
-~~~json
-{
-  "outcome_key": "expedition_extracted",
-  "reward_key": "expedition.world-essence",
-  "calculator_key": "campaign.extract_item_stack",
-  "calculator_config": {
-    "item_key": "world-fragment",
-    "quality_key": "common",
-    "source_quantity": 3,
-    "reward_quantity": 1,
-    "maximum_reward_quantity": 10,
-    "consume": true
-  }
-}
-~~~
-
-来源必须是当前版本的可堆叠 item，目标必须是可叠加账号奖励，outcome 必须被真实终局任务引用。上限是必填安全边界；模型和玩家不能提交实际数量。完整结算顺序、幂等和快照契约见 `21-campaign-outcome-rewards.md`。
+无需独立奖励定义文件或计算器。不要在 Prompt、action 或 narrative 中计算平台奖励，也不要把局内灵石、碎片折算或额外扣除来发账号奖励。事务、幂等与直连边界见 [21 Campaign 终局积分](21-campaign-outcome-rewards.md)。
 
 ## `runtime/`
 
@@ -297,7 +260,7 @@ Runtime 使用 `runtime/runtime.json` 作为入口。它必须声明 `runtime_co
 
 数值可用 `min/max`，字符串和 list 可用 `min_length/max_length`，enum 必须提供仅由非空字符串组成的非空 `values`。默认值必须满足声明类型和约束。
 
-只有 object 可声明 `allow_children=true`。动态子路径适合非 Campaign 玩法的纯展示扩展，不适合数值 verifier 和 reward calculator；需要验证或计奖的路径应显式声明类型。Campaign Runtime 禁止无边界动态对象，长期事实必须放入 `campaign.field_ownership` 并由领域 Action 写入。
+只有 object 可声明 `allow_children=true`。动态子路径适合非 Campaign 玩法的纯展示扩展，不适合数值 verifier；需要验证的路径应显式声明类型。Campaign Runtime 禁止无边界动态对象，长期事实必须放入 `campaign.field_ownership` 并由领域 Action 写入。
 
 ### Campaign
 
@@ -417,46 +380,9 @@ Campaign Runtime 还可以声明 `presentation.campaign_view`，由通用 `Campa
 
 玩法状态、投影和结局中的稳定枚举值通过 `presentation.value_labels` 提供玩家文案，映射随 Runtime 版本进入内容哈希。例如 `campaign.relationship.public_stance.neutral` 可以映射为“中立”。命名空间应描述语义路径，值 key 保持规则中的稳定值；不要把中文写入动作参数、数据库字段或事件。未知技术值在玩家界面显示为安全占位或被省略，不得回退为英文 key。动态 `item_list` 子字段必须提供标签或可读名称，不能依赖前端 `Object.entries` 猜测。
 
-## `rewards.json`
+## 账号奖励边界
 
-~~~json
-[
-  {
-    "key": "midnight-case.truth-seeker",
-    "kind": "badge",
-    "name": "真相揭示者",
-    "description": "在午夜前找出真凶。",
-    "unit": "枚",
-    "icon": "ribbon",
-    "stackable": false,
-    "consumable": false,
-    "featured": false,
-    "sort_order": 20,
-    "metadata": {}
-  },
-  {
-    "key": "midnight-case.case-token",
-    "kind": "currency",
-    "name": "调查凭证",
-    "description": "可作为其他功能的前置条件。",
-    "unit": "张",
-    "icon": "ticket",
-    "stackable": true,
-    "consumable": true,
-    "featured": false,
-    "sort_order": 30,
-    "metadata": {}
-  }
-]
-~~~
-
-支持 `currency/item/badge/entitlement/credit`。非堆叠奖励必须不可消费。导入时：
-
-- key 不存在则创建；
-- 已存在且 kind/stackable/consumable 一致、资产未停用时可复用；显式导入先预览共享展示字段与引用，确认后刷新；
-- 稳定语义冲突则拒绝整包导入并回滚。
-
-平台自有奖励（如改写额度）不必重复放进每个包，但发布时必须已存在且未停用。普通重启不覆盖管理员配置；显式导入须提交当前 preview_token，预览变化则重新确认。
+玩法包只声明结局积分。平台固定 `fatecraft.points` 与 `fatecraft.message-rewrite-credit` 两项余额；导入器拒绝旧的 `rewards.json` 文件，Manifest 和版本保存拒绝旧 `reward_rules` 等未知字段。注册赠送和兑换套餐独立由后台管理，不写入玩法包。
 
 ## Character、Persona 与 Scenario
 
@@ -514,13 +440,9 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 
 ## 奖励设计
 
-资产、注册赠送、用户发放与积分兑换在独立“奖励管理”配置，详见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。玩法包只声明通关资格和可信计算，不内嵌兑换商品、账号余额或管理员操作，注册赠送与兑换汇率不进入玩法版本。
+为每个结局设置容易理解的固定积分，局内资源继续服务于原玩法。账号奖励自动到账，积分可兑换剧情改写次数。注册、管理发放、套餐和收支见 [22 奖励管理](22-reward-management-and-exchange.md)。
 
-- 徽章/entitlement 通常非堆叠，固定数量 1。
-- currency/credit 通常可堆叠，可按固定值或可信数值状态计算。
-- 不要把局内临时资源直接当账号余额；结算时由 calculator 转换。
-- 需要被其他功能使用的奖励必须有清晰、长期稳定的语义。
-- 发布后改变奖励稳定语义时创建新 key，不覆盖旧定义。
+通关积分进入玩法版本；注册赠送和兑换价格不进入玩法哈希。修改后两者不应改变旧存档的通关所得。
 
 ## 管理端工作流
 
@@ -532,7 +454,7 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 4. 在“玩法运行”选择已安装模块并声明 State Schema。
 5. 在“玩家界面”配置状态分组。
 6. 在“结局验证”选择 verifier 并填写受限配置。
-7. 在“奖励规则”选择全局奖励定义与 calculator。后台“奖励管理”可集中定位规则；core.fixed、core.state_multiplier、campaign.extract_item_stack 提供结构化参数表单。
+7. 在同一结局表单填写通关积分，0 表示不发放；后台“奖励管理”可集中定位规则。
 8. 保存草稿，再校验发布。
 
 整份 JSON 位于“高级 JSON”，适合导入/导出，不是主要维护入口。
@@ -543,11 +465,11 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 
 1. 在 `data/preset_packs/<slug>` 创建标准目录。
 2. 编写 `GAMEPLAY_DESIGN.md`。
-3. 完成 pack/runtime/rewards 和资产 JSON。
+3. 完成 pack/runtime 和资产 JSON。
 4. 运行后端 importer 测试，确认内容哈希稳定。
 5. 空库启动会自动导入；已有数据库由管理员在“内置内容”显式导入，内容不一致时确认覆盖。
 
-不需要管理员手工创建奖励表记录或执行额外 SQL。导入器在一个事务内处理奖励定义、版本和发布。同版本覆盖只适用于未被对话引用的内置快照；投入使用后应提升版本号。
+不需要管理员手工创建奖励表记录或执行额外 SQL。导入器在一个事务内处理版本、结局积分和发布。同版本覆盖只适用于未被对话引用的内置快照；投入使用后应提升版本号。
 
 ## 发布前检查表
 
@@ -561,8 +483,8 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 - internal/model 字段没有进入 presentation。
 - 每个 outcome key 唯一，Prompt 明确引用。
 - verifier 的状态路径和 roll key 正确。
-- 每个 reward key 在 rewards.json 或平台定义中存在。
-- calculator 配置有效，非堆叠奖励数量合理。
+- reward_points 为非负安全整数，入口余额条件只能引用两个固定 key。
+- Campaign 正积分结局关联真实终局任务。
 - 成功、失败、中性结局都有清晰叙事行为。
 - 玩家伪造过去事件、物品、判定或奖励不能绕过服务端。
 - 可重复玩法不存在无业务必要的统一初始功法或物品；Campaign 的互斥开局传承使用 `starting_pool`，未选内容仍有可信取得路径。

@@ -20,6 +20,8 @@ func TestRewardRequestValidationBeforeDatabase(t *testing.T) {
 	}{
 		{"decimal exchange", `{"units":1.5}`, s.exchangeReward},
 		{"overflow exchange", `{"units":999999999999999999999}`, s.exchangeReward},
+		{"old asset field", `{"cost_definition_id":"old"}`, s.saveExchangeOffer},
+		{"old claim field", `{"delivery_mode":"claim"}`, s.createAdminRewardGrant},
 		{"decimal grant", `{"quantity":1.5}`, s.createAdminRewardGrant},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,7 +44,7 @@ func TestRewardErrorsExposeStableCodes(t *testing.T) {
 		code   string
 		status int
 	}{
-		{storage.ErrExchangeChanged, "exchange_changed", 409}, {storage.ErrExchangeOwned, "exchange_owned", 409},
+		{storage.ErrExchangeChanged, "exchange_changed", 409}, {storage.ErrRewardKey, "invalid_reward_key", 400},
 		{storage.ErrExchangeUnavailable, "exchange_unavailable", 400}, {storage.ErrInsufficientReward, "insufficient_balance", 400},
 		{storage.ErrRewardRequestConflict, "request_conflict", 409}, {storage.ErrRewardAdminRequired, "admin_required", 403},
 	} {
@@ -61,9 +63,9 @@ func TestRewardErrorsExposeStableCodes(t *testing.T) {
 
 func TestRewardPrivateFieldsOnlyInAdminView(t *testing.T) {
 	actor, request := uuid.New(), uuid.New()
-	row := storage.RewardRecord{ID: uuid.New(), PlayerID: uuid.New(), ActorID: &actor, RequestID: &request, Reason: "private_reason", RequestHash: "private_hash"}
+	row := storage.RewardLedgerEntry{ID: uuid.New(), PlayerID: uuid.New(), ActorID: &actor, RequestID: &request, SourceID: request.String(), Reason: "private_reason", RequestHash: "private_hash"}
 	public, _ := json.Marshal(row)
-	for _, key := range []string{"private_reason", "private_hash", "user_id", "operator_id", "request_id"} {
+	for _, key := range []string{"private_reason", "private_hash", "user_id", "operator_id", "request_id", request.String(), actor.String()} {
 		if strings.Contains(string(public), key) {
 			t.Fatalf("private field leaked: %s", key)
 		}

@@ -189,7 +189,7 @@ Handler 返回 rejected/failed 时，内部哨兵回滚该工具事务内的所�
 
 平台保留 `id`、`status`、`current_location_key`、`game_time`、`revision`、`recent_events`、内部 `action_capabilities`、玩家 Snapshot 的 `outcome_rewards` 和压缩时注入的 `projection_control`，玩法投影不能覆盖。`outcome_rewards` 由平台根据不可变账本恢复，不进入玩法 Provider 自定义数据。玩家 snapshot 不能泄漏 internal 或仅供模型使用的事实；模型上下文也必须先按地点、查询和集合上限裁剪，再接受统一 Token 压缩。内部 `action_capabilities` 在生成工具快照后会从模型可见 Projection 移除。
 
-终局带出不是普通模型动作。可信终局 Handler 在 Campaign 行锁事务内调用平台奖励结算，来源扣除、账号余额、不可变账本、完成状态和事件原子提交；计算器和发布规则见 `21-campaign-outcome-rewards.md`。
+终局积分由可信终局 Handler 在 Campaign 行锁事务内发放，账号余额、不可变账本、完成状态和事件原子提交；金额来自固定版本 reward_points，不额外扣除局内来源。发布规则见 `21-campaign-outcome-rewards.md`。
 
 低窗口压缩只改变本次模型读模型，不改变 Campaign 事实、revision、API snapshot、工具快照或事务内能力复核。`projection_control.partial=true` 时，未列主题表示本轮未提供，不表示集合为空。模型只能调用当前步骤实际提供的 `fc_action_*` 工具；上下文日志记录压缩前后 Token 和省略 key。
 

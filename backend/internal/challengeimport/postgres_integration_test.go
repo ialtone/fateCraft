@@ -79,27 +79,7 @@ func assertMortalPathPublishedContent(
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules, err := repository.ListRewardRules(ctx, versionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reward, err := repository.Rewards().DefinitionByKey(ctx, "mortal-path.world-seal")
-	if err != nil {
-		t.Fatal(err)
-	}
-	lawEssence, err := repository.Rewards().DefinitionByKey(ctx, "mortal-path.law-essence")
-	if err != nil {
-		t.Fatal(err)
-	}
-	spiritEssence, err := repository.Rewards().DefinitionByKey(ctx, "mortal-path.spirit-essence")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(definitions) != 225 || len(outcomes) != 2 || len(rules) != 6 || reward.Kind != "badge" ||
-		!lawEssence.Stackable || !lawEssence.Consumable || !spiritEssence.Stackable || !spiritEssence.Consumable {
-		t.Fatalf(
-			"incomplete mortal-path publication: definitions=%d outcomes=%d rules=%d rewards=%+v/%+v/%+v",
-			len(definitions), len(outcomes), len(rules), reward, lawEssence, spiritEssence,
-		)
+	if len(definitions) != 225 || len(outcomes) != 2 || outcomes[0].RewardPoints != 1000 || outcomes[1].RewardPoints != 1000 {
+		t.Fatalf("incomplete fixed point publication: %+v", outcomes)
 	}
 }

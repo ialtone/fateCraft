@@ -5,7 +5,13 @@ export function confirmsPendingExchange(
   pending: RewardExchangeRequest | undefined,
   order: RewardExchangeOrder,
 ): boolean {
-  return !!pending && pending.request_id === order.request_id
+  return (
+    !!pending &&
+    pending.request_id === order.request_id &&
+    pending.offer_id === order.offer_id &&
+    pending.revision === order.offer_revision &&
+    pending.units === order.units
+  )
 }
 
 export function validExchangeRequestID(value: string): boolean {

@@ -105,13 +105,12 @@ func TestPostgresReleaseClaimKeepsJobPending(t *testing.T) {
 func TestPostgresClientRouteSettlementSkipsRewards(t *testing.T) {
 	db := openGenerationTestDB(t)
 	ctx := context.Background()
-	playerID, packID, versionID, definitionID, outcomeRuleID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	playerID, packID, versionID, outcomeRuleID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	hash := strings.Repeat("0", 64)
 	for _, statement := range []string{
 		`INSERT INTO users (id, username, display_name) VALUES ('` + playerID.String() + `', 'settle-route-test', 'Settle Route Test')`,
 		`INSERT INTO challenge_packs (id, slug, name) VALUES ('` + packID.String() + `', 'settle-route-test', 'Settle Route Test')`,
 		`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES ('` + versionID.String() + `', '` + packID.String() + `', '1.0.0', 'published', '{}'::jsonb, '` + hash + `', CURRENT_TIMESTAMP)`,
-		`INSERT INTO reward_definitions (id, key, kind, name, description, unit, icon, stackable, consumable, featured, sort_order, metadata) VALUES ('` + definitionID.String() + `', 'route-test.stone', 'currency', 'Stone', '', 'unit', '', TRUE, TRUE, FALSE, 1, '{}'::jsonb)`,
 		`INSERT INTO challenge_outcome_rules (id, challenge_version_id, outcome_key, category, title, verifier_key, verifier_config) VALUES ('` + outcomeRuleID.String() + `', '` + versionID.String() + `', 'good_end', 'success', 'Good End', 'none', '{}'::jsonb)`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {
@@ -140,11 +139,8 @@ func TestPostgresClientRouteSettlementSkipsRewards(t *testing.T) {
 			Category: "success", TitleSnapshot: "Good End", Summary: "done",
 			SettlementDetail: JSONMap{}, SettledAt: time.Now(),
 		}
-		grants := []ChallengeRewardGrant{{
-			Definition: RewardDefinition{ID: definitionID, Key: "route-test.stone", Name: "Stone", Unit: "unit"},
-			Quantity:   5,
-		}}
-		if _, err := repo.CompleteRun(ctx, conv, run, grants); err != nil {
+		points := int64(5)
+		if _, err := repo.CompleteRun(ctx, conv, run, points); err != nil {
 			t.Fatalf("complete run (%s): %v", route, err)
 		}
 		updated, err := repo.LockConversation(ctx, convID)
@@ -163,7 +159,7 @@ func TestPostgresClientRouteSettlementSkipsRewards(t *testing.T) {
 	balanceOf := func() int64 {
 		t.Helper()
 		var balance PlayerRewardBalance
-		if err := db.First(&balance, "player_id = ? AND reward_definition_id = ?", playerID, definitionID).Error; err != nil {
+		if err := db.First(&balance, "player_id = ? AND reward_key = ?", playerID, PointsKey).Error; err != nil {
 			return -1
 		}
 		return balance.Balance
@@ -192,8 +188,7 @@ func TestPostgresClientRouteRegenerateSkipsCharge(t *testing.T) {
 	db := openGenerationTestDB(t)
 	ctx := context.Background()
 	playerID, packID, versionID := uuid.New(), uuid.New(), uuid.New()
-	// 改写额度由基线 migration 预置（id 00000000-0000-0000-0000-000000000001，
-	// key fatecraft.message-rewrite-credit），种子不得重复插入。
+	// 两项余额身份由平台固定，测试按实际授予创建余额。
 	hash := strings.Repeat("0", 64)
 	for _, statement := range []string{
 		`INSERT INTO users (id, username, display_name) VALUES ('` + playerID.String() + `', 'regen-route-test', 'Regen Route Test')`,
@@ -264,13 +259,26 @@ func TestPostgresClientRouteRegenerateSkipsCharge(t *testing.T) {
 	}
 
 	// server 路由：行为不变，正常扣费。
-	serverPreparation := regenerate(newConversation(LLMRouteServer), "regen:server:1")
+	serverConversation := newConversation(LLMRouteServer)
+	serverPreparation := regenerate(serverConversation, "regen:server:1")
 	if !serverPreparation.RewardConsumed {
 		t.Fatal("server regenerate did not consume rewrite credit")
 	}
 	if count := consumeCount(); count != 1 {
 		t.Fatalf("server regenerate consume entries = %d, want 1", count)
 	}
+	// 同一对话的新请求应重新扣费，不能被来源防重误当成第一次消费。
+	if err := db.Model(&ConversationTurn{}).Where("id = ?", serverPreparation.Turn.ID).Update("status", TurnStatusCompleted).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&GenerationAttempt{}).Where("id = ?", serverPreparation.Attempt.ID).Update("status", AttemptStatusCompleted).Error; err != nil {
+		t.Fatal(err)
+	}
+	second := regenerate(serverConversation, "regen:server:2")
+	if !second.RewardConsumed || consumeCount() != 2 {
+		t.Fatal("separate regenerate request was not charged")
+	}
+	checkRewardBalance(t, db, playerID, MessageRewriteCreditKey, 8)
 }
 
 func TestPostgresClientRouteRewriteSkipsCharge(t *testing.T) {

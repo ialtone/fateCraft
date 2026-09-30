@@ -259,7 +259,7 @@ func TestEncounterVictoryQuestCompletesCampaignWithMilestoneAndAccountReward(t *
 		outcome.OutcomeKey == nil || *outcome.OutcomeKey != "world-warden" || len(outcome.Events) != 3 {
 		t.Fatalf("unexpected campaign completion: %+v", outcome)
 	}
-	if rewards, ok := outcome.Result["account_rewards"].([]storage.CampaignOutcomeReward); !ok || len(rewards) != 1 || rewards[0].Key != "fate-mark" {
+	if rewards, ok := outcome.Result["account_rewards"].([]storage.CampaignOutcomeReward); !ok || len(rewards) != 1 || rewards[0].Key != storage.PointsKey {
 		t.Fatalf("account reward missing: %#v", outcome.Result["account_rewards"])
 	}
 }

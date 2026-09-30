@@ -6,13 +6,21 @@
   "description": "一世一局的寿元挑战。你将在有限寿元中经历机缘、积累资源、逐级突破，并在正统渡劫、虚空裂缝与仙缘传送之间选择飞升道路。知足与贪婪的抉择，将决定这一世的命运。",
   "author": "ialtone",
   "icon": "sparkles",
-  "tags": ["修真", "飞升", "凡人修仙", "天命判定", "寿元管理"],
+  "tags": [
+    "修真",
+    "飞升",
+    "凡人修仙",
+    "天命判定",
+    "寿元管理"
+  ],
   "default_config": {
     "recommended_character": "heavenly-dao-proctor",
     "recommended_persona": "rogue-cultivator",
     "recommended_scenario": "heavenly-trial",
     "recommended_prompt": "ascension-trials-v1",
-    "required_worldbooks": ["ascension-system-v1"],
+    "required_worldbooks": [
+      "ascension-system-v1"
+    ],
     "allowed_personas": [
       "alchemy-master",
       "demonic-cultivator",
@@ -32,22 +40,71 @@
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
-          {"type": "state_in", "path": "profile.cultivation_realm_key", "values": ["spirit-transformation", "void-refining", "body-integration", "great-ascension"]},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.foundation"},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.core"},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.nascent"},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.deity"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.1"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.2"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.3"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.4"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.5"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.6"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.7"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.8"},
-          {"type": "successful_roll", "key": "cultivation.tribulation.9"}
+          {
+            "type": "state_in",
+            "path": "profile.cultivation_realm_key",
+            "values": [
+              "spirit-transformation",
+              "void-refining",
+              "body-integration",
+              "great-ascension"
+            ]
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.foundation"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.core"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.nascent"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.deity"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.1"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.2"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.3"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.4"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.5"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.6"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.7"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.8"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.tribulation.9"
+          }
         ]
-      }
+      },
+      "reward_points": 300
     },
     {
       "outcome_key": "void_ascension",
@@ -57,13 +114,36 @@
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
-          {"type": "state_in", "path": "profile.cultivation_realm_key", "values": ["nascent-soul", "spirit-transformation", "void-refining", "body-integration", "great-ascension"]},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.foundation"},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.core"},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.nascent"},
-          {"type": "successful_roll", "key": "cultivation.void_rift.traverse"}
+          {
+            "type": "state_in",
+            "path": "profile.cultivation_realm_key",
+            "values": [
+              "nascent-soul",
+              "spirit-transformation",
+              "void-refining",
+              "body-integration",
+              "great-ascension"
+            ]
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.foundation"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.core"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.nascent"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.void_rift.traverse"
+          }
         ]
-      }
+      },
+      "reward_points": 200
     },
     {
       "outcome_key": "affinity_ascension",
@@ -73,12 +153,33 @@
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
-          {"type": "state_in", "path": "profile.cultivation_realm_key", "values": ["golden-core", "nascent-soul", "spirit-transformation", "void-refining", "body-integration", "great-ascension"]},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.foundation"},
-          {"type": "successful_roll", "key": "cultivation.breakthrough.core"},
-          {"type": "successful_roll", "key": "cultivation.affinity.acquire"}
+          {
+            "type": "state_in",
+            "path": "profile.cultivation_realm_key",
+            "values": [
+              "golden-core",
+              "nascent-soul",
+              "spirit-transformation",
+              "void-refining",
+              "body-integration",
+              "great-ascension"
+            ]
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.foundation"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.breakthrough.core"
+          },
+          {
+            "type": "successful_roll",
+            "key": "cultivation.affinity.acquire"
+          }
         ]
-      }
+      },
+      "reward_points": 150
     },
     {
       "outcome_key": "peaceful_passing",
@@ -87,8 +188,16 @@
       "tone": "info",
       "verifier_key": "core.conditions",
       "verifier_config": {
-        "conditions": [{"type": "state_number", "path": "profile.remaining_lifespan", "operator": "lte", "value": 5}]
-      }
+        "conditions": [
+          {
+            "type": "state_number",
+            "path": "profile.remaining_lifespan",
+            "operator": "lte",
+            "value": 5
+          }
+        ]
+      },
+      "reward_points": 0
     },
     {
       "outcome_key": "lifespan_exhausted",
@@ -97,32 +206,29 @@
       "tone": "error",
       "verifier_key": "core.conditions",
       "verifier_config": {
-        "conditions": [{"type": "state_number", "path": "profile.remaining_lifespan", "operator": "lte", "value": 0}]
-      }
-    }
-  ],
-  "reward_rules": [
-    {
-      "outcome_key": "orthodox_ascension",
-      "reward_key": "reincarnation-trials.spirit-stone",
-      "calculator_key": "core.state_multiplier",
-      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 30000, "max_amount": 60000}
-    },
-    {
-      "outcome_key": "void_ascension",
-      "reward_key": "reincarnation-trials.spirit-stone",
-      "calculator_key": "core.state_multiplier",
-      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 20000, "max_amount": 40000}
-    },
-    {
-      "outcome_key": "affinity_ascension",
-      "reward_key": "reincarnation-trials.spirit-stone",
-      "calculator_key": "core.state_multiplier",
-      "calculator_config": {"state_path": "attributes.灵石", "multiplier_bps": 15000, "max_amount": 30000}
+        "conditions": [
+          {
+            "type": "state_number",
+            "path": "profile.remaining_lifespan",
+            "operator": "lte",
+            "value": 0
+          }
+        ]
+      },
+      "reward_points": 0
     }
   ],
   "quick_start_guide": "选择一种修士身份开启新的一世。叙述者会生成完整角色和眼前机缘；你需要在事件、修炼、交易与探索中积累修为和资源，通过真实判定突破境界，并在寿元耗尽前选择正统渡劫、穿越虚空裂缝或寻找仙缘传送。",
-  "features": ["一世一局挑战", "完整角色与修真世界生成", "九阶可信境界突破", "寿元管理与时间压力", "灵石与修炼资源循环", "三种飞升路径选择", "天命判定系统（D20/D100）", "延寿机缘与宝物"],
+  "features": [
+    "一世一局挑战",
+    "完整角色与修真世界生成",
+    "九阶可信境界突破",
+    "寿元管理与时间压力",
+    "灵石与修炼资源循环",
+    "三种飞升路径选择",
+    "天命判定系统（D20/D100）",
+    "延寿机缘与宝物"
+  ],
   "dependencies": [],
   "created_at": "2026-06-14T00:00:00Z",
   "updated_at": "2026-08-15T00:00:00Z"

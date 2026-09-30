@@ -4,9 +4,9 @@ import { NAlert, NButton, NEmpty, NInputNumber, NModal, NSpin, useMessage } from
 import { rewardExchangeApi as api } from '@/api/rewards'
 import { useAuthStore } from '@/stores/auth'
 import { useRewardStore } from '@/stores/rewards'
-import { rewardError } from '@/lib/rewards'
+import { rewardError, POINTS } from '@/lib/rewards'
 import type {
-  RewardExchangeOfferView,
+  RewardExchangeOffer,
   RewardExchangeOrder,
   RewardExchangeRequest,
 } from '@/types/rewards'
@@ -15,12 +15,12 @@ const props = defineProps<{ active: boolean }>()
 const emit = defineEmits<{ changed: []; pendingChange: [pending: boolean]; viewOrders: [] }>(),
   message = useMessage(),
   rewards = useRewardStore()
-const offers = ref<RewardExchangeOfferView[]>([]),
+const offers = ref<RewardExchangeOffer[]>([]),
   error = ref(''),
   loading = ref(false),
   busy = ref(false),
   open = ref(false),
-  selected = ref<RewardExchangeOfferView>(),
+  selected = ref<RewardExchangeOffer>(),
   units = ref<number | null>(1),
   pending = ref<RewardExchangeRequest>(),
   result = ref<RewardExchangeOrder>(),
@@ -41,7 +41,7 @@ watch(pending, (value) => {
   }
 })
 const maxUnits = computed(() =>
-  selected.value?.reward_asset.stackable
+  selected.value
     ? Math.min(
         Math.floor(Number.MAX_SAFE_INTEGER / selected.value.cost_quantity),
         Math.floor(Number.MAX_SAFE_INTEGER / selected.value.reward_quantity),
@@ -56,10 +56,7 @@ const valid = computed(
     units.value >= 1 &&
     units.value <= maxUnits.value,
 )
-const balance = computed(
-  () =>
-    rewards.items.find((r) => r.definition.id === selected.value?.cost_definition_id)?.balance ?? 0,
-)
+const balance = computed(() => rewards.balanceFor(POINTS))
 async function load() {
   if (loading.value) return
   loading.value = true
@@ -73,7 +70,7 @@ async function load() {
     loading.value = false
   }
 }
-function choose(offer: RewardExchangeOfferView) {
+function choose(offer: RewardExchangeOffer) {
   if (pending.value) {
     open.value = true
     return
@@ -86,6 +83,9 @@ function choose(offer: RewardExchangeOfferView) {
   open.value = true
 }
 async function completed(order: RewardExchangeOrder) {
+  if (!confirmsPendingExchange(pending.value, order)) {
+    throw new Error('原请求结果与本次兑换内容不一致，请检查兑换记录。')
+  }
   result.value = order
   pending.value = undefined
   message.success('兑换完成，奖励已到账')
@@ -176,7 +176,7 @@ onMounted(() => {
     <div class="toolbar">
       <div>
         <h2>积分兑换</h2>
-        <p>通关积累的点数可兑换账号奖励和额度。</p>
+        <p>通关积累积分，兑换剧情改写次数。</p>
       </div>
       <NButton :loading="loading" @click="load">刷新商品</NButton>
     </div>
@@ -186,9 +186,7 @@ onMounted(() => {
         <article v-for="offer in offers" :key="offer.id">
           <h3>{{ offer.name }}</h3>
           <p>{{ offer.description }}</p>
-          <strong
-            >{{ offer.cost_quantity }} {{ offer.cost_asset.name }} → {{ offer.reward_quantity }}
-            {{ offer.reward_asset.name }}</strong
+          <strong>{{ offer.cost_quantity }} 积分 → {{ offer.reward_quantity }} 次剧情改写</strong
           ><NButton type="primary" @click="choose(offer)">兑换</NButton>
         </article>
       </div>
@@ -207,7 +205,7 @@ onMounted(() => {
       <template v-if="result"
         ><NAlert type="success"
           >兑换已完成：{{ result.snapshot.name }} × {{ result.units }}；获得
-          {{ result.reward_quantity }} {{ result.snapshot.reward_asset.name }}</NAlert
+          {{ result.reward_quantity }} 次剧情改写</NAlert
         >
         <p class="identifier">订单 {{ result.id }}</p>
         <div class="toolbar">
@@ -218,7 +216,8 @@ onMounted(() => {
       <template v-else-if="selected"
         ><h3>{{ selected.name }}</h3>
         <p>{{ selected.description }}</p>
-        <p>当前余额：{{ balance }} {{ selected.cost_asset.name }}</p>
+        <p v-if="valid">兑换后预计积分：{{ balance - selected.cost_quantity * (units ?? 1) }}</p>
+        <p>当前余额：{{ balance }} 积分</p>
         <NInputNumber
           v-model:value="units"
           :disabled="busy || !!pending"
@@ -229,11 +228,10 @@ onMounted(() => {
         />
         <p>
           支付 {{ valid ? selected.cost_quantity * (units ?? 1) : '—' }}
-          {{ selected.cost_asset.name }}，获得
+          积分，获得
           {{ valid ? selected.reward_quantity * (units ?? 1) : '—' }}
-          {{ selected.reward_asset.name }}
+          次剧情改写
         </p>
-        <p v-if="!selected.reward_asset.stackable">已经拥有该奖励时无法兑换，积分不会扣除。</p>
         <NAlert v-if="pending" type="warning"
           >结果尚未确认，请保留请求 ID 并重试同次兑换。
           <p class="identifier">{{ pending.request_id }}</p></NAlert

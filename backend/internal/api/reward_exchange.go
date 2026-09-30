@@ -26,12 +26,23 @@ func (s *Server) saveExchangeOffer(c *gin.Context) {
 			return
 		}
 	}
-	var body storage.RewardExchangeOffer
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var body struct {
+		Name           string `json:"name"`
+		Description    string `json:"description"`
+		CostQuantity   int64  `json:"cost_quantity"`
+		RewardQuantity int64  `json:"reward_quantity"`
+		Enabled        bool   `json:"enabled"`
+		SortOrder      int    `json:"sort_order"`
+		Revision       int64  `json:"revision"`
+	}
+	if err := bindRewardJSON(c, &body); err != nil {
 		c.JSON(400, gin.H{"error": "兑换商品格式无效"})
 		return
 	}
-	row, err := s.rewards.SaveExchangeOffer(c.Request.Context(), rewardActor(c), id, body)
+	row, err := s.rewards.SaveExchangeOffer(c.Request.Context(), rewardActor(c), id, storage.RewardExchangeOffer{
+		Name: body.Name, Description: body.Description, CostQuantity: body.CostQuantity,
+		RewardQuantity: body.RewardQuantity, Enabled: body.Enabled, SortOrder: body.SortOrder, Revision: body.Revision,
+	})
 	if err != nil {
 		rewardFail(c, err)
 		return
@@ -41,7 +52,7 @@ func (s *Server) saveExchangeOffer(c *gin.Context) {
 
 func (s *Server) exchangeReward(c *gin.Context) {
 	var body storage.RewardExchangeRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
+	if err := bindRewardJSON(c, &body); err != nil {
 		c.JSON(400, gin.H{"error": "兑换请求格式无效"})
 		return
 	}
@@ -116,15 +127,6 @@ func (s *Server) listExchangeRevisions(c *gin.Context) {
 	c.JSON(200, gin.H{"revisions": rows})
 }
 
-func (s *Server) rewardOverview(c *gin.Context) {
-	rows, err := s.rewards.Overview(c.Request.Context())
-	if err != nil {
-		rewardFail(c, err)
-		return
-	}
-	c.JSON(200, gin.H{"assets": rows})
-}
-
 func (s *Server) rewardRuleCatalog(c *gin.Context) {
 	limit, ok := adminListLimit(c)
 	if !ok {
@@ -134,11 +136,7 @@ func (s *Server) rewardRuleCatalog(c *gin.Context) {
 	if !ok {
 		return
 	}
-	cursor, ok := rewardCursor(c)
-	if !ok {
-		return
-	}
-	rows, err := s.rewards.RuleCatalog(c.Request.Context(), cursor.DefinitionID, limit+1, offset)
+	rows, err := s.rewards.RuleCatalog(c.Request.Context(), limit+1, offset)
 	if err != nil {
 		rewardFail(c, err)
 		return

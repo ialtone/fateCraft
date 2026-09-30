@@ -15,6 +15,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/identity"
+	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -152,7 +153,7 @@ type routeStub struct {
 	err   error
 }
 
-func (s routeStub) EffectiveRoute(context.Context, string) (string, error) {
+func (s routeStub) ReadyRoute(context.Context, string) (string, error) {
 	return s.route, s.err
 }
 
@@ -407,6 +408,28 @@ func TestCreateSolidifiesEffectiveRoute(t *testing.T) {
 	}
 	if createdServer.LLMRoute != storage.LLMRouteServer {
 		t.Fatalf("campaign route = %q, want server", createdServer.LLMRoute)
+	}
+}
+
+func TestMissingModelConfigurationDoesNotCreateCampaignOrConversation(t *testing.T) {
+	playerID := uuid.New()
+	provider, ctx := testIdentityContext(playerID)
+	contract := campaignContract()
+	selection := &challenge.Selection{Version: storage.ChallengeVersion{ID: uuid.New(), ContentHash: "hash"}, Contract: *contract}
+	repo := &campaignRepoStub{row: storage.Campaign{
+		ID: uuid.New(), PlayerID: playerID, Status: storage.CampaignStatusActive,
+		ChallengeVersionID: selection.Version.ID, ChallengeHash: "hash", LLMRoute: storage.LLMRouteServer,
+	}}
+	service := NewService(repo, challengeStub{selection: selection, contract: contract}, nil, provider)
+	service.SetRouteResolver(routeStub{err: llmsettings.ErrConfigurationIncomplete})
+	if _, err := service.Create(ctx, CreateInput{ChallengeSlug: "campaign"}); !errors.Is(err, llmsettings.ErrConfigurationIncomplete) {
+		t.Fatalf("Create error = %v", err)
+	}
+	if _, err := service.CreateConversation(ctx, repo.row.ID); !errors.Is(err, llmsettings.ErrConfigurationIncomplete) {
+		t.Fatalf("CreateConversation error = %v", err)
+	}
+	if repo.created != nil || repo.conversation != nil {
+		t.Fatal("missing configuration created game state")
 	}
 }
 

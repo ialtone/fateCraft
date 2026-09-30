@@ -177,24 +177,13 @@ func buildPublicVersionProjection(compiled *compiledVersionContent) (publicVersi
 		projection.personas = append(projection.personas, AssetOption{ID: asset.ID, Slug: asset.Slug, Name: asset.Name, Description: persona.Description})
 	}
 	sort.Slice(projection.personas, func(i, j int) bool { return projection.personas[i].Name < projection.personas[j].Name })
-	outcomeByID := make(map[uuid.UUID]storage.ChallengeOutcomeRule, len(compiled.document.Outcomes))
 	for _, outcome := range compiled.document.Outcomes {
-		outcomeByID[outcome.ID] = outcome
 		if outcome.Enabled {
-			projection.outcomes = append(projection.outcomes, OutcomeView{Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title, Tone: outcome.Tone})
+			projection.outcomes = append(projection.outcomes, OutcomeView{Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title, Tone: outcome.Tone, RewardPoints: outcome.RewardPoints})
+			if outcome.RewardPoints > 0 {
+				projection.rewards = append(projection.rewards, RewardView{Points: outcome.RewardPoints, OutcomeKey: outcome.OutcomeKey, OutcomeTitle: outcome.Title})
+			}
 		}
-	}
-	for _, rule := range compiled.document.RewardRules {
-		outcome, ok := outcomeByID[rule.OutcomeRuleID]
-		if !rule.Enabled || !ok || !outcome.Enabled {
-			continue
-		}
-		projection.rewards = append(projection.rewards, RewardView{
-			RewardKey: stringFromSnapshot(rule.PublicSnapshot, "key"), Name: stringFromSnapshot(rule.PublicSnapshot, "name"),
-			Description: stringFromSnapshot(rule.PublicSnapshot, "description"), Kind: stringFromSnapshot(rule.PublicSnapshot, "kind"),
-			Unit: stringFromSnapshot(rule.PublicSnapshot, "unit"), Icon: stringFromSnapshot(rule.PublicSnapshot, "icon"),
-			OutcomeKey: outcome.OutcomeKey, OutcomeTitle: outcome.Title,
-		})
 	}
 	projection.runtime = PublicRuntime{
 		EngineKey: compiled.contract.Engine.Key, Mode: gameplay.NormalizeRuntimeMode(compiled.contract.Mode),
@@ -225,7 +214,6 @@ func cloneManifest(source Manifest) Manifest {
 	clone.DefaultConfig.RequiredWorldBooks = append([]string(nil), source.DefaultConfig.RequiredWorldBooks...)
 	clone.DefaultConfig.AllowedPersonas = append([]string(nil), source.DefaultConfig.AllowedPersonas...)
 	clone.Outcomes = append([]OutcomeSpec(nil), source.Outcomes...)
-	clone.RewardRules = append([]RewardSpec(nil), source.RewardRules...)
 	return clone
 }
 

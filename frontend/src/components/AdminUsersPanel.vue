@@ -184,7 +184,7 @@ function openRewards(user: AdminUser) {
                 >
               </div>
               <div class="user-actions">
-                <NButton size="small" @click="openRewards(user)">奖励与点数</NButton>
+                <NButton size="small" @click="openRewards(user)">积分与改写次数</NButton>
                 <NSelect
                   v-if="isOwner"
                   :value="user.role"
@@ -232,7 +232,7 @@ function openRewards(user: AdminUser) {
     <NModal
       v-model:show="showRewards"
       preset="card"
-      title="用户奖励与点数"
+      title="用户积分与改写次数"
       style="width: min(1040px, 96vw)"
       ><AdminRewardUserPanel v-if="rewardUser" :key="rewardUser.id" :user-id="rewardUser.id"
     /></NModal>

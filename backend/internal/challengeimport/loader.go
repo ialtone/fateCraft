@@ -22,7 +22,6 @@ import (
 type loadedChallenge struct {
 	manifest challenge.Manifest
 	document challenge.VersionDocument
-	rewards  []storage.RewardDefinition
 	hash     string
 }
 
@@ -35,20 +34,6 @@ var assetSources = []struct {
 	{"scenarios", storage.ChallengeAssetScenario},
 	{"prompts", storage.ChallengeAssetPrompt},
 	{"worldbooks", storage.ChallengeAssetWorldBook},
-}
-
-type rewardFile struct {
-	Key         string         `json:"key"`
-	Kind        string         `json:"kind"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Unit        string         `json:"unit"`
-	Icon        string         `json:"icon"`
-	Stackable   bool           `json:"stackable"`
-	Consumable  bool           `json:"consumable"`
-	Featured    bool           `json:"featured"`
-	SortOrder   int            `json:"sort_order"`
-	Metadata    map[string]any `json:"metadata"`
 }
 
 type gameplayDefinitionFile struct {
@@ -118,9 +103,7 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 		return nil, fmt.Errorf("内置挑战 version 无效: %w", err)
 	}
 	outcomeSpecs := append([]challenge.OutcomeSpec(nil), manifest.Outcomes...)
-	rewardSpecs := append([]challenge.RewardSpec(nil), manifest.RewardRules...)
 	manifest.Outcomes = nil
-	manifest.RewardRules = nil
 	canonicalManifest, err := json.Marshal(manifest)
 	if err != nil {
 		return nil, err
@@ -143,19 +126,15 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 	runtime.CreatedAt = now
 	runtime.UpdatedAt = now
 
-	rewardDefs, err := loadRewardDefinitions(filepath.Join(directory, "rewards.json"), now)
-	if err != nil {
+	if _, err := os.Stat(filepath.Join(directory, "rewards.json")); err == nil {
+		return nil, fmt.Errorf("不再支持 rewards.json，请在 outcomes 中配置 reward_points")
+	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
 	gameplayDefinitions, err := loadGameplayDefinitionCatalog(directory, now)
 	if err != nil {
 		return nil, err
 	}
-	definitions := make(map[string]storage.RewardDefinition, len(rewardDefs))
-	for _, definition := range rewardDefs {
-		definitions[definition.Key] = definition
-	}
-
 	assets := make([]storage.ChallengeAsset, 0)
 	for _, source := range assetSources {
 		files, err := filepath.Glob(filepath.Join(directory, source.directory, "*.json"))
@@ -187,37 +166,15 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 	}
 
 	outcomes := make([]storage.ChallengeOutcomeRule, 0, len(outcomeSpecs))
-	outcomeIDs := make(map[string]uuid.UUID, len(outcomeSpecs))
 	for _, spec := range outcomeSpecs {
 		enabled := spec.Enabled == nil || *spec.Enabled
 		outcome := storage.ChallengeOutcomeRule{
 			ID: uuid.New(), OutcomeKey: spec.OutcomeKey, Category: spec.Category,
-			Title: spec.Title, Tone: spec.Tone, VerifierKey: spec.VerifierKey,
+			Title: spec.Title, Tone: spec.Tone, VerifierKey: spec.VerifierKey, RewardPoints: spec.RewardPoints,
 			VerifierConfig: storage.JSONMap(spec.VerifierConfig), Enabled: enabled,
 			CreatedAt: now, UpdatedAt: now,
 		}
 		outcomes = append(outcomes, outcome)
-		outcomeIDs[spec.OutcomeKey] = outcome.ID
-	}
-
-	rules := make([]storage.ChallengeRewardRule, 0, len(rewardSpecs))
-	for _, spec := range rewardSpecs {
-		definition, ok := definitions[spec.RewardKey]
-		if !ok {
-			return nil, fmt.Errorf("奖励 %s 未在 rewards.json 定义", spec.RewardKey)
-		}
-		outcomeID, ok := outcomeIDs[spec.OutcomeKey]
-		if !ok {
-			return nil, fmt.Errorf("奖励 %s 引用了未知结局 %s", spec.RewardKey, spec.OutcomeKey)
-		}
-		enabled := spec.Enabled == nil || *spec.Enabled
-		rules = append(rules, storage.ChallengeRewardRule{
-			ID: uuid.New(), OutcomeRuleID: outcomeID, RewardDefinitionID: definition.ID,
-			CalculatorKey:    spec.CalculatorKey,
-			CalculatorConfig: storage.JSONMap(spec.CalculatorConfig),
-			PublicSnapshot:   rewardSnapshot(definition), Enabled: enabled,
-			CreatedAt: now, UpdatedAt: now,
-		})
 	}
 
 	document := challenge.VersionDocument{
@@ -225,7 +182,7 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 			Version: manifest.Version, Manifest: storage.JSONDoc(canonicalManifest),
 		},
 		Runtime: runtime, Assets: assets, Definitions: gameplayDefinitions,
-		Outcomes: outcomes, RewardRules: rules,
+		Outcomes: outcomes,
 	}
 	if err := challenge.ValidateDocument(&document, registry); err != nil {
 		return nil, err
@@ -234,7 +191,7 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 	if err != nil {
 		return nil, err
 	}
-	return &loadedChallenge{manifest: manifest, document: document, rewards: rewardDefs, hash: hash}, nil
+	return &loadedChallenge{manifest: manifest, document: document, hash: hash}, nil
 }
 
 func loadRuntimeSource(packDirectory, entryReference string) (*gameplay.RuntimeContract, error) {
@@ -435,42 +392,6 @@ func loadGameplayDefinitions(path string, now time.Time) ([]storage.GameplayDefi
 		})
 	}
 	return out, nil
-}
-
-func loadRewardDefinitions(path string, now time.Time) ([]storage.RewardDefinition, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("读取 rewards.json: %w", err)
-	}
-	var values []rewardFile
-	if err := json.Unmarshal(raw, &values); err != nil {
-		return nil, fmt.Errorf("解析 rewards.json: %w", err)
-	}
-	out := make([]storage.RewardDefinition, 0, len(values))
-	seen := map[string]bool{}
-	for _, value := range values {
-		value.Key = strings.TrimSpace(value.Key)
-		if value.Key == "" || value.Kind == "" || value.Name == "" || seen[value.Key] {
-			return nil, fmt.Errorf("rewards.json 包含空值或重复 key")
-		}
-		seen[value.Key] = true
-		out = append(out, storage.RewardDefinition{
-			ID: uuid.New(), Key: value.Key, Kind: value.Kind, Name: value.Name,
-			Description: value.Description, Unit: value.Unit, Icon: value.Icon,
-			Stackable: value.Stackable, Consumable: value.Consumable,
-			Featured: value.Featured, SortOrder: value.SortOrder,
-			Metadata: storage.JSONMap(value.Metadata), CreatedAt: now, UpdatedAt: now,
-		})
-	}
-	return out, nil
-}
-
-func rewardSnapshot(definition storage.RewardDefinition) storage.JSONMap {
-	return storage.JSONMap{
-		"key": definition.Key, "kind": definition.Kind, "name": definition.Name,
-		"description": definition.Description, "unit": definition.Unit, "icon": definition.Icon,
-		"stackable": definition.Stackable, "consumable": definition.Consumable,
-	}
 }
 
 func parseStableVersion(version string) ([3]int, error) {

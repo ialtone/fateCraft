@@ -125,7 +125,7 @@ func TestPlatformModeEffectiveRouteIsServer(t *testing.T) {
 	}
 }
 
-// systemWithClientRoute 返回带平台开关取值的全局设置（默认关闭，需 owner 开启）。
+// systemWithClientRoute 返回带指定客户端直连开关的全局设置。
 func systemWithClientRoute(enabled bool) *storage.SystemSettings {
 	settings := storage.DefaultSystemSettings()
 	settings.ClientLLMRouteEnabled = enabled

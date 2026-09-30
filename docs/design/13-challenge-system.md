@@ -24,8 +24,7 @@ ChallengePack（稳定入口）
         |     |-- Scenario
         |     |-- Prompt
         |     `-- WorldBook
-        |-- Outcome Rules
-        `-- Reward Rules -> global Reward Definitions
+        `-- Outcome Rules（包含 reward_points）
 ~~~
 
 Pack 只表达稳定入口和当前发布版本。所有会影响生成、状态、展示、验证和奖励的内容必须属于 Version 并进入内容哈希。
@@ -53,10 +52,10 @@ Manifest 是公开元数据与入口声明，不承载技术运行细节：
     "allowed_personas": ["private-investigator"]
   },
   "quick_start_guide": "检查现场并在倒计时结束前提出指控。",
-  "features": ["证据完整度", "服务端指控判定", "多奖励"],
+  "features": ["证据完整度", "服务端指控判定", "通关积分"],
   "entry_requirement": {
     "type": "reward_balance",
-    "reward_key": "another-pack.ticket",
+    "reward_key": "fatecraft.points",
     "operator": "gte",
     "quantity": 1
   }
@@ -84,7 +83,7 @@ Runtime 与 Manifest 分离。玩法包通过 `pack.json.runtime_entry` 指向 R
 }
 ~~~
 
-Runtime 子文件分别保存 `state_schema`、`actions`、`settlement` 和 `presentation`。Campaign 模式额外通过 `includes.campaign` 引用 Campaign 配置。入口和所有被引用文件必须位于当前玩法包目录内，不能使用绝对路径、脚本或任意表达式。入口格式的 JSON Schema 位于 `backend/data/schemas/fatecraft.runtime.schema.json`；后端还会执行跨文件和模块级语义校验。`value_labels` 的命名空间和值必须是稳定 key，标签不能为空且长度受限；未知 engine、版本、action、verifier、calculator、settlement handler、状态类型或前端控件都会阻止发布。稳定值不因本地化改变。
+Runtime 子文件分别保存 `state_schema`、`actions`、`settlement` 和 `presentation`。Campaign 模式额外通过 `includes.campaign` 引用 Campaign 配置。入口和所有被引用文件必须位于当前玩法包目录内，不能使用绝对路径、脚本或任意表达式。入口格式的 JSON Schema 位于 `backend/data/schemas/fatecraft.runtime.schema.json`；后端还会执行跨文件和模块级语义校验。`value_labels` 的命名空间和值必须是稳定 key，标签不能为空且长度受限；未知 engine、版本、action、verifier、settlement handler、状态类型或前端控件都会阻止发布。稳定值不因本地化改变。
 
 Campaign View 是玩法包提供的纯展示契约。`renderer` 当前只能为 `generic`；字段路径只能引用公开 Campaign Snapshot，集合通过 `item_fields` 声明可读标签，`visible_when` 仅支持存在、相等和有限数值比较。动作槽的 key 必须同时存在于当前 Runtime 的 `campaign.action_allowlist` 和玩法模块注册表，参数绑定只能读取公开快照或有限的 item/option/input 上下文。View 的数量、大小和嵌套深度受校验限制，不能声明权限、写库、随机或结算。
 
@@ -117,11 +116,11 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 
 通用挑战核心依赖 `gameplay.Registry`，不导入具体题材包。组合根显式安装：
 
-- `core.generic@1`：状态相等、状态集合、数值条件、成功判定、最少回合、all/any、固定奖励和状态倍率；内置单局修仙玩法也直接使用该模块；
+- `core.generic@1`：状态相等、状态集合、数值条件、成功判定、最少回合、all/any、可信结局验证；内置单局修仙玩法也直接使用该模块；
 - `cultivation.campaign@1`：修仙 Campaign 生命周期、投影、上下文和完整领域动作集合；Runtime 只能从模块声明的 `campaign_actions` 中启用白名单，不允许用自由状态 JSON 冒充领域事实；
 - 后续需要特殊可信规则的模块。
 
-模块 descriptor 列出允许的 action、Campaign action、verifier、calculator 和 settlement handler。管理员界面通过 `/api/admin/gameplay-modules` 读取目录并生成选项，不在前端硬编码修仙能力。Campaign 动作的 Definition、Capability 和事务 Handler 契约见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
+模块 descriptor 列出允许的 action、Campaign action、verifier 和 settlement handler。管理员界面通过 `/api/admin/gameplay-modules` 读取目录并生成选项，不在前端硬编码修仙能力。Campaign 动作的 Definition、Capability 和事务 Handler 契约见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
 
 纯内容玩法若能使用 `core.generic`，只需新增数据，不需要修改 Go。只有无法由受限通用条件安全表达的规则，才新增后端模块。
 
@@ -135,6 +134,7 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
   "category": "success",
   "title": "真相大白",
   "tone": "success",
+  "reward_points": 100,
   "verifier_key": "core.conditions",
   "verifier_config": {
     "conditions": [
@@ -149,37 +149,11 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 
 `core.conditions` 的 `state_in` 用于由玩法内容声明离散状态集合，例如 `{"type":"state_in","path":"case.status","values":["solved","closed"]}`。`values` 只能包含 1 到 64 个不重复的字符串、布尔值或数字，状态路径必须由该版本的 State Schema 声明。平台只做集合成员判断，不解释值的题材含义。
 
-## 全局奖励与版本规则
+## 结局积分
 
-奖励定义拥有跨玩法稳定 key，例如：
+每个 outcome 直接保存 `reward_points`，范围为 0–9007199254740991；省略视为 0。正整数在可信通关后自动进入 `fatecraft.points`，0 正常完成且不创建零金额流水。积分与局内财富、库存无换算关系。
 
-~~~json
-{
-  "key": "midnight-case.case-token",
-  "kind": "currency",
-  "name": "调查凭证",
-  "description": "可用于进入其他调查玩法。",
-  "unit": "张",
-  "icon": "ticket",
-  "stackable": true,
-  "consumable": true
-}
-~~~
-
-挑战版本只保存引用、calculator 和发布时公开快照：
-
-~~~json
-{
-  "outcome_key": "case_solved",
-  "reward_key": "midnight-case.case-token",
-  "calculator_key": "core.fixed",
-  "calculator_config": {"amount": 2}
-}
-~~~
-
-一次 outcome 可以绑定多项奖励。定义的展示信息后来变化时，旧挑战仍使用发布时快照；余额与其他功能前置条件继续按稳定 reward key 识别。
-
-Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局内堆叠物按比例转为可叠加账号资源。规则必须声明每批来源量、每批奖励量、单局奖励上限及是否扣除来源；只能绑定当前版本真实终局任务，计算、扣除、授予和 Campaign 完成在同一事务执行。完整协议见 `21-campaign-outcome-rewards.md`。
+账号只保留积分与剧情改写次数。玩家用积分兑换改写套餐，后台运营规则见 [22 奖励管理](22-reward-management-and-exchange.md)。Campaign 正积分结局必须由当前版本真实终局任务引用，任务核验、积分和存档完成同事务；详见 [21 终局积分](21-campaign-outcome-rewards.md)。
 
 ## 生命周期
 
@@ -204,9 +178,8 @@ Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局�
 1. 生成新的 version ID；
 2. 更新 Manifest 版本号；
 3. 深复制 Runtime 与全部资产；
-4. 为 outcome 和 reward rule 生成新 ID 并重连引用；
-5. 保持奖励定义指向全局稳定 ID；
-6. 不改变已有对话或旧发布版本。
+4. 为 outcome 生成新 ID，保留固定积分；
+5. 不改变已有对话或旧发布版本。
 
 ## 管理员编辑器
 
@@ -216,9 +189,8 @@ Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局�
 2. 角色、Persona、场景、Prompt 与世界书资产；
 3. engine、允许动作和状态 Schema；
 4. 玩家状态分组、标签、控件和术语；
-5. outcome 与 verifier；
-6. 奖励定义与 calculator；
-7. 高级 JSON 导入/导出。
+5. outcome、verifier 与通关积分；
+6. 高级 JSON 导入/导出。
 
 保存草稿不等于发布。点击发布会先保存当前表单，再执行完整发布校验，避免误发布数据库中的旧草稿。
 
@@ -235,11 +207,11 @@ Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局�
 - State Schema 路径唯一，类型、默认值、约束、可见性和更新权限合法；
 - presentation 只引用 player 可见路径和平台固定控件；
 - outcome key 唯一，category/tone 合法，verifier 已安装且配置有效；
-- 通用数值条件和状态倍率引用已声明的数值字段；
+- 通用数值条件引用已声明的数值字段；
 - Prompt 明确引用每个 outcome key；
-- 奖励定义存在且未停用，公开快照仍与定义一致，calculator 已安装；
-- 能力成本引用存在且可消费的奖励；
-- 入口奖励前置条件引用存在定义，条件树不过深。
+- 每个结局积分是非负安全整数；
+- 能力成本只引用积分或剧情改写次数，数量不越界；
+- 入口余额条件只引用两项固定 key，条件树不过深。
 
 校验、哈希、版本状态切换和 Pack 当前版本切换在版本行与 Pack 行锁事务内完成；同一 Pack 的并发发布会串行化，最终只有一个 current published version。
 
@@ -251,7 +223,7 @@ Campaign 还可用 `campaign.extract_item_stack` 把终局时真实存在的局�
 - Runtime 的 engine、State Schema、actions、settlement、presentation；
 - 所有资产的 kind、slug、name、content 与排序；
 - outcome key、展示、verifier 与配置；
-- reward 绑定、calculator、配置和公开快照。
+- reward 绑定、配置和公开快照。
 
 数据库行 ID、创建时间等非内容字段不进入哈希。相同语义内容必须得到相同 SHA-256；任一运行规则变化必须改变哈希。
 
@@ -269,7 +241,6 @@ data/preset_packs/<slug>/
     actions.json
     settlement.json
     presentation.json
-  rewards.json
   characters/
   personas/
   scenarios/
@@ -278,9 +249,9 @@ data/preset_packs/<slug>/
   GAMEPLAY_DESIGN.md（推荐）
 ~~~
 
-空数据库首次启动时，在 PostgreSQL advisory lock 下导入并发布全部内置包。导入事务会先创建或精确复用奖励定义，再创建 Pack、版本、Runtime、资产、outcome 和 reward rules，最后执行与管理端相同的发布校验。
+空数据库首次启动时，在 PostgreSQL advisory lock 下导入并发布全部内置包。导入事务创建 Pack、版本、Runtime、资产及包含积分的 outcome，最后执行与管理端相同的发布校验。
 
-数据库已有任何 Pack 时，启动不自动升级。管理员在“内置内容”查看仓库版本和哈希；新版本可显式“导入并发布”，仓库内容与数据库当前快照不一致时显示“覆盖现有内容”。导入前展示共享奖励差异、引用与前后规则，确认时提交 preview_token 和覆盖标记；服务端在配置锁内核对预览，并重新执行完整发布校验。
+数据库已有任何 Pack 时，启动不自动升级。管理员在“内置内容”查看仓库版本和哈希；新版本可显式“导入并发布”，仓库内容与数据库当前快照不一致时显示“覆盖现有内容”。导入前展示结局积分及前后规则，确认时提交 preview_token 和覆盖标记；服务端在配置锁内核对预览，并重新执行完整发布校验。
 
 同一 `slug + version` 内容变化时，覆盖事务先锁定目标版本并检查引用。无人使用时可以删除旧草稿/快照并以新 ID 重建、校验、计算哈希和发布；已被对话或 Campaign 引用时仍返回 409，要求提升版本号。仓库版本低于或等于当前版本时也不能通过覆盖回退。发布更高版本时，旧版本标记为 `retired`，其普通 active 对话自动封存为只读；旧快照不会被删除，用户可从历史对话分叉出绑定当前版本的新对话。
 
@@ -290,12 +261,12 @@ data/preset_packs/<slug>/
 
 - 名称、说明、版本、图标、标签、特色和快速指南；
 - 允许选择的 Persona 摘要；
-- outcome 的 key/category/title/tone；
-- 奖励名称、说明、类型、单位和适用结局；
+- outcome 的 key/category/title/tone/reward_points；
+- 每个结局的固定积分概要；
 - 编译后的公开 Runtime Presentation 与玩家 capabilities；
 - 当前用户是否满足入口要求及不可用原因。
 
-不返回 Prompt、WorldBook、完整 State Schema、隐藏状态、verifier_config、calculator_config 和奖励内部条件。
+不返回 Prompt、WorldBook、完整 State Schema、隐藏状态、verifier_config_config 和奖励内部条件。
 
 ## 对话固定与运行 Bundle
 
@@ -322,20 +293,20 @@ data/preset_packs/<slug>/
 3. 事务内锁 conversation 并确认 active；
 4. 检查该对话没有 `challenge_run`；
 5. 重建可信 evidence 并再次执行固定 outcome verifier；
-6. 执行全部 reward calculator；
-7. 写 run，通过 AwardInCurrentTx 写获奖记录、实际账本、余额和多奖励快照；
+6. 读取固定结局积分；client 路由实际所得为 0；
+7. 写 run，通过 GrantInCurrentTx 写实际账本、余额和积分快照；
 8. 将对话置为 ended；
 9. 提交后发送通用 `challenge_completed`。
 
-唯一约束和幂等键保证并发重试不会重复结算。零结果、已拥有非叠加资产分别保留 skipped/zero_quantity、skipped/already_owned，不造授予流水；负数或越界失败回滚。多资产余额按 ID 升序加锁，所有奖励与对话完成同事务。验证不满足是业务拒绝，不是系统错误。
+唯一约束和来源幂等键保证并发重试不会重复结算。0 积分保存在结算详情中，不造授予流水；负数或越界失败回滚。积分与对话完成同事务。验证不满足是业务拒绝，不是系统错误。
 
-奖励管理从 /admin/rewards 集中定位玩法版本，规则仍通过草稿/发布编辑；账号资产积累、领取和兑换见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+奖励管理从 /admin/rewards 集中定位玩法版本，规则仍通过草稿/发布编辑；积分积累与兑换见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
 ## 内容演进规则
 
 - 已发布版本永不原地修改；管理员覆盖未使用的内置版本时采用删除后重建，而非修改原快照。
 - 稳定 outcome key 的语义变化应提升玩法版本。
-- 奖励 key 的 kind/堆叠/消费语义变化必须创建新 key。
-- 删除后端 verifier/calculator 前，必须确认没有仍需运行的已发布版本引用。
+- 两项账号余额身份由平台固定，玩法只能配置结局积分。
+- 删除后端 verifier 前，必须确认没有仍需运行的已发布版本引用。
 - 前端新增可选控件时仍要保留未知控件安全降级。
 - 新题材不得把自身字段塞回通用 challenge、事件或 App 顶栏。

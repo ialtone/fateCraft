@@ -117,12 +117,12 @@ func assertBaselineObjects(t *testing.T, db interface {
 		want   int
 	}{
 		{"functions", `SELECT count(*) FROM pg_proc WHERE pronamespace = current_schema()::regnamespace AND proname IN ('reject_reward_ledger_mutation', 'reject_campaign_event_mutation', 'reject_campaign_action_commit_mutation', 'reject_llm_route_change')`, &functions, 4},
-		{"triggers", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('reward_ledger'::regclass, 'campaign_events'::regclass, 'campaign_action_commits'::regclass, 'conversations'::regclass, 'campaigns'::regclass)`, &triggers, 5},
+		{"triggers", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('reward_ledger'::regclass, 'campaign_events'::regclass, 'campaign_action_commits'::regclass, 'conversations'::regclass, 'campaigns'::regclass)`, &triggers, 6},
 		{"indexes", `SELECT count(*) FROM pg_indexes WHERE schemaname = current_schema() AND indexname IN ('idx_users_username_lower', 'idx_users_single_owner', 'idx_challenge_versions_pack', 'idx_reward_ledger_player')`, &indexes, 4},
-		{"seed rows", `SELECT count(*) FROM reward_definitions WHERE id = '00000000-0000-0000-0000-000000000001'`, &seedRows, 1},
-		{"reward tables with comments", `SELECT count(*) FROM pg_class WHERE relnamespace=current_schema()::regnamespace AND relname IN ('reward_records','registration_reward_rules','reward_exchange_offers','reward_exchange_revisions','reward_exchange_orders') AND obj_description(oid,'pg_class') IS NOT NULL`, &rewardTables, 5},
-		{"registration rule seed", `SELECT count(*) FROM registration_reward_rules WHERE quantity=10 AND enabled AND reward_definition_id='00000000-0000-0000-0000-000000000001'`, &registrationSeeds, 1},
-		{"immutable reward objects", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('reward_records'::regclass,'registration_reward_rules'::regclass,'reward_exchange_orders'::regclass,'reward_exchange_revisions'::regclass)`, &rewardTriggers, 4},
+		{"seed rows", `SELECT count(*) FROM reward_exchange_offers WHERE id = '00000000-0000-0000-0000-000000000001'`, &seedRows, 1},
+		{"reward tables with comments", `SELECT count(*) FROM pg_class WHERE relnamespace=current_schema()::regnamespace AND relname IN ('registration_reward_rules','reward_exchange_offers','reward_exchange_revisions','reward_exchange_orders') AND obj_description(oid,'pg_class') IS NOT NULL`, &rewardTables, 4},
+		{"registration rule seed", `SELECT count(*) FROM registration_reward_rules WHERE points=0 AND rewrite_credits=10`, &registrationSeeds, 1},
+		{"immutable reward objects", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('registration_reward_rules'::regclass,'reward_exchange_orders'::regclass,'reward_exchange_revisions'::regclass)`, &rewardTriggers, 3},
 	}
 	for _, check := range queries {
 		if err := db.QueryRowContext(ctx, check.query).Scan(check.target); err != nil {

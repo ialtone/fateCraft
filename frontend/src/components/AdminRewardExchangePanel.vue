@@ -8,22 +8,15 @@ import {
   NInput,
   NInputNumber,
   NModal,
-  NSelect,
   NSwitch,
   NTag,
   useMessage,
 } from 'naive-ui'
 import { rewardExchangeApi as api } from '@/api/rewards'
 import { rewardError } from '@/lib/rewards'
-import type { RewardDefinition } from '@/types'
-import type {
-  RewardExchangeOffer,
-  RewardExchangeOfferView,
-  RewardExchangeRevision,
-} from '@/types/rewards'
-const props = defineProps<{ definitions: RewardDefinition[] }>(),
-  message = useMessage()
-const offers = ref<RewardExchangeOfferView[]>([]),
+import type { RewardExchangeOffer, RewardExchangeRevision } from '@/types/rewards'
+const message = useMessage()
+const offers = ref<RewardExchangeOffer[]>([]),
   form = ref<RewardExchangeOffer>(),
   open = ref(false),
   busy = ref(false),
@@ -33,26 +26,9 @@ const offers = ref<RewardExchangeOfferView[]>([]),
   revisions = ref<RewardExchangeRevision[]>([]),
   historyOpen = ref(false),
   historyError = ref('')
-const costs = computed(() =>
-  props.definitions
-    .filter((d) => d.stackable && d.consumable && ['currency', 'credit'].includes(d.kind))
-    .map((d) => ({ label: `${d.name} · ${d.key}${d.disabled ? '（停用）' : ''}`, value: d.id })),
-)
-const targets = computed(() =>
-  props.definitions.map((d) => ({
-    label: `${d.name} · ${d.key}${d.disabled ? '（停用）' : ''}`,
-    value: d.id,
-  })),
-)
-const target = computed(() =>
-  props.definitions.find((d) => d.id === form.value?.reward_definition_id),
-)
 const valid = computed(
   () =>
     !!form.value?.name.trim() &&
-    !!form.value.cost_definition_id &&
-    !!form.value.reward_definition_id &&
-    form.value.cost_definition_id !== form.value.reward_definition_id &&
     Number.isSafeInteger(form.value.cost_quantity) &&
     form.value.cost_quantity > 0 &&
     Number.isSafeInteger(form.value.reward_quantity) &&
@@ -76,9 +52,7 @@ function edit(offer?: RewardExchangeOffer) {
         id: '',
         name: '',
         description: '',
-        cost_definition_id: '',
         cost_quantity: 1,
-        reward_definition_id: '',
         reward_quantity: 1,
         enabled: false,
         revision: 0,
@@ -121,7 +95,7 @@ onMounted(load)
     <div class="toolbar">
       <div>
         <h3>兑换商品</h3>
-        <p>设置支付点数和所得账号奖励；上架后玩家可在“我的奖励”兑换。</p>
+        <p>设置积分价格和所得剧情改写次数；上架后玩家可在“我的奖励”兑换。</p>
       </div>
       <div class="buttons">
         <NButton :loading="loading" @click="load">刷新</NButton
@@ -133,11 +107,11 @@ onMounted(load)
       <div>
         <strong>{{ offer.name }}</strong>
         <p>
-          {{ offer.cost_quantity }} {{ offer.cost_asset.name }} → {{ offer.reward_quantity }}
-          {{ offer.reward_asset.name }}
+          {{ offer.cost_quantity }} 积分 → {{ offer.reward_quantity }}
+          次剧情改写
         </p>
-        <NTag :type="offer.available ? 'success' : 'default'">{{
-          offer.available ? '已上架' : offer.enabled ? '资产停用，暂不可兑换' : '已下架'
+        <NTag :type="offer.enabled ? 'success' : 'default'">{{
+          offer.enabled ? '已上架' : '已下架'
         }}</NTag
         ><small>修订 {{ offer.revision }}</small>
       </div>
@@ -165,28 +139,17 @@ onMounted(load)
           ><NInput v-model:value="form.description" type="textarea" :maxlength="2000"
         /></NFormItem>
         <div class="form-grid">
-          <NFormItem label="支付资产（可消费点数 / 额度）"
-            ><NSelect
-              v-model:value="form.cost_definition_id"
-              :options="costs"
-              filterable /></NFormItem
-          ><NFormItem label="每份支付数量"
+          <NFormItem label="每份积分价格"
             ><NInputNumber
               v-model:value="form.cost_quantity"
               :min="1"
               :max="Number.MAX_SAFE_INTEGER"
               :precision="0" /></NFormItem
-          ><NFormItem label="所得账号奖励"
-            ><NSelect
-              v-model:value="form.reward_definition_id"
-              :options="targets"
-              filterable
-              @update:value="form!.reward_quantity = 1" /></NFormItem
-          ><NFormItem label="每份奖励数量"
+          ><NFormItem label="每份改写次数"
             ><NInputNumber
               v-model:value="form.reward_quantity"
               :min="1"
-              :max="target && !target.stackable ? 1 : Number.MAX_SAFE_INTEGER"
+              :max="Number.MAX_SAFE_INTEGER"
               :precision="0" /></NFormItem
           ><NFormItem label="上架"><NSwitch v-model:value="form.enabled" /></NFormItem
           ><NFormItem label="排序（较小靠前）"
@@ -197,7 +160,7 @@ onMounted(load)
               :precision="0"
           /></NFormItem>
         </div>
-        <p>保存会新增一份配置修订，已有订单保留当时的价格和奖励。支付与所得资产必须不同。</p>
+        <p>保存会新增一份配置修订，已有订单保留当时的价格和奖励。</p>
         <NButton type="primary" :disabled="!valid" :loading="busy" @click="save"
           >保存商品</NButton
         ></template
@@ -216,17 +179,12 @@ onMounted(load)
           {{ revision.snapshot.enabled ? '上架' : '下架' }}
         </p>
         <p>
-          支付：{{
-            definitions.find((d) => d.id === revision.snapshot.cost_definition_id)?.name ||
-            revision.snapshot.cost_definition_id
+          支付：{{ revision.snapshot.cost_quantity }} 积分；所得：{{
+            revision.snapshot.reward_quantity
           }}
-          × {{ revision.snapshot.cost_quantity }}；所得：{{
-            definitions.find((d) => d.id === revision.snapshot.reward_definition_id)?.name ||
-            revision.snapshot.reward_definition_id
-          }}
-          × {{ revision.snapshot.reward_quantity }}
+          次剧情改写
         </p>
-        <small>操作者 {{ revision.actor_id }}</small>
+        <small>操作者 {{ revision.actor_id || '系统初始化' }}</small>
       </div></NModal
     >
   </section>

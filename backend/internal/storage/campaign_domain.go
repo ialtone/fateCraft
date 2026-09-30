@@ -4,14 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ialtone/fatecraft/internal/campaignreward"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const (
@@ -320,24 +317,13 @@ type CampaignDomainState struct {
 	Definitions    map[string]GameplayDefinition
 }
 
-type CampaignRewardSource struct {
-	Type              string `json:"type"`
-	Key               string `json:"key"`
-	Name              string `json:"name"`
-	QualityKey        string `json:"quality_key,omitempty"`
-	AvailableQuantity int64  `json:"available_quantity"`
-	ConsumedQuantity  int64  `json:"consumed_quantity"`
-}
-
 type CampaignOutcomeReward struct {
-	Key      string                `json:"key"`
-	Kind     string                `json:"kind"`
-	Name     string                `json:"name"`
-	Unit     string                `json:"unit"`
-	Icon     string                `json:"icon"`
-	Quantity int64                 `json:"quantity"`
-	Balance  int64                 `json:"balance"`
-	Source   *CampaignRewardSource `json:"source,omitempty"`
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Unit     string `json:"unit"`
+	Icon     string `json:"icon"`
+	Quantity int64  `json:"quantity"`
+	Balance  int64  `json:"balance"`
 }
 
 func definitionMapKey(kind, key string) string { return kind + ":" + key }
@@ -710,7 +696,7 @@ func (s *CampaignActionStore) EncounterWinCount(campaignID uuid.UUID, encounterK
 }
 
 func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, campaign Campaign, outcomeKey string) ([]CampaignOutcomeReward, error) {
-	// client 路由：任务与 Campaign 照常完成，不计算奖励、不扣来源物、不写账本。
+	// client 路由：任务与 Campaign 照常完成，不发放账号积分。
 	// 路由在事务内直接取执行中的 Campaign 行，不在调用方判断，保证所有入口一致。
 	if campaign.LLMRoute == LLMRouteClient {
 		return []CampaignOutcomeReward{}, nil
@@ -723,318 +709,27 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 		}
 		return nil, err
 	}
-	var rules []ChallengeRewardRule
-	if err := s.tx.WithContext(ctx).Where("outcome_rule_id = ? AND enabled = ?", outcome.ID, true).
-		Find(&rules).Error; err != nil {
+	if outcome.RewardPoints < 0 || outcome.RewardPoints > MaxRewardQuantity {
+		return nil, ErrRewardQuantity
+	}
+	if outcome.RewardPoints == 0 {
+		return []CampaignOutcomeReward{}, nil
+	}
+	_, err := NewRewardRepository(s.tx).GrantInCurrentTx(ctx, RewardMutation{PlayerID: campaign.PlayerID, RewardKey: PointsKey, Quantity: outcome.RewardPoints, SourceType: "campaign_outcome", SourceID: campaign.ID.String(), IdempotencyKey: "campaign:" + campaign.ID.String() + ":points", Metadata: JSONMap{"outcome_key": outcomeKey, "challenge_version_id": campaign.ChallengeVersionID}})
+	if err != nil {
 		return nil, err
 	}
-	definitionIDs := make([]uuid.UUID, 0, len(rules))
-	for _, rule := range rules {
-		definitionIDs = append(definitionIDs, rule.RewardDefinitionID)
-	}
-	definitions := make(map[uuid.UUID]RewardDefinition, len(definitionIDs))
-	if len(definitionIDs) > 0 {
-		var rows []RewardDefinition
-		if err := s.tx.WithContext(ctx).Where("id IN ?", definitionIDs).Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		for _, definition := range rows {
-			definitions[definition.ID] = definition
-		}
-	}
-	idempotencyKeys := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		definition, exists := definitions[rule.RewardDefinitionID]
-		if !exists {
-			return nil, fmt.Errorf("Campaign 结局奖励定义不存在: %s", rule.RewardDefinitionID)
-		}
-		idempotencyKeys = append(idempotencyKeys, campaignOutcomeRewardIdempotencyKey(campaign.ID, outcomeKey, definition.Key))
-	}
-	existingEntries := make(map[string]RewardLedgerEntry, len(idempotencyKeys))
-	if len(idempotencyKeys) > 0 {
-		var rows []RewardLedgerEntry
-		if err := s.tx.WithContext(ctx).Where("idempotency_key IN ?", idempotencyKeys).Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		for _, entry := range rows {
-			existingEntries[entry.IdempotencyKey] = entry
-		}
-	}
-	balances := make(map[uuid.UUID]*PlayerRewardBalance, len(definitionIDs))
-	if len(definitionIDs) > 0 {
-		now := time.Now()
-		missing := make([]PlayerRewardBalance, 0, len(definitions))
-		uniqueDefinitionIDs := make([]uuid.UUID, 0, len(definitions))
-		for definitionID := range definitions {
-			uniqueDefinitionIDs = append(uniqueDefinitionIDs, definitionID)
-		}
-		sort.Slice(uniqueDefinitionIDs, func(left, right int) bool {
-			return uniqueDefinitionIDs[left].String() < uniqueDefinitionIDs[right].String()
-		})
-		for _, definitionID := range uniqueDefinitionIDs {
-			missing = append(missing, PlayerRewardBalance{
-				PlayerID: campaign.PlayerID, RewardDefinitionID: definitionID, UpdatedAt: now,
-			})
-		}
-		if err := s.tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&missing).Error; err != nil {
-			return nil, err
-		}
-		var rows []PlayerRewardBalance
-		if err := s.tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("player_id = ? AND reward_definition_id IN ?", campaign.PlayerID, uniqueDefinitionIDs).
-			Order("reward_definition_id ASC").
-			Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		for index := range rows {
-			balances[rows[index].RewardDefinitionID] = &rows[index]
-		}
-		if len(balances) != len(definitions) {
-			return nil, errors.New("Campaign 结局奖励余额初始化不完整")
-		}
-	}
-	type extractionKey struct{ item, quality string }
-	extractionRules := make(map[uuid.UUID]campaignreward.ItemStackRule)
-	itemStackKeys := make([]extractionKey, 0, len(rules))
-	itemKeys := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		if rule.CalculatorKey != campaignreward.ItemStackCalculatorKey {
-			continue
-		}
-		extraction, err := campaignreward.ParseItemStackRule(map[string]any(rule.CalculatorConfig))
-		if err != nil {
-			return nil, fmt.Errorf("Campaign 局内资产提取配置无效: %w", err)
-		}
-		extractionRules[rule.ID] = extraction
-		itemStackKeys = append(itemStackKeys, extractionKey{item: extraction.ItemKey, quality: extraction.QualityKey})
-		itemKeys = append(itemKeys, extraction.ItemKey)
-	}
-	itemStacks := make(map[extractionKey]*CampaignItemStack, len(itemStackKeys))
-	if len(itemStackKeys) > 0 {
-		var rows []CampaignItemStack
-		if err := s.tx.WithContext(ctx).Where("campaign_id = ? AND item_key IN ?", campaign.ID, itemKeys).Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		for index := range rows {
-			itemStacks[extractionKey{item: rows[index].ItemKey, quality: rows[index].QualityKey}] = &rows[index]
-		}
-	}
-	itemDefinitions := make(map[string]GameplayDefinition, len(itemKeys))
-	if len(itemKeys) > 0 {
-		var rows []GameplayDefinition
-		if err := s.tx.WithContext(ctx).
-			Where("challenge_version_id = ? AND kind = ? AND key IN ?", campaign.ChallengeVersionID, DefinitionItem, itemKeys).
-			Find(&rows).Error; err != nil {
-			return nil, err
-		}
-		for _, definition := range rows {
-			itemDefinitions[definition.Key] = definition
-		}
-	}
-	sort.Slice(rules, func(left, right int) bool {
-		return fmt.Sprint(rules[left].PublicSnapshot["key"]) < fmt.Sprint(rules[right].PublicSnapshot["key"])
-	})
-	rewards := make([]CampaignOutcomeReward, 0, len(rules))
-	for _, rule := range rules {
-		definition, exists := definitions[rule.RewardDefinitionID]
-		if !exists {
-			return nil, fmt.Errorf("Campaign 结局奖励定义不存在: %s", rule.RewardDefinitionID)
-		}
-		idempotencyKey := campaignOutcomeRewardIdempotencyKey(campaign.ID, outcomeKey, definition.Key)
-		if existing, ok := existingEntries[idempotencyKey]; ok {
-			balance := balances[definition.ID]
-			if balance == nil {
-				return nil, fmt.Errorf("Campaign 结局奖励余额不存在: %s", definition.Key)
-			}
-			kind, name, unit, icon := campaignRewardPresentation(existing.Metadata, definition)
-			rewards = append(rewards, CampaignOutcomeReward{
-				Key: definition.Key, Kind: kind, Name: name, Unit: unit, Icon: icon,
-				Quantity: existing.QuantityDelta, Balance: balance.Balance, Source: campaignRewardSource(existing.Metadata),
-			})
-			continue
-		}
-
-		amount := int64(0)
-		rewardSnapshot := campaignRuleRewardSnapshot(rule.PublicSnapshot, definition)
-		metadata := JSONMap{
-			"outcome_key": outcomeKey, "challenge_version_id": campaign.ChallengeVersionID.String(),
-			"reward_snapshot": rewardSnapshot,
-		}
-		var source *CampaignRewardSource
-		var consumedStack *CampaignItemStack
-		switch rule.CalculatorKey {
-		case "core.fixed":
-			var ok bool
-			amount, ok = campaignDefinitionInt(rule.CalculatorConfig["amount"])
-			if !ok || amount <= 0 {
-				return nil, fmt.Errorf("Campaign 固定结局奖励数量无效")
-			}
-		case campaignreward.ItemStackCalculatorKey:
-			if !definition.Stackable {
-				return nil, fmt.Errorf("Campaign 局内资产只能提取为可叠加的账号奖励: %s", definition.Key)
-			}
-			extraction := extractionRules[rule.ID]
-			stack := itemStacks[extractionKey{item: extraction.ItemKey, quality: extraction.QualityKey}]
-			if stack == nil {
-				break
-			}
-			consumed := int64(0)
-			var err error
-			amount, consumed, err = campaignreward.CalculateItemStack(stack.Quantity, extraction)
-			if err != nil {
-				return nil, err
-			}
-			if amount == 0 {
-				break
-			}
-			itemDefinition, exists := itemDefinitions[extraction.ItemKey]
-			if !exists {
-				return nil, fmt.Errorf("Campaign 局内物品定义不存在: %s", extraction.ItemKey)
-			}
-			source = &CampaignRewardSource{
-				Type: "item_stack", Key: extraction.ItemKey, Name: itemDefinition.Name, QualityKey: extraction.QualityKey,
-				AvailableQuantity: stack.Quantity, ConsumedQuantity: consumed,
-			}
-			metadata["extraction"] = JSONMap{
-				"type": source.Type, "key": source.Key, "name": source.Name, "quality_key": source.QualityKey,
-				"available_quantity": source.AvailableQuantity, "consumed_quantity": source.ConsumedQuantity,
-			}
-			if consumed > 0 {
-				stack.Quantity -= consumed
-				stack.UpdatedAt = time.Now()
-				consumedStack = stack
-			}
-		default:
-			return nil, fmt.Errorf("Campaign 结局奖励计算器不受支持: %s", rule.CalculatorKey)
-		}
-		grant, err := NewRewardRepository(s.tx).AwardInCurrentTx(ctx, RewardMutation{
-			PlayerID: campaign.PlayerID, RewardKey: definition.Key, Quantity: amount,
-			SourceType: "campaign_outcome", SourceID: campaign.ID.String(),
-			IdempotencyKey: idempotencyKey, Metadata: metadata,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if !grant.Applied || grant.Ledger == nil {
-			if consumedStack != nil {
-				return nil, fmt.Errorf("Campaign 提取奖励未实际入账: %s", definition.Key)
-			}
-			continue
-		}
-		if consumedStack != nil {
-			if err := s.SaveItemStack(consumedStack); err != nil {
-				return nil, err
-			}
-		}
-		kind, name, unit, icon := campaignRewardPresentation(metadata, definition)
-		rewards = append(rewards, CampaignOutcomeReward{
-			Key: definition.Key, Kind: kind, Name: name, Unit: unit, Icon: icon,
-			Quantity: amount, Balance: grant.Balance, Source: source,
-		})
-	}
-	return rewards, nil
+	return loadCampaignOutcomeRewards(ctx, s.tx, campaign)
 }
-
-func campaignOutcomeRewardIdempotencyKey(campaignID uuid.UUID, outcomeKey, rewardKey string) string {
-	return "campaign:" + campaignID.String() + ":outcome:" + outcomeKey + ":" + rewardKey
-}
-
-func campaignRewardSource(metadata JSONMap) *CampaignRewardSource {
-	raw, ok := metadata["extraction"]
-	if !ok {
-		return nil
-	}
-	var values map[string]any
-	switch typed := raw.(type) {
-	case map[string]any:
-		values = typed
-	case JSONMap:
-		values = map[string]any(typed)
-	default:
-		return nil
-	}
-	available, _ := campaignDefinitionInt(values["available_quantity"])
-	consumed, _ := campaignDefinitionInt(values["consumed_quantity"])
-	return &CampaignRewardSource{
-		Type: fmt.Sprint(values["type"]), Key: fmt.Sprint(values["key"]), Name: fmt.Sprint(values["name"]),
-		QualityKey: fmt.Sprint(values["quality_key"]), AvailableQuantity: available, ConsumedQuantity: consumed,
-	}
-}
-
-func campaignRuleRewardSnapshot(snapshot JSONMap, fallback RewardDefinition) JSONMap {
-	out := rewardSnapshot(fallback)
-	for _, key := range []string{"key", "kind", "name", "unit", "icon", "description"} {
-		if value, ok := snapshot[key].(string); ok {
-			out[key] = value
-		}
-	}
-	return out
-}
-
-func campaignRewardPresentation(metadata JSONMap, fallback RewardDefinition) (kind, name, unit, icon string) {
-	kind, name, unit, icon = fallback.Kind, fallback.Name, fallback.Unit, fallback.Icon
-	raw, ok := metadata["reward_snapshot"]
-	if !ok {
-		return kind, name, unit, icon
-	}
-	var values map[string]any
-	switch typed := raw.(type) {
-	case map[string]any:
-		values = typed
-	case JSONMap:
-		values = map[string]any(typed)
-	default:
-		return kind, name, unit, icon
-	}
-	if value, valid := values["kind"].(string); valid && value != "" {
-		kind = value
-	}
-	if value, valid := values["name"].(string); valid && value != "" {
-		name = value
-	}
-	if value, valid := values["unit"].(string); valid {
-		unit = value
-	}
-	if value, valid := values["icon"].(string); valid {
-		icon = value
-	}
-	return kind, name, unit, icon
-}
-
 func loadCampaignOutcomeRewards(ctx context.Context, db *gorm.DB, campaign Campaign) ([]CampaignOutcomeReward, error) {
-	type rewardRow struct {
-		RewardLedgerEntry
-		DefinitionKey  string `gorm:"column:definition_key"`
-		DefinitionKind string `gorm:"column:definition_kind"`
-		DefinitionName string `gorm:"column:definition_name"`
-		DefinitionUnit string `gorm:"column:definition_unit"`
-		DefinitionIcon string `gorm:"column:definition_icon"`
-		Balance        int64  `gorm:"column:balance"`
-	}
-	var entries []rewardRow
-	if err := db.WithContext(ctx).Table("reward_ledger AS e").
-		Select(`e.*, d.key AS definition_key, d.kind AS definition_kind,
-			d.name AS definition_name, d.unit AS definition_unit, d.icon AS definition_icon,
-			COALESCE(b.balance, 0) AS balance`).
-		Joins("JOIN reward_definitions AS d ON d.id = e.reward_definition_id").
-		Joins("LEFT JOIN player_reward_balances AS b ON b.player_id = e.player_id AND b.reward_definition_id = e.reward_definition_id").
-		Where("e.player_id = ? AND e.source_type = ? AND e.source_id = ? AND e.operation = ?",
-			campaign.PlayerID, "campaign_outcome", campaign.ID.String(), "grant").
-		Order("e.created_at ASC, e.id ASC").Scan(&entries).Error; err != nil {
+	rows := []RewardLedgerEntry{}
+	if err := db.WithContext(ctx).Where("player_id = ? AND source_type = 'campaign_outcome' AND source_id = ? AND operation = 'grant'", campaign.PlayerID, campaign.ID.String()).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	rewards := make([]CampaignOutcomeReward, 0, len(entries))
-	for _, row := range entries {
-		entry := row.RewardLedgerEntry
-		definition := RewardDefinition{
-			ID: entry.RewardDefinitionID, Key: row.DefinitionKey, Kind: row.DefinitionKind,
-			Name: row.DefinitionName, Unit: row.DefinitionUnit, Icon: row.DefinitionIcon,
-		}
-		kind, name, unit, icon := campaignRewardPresentation(entry.Metadata, definition)
-		rewards = append(rewards, CampaignOutcomeReward{
-			Key: definition.Key, Kind: kind, Name: name, Unit: unit, Icon: icon,
-			Quantity: entry.QuantityDelta, Balance: row.Balance, Source: campaignRewardSource(entry.Metadata),
-		})
+	rewards := []CampaignOutcomeReward{}
+	for _, row := range rows {
+		asset := RewardAssetFor(row.RewardKey)
+		rewards = append(rewards, CampaignOutcomeReward{Key: asset.Key, Name: asset.Name, Unit: asset.Unit, Icon: asset.Icon, Quantity: row.QuantityDelta, Balance: row.BalanceAfter})
 	}
 	return rewards, nil
 }

@@ -12,7 +12,24 @@ test('looking up an old order cannot resolve another pending exchange', () => {
   const historical = { request_id: requestB }
   assert.equal(confirmsPendingExchange(pending, historical), false)
   assert.equal(pending.request_id, requestA)
-  assert.equal(confirmsPendingExchange(pending, { request_id: requestA }), true)
+  assert.equal(
+    confirmsPendingExchange(pending, {
+      request_id: requestA,
+      offer_id: 'offer',
+      offer_revision: 3,
+      units: 2,
+    }),
+    true,
+  )
+  assert.equal(
+    confirmsPendingExchange(pending, {
+      request_id: requestA,
+      offer_id: 'offer',
+      offer_revision: 4,
+      units: 2,
+    }),
+    false,
+  )
   assert.equal(confirmsPendingExchange(undefined, historical), false)
   assert.equal(validExchangeRequestID(' ' + requestA + ' '), true)
   for (const invalid of ['', '00000000-0000-0000-0000-000000000000', '../orders', 'not-an-id']) {
@@ -40,7 +57,7 @@ test('catalogue, history, and lookup have separate homes while pending state sta
   const panes = find(view, 'NTabPane')
   assert.deepEqual(
     panes.map((p) => attribute(p, 'name')),
-    ['exchange', 'overview', 'records', 'orders', 'ledger'],
+    ['exchange', 'orders', 'ledger'],
   )
   const exchange = panes.find((p) => attribute(p, 'name') === 'exchange')
   assert.equal(

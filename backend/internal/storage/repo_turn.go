@@ -255,7 +255,7 @@ func (r *TurnRepo) BeginRegenerate(ctx context.Context, in RegenerateInput) (*Re
 		if costQuantity > 0 {
 			consumed, err := NewRewardRepository(tx).ConsumeInCurrentTx(ctx, RewardMutation{
 				PlayerID: in.PlayerID, RewardKey: policy.CostRewardKey, Quantity: costQuantity,
-				SourceType: "message_regenerate", SourceID: in.ConversationID.String(),
+				SourceType: "message_regenerate", SourceID: in.IdempotencyKey,
 				IdempotencyKey: in.IdempotencyKey,
 				Metadata: JSONMap{
 					"conversation_id": in.ConversationID.String(),
@@ -315,13 +315,6 @@ func RegenerateRequestIdempotencyKey(requestID uuid.UUID) string {
 	return "message_regenerate_request:" + requestID.String()
 }
 
-// RewriteRefundIdempotencyKey identifies the compensating grant for one
-// rewrite reservation. It is deliberately derived from the consume key so a
-// repeated failure/recovery path cannot grant the credit twice.
-func RewriteRefundIdempotencyKey(consumeKey string) string {
-	return "message_rewrite_refund:" + consumeKey
-}
-
 type RewritePreparation struct {
 	Turn                  ConversationTurn
 	Attempt               GenerationAttempt
@@ -378,7 +371,7 @@ func (r *TurnRepo) BeginRewrite(ctx context.Context, in RewriteUserMessageInput)
 		if policy.CostQuantity > 0 && !clientRoute {
 			result, err := NewRewardRepository(tx).ConsumeInCurrentTx(ctx, RewardMutation{
 				PlayerID: in.PlayerID, RewardKey: policy.CostRewardKey, Quantity: policy.CostQuantity,
-				SourceType: "message_rewrite", SourceID: in.MessageID.String(), IdempotencyKey: in.IdempotencyKey,
+				SourceType: "message_rewrite", SourceID: in.IdempotencyKey, IdempotencyKey: in.IdempotencyKey,
 				Metadata: JSONMap{"conversation_id": in.ConversationID.String(), "message_id": in.MessageID.String()},
 			})
 			if err != nil {

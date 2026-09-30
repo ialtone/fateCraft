@@ -28,7 +28,6 @@ type rewriteReservation struct {
 	PlayerID              uuid.UUID
 	RewardKey             string
 	ConsumeIdempotencyKey string
-	SourceID              string
 }
 
 type rewriteReservationKey struct{}
@@ -39,7 +38,7 @@ func withRewriteReservation(ctx context.Context, reservation rewriteReservation)
 
 func rewriteReservationFromContext(ctx context.Context) (rewriteReservation, bool) {
 	reservation, ok := ctx.Value(rewriteReservationKey{}).(rewriteReservation)
-	return reservation, ok && reservation.PlayerID != uuid.Nil && reservation.RewardKey != "" && reservation.ConsumeIdempotencyKey != "" && reservation.SourceID != ""
+	return reservation, ok && reservation.PlayerID != uuid.Nil && reservation.RewardKey != "" && reservation.ConsumeIdempotencyKey != ""
 }
 
 func markMutatingToolCommitted(ctx context.Context) {

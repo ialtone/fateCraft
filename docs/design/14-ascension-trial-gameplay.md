@@ -8,7 +8,7 @@
 
 玩法由三层共同实现，维护时必须区分：
 
-1. 后端硬约束：身份与归属、State Schema、步骤工具快照、稳定判定 key、飞升境界等级、outcome verifier、奖励 calculator、工具事务、唯一结算和不可变奖励账本。玩家或模型不能用普通文本绕过。
+1. 后端硬约束：身份与归属、State Schema、步骤工具快照、稳定判定 key、飞升境界等级、outcome verifier、固定结局积分、工具事务、唯一结算和不可变奖励账本。玩家或模型不能用普通文本绕过。
 2. 版本内容约束：Manifest、Runtime Contract、Prompt、世界书、结局和奖励规则，发布后成为不可变快照；旧对话保留旧版本用于浏览，新版本发布后普通对话自动封存，继续游玩需创建当前版本的新对话。
 3. 叙事规则：修为进度、寿元消耗、机缘任务链、物品明细和剧情后果主要由 Prompt 与世界书指导模型执行，目前不是独立规则引擎。成功飞升还必须满足第一层的服务端证据。
 
@@ -25,7 +25,6 @@ backend/data/preset_packs/reincarnation-trials/
     actions.json
     settlement.json
     presentation.json
-  rewards.json
   characters/
   personas/
   scenarios/
@@ -143,7 +142,7 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 - 购买延寿资源。
 - 准备雷符、护体法宝和渡劫丹药。
 
-模型只能通过当前步骤开放的状态工具更新 `attributes.灵石`，参数仍受 State Schema 校验。成功结局触发时，后端从服务端保存的当前状态读取该值，再按固定挑战版本的奖励规则计算最终平台奖励。模型不能提交最终奖励金额。
+模型只能通过当前步骤开放的状态工具更新 `attributes.灵石`，参数仍受 State Schema 校验。成功结局触发时，后端按固定挑战版本的 reward_points 发放积分，局内灵石不会改变账号收益。模型不能提交最终奖励金额。
 
 ## 天命判定
 
@@ -171,7 +170,7 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 - 失败：早期失败可重伤，中期失败可倒退境界，后期失败可灰飞烟灭。
 - 成功工具：`fc_complete_challenge`，`outcome_key = orthodox_ascension`。
 - 服务端条件：持久化境界至少为化神；必须成功通过 `cultivation.breakthrough.foundation/core/nascent/deity`，以及 `cultivation.tribulation.1` 到 `.9` 十三种稳定判定 key。
-- 奖励倍率：`30000` bps，即局内灵石的 3 倍。
+- 通关积分：300。
 
 ### 虚空裂缝
 
@@ -181,7 +180,7 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 - 失败：重伤、随机传送，严重时肉身损毁。
 - 成功工具：`fc_complete_challenge`，`outcome_key = void_ascension`。
 - 服务端条件：持久化境界至少为元婴；必须成功通过三种突破 key 和 `cultivation.void_rift.traverse`。
-- 奖励倍率：`20000` bps，即局内灵石的 2 倍。
+- 通关积分：200。
 
 ### 仙缘传送
 
@@ -192,17 +191,17 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 - 风险：叙事上成功率极高，适合保守路线或寿元将尽时离场。
 - 成功工具：`fc_complete_challenge`，`outcome_key = affinity_ascension`。
 - 服务端条件：持久化境界至少为结丹；必须成功通过筑基、结丹和仙缘获取三种稳定 key。
-- 奖励倍率：`15000` bps，即局内灵石的 1.5 倍。
+- 通关积分：150。
 
 ## 非成功结局
 
 ### 坐化
 
-玩家在剩余寿元不超过五年时可以主动安排后事并坐化，提交 `outcome_key = peaceful_passing`。坐化 category 为 `neutral`，保留叙事尊严，但没有奖励规则。
+玩家在剩余寿元不超过五年时可以主动安排后事并坐化，提交 `outcome_key = peaceful_passing`。坐化 category 为 `neutral`，保留叙事尊严，但reward_points 为 0。
 
 ### 寿元耗尽或陨落
 
-寿元归零提交 `outcome_key = lifespan_exhausted`，category 为 `failure`。渡劫失败或其他致命事件应先按剧情与状态处理；只有已发布 outcome 才能结束挑战。失败结局没有奖励规则，通用统计以后可从 `challenge_runs.category` 聚合。
+寿元归零提交 `outcome_key = lifespan_exhausted`，category 为 `failure`。渡劫失败或其他致命事件应先按剧情与状态处理；只有已发布 outcome 才能结束挑战。失败结局reward_points 为 0，通用统计以后可从 `challenge_runs.category` 聚合。
 
 ## 结构化状态
 
@@ -272,7 +271,7 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 
 1. 根据步骤工具快照确认名称、参数和 `outcome_key`，然后锁定对话。
 2. 按对话固定的 `challenge_version_id` 查找 outcome，执行通用 `core.conditions`。每条飞升路线在版本内容中用 `state_in` 明确列出可接受的 `profile.cultivation_realm_key`，并用 `successful_roll` 校验全部稳定判定 key；平台层不内置境界顺序或飞升门槛。
-3. 校验成功后执行版本化 calculator，在一个工具事务中原子写入唯一 `challenge_run`、奖励账本、玩家余额、`challenge_run_rewards`、对话 ended 状态、invocation 与 tool 消息。
+3. 校验成功后读取版本化 reward_points，在一个工具事务中原子写入唯一 `challenge_run`、奖励账本、玩家余额、`challenge_run_rewards`、对话 ended 状态、invocation 与 tool 消息。
 4. 校验拒绝时回滚领域写入，只保存公开 tool result；模型在下一步骤依据拒绝原因继续。若需要先改变状态，必须先在更早步骤提交状态工具，不能在同一个 Tool Call 中为自身补资格。
 
 `challenge_runs.conversation_id` 唯一，`attempt_id + call_id` 与结算约束共同保证重复调用、重放请求和归档恢复都不能重复领奖。
@@ -283,7 +282,6 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 
 - `pack.json` 的版本号、公开说明、允许 Persona、outcome 和奖励规则。
 - `runtime/` 下的状态 Schema、展示分组、动作和玩家能力文件。
-- `rewards.json` 的全局奖励稳定语义。
 - Prompt 中的稳定 outcome/roll key、玩家输入权限边界、仙缘获取流程和结算安全分段。
 - Prompt 的 12 个完整职责分段与主动推进要求，不能压缩成规则摘要。
 - 世界书中的至少 12 类完整规则、共享境界与基础术语、寿元、延寿、飞升路径和动作协议。
@@ -300,6 +298,6 @@ Prompt 固定保留 12 个职责分段：总叙事、核心循环、角色生成
 - `profile.cultivation_realm_key`、显示境界和寿元上限由服务端突破判定原子维护；阶段、修为进度和剩余寿元仍主要由模型维护，且尚无独立修为事件账本。
 - 飞升符是否完成了指定剧情任务链仍由内容控制；后端只硬性要求本对话成功执行过 `仙缘获取判定`。
 - 每回合寿元消耗是否严格落在参考范围。
-- 局内灵石获取和消耗是否经过独立局内经济事件账本；账号灵石奖励已进入通用奖励账本。
+- 局内灵石获取和消耗是否经过独立局内经济事件账本；账号积分已进入统一奖励账本，与局内灵石没有兑换关系。
 
 后续若挑战奖励具有真实价值，应把这些条件逐步迁移为结构化规则、服务端事件和不可伪造流水，而不是继续增加 Prompt 文字。

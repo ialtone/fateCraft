@@ -29,6 +29,9 @@ func TestDefaultSystemSettingsUsesUserManagedLLM(t *testing.T) {
 	if settings.LLMAccessMode != "user_managed" {
 		t.Fatalf("default LLM access mode = %q, want user_managed", settings.LLMAccessMode)
 	}
+	if !settings.ClientLLMRouteEnabled {
+		t.Fatal("client route choice must be enabled by default")
+	}
 }
 
 func TestSystemSettingsCacheReturnsIndependentCopiesAndExpires(t *testing.T) {

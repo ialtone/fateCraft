@@ -305,25 +305,6 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	manifest := loaded.manifest
 	document := loaded.document
 
-	// 奖励定义是跨玩法共享的实体。导入时按稳定 key 精确复用，
-	// 再把规则中的临时 UUID 替换成数据库中的真实 UUID。
-	definitionIDs := make(map[string]uuid.UUID, len(loaded.rewards))
-	for index := range loaded.rewards {
-		definition, err := i.repo.Rewards().UpsertDefinitionExact(ctx, &loaded.rewards[index])
-		if err != nil {
-			return nil, fmt.Errorf("导入奖励定义 %s: %w", loaded.rewards[index].Key, err)
-		}
-		definitionIDs[definition.Key] = definition.ID
-	}
-	for index := range document.RewardRules {
-		key := stringFromJSONMap(document.RewardRules[index].PublicSnapshot, "key")
-		definitionID, ok := definitionIDs[key]
-		if !ok {
-			return nil, fmt.Errorf("奖励规则引用了未导入的定义 %s", key)
-		}
-		document.RewardRules[index].RewardDefinitionID = definitionID
-	}
-
 	pack, err := i.repo.GetPackBySlug(ctx, manifest.ID)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
@@ -402,11 +383,8 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	for index := range document.Assets {
 		document.Assets[index].ChallengeVersionID = version.ID
 	}
-	for index := range document.RewardRules {
-		document.RewardRules[index].ChallengeVersionID = version.ID
-	}
 	if err := i.repo.CreateDraftWithContent(
-		ctx, version, document.Runtime, document.Assets, document.Definitions, document.Outcomes, document.RewardRules,
+		ctx, version, document.Runtime, document.Assets, document.Definitions, document.Outcomes,
 	); err != nil {
 		return nil, err
 	}

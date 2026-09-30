@@ -7,7 +7,7 @@
 项目当前已经具备：
 
 - LinuxDo OAuth、可配置邮箱认证、user/admin 权限和服务端会话；
-- PostgreSQL 挑战包、不可变发布版本、内容哈希、内置内容显式导入和多奖励账本；
+- PostgreSQL 挑战包、不可变发布版本、内容哈希、内置内容显式导入和积分与改写次数账本；
 - 单局 Challenge 与长期 Campaign 两种 Runtime 模式；
 - 题材无关的 State Schema、Presentation、判定、Outcome、奖励和 Campaign 动作注册表；
 - 主叙事普通文本 + 真实 Agent Tool Loop，同时适配 Chat Completions 与 Responses；
@@ -21,9 +21,9 @@
 
 ## 奖励管理与兑换验收
 
-代码已接通独立后台、规则定位、注册修订、用户搜索与发放、统一获奖与领取、不可变账本和账号积分兑换，实际模型见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+代码已接通独立后台、规则定位、注册修订、用户搜索与发放、固定通关积分、直接到账与误发撤回、不可变账本和账号积分兑换，实际模型见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
-发布前仍需真实 PostgreSQL 验收：本地检查未配置可用验证库，集成测试被跳过。验证库通过 FATECRAFT_TEST_DATABASE_URL 配置，随机 schema 执行完整 00001，覆盖并发发放/领取/兑换、审计与订单回滚、权限、修订及余额不为负，不通过自动清库或兼容迁移绕过基线要求。
+发布前仍需真实 PostgreSQL 验收：本地检查未配置可用验证库，集成测试被跳过。验证库通过 FATECRAFT_TEST_DATABASE_URL 配置，随机 schema 执行完整 00001，覆盖并发发放/撤回/兑换、审计与订单回滚、权限、修订及余额不为负，不通过自动清库或兼容迁移绕过基线要求。
 
 ## P0：协议与事务回归
 

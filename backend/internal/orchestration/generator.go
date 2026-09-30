@@ -184,8 +184,6 @@ func (g *Generator) refundRewriteReservation(ctx context.Context, source string)
 	if _, err := g.rewards.RefundConsumed(context.WithoutCancel(ctx), storage.RewardRefund{
 		PlayerID: reservation.PlayerID, RewardKey: reservation.RewardKey,
 		ConsumeIdempotencyKey: reservation.ConsumeIdempotencyKey,
-		RefundIdempotencyKey:  storage.RewriteRefundIdempotencyKey(reservation.ConsumeIdempotencyKey),
-		SourceID:              reservation.SourceID,
 		Metadata: storage.JSONMap{
 			"operation": "message_rewrite_refund", "source": source,
 		},
@@ -383,7 +381,6 @@ func (g *Generator) Regenerate(ctx context.Context, convID, requestID uuid.UUID,
 		ctx = withRewriteReservation(ctx, rewriteReservation{
 			PlayerID: playerID, RewardKey: preparation.RewardKey,
 			ConsumeIdempotencyKey: storage.RegenerateRequestIdempotencyKey(requestID),
-			SourceID:              convID.String(),
 		})
 	}
 	ctx, finish, err := g.beginAttemptFromRecords(ctx, convID, "regenerate", &preparation.Turn, &preparation.Attempt)
@@ -453,7 +450,6 @@ func (g *Generator) Rewrite(ctx context.Context, convID, requestID, messageID uu
 		ctx = withRewriteReservation(ctx, rewriteReservation{
 			PlayerID: playerID, RewardKey: preparation.RewardKey,
 			ConsumeIdempotencyKey: storage.RewriteRequestIdempotencyKey(requestID),
-			SourceID:              messageID.String(),
 		})
 	}
 	if !preparation.Applied {

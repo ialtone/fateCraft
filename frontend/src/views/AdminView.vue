@@ -40,7 +40,6 @@ import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
 import AdminRewardsPanel from '@/components/AdminRewardsPanel.vue'
-import { rewardManagementApi } from '@/api/rewards'
 import type {
   AdminBuiltinChallenge,
   AdminAuthSettings,
@@ -57,7 +56,6 @@ import type {
   InvitationCode,
   LLMCapabilityDiagnostic,
   LLMCapabilityRole,
-  RewardDefinition,
   SaveChallengeVersionInput,
   ConversationShare,
   ConversationShareReport,
@@ -150,7 +148,6 @@ const invitations = ref<InvitationCode[]>([])
 const packs = ref<AdminChallengePack[]>([])
 const builtins = ref<AdminBuiltinChallenge[]>([])
 const modules = ref<GameplayModuleDescriptor[]>([])
-const rewardDefinitions = ref<RewardDefinition[]>([])
 const publicShares = ref<ConversationShare[]>([])
 const shareReports = ref<ConversationShareReport[]>([])
 const loadingSettings = ref(false)
@@ -176,12 +173,10 @@ const selectedVersionId = ref('')
 const showPackModal = ref(false)
 const showInvitationModal = ref(false)
 const showCreatedInvitationModal = ref(false)
-const showRewardModal = ref(false)
 const showLLMLogModal = ref(false)
 const showContextLogModal = ref(false)
 const createdInvitationCode = ref('')
 const creatingPack = ref(false)
-const creatingReward = ref(false)
 const packForm = ref({ slug: '', name: '', description: '' })
 const showModerateModal = ref(false)
 const moderateTarget = ref<ConversationShare | null>(null)
@@ -196,74 +191,6 @@ const invitationForm = ref<{ label: string; max_uses: number; expires_at: number
   max_uses: 1,
   expires_at: null,
 })
-const rewardForm = ref({
-  key: '',
-  kind: 'currency',
-  name: '',
-  description: '',
-  unit: '',
-  icon: '',
-  stackable: true,
-  consumable: true,
-  featured: false,
-  sort_order: 100,
-})
-const editingReward = ref<RewardDefinition | null>(null)
-function openRewardEditor(reward?: RewardDefinition) {
-  editingReward.value = reward || null
-  rewardForm.value = reward
-    ? { ...reward }
-    : {
-        key: '',
-        kind: 'currency',
-        name: '',
-        description: '',
-        unit: '',
-        icon: '',
-        stackable: true,
-        consumable: true,
-        featured: false,
-        sort_order: 100,
-      }
-  showRewardModal.value = true
-}
-async function toggleReward(reward: RewardDefinition) {
-  try {
-    const impact = await rewardManagementApi.impact(reward.id)
-    const disableRegistration = !reward.disabled && !!impact.registration?.enabled
-    dialog.warning({
-      title: reward.disabled ? '启用奖励资产' : '停用奖励资产',
-      content: reward.disabled
-        ? `启用 ${reward.name}，不会自动启用已停用的发奖规则。`
-        : `停用 ${reward.name} 后禁止新的独立发放。有 ${impact.rules.length} 条玩法规则引用、${impact.pending} 笔待领取记录、${impact.exchange_offers.length} 个兑换商品；已发布玩法与已获奖记录仍会履约，已有余额仍可消费。${disableRegistration ? '本次将同时停用注册赠送规则。' : ''}`,
-      positiveText: '确认',
-      negativeText: '取消',
-      onPositiveClick: async () => {
-        try {
-          await adminApi.updateRewardDefinition(
-            reward.id,
-            { ...reward, disabled: !reward.disabled },
-            disableRegistration,
-          )
-          await loadGameplayCatalog()
-          message.success('奖励状态已更新')
-        } catch (err: any) {
-          message.error(err.message || '操作失败')
-        }
-      },
-    })
-  } catch (err: any) {
-    message.error(err.message || '读取影响范围失败')
-  }
-}
-const rewardKindOptions = [
-  { label: '货币', value: 'currency' },
-  { label: '物品', value: 'item' },
-  { label: '徽章', value: 'badge' },
-  { label: '权限', value: 'entitlement' },
-  { label: '额度', value: 'credit' },
-]
-
 const smtpSecurityOptions = [
   { label: 'STARTTLS（推荐）', value: 'starttls' },
   { label: 'TLS / SSL', value: 'tls' },
@@ -910,7 +837,6 @@ function setVersionDocument(doc: ChallengeVersionDocument) {
     assets: structuredClone(doc.assets || []),
     definitions: structuredClone(doc.definitions || []),
     outcomes: structuredClone(doc.outcomes || []),
-    reward_rules: structuredClone(doc.reward_rules || []),
   }
 }
 
@@ -962,51 +888,11 @@ async function submitCreateVersion() {
 async function loadGameplayCatalog() {
   loadingGameplay.value = true
   try {
-    ;[modules.value, rewardDefinitions.value] = await Promise.all([
-      adminApi.listGameplayModules(),
-      adminApi.listRewardDefinitions(),
-    ])
+    modules.value = await adminApi.listGameplayModules()
   } catch (err: any) {
     message.error(`读取玩法能力失败：${err.message || '未知错误'}`)
   } finally {
     loadingGameplay.value = false
-  }
-}
-
-async function createRewardDefinition() {
-  if (!rewardForm.value.key.trim() || !rewardForm.value.name.trim()) {
-    message.warning('请填写奖励 key 和名称')
-    return
-  }
-  creatingReward.value = true
-  try {
-    const body = {
-      ...rewardForm.value,
-      kind: rewardForm.value.kind as RewardDefinition['kind'],
-      metadata: editingReward.value?.metadata || {},
-      disabled: editingReward.value?.disabled || false,
-    }
-    if (editingReward.value) await adminApi.updateRewardDefinition(editingReward.value.id, body)
-    else await adminApi.createRewardDefinition(body)
-    showRewardModal.value = false
-    rewardForm.value = {
-      key: '',
-      kind: 'currency',
-      name: '',
-      description: '',
-      unit: '',
-      icon: '',
-      stackable: true,
-      consumable: true,
-      featured: false,
-      sort_order: 100,
-    }
-    await loadGameplayCatalog()
-    message.success('奖励定义已保存')
-  } catch (err: any) {
-    message.error(`保存奖励失败：${err.message || '未知错误'}`)
-  } finally {
-    creatingReward.value = false
   }
 }
 
@@ -1149,7 +1035,7 @@ watch(
                       <template #unchecked>未允许</template>
                     </NSwitch>
                     <template #feedback>
-                      默认关闭。开启后用户自行决定是否直连；关闭会立即中断进行中的直连回合，已有直连对话变为只读，重新开启后恢复。
+                      默认开启，用户自行决定是否直连；关闭会立即中断进行中的直连回合，已有直连对话变为只读，重新开启后恢复。
                     </template>
                   </NFormItem>
                 </NForm>
@@ -1457,9 +1343,6 @@ watch(
               </div>
               <div class="catalog-tags">
                 <NTag v-for="key in module.verifiers" :key="key" size="small">{{ key }}</NTag>
-                <NTag v-for="key in module.calculators" :key="key" size="small" type="success">{{
-                  key
-                }}</NTag>
               </div>
             </div>
           </section>
@@ -1467,41 +1350,7 @@ watch(
       </NTabPane>
 
       <NTabPane v-if="sectionVisible('rewards')" name="rewards" tab="奖励管理">
-        <AdminRewardsPanel :definitions="rewardDefinitions" @open-version="openVersion">
-          <template #assets>
-            <section class="admin-section">
-              <div class="section-toolbar">
-                <div>
-                  <h3>奖励定义</h3>
-                  <p class="section-sub">稳定 key 被挑战引用后，不可改变类型、堆叠和消费语义。</p>
-                </div>
-                <NButton type="primary" @click="openRewardEditor()">新建奖励</NButton>
-              </div>
-              <div
-                v-for="reward in rewardDefinitions"
-                :key="reward.id"
-                class="catalog-row reward-row-admin"
-              >
-                <div>
-                  <strong>{{ reward.name }}</strong>
-                  <span class="muted">{{ reward.key }}</span>
-                  <p>{{ reward.description || '暂无说明' }}</p>
-                </div>
-                <div class="catalog-tags">
-                  <NTag size="small">{{ reward.kind }}</NTag>
-                  <NTag v-if="reward.stackable" size="small" type="info">可堆叠</NTag>
-                  <NTag v-if="reward.consumable" size="small" type="warning">可消费</NTag>
-                  <NTag v-if="reward.featured" size="small" type="success">顶栏展示</NTag>
-                  <NTag v-if="reward.disabled" size="small" type="warning">已停用</NTag>
-                  <NButton size="small" @click="openRewardEditor(reward)">编辑</NButton>
-                  <NButton size="small" @click="toggleReward(reward)">{{
-                    reward.disabled ? '启用' : '停用'
-                  }}</NButton>
-                </div>
-              </div>
-            </section>
-          </template>
-        </AdminRewardsPanel>
+        <AdminRewardsPanel @open-version="openVersion" />
       </NTabPane>
 
       <NTabPane v-if="sectionVisible('auth')" name="auth" tab="账号与注册"
@@ -1912,7 +1761,6 @@ watch(
                 :key="versionDoc.version.id"
                 v-model="versionPayload"
                 :modules="modules"
-                :rewards="rewardDefinitions"
                 :readonly="versionDoc.version.status !== 'draft'"
               />
               <p v-if="versionDoc.version.content_hash" class="hash-line">
@@ -2007,52 +1855,6 @@ watch(
       <template #action>
         <NButton @click="showPackModal = false">取消</NButton>
         <NButton type="primary" :loading="creatingPack" @click="createPack">创建</NButton>
-      </template>
-    </NModal>
-
-    <NModal
-      v-model:show="showRewardModal"
-      preset="dialog"
-      :title="editingReward ? '编辑奖励定义' : '新建奖励定义'"
-      style="width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
-    >
-      <NForm label-placement="top">
-        <div class="form-grid two-columns">
-          <NFormItem label="稳定 Key"
-            ><NInput v-model:value="rewardForm.key" placeholder="pack-slug.reward-key"
-          /></NFormItem>
-          <NFormItem label="类型"
-            ><NSelect v-model:value="rewardForm.kind" :options="rewardKindOptions"
-          /></NFormItem>
-          <NFormItem label="名称"><NInput v-model:value="rewardForm.name" /></NFormItem>
-          <NFormItem label="单位"><NInput v-model:value="rewardForm.unit" /></NFormItem>
-          <NFormItem label="图标 Key"
-            ><NInput v-model:value="rewardForm.icon" placeholder="例如 gem"
-          /></NFormItem>
-          <NFormItem label="排序"
-            ><NInputNumber v-model:value="rewardForm.sort_order" style="width: 100%"
-          /></NFormItem>
-        </div>
-        <NFormItem label="说明"
-          ><NInput v-model:value="rewardForm.description" type="textarea"
-        /></NFormItem>
-        <div class="setting-list compact-settings">
-          <div class="setting-row">
-            <span>可堆叠</span><NSwitch v-model:value="rewardForm.stackable" />
-          </div>
-          <div class="setting-row">
-            <span>可消费</span><NSwitch v-model:value="rewardForm.consumable" />
-          </div>
-          <div class="setting-row">
-            <span>顶栏展示</span><NSwitch v-model:value="rewardForm.featured" />
-          </div>
-        </div>
-      </NForm>
-      <template #action>
-        <NButton @click="showRewardModal = false">取消</NButton>
-        <NButton type="primary" :loading="creatingReward" @click="createRewardDefinition"
-          >保存</NButton
-        >
       </template>
     </NModal>
 
@@ -2386,65 +2188,18 @@ watch(
         {{ builtinPreview.info.name }} · {{ builtinPreview.current_version?.version || '未导入' }} →
         {{ builtinPreview.info.version }}
       </h3>
-      <p>
-        确认将发布所选玩法内容，并按下列差异更新共享奖励资产。已有存档和获奖记录保留自己的快照。
-      </p>
+      <p>确认将发布所选玩法内容，结局积分如下。已有存档和收支记录保留原版本结果。</p>
       <NAlert v-if="builtinPreviewError" type="error">{{ builtinPreviewError }}</NAlert>
-      <h4>共享奖励资产变化</h4>
-      <p v-if="!builtinPreview.rewards.length">没有奖励资产字段变化。</p>
-      <div
-        v-for="diff in builtinPreview.rewards"
-        :key="diff.key"
-        style="padding: 12px 0; border-bottom: 1px solid var(--border-soft)"
-      >
-        <strong>{{ diff.key }}</strong
-        ><NAlert v-if="diff.conflict" type="error"
-          >资产已停用或语义冲突，不能导入。请先处理定义或使用新的资产 Key。</NAlert
-        >
-        <table style="width: 100%; table-layout: fixed; overflow-wrap: anywhere">
-          <thead>
-            <tr>
-              <th>字段</th>
-              <th>当前</th>
-              <th>导入后</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(value, key) in diff.after" :key="key">
-              <td>{{ key }}</td>
-              <td>{{ JSON.stringify(diff.before?.[key] ?? null) }}</td>
-              <td>{{ JSON.stringify(value) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-if="diff.impact">
-          已有 {{ diff.impact.rules.length }} 条玩法引用、{{ diff.impact.pending }} 笔待领取奖励。
-        </p>
-        <NButton
-          v-for="rule in diff.impact?.rules || []"
-          :key="rule.id"
-          text
-          @click="openVersion(rule.challenge_version_id)"
-          >查看引用玩法 {{ rule.challenge_version_id }}</NButton
-        >
-      </div>
-      <h4>当前奖励规则</h4>
-      <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{
-        JSON.stringify(
-          builtinPreview.current_rules.map((r) => ({
-            asset: r.reward_definition_id,
-            calculator: r.calculator_key,
-            config: r.calculator_config,
-            enabled: r.enabled,
-          })),
-          null,
-          2,
-        )
-      }}</pre>
-      <h4>导入后的奖励规则</h4>
-      <pre style="white-space: pre-wrap; overflow-wrap: anywhere">{{
-        JSON.stringify(builtinPreview.proposed_rules, null, 2)
-      }}</pre>
+      <h4>当前结局积分</h4>
+      <p v-if="!builtinPreview.current_rules.length">尚无结局规则。</p>
+      <p v-for="rule in builtinPreview.current_rules" :key="rule.outcome_key">
+        {{ rule.title }}：{{ rule.reward_points }} 积分{{ rule.enabled ? '' : '（已停用）' }}
+      </p>
+      <h4>导入后的结局积分</h4>
+      <p v-if="!builtinPreview.proposed_rules.length">没有结局规则。</p>
+      <p v-for="rule in builtinPreview.proposed_rules" :key="rule.outcome">
+        {{ rule.title }}：{{ rule.points }} 积分{{ rule.enabled ? '' : '（已停用）' }}
+      </p>
     </template>
     <template #footer
       ><NButton
@@ -2456,7 +2211,7 @@ watch(
       <NButton
         type="primary"
         :loading="!!importingBuiltin"
-        :disabled="!builtinPreview || builtinPreview.rewards.some((d) => d.conflict)"
+        :disabled="!builtinPreview"
         @click="confirmBuiltinImport"
         >确认导入以上变更</NButton
       ></template

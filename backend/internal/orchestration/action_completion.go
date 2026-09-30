@@ -15,7 +15,7 @@ import (
 )
 
 // CompletionHandler implements the generic challenge completion action. The
-// challenge runtime selects the verifier and reward calculators; this handler
+// challenge version selects the verifier and fixed points; this handler
 // only freezes trusted state and forwards the requested outcome key.
 type CompletionHandler struct {
 	chatSvc   *chat.Service

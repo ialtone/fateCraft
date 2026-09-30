@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ialtone/fatecraft/internal/campaignreward"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -19,16 +18,10 @@ type Evidence struct {
 
 type VerifierFunc func(Evidence, storage.JSONMap) error
 type ConfigValidator func(storage.JSONMap) error
-type CalculatorFunc func(Evidence, storage.JSONMap) (int64, error)
 
 type verifierRegistration struct {
 	validate ConfigValidator
 	verify   VerifierFunc
-}
-
-type calculatorRegistration struct {
-	validate  ConfigValidator
-	calculate CalculatorFunc
 }
 
 type ModuleDescriptor struct {
@@ -39,7 +32,6 @@ type ModuleDescriptor struct {
 	Modes                      []string `json:"modes"`
 	Actions                    []string `json:"actions"`
 	Verifiers                  []string `json:"verifiers"`
-	Calculators                []string `json:"calculators"`
 	SettlementHandlers         []string `json:"settlement_handlers"`
 	CampaignLifecycleHandlers  []string `json:"campaign_lifecycle_handlers,omitempty"`
 	CampaignProjectionHandlers []string `json:"campaign_projection_handlers,omitempty"`
@@ -54,15 +46,13 @@ type ModuleDescriptor struct {
 }
 
 type Registry struct {
-	modules     map[string]ModuleDescriptor
-	verifiers   map[string]verifierRegistration
-	calculators map[string]calculatorRegistration
+	modules   map[string]ModuleDescriptor
+	verifiers map[string]verifierRegistration
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
 		modules: map[string]ModuleDescriptor{}, verifiers: map[string]verifierRegistration{},
-		calculators: map[string]calculatorRegistration{},
 	}
 }
 
@@ -70,16 +60,12 @@ func NewCoreRegistry() *Registry {
 	registry := NewRegistry()
 	registry.RegisterVerifier("core.always", validateEmptyConfig, func(Evidence, storage.JSONMap) error { return nil })
 	registry.RegisterVerifier("core.conditions", validateConditionsConfig, verifyConditions)
-	registry.RegisterCalculator("core.fixed", validateFixedConfig, calculateFixed)
-	registry.RegisterCalculator("core.state_multiplier", validateStateMultiplierConfig, calculateStateMultiplier)
-	registry.RegisterCalculator(campaignreward.ItemStackCalculatorKey, validateCampaignItemStackConfig, calculateCampaignItemStack)
 	registry.RegisterModule(ModuleDescriptor{
 		Key: "core.generic", Version: 1, Name: "通用状态玩法",
-		Description:        "使用受限状态条件、服务端判定证据和整数奖励计算器。",
+		Description:        "使用受限状态条件、服务端判定证据和固定通关积分。",
 		Modes:              []string{RuntimeModeChallenge},
 		Actions:            []string{"update_state", "roll", "complete_challenge"},
 		Verifiers:          []string{"core.always", "core.conditions"},
-		Calculators:        []string{"core.fixed", "core.state_multiplier"},
 		SettlementHandlers: []string{"core.challenge_completion"},
 	})
 	return registry
@@ -107,16 +93,6 @@ func (r *Registry) RegisterVerifier(key string, validate ConfigValidator, verify
 		panic("duplicate gameplay verifier: " + key)
 	}
 	r.verifiers[key] = verifierRegistration{validate: validate, verify: verify}
-}
-
-func (r *Registry) RegisterCalculator(key string, validate ConfigValidator, calculate CalculatorFunc) {
-	if key == "" || validate == nil || calculate == nil {
-		panic("invalid gameplay calculator")
-	}
-	if _, exists := r.calculators[key]; exists {
-		panic("duplicate gameplay calculator: " + key)
-	}
-	r.calculators[key] = calculatorRegistration{validate: validate, calculate: calculate}
 }
 
 func (r *Registry) Modules() []ModuleDescriptor {
@@ -239,36 +215,6 @@ func (r *Registry) Verify(key string, evidence Evidence, config storage.JSONMap)
 		return fmt.Errorf("验证器未注册: %s", key)
 	}
 	return registered.verify(evidence, config)
-}
-
-func (r *Registry) ValidateCalculator(contract *RuntimeContract, key string, config storage.JSONMap) error {
-	module := r.modules[moduleRegistryKey(contract.Engine.Key, contract.Engine.Version)]
-	if !contains(module.Calculators, key) {
-		return fmt.Errorf("玩法模块不允许奖励计算器 %s", key)
-	}
-	registered, ok := r.calculators[key]
-	if !ok {
-		return fmt.Errorf("奖励计算器未注册: %s", key)
-	}
-	if err := registered.validate(config); err != nil {
-		return err
-	}
-	if key == "core.state_multiplier" {
-		path := stringValue(config["state_path"])
-		field, ok := FieldForPath(contract.StateSchema, path)
-		if !ok || field.Path != path || (field.Type != "integer" && field.Type != "number") {
-			return fmt.Errorf("core.state_multiplier.state_path 必须引用已声明的数值状态: %s", path)
-		}
-	}
-	return nil
-}
-
-func (r *Registry) Calculate(key string, evidence Evidence, config storage.JSONMap) (int64, error) {
-	registered, ok := r.calculators[key]
-	if !ok {
-		return 0, fmt.Errorf("奖励计算器未注册: %s", key)
-	}
-	return registered.calculate(evidence, config)
 }
 
 func moduleRegistryKey(key string, version int) string {
@@ -484,93 +430,6 @@ func validateConditionPaths(schema StateSchema, config storage.JSONMap) error {
 		}
 	}
 	return nil
-}
-
-func validateFixedConfig(config storage.JSONMap) error {
-	amount, ok := numberValue(config["amount"])
-	// amount 必须是正整数：小数会在运行时被截断（例如 1.5 变成 1），
-	// 这类配置必须在发布时直接拒绝。
-	if !ok || amount <= 0 || amount != math.Trunc(amount) || amount > float64(storage.MaxRewardQuantity) {
-		return fmt.Errorf("core.fixed.amount 必须是正整数")
-	}
-	return nil
-}
-
-func calculateFixed(_ Evidence, config storage.JSONMap) (int64, error) {
-	if err := validateFixedConfig(config); err != nil {
-		return 0, err
-	}
-	amount, _ := numberValue(config["amount"])
-	return int64(amount), nil
-}
-
-func validateCampaignItemStackConfig(config storage.JSONMap) error {
-	_, err := campaignreward.ParseItemStackRule(map[string]any(config))
-	return err
-}
-
-func calculateCampaignItemStack(evidence Evidence, config storage.JSONMap) (int64, error) {
-	rule, err := campaignreward.ParseItemStackRule(map[string]any(config))
-	if err != nil {
-		return 0, err
-	}
-	source, ok := numberValue(evidence.Facts["campaign.item_stack.quantity"])
-	if !ok || source < 0 || source != math.Trunc(source) || source > math.MaxInt64 {
-		return 0, fmt.Errorf("缺少有效的 Campaign 局内物品数量证据")
-	}
-	reward, _, err := campaignreward.CalculateItemStack(int64(source), rule)
-	return reward, err
-}
-
-func validateStateMultiplierConfig(config storage.JSONMap) error {
-	if strings.TrimSpace(stringValue(config["state_path"])) == "" {
-		return fmt.Errorf("core.state_multiplier.state_path 不能为空")
-	}
-	bps, ok := numberValue(config["multiplier_bps"])
-	if !ok || bps <= 0 || bps != math.Trunc(bps) || bps > float64(storage.MaxRewardQuantity) {
-		return fmt.Errorf("core.state_multiplier.multiplier_bps 无效")
-	}
-	if raw, exists := config["max_amount"]; exists && raw != nil {
-		maxAmount, ok := numberValue(raw)
-		// max_amount 为 0 会把所有奖励截断为 0，必须是正整数（M-8 之后 0 值会被跳过，
-		// 配置 0 等同于发不出奖励，属于误配，发布时拒绝）。
-		if !ok || maxAmount <= 0 || maxAmount != math.Trunc(maxAmount) || maxAmount > float64(storage.MaxRewardQuantity) {
-			return fmt.Errorf("core.state_multiplier.max_amount 无效")
-		}
-	}
-	return nil
-}
-
-func calculateStateMultiplier(evidence Evidence, config storage.JSONMap) (int64, error) {
-	if err := validateStateMultiplierConfig(config); err != nil {
-		return 0, err
-	}
-	raw, ok := ValueAtPath(evidence.State, stringValue(config["state_path"]))
-	base, numeric := numberValue(raw)
-	if !ok || !numeric || base < 0 || base > float64(storage.MaxRewardQuantity) || math.IsNaN(base) || math.IsInf(base, 0) {
-		return 0, fmt.Errorf("奖励基数状态不存在或不是非负数字")
-	}
-	bps, _ := numberValue(config["multiplier_bps"])
-	baseInt, bpsInt := int64(base), int64(bps)
-	if baseInt > 0 && bpsInt > math.MaxInt64/baseInt {
-		return 0, fmt.Errorf("奖励计算溢出")
-	}
-	amount := baseInt * bpsInt / 10000
-	if maxRaw, exists := config["max_amount"]; exists && maxRaw != nil {
-		maxValue, _ := numberValue(maxRaw)
-		if maxValue >= 0 && amount > int64(maxValue) {
-			amount = int64(maxValue)
-		}
-	}
-	// 奖励基数为 0 是合法的对局状态（例如灵石花光）：返回 0 由调用方跳过该项，
-	// 结算照常完成，而不是把整个结算拒绝掉。
-	if amount <= 0 {
-		return 0, nil
-	}
-	if amount > storage.MaxRewardQuantity {
-		return 0, fmt.Errorf("奖励数量超出安全整数范围")
-	}
-	return amount, nil
 }
 
 func stringValue(value any) string {

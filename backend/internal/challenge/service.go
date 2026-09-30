@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/campaignreward"
 	"github.com/ialtone/fatecraft/internal/gameplay"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/craftingrules"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/effectrules"
@@ -433,14 +432,9 @@ func (s *Service) versionContent(ctx context.Context, versionID uuid.UUID) (*ver
 		s.versionCache.finishLoad(versionID, flight, nil, err, time.Since(loadStarted), 0)
 		return nil, err
 	}
-	rules, err := s.repo.ListRewardRules(ctx, versionID)
-	if err != nil {
-		s.versionCache.finishLoad(versionID, flight, nil, err, time.Since(loadStarted), 0)
-		return nil, err
-	}
 	doc := &VersionDocument{
 		Version: *version, Runtime: *runtime, Assets: assets, Definitions: definitions,
-		Outcomes: outcomes, RewardRules: rules,
+		Outcomes: outcomes,
 	}
 	entry := &versionCacheEntry{document: doc}
 	compileDuration := time.Duration(0)
@@ -476,8 +470,14 @@ func (s *Service) CacheStats() CacheStats {
 }
 
 func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVersionInput) (*VersionDocument, error) {
-	if !json.Valid(in.Manifest) {
-		return nil, fmt.Errorf("%w: manifest 不是合法 JSON", ErrInvalidChallenge)
+	var manifest Manifest
+	if err := json.Unmarshal(in.Manifest, &manifest); err != nil {
+		return nil, fmt.Errorf("%w: manifest 无效: %v", ErrInvalidChallenge, err)
+	}
+	for _, outcome := range in.Outcomes {
+		if outcome.RewardPoints < 0 || outcome.RewardPoints > storage.MaxRewardQuantity {
+			return nil, fmt.Errorf("%w: 通关积分无效", ErrInvalidChallenge)
+		}
 	}
 	if err := validateAssetDocuments(in.Assets); err != nil {
 		return nil, err
@@ -490,18 +490,8 @@ func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVer
 		in.Runtime.CampaignConfig = nil
 	}
 	in.Runtime.ChallengeVersionID = versionID
-	for index := range in.RewardRules {
-		definition, err := s.repo.RewardDefinition(ctx, in.RewardRules[index].RewardDefinitionID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: 奖励定义不存在", ErrInvalidChallenge)
-		}
-		in.RewardRules[index].PublicSnapshot = rewardSnapshot(*definition)
-		if definition.Disabled {
-			return nil, fmt.Errorf("%w: 奖励已停用", ErrInvalidChallenge)
-		}
-	}
 	if err := s.repo.ReplaceDraft(
-		ctx, versionID, storage.JSONDoc(in.Manifest), in.Runtime, in.Assets, in.Definitions, in.Outcomes, in.RewardRules,
+		ctx, versionID, storage.JSONDoc(in.Manifest), in.Runtime, in.Assets, in.Definitions, in.Outcomes,
 	); err != nil {
 		return nil, err
 	}
@@ -516,11 +506,10 @@ func (s *Service) Publish(ctx context.Context, versionID, publisherID uuid.UUID)
 		assets []storage.ChallengeAsset,
 		definitions []storage.GameplayDefinition,
 		outcomes []storage.ChallengeOutcomeRule,
-		rules []storage.ChallengeRewardRule,
 	) (string, error) {
 		doc := &VersionDocument{
 			Version: version, Runtime: runtime, Assets: assets, Definitions: definitions,
-			Outcomes: outcomes, RewardRules: rules,
+			Outcomes: outcomes,
 		}
 		if err := s.ValidateDocument(ctx, doc); err != nil {
 			return "", err
@@ -568,7 +557,6 @@ func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, 
 	var assets []storage.ChallengeAsset
 	var definitions []storage.GameplayDefinition
 	var outcomes []storage.ChallengeOutcomeRule
-	var rules []storage.ChallengeRewardRule
 	if pack.CurrentVersionID != nil {
 		source, err := s.VersionDocument(ctx, *pack.CurrentVersionID)
 		if err != nil {
@@ -580,7 +568,6 @@ func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, 
 		}
 		manifest.Version = versionName
 		manifest.Outcomes = nil
-		manifest.RewardRules = nil
 		manifestJSON, err := json.Marshal(manifest)
 		if err != nil {
 			return nil, err
@@ -592,8 +579,6 @@ func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, 
 		assets = source.Assets
 		definitions = source.Definitions
 		outcomes = source.Outcomes
-		rules = source.RewardRules
-		outcomeIDs := map[uuid.UUID]uuid.UUID{}
 		for index := range assets {
 			assets[index].ID = uuid.New()
 			assets[index].ChallengeVersionID = version.ID
@@ -605,20 +590,12 @@ func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, 
 			definitions[index].CreatedAt, definitions[index].UpdatedAt = now, now
 		}
 		for index := range outcomes {
-			oldID := outcomes[index].ID
 			outcomes[index].ID = uuid.New()
-			outcomeIDs[oldID] = outcomes[index].ID
 			outcomes[index].ChallengeVersionID = version.ID
 			outcomes[index].CreatedAt, outcomes[index].UpdatedAt = now, now
 		}
-		for index := range rules {
-			rules[index].ID = uuid.New()
-			rules[index].ChallengeVersionID = version.ID
-			rules[index].OutcomeRuleID = outcomeIDs[rules[index].OutcomeRuleID]
-			rules[index].CreatedAt, rules[index].UpdatedAt = now, now
-		}
 	}
-	if err := s.repo.CreateDraftWithContent(ctx, version, runtime, assets, definitions, outcomes, rules); err != nil {
+	if err := s.repo.CreateDraftWithContent(ctx, version, runtime, assets, definitions, outcomes); err != nil {
 		return nil, err
 	}
 	return s.VersionDocument(ctx, version.ID)
@@ -627,15 +604,13 @@ func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, 
 type settlementReader interface {
 	GetRun(context.Context, uuid.UUID) (*storage.ChallengeRun, error)
 	OutcomeRule(context.Context, uuid.UUID, string) (*storage.ChallengeOutcomeRule, error)
-	RewardRulesForOutcome(context.Context, uuid.UUID) ([]storage.ChallengeRewardRule, error)
-	RewardDefinition(context.Context, uuid.UUID) (*storage.RewardDefinition, error)
 	SuccessfulRollKeys(context.Context, uuid.UUID) ([]string, error)
 	GetRuntime(context.Context, uuid.UUID) (*storage.ChallengeRuntimeConfig, error)
 }
 
 type settlementEvaluation struct {
 	outcome storage.ChallengeOutcomeRule
-	grants  []storage.ChallengeRewardGrant
+	points  int64
 	detail  storage.JSONMap
 }
 
@@ -712,8 +687,10 @@ func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeReposit
 	// client 路由：照常校验结局、写 challenge_runs 并结束对话，但跳过全部奖励授予。
 	rewardsDisabledReason := ""
 	if conv.LLMRoute == storage.LLMRouteClient {
+		evaluation.points = 0
 		rewardsDisabledReason = storage.RewardsDisabledReasonClientRoute
 		evaluation.detail[storage.RewardsDisabledReasonKey] = rewardsDisabledReason
+		evaluation.detail["reward_points"] = int64(0)
 	}
 	settled := storage.ChallengeRun{
 		ID: uuid.New(), ConversationID: conv.ID, PlayerID: in.PlayerID,
@@ -728,10 +705,11 @@ func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeReposit
 		settled.AttemptID = &metadata.AttemptID
 	}
 	settledOutcome := OutcomeView{
-		Key: evaluation.outcome.OutcomeKey, Category: evaluation.outcome.Category,
+		RewardPoints: evaluation.points,
+		Key:          evaluation.outcome.OutcomeKey, Category: evaluation.outcome.Category,
 		Title: evaluation.outcome.Title, Tone: evaluation.outcome.Tone,
 	}
-	rewards, err := tx.CompleteRun(ctx, conv, &settled, evaluation.grants)
+	rewards, err := tx.CompleteRun(ctx, conv, &settled, evaluation.points)
 	if err != nil {
 		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
 	}
@@ -796,88 +774,20 @@ func (s *Service) evaluateSettlement(
 		return nil, fmt.Errorf("%w: %v", ErrSettlementDenied, err)
 	}
 
-	rules, err := repo.RewardRulesForOutcome(ctx, outcome.ID)
-	if err != nil {
-		return nil, err
-	}
-	grants := make([]storage.ChallengeRewardGrant, 0, len(rules))
-	for _, rule := range rules {
-		amount, err := s.registry.Calculate(rule.CalculatorKey, evidence, rule.CalculatorConfig)
-		if err != nil {
-			return nil, fmt.Errorf("%w: 奖励计算失败: %v", ErrSettlementDenied, err)
-		}
-		// Zero is a durable skipped award; a negative calculator result is invalid.
-		if amount < 0 {
-			return nil, fmt.Errorf("%w: 奖励计算数量为负数", ErrSettlementDenied)
-		}
-		definition, err := repo.RewardDefinition(ctx, rule.RewardDefinitionID)
-		if err != nil {
-			return nil, err
-		}
-		grants = append(grants, storage.ChallengeRewardGrant{
-			Definition: *definition, Quantity: amount, Snapshot: rule.PublicSnapshot,
-		})
+	if outcome.RewardPoints < 0 || outcome.RewardPoints > storage.MaxRewardQuantity {
+		return nil, fmt.Errorf("%w: 积分数量无效", ErrSettlementDenied)
 	}
 	return &settlementEvaluation{
-		outcome: *outcome, grants: grants,
+		outcome: *outcome, points: outcome.RewardPoints,
 		detail: storage.JSONMap{
 			"engine_key": contract.Engine.Key, "outcome_key": outcome.OutcomeKey,
-			"turn_count": in.TurnCount, "successful_roll_keys": successful,
+			"turn_count": in.TurnCount, "successful_roll_keys": successful, "reward_points": outcome.RewardPoints,
 		},
 	}, nil
 }
 
 func (s *Service) ValidateDocument(ctx context.Context, doc *VersionDocument) error {
-	if err := ValidateDocument(doc, s.registry); err != nil {
-		return err
-	}
-	contract, err := gameplay.DecodeRuntime(doc.Runtime)
-	if err != nil {
-		return fmt.Errorf("%w: runtime 无效: %v", ErrInvalidChallenge, err)
-	}
-	manifest, err := decodeManifest(doc.Version.Manifest)
-	if err != nil {
-		return err
-	}
-	if len(manifest.EntryRequirement) > 0 {
-		rule, err := requirement.Decode(manifest.EntryRequirement)
-		if err != nil {
-			return fmt.Errorf("%w: entry_requirement 无效: %v", ErrInvalidChallenge, err)
-		}
-		for _, rewardKey := range requirement.RewardKeys(rule) {
-			if _, err := s.repo.Rewards().DefinitionByKey(ctx, rewardKey); err != nil {
-				return fmt.Errorf("%w: 前置条件奖励不存在 %s", ErrInvalidChallenge, rewardKey)
-			}
-		}
-	}
-	for capabilityKey, capability := range contract.Actions.Capabilities {
-		if capability.CostQuantity <= 0 {
-			continue
-		}
-		definition, err := s.repo.Rewards().DefinitionByKey(ctx, capability.CostRewardKey)
-		if err != nil {
-			return fmt.Errorf("%w: 能力 %s 的消耗奖励不存在 %s", ErrInvalidChallenge, capabilityKey, capability.CostRewardKey)
-		}
-		if !definition.Consumable {
-			return fmt.Errorf("%w: 能力 %s 引用的奖励不可消费 %s", ErrInvalidChallenge, capabilityKey, capability.CostRewardKey)
-		}
-	}
-	for _, rule := range doc.RewardRules {
-		definition, err := s.repo.RewardDefinition(ctx, rule.RewardDefinitionID)
-		if err != nil {
-			return fmt.Errorf("%w: 奖励定义不存在", ErrInvalidChallenge)
-		}
-		expected := rewardSnapshot(*definition)
-		if definition.Disabled {
-			return fmt.Errorf("%w: 奖励已停用", ErrInvalidChallenge)
-		}
-		for _, key := range []string{"key", "kind", "name", "description", "unit", "icon", "stackable", "consumable"} {
-			if fmt.Sprint(rule.PublicSnapshot[key]) != fmt.Sprint(expected[key]) {
-				return fmt.Errorf("%w: 奖励 %s 的 public_snapshot 已过期", ErrInvalidChallenge, definition.Key)
-			}
-		}
-	}
-	return nil
+	return ValidateDocument(doc, s.registry)
 }
 
 func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) error {
@@ -1006,10 +916,12 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 	if gameplay.NormalizeRuntimeMode(contract.Mode) == gameplay.RuntimeModeChallenge && len(doc.Outcomes) == 0 {
 		return fmt.Errorf("%w: 至少需要一个结局", ErrInvalidChallenge)
 	}
-	outcomes := map[uuid.UUID]storage.ChallengeOutcomeRule{}
 	outcomeKeys := map[string]bool{}
 	enabledOutcomeKeys := map[string]bool{}
 	for _, outcome := range doc.Outcomes {
+		if outcome.RewardPoints < 0 || outcome.RewardPoints > storage.MaxRewardQuantity {
+			return fmt.Errorf("%w: 通关积分无效", ErrInvalidChallenge)
+		}
 		if outcome.ID == uuid.Nil || strings.TrimSpace(outcome.OutcomeKey) == "" ||
 			outcomeKeys[outcome.OutcomeKey] || strings.TrimSpace(outcome.Title) == "" {
 			return fmt.Errorf("%w: outcome_key、ID 或标题无效", ErrInvalidChallenge)
@@ -1028,58 +940,6 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 		}
 		outcomeKeys[outcome.OutcomeKey] = true
 		enabledOutcomeKeys[outcome.OutcomeKey] = outcome.Enabled
-		outcomes[outcome.ID] = outcome
-	}
-	seenRewardBindings := map[string]bool{}
-	seenCampaignExtractionSources := map[string]bool{}
-	for _, rule := range doc.RewardRules {
-		outcome, ok := outcomes[rule.OutcomeRuleID]
-		if !ok || rule.RewardDefinitionID == uuid.Nil {
-			return fmt.Errorf("%w: 奖励规则引用了无效结局或奖励定义", ErrInvalidChallenge)
-		}
-		binding := rule.OutcomeRuleID.String() + ":" + rule.RewardDefinitionID.String()
-		if seenRewardBindings[binding] {
-			return fmt.Errorf("%w: 结局 %s 存在重复奖励", ErrInvalidChallenge, outcome.OutcomeKey)
-		}
-		if err := registry.ValidateCalculator(contract, rule.CalculatorKey, rule.CalculatorConfig); err != nil {
-			return fmt.Errorf("%w: 结局 %s 的奖励计算无效: %v", ErrInvalidChallenge, outcome.OutcomeKey, err)
-		}
-		if rule.CalculatorKey == campaignreward.ItemStackCalculatorKey {
-			if gameplay.NormalizeRuntimeMode(contract.Mode) != gameplay.RuntimeModeCampaign {
-				return fmt.Errorf("%w: 局内资产提取计算器只能用于 Campaign", ErrInvalidChallenge)
-			}
-			extraction, _ := campaignreward.ParseItemStackRule(map[string]any(rule.CalculatorConfig))
-			var source *storage.GameplayDefinition
-			for index := range doc.Definitions {
-				definition := &doc.Definitions[index]
-				if definition.Kind == storage.DefinitionItem && definition.Key == extraction.ItemKey {
-					source = definition
-					break
-				}
-			}
-			stackable, _ := sourceContentValue(source, "stackable").(bool)
-			if source == nil || !stackable {
-				return fmt.Errorf("%w: Campaign 提取奖励必须引用可堆叠 item %s", ErrInvalidChallenge, extraction.ItemKey)
-			}
-			rewardStackable, _ := rule.PublicSnapshot["stackable"].(bool)
-			if !rewardStackable {
-				return fmt.Errorf("%w: Campaign 局内资产只能提取为可叠加的账号奖励", ErrInvalidChallenge)
-			}
-			sourceBinding := outcome.OutcomeKey + ":" + extraction.ItemKey + ":" + extraction.QualityKey
-			if rule.Enabled && seenCampaignExtractionSources[sourceBinding] {
-				return fmt.Errorf("%w: Campaign 结局 %s 不能重复提取同一局内来源 %s/%s",
-					ErrInvalidChallenge, outcome.OutcomeKey, extraction.ItemKey, extraction.QualityKey)
-			}
-			if rule.Enabled {
-				seenCampaignExtractionSources[sourceBinding] = true
-			}
-		}
-		if stringFromSnapshot(rule.PublicSnapshot, "key") == "" ||
-			stringFromSnapshot(rule.PublicSnapshot, "name") == "" ||
-			stringFromSnapshot(rule.PublicSnapshot, "kind") == "" {
-			return fmt.Errorf("%w: 结局 %s 的奖励快照不完整", ErrInvalidChallenge, outcome.OutcomeKey)
-		}
-		seenRewardBindings[binding] = true
 	}
 	if gameplay.NormalizeRuntimeMode(contract.Mode) == gameplay.RuntimeModeCampaign {
 		campaignOutcomes := map[string]bool{}
@@ -1096,16 +956,9 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 			}
 			campaignOutcomes[quest.CampaignOutcomeKey] = true
 		}
-		for _, rule := range doc.RewardRules {
-			outcome := outcomes[rule.OutcomeRuleID]
-			if !rule.Enabled {
-				continue
-			}
-			if !campaignOutcomes[outcome.OutcomeKey] {
-				return fmt.Errorf("%w: Campaign 奖励引用了没有终局任务的结局 %s", ErrInvalidChallenge, outcome.OutcomeKey)
-			}
-			if rule.CalculatorKey != "core.fixed" && rule.CalculatorKey != campaignreward.ItemStackCalculatorKey {
-				return fmt.Errorf("%w: Campaign 结局 %s 使用了不受支持的账号奖励计算器", ErrInvalidChallenge, outcome.OutcomeKey)
+		for _, outcome := range doc.Outcomes {
+			if outcome.Enabled && outcome.RewardPoints > 0 && !campaignOutcomes[outcome.OutcomeKey] {
+				return fmt.Errorf("%w: 积分结局没有终局任务 %s", ErrInvalidChallenge, outcome.OutcomeKey)
 			}
 		}
 	}
@@ -2054,6 +1907,7 @@ func ContentHashDocument(doc *VersionDocument) (string, error) {
 		SortOrder int             `json:"sort_order"`
 	}
 	type hashOutcome struct {
+		RewardPoints   int64          `json:"reward_points"`
 		Key            string         `json:"key"`
 		Category       string         `json:"category"`
 		Title          string         `json:"title"`
@@ -2071,14 +1925,6 @@ func ContentHashDocument(doc *VersionDocument) (string, error) {
 		SearchText string         `json:"search_text"`
 		Visibility string         `json:"visibility"`
 		SortOrder  int            `json:"sort_order"`
-	}
-	type hashReward struct {
-		OutcomeKey       string         `json:"outcome_key"`
-		RewardKey        string         `json:"reward_key"`
-		CalculatorKey    string         `json:"calculator_key"`
-		CalculatorConfig map[string]any `json:"calculator_config"`
-		PublicSnapshot   map[string]any `json:"public_snapshot"`
-		Enabled          bool           `json:"enabled"`
 	}
 	canonicalManifest, err := canonicalJSON(doc.Version.Manifest)
 	if err != nil {
@@ -2115,7 +1961,6 @@ func ContentHashDocument(doc *VersionDocument) (string, error) {
 		Assets      []hashAsset      `json:"assets"`
 		Definitions []hashDefinition `json:"definitions"`
 		Outcomes    []hashOutcome    `json:"outcomes"`
-		Rewards     []hashReward     `json:"rewards"`
 	}{Manifest: canonicalManifest, Runtime: runtimePayload}
 
 	assets := append([]storage.ChallengeAsset(nil), doc.Assets...)
@@ -2143,29 +1988,13 @@ func ContentHashDocument(doc *VersionDocument) (string, error) {
 			Visibility: definition.Visibility, SortOrder: definition.SortOrder,
 		})
 	}
-	outcomeByID := map[uuid.UUID]string{}
 	outcomes := append([]storage.ChallengeOutcomeRule(nil), doc.Outcomes...)
 	sort.Slice(outcomes, func(i, j int) bool { return outcomes[i].OutcomeKey < outcomes[j].OutcomeKey })
 	for _, outcome := range outcomes {
-		outcomeByID[outcome.ID] = outcome.OutcomeKey
 		payload.Outcomes = append(payload.Outcomes, hashOutcome{
 			Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title,
 			Tone: outcome.Tone, VerifierKey: outcome.VerifierKey,
-			VerifierConfig: outcome.VerifierConfig, Enabled: outcome.Enabled,
-		})
-	}
-	rules := append([]storage.ChallengeRewardRule(nil), doc.RewardRules...)
-	sort.Slice(rules, func(i, j int) bool {
-		left := outcomeByID[rules[i].OutcomeRuleID] + ":" + stringFromSnapshot(rules[i].PublicSnapshot, "key")
-		right := outcomeByID[rules[j].OutcomeRuleID] + ":" + stringFromSnapshot(rules[j].PublicSnapshot, "key")
-		return left < right
-	})
-	for _, rule := range rules {
-		payload.Rewards = append(payload.Rewards, hashReward{
-			OutcomeKey:    outcomeByID[rule.OutcomeRuleID],
-			RewardKey:     stringFromSnapshot(rule.PublicSnapshot, "key"),
-			CalculatorKey: rule.CalculatorKey, CalculatorConfig: rule.CalculatorConfig,
-			PublicSnapshot: rule.PublicSnapshot, Enabled: rule.Enabled,
+			VerifierConfig: outcome.VerifierConfig, Enabled: outcome.Enabled, RewardPoints: outcome.RewardPoints,
 		})
 	}
 	data, err := json.Marshal(payload)
@@ -2224,14 +2053,6 @@ func defaultDraftRuntime(versionID uuid.UUID) (storage.ChallengeRuntimeConfig, e
 	runtime.CreatedAt = now
 	runtime.UpdatedAt = now
 	return runtime, nil
-}
-
-func rewardSnapshot(definition storage.RewardDefinition) storage.JSONMap {
-	return storage.JSONMap{
-		"key": definition.Key, "kind": definition.Kind, "name": definition.Name,
-		"description": definition.Description, "unit": definition.Unit, "icon": definition.Icon,
-		"stackable": definition.Stackable, "consumable": definition.Consumable,
-	}
 }
 
 func stringFromSnapshot(snapshot storage.JSONMap, key string) string {

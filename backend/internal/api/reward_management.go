@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,8 +19,6 @@ func rewardFail(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, storage.ErrExchangeChanged):
 		status, code = http.StatusConflict, "exchange_changed"
-	case errors.Is(err, storage.ErrExchangeOwned):
-		status, code = http.StatusConflict, "exchange_owned"
 	case errors.Is(err, storage.ErrExchangeUnavailable):
 		code = "exchange_unavailable"
 	case errors.Is(err, storage.ErrRewardRequestConflict):
@@ -29,18 +29,16 @@ func rewardFail(c *gin.Context, err error) {
 		status, code = http.StatusForbidden, "admin_required"
 	case errors.Is(err, storage.ErrNotFound):
 		status, code = http.StatusNotFound, "not_found"
-	case errors.Is(err, storage.ErrRewardDisabled):
-		code = "asset_disabled"
 	case errors.Is(err, storage.ErrTargetUserDisabled):
 		code = "user_disabled"
+	case errors.Is(err, storage.ErrRewardKey):
+		code = "invalid_reward_key"
 	case errors.Is(err, storage.ErrRewardQuantity):
 		code = "invalid_quantity"
 	case errors.Is(err, storage.ErrRewardReversal):
 		code = "reversal_unsupported"
 	case errors.Is(err, storage.ErrInsufficientReward):
 		code = "insufficient_balance"
-	case errors.Is(err, storage.ErrRewardDefinitionConflict), errors.Is(err, storage.ErrRewardDefinitionInUse):
-		status, code = http.StatusConflict, "asset_conflict"
 	default:
 		fail(c, err)
 		return
@@ -58,13 +56,29 @@ func rewardActor(c *gin.Context) uuid.UUID {
 
 func rewardCursor(c *gin.Context) (storage.RewardPageCursor, bool) {
 	var result storage.RewardPageCursor
-	if value := c.Query("reward_definition_id"); value != "" {
-		id, err := uuid.Parse(value)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "奖励 ID 无效"})
-			return result, false
+	if c.Query("reward_definition_id") != "" {
+		c.JSON(400, gin.H{"error": "请使用 reward_key 筛选"})
+		return result, false
+	}
+	result.RewardKey = c.Query("reward_key")
+	result.SourceType = c.Query("source_type")
+	if result.RewardKey != "" && !storage.ValidRewardKey(result.RewardKey) {
+		c.JSON(400, gin.H{"error": "余额项目无效"})
+		return result, false
+	}
+	for name, dest := range map[string]**time.Time{"created_from": &result.CreatedFrom, "created_to": &result.CreatedTo} {
+		if raw := c.Query(name); raw != "" {
+			v, err := time.Parse(time.RFC3339Nano, raw)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "时间筛选无效"})
+				return result, false
+			}
+			*dest = &v
 		}
-		result.DefinitionID = &id
+	}
+	if result.CreatedFrom != nil && result.CreatedTo != nil && result.CreatedFrom.After(*result.CreatedTo) {
+		c.JSON(400, gin.H{"error": "开始时间不能晚于结束时间"})
+		return result, false
 	}
 	if raw := c.Query("cursor"); raw != "" {
 		decoded, err := base64.RawURLEncoding.DecodeString(raw)
@@ -89,18 +103,6 @@ func rewardCursor(c *gin.Context) (storage.RewardPageCursor, bool) {
 
 func encodeRewardCursor(at time.Time, id uuid.UUID) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(at.Format(time.RFC3339Nano) + "|" + id.String()))
-}
-
-func (s *Server) rewardTarget(c *gin.Context, admin bool) (uuid.UUID, bool) {
-	if admin {
-		return paramUUID(c, "id")
-	}
-	id := rewardActor(c)
-	if id == uuid.Nil {
-		c.JSON(401, gin.H{"error": "未登录"})
-		return id, false
-	}
-	return id, true
 }
 
 func (s *Server) getAdminUserRewards(c *gin.Context) {
@@ -131,7 +133,7 @@ func (s *Server) createAdminRewardGrant(c *gin.Context) {
 		return
 	}
 	var body storage.AdminRewardGrant
-	if err := c.ShouldBindJSON(&body); err != nil {
+	if err := bindRewardJSON(c, &body); err != nil {
 		c.JSON(400, gin.H{"error": "发放请求格式无效", "code": "invalid_reward_request"})
 		return
 	}
@@ -156,162 +158,6 @@ func (s *Server) getAdminRewardRequest(c *gin.Context) {
 	c.JSON(200, row.AdminView())
 }
 
-func (s *Server) listRewardRecords(c *gin.Context)      { s.rewardRecords(c, false) }
-func (s *Server) listAdminRewardRecords(c *gin.Context) { s.rewardRecords(c, true) }
-func (s *Server) rewardRecords(c *gin.Context, admin bool) {
-	limit, ok := adminListLimit(c)
-	if !ok {
-		return
-	}
-	cursor, ok := rewardCursor(c)
-	if !ok {
-		return
-	}
-	f := storage.RewardRecordFilter{Limit: limit + 1, DefinitionID: cursor.DefinitionID, Status: c.Query("status"), SourceType: c.Query("source_type"), SourceID: c.Query("source_id"), Purpose: c.Query("purpose")}
-	for name, dest := range map[string]**time.Time{"created_from": &f.CreatedFrom, "created_to": &f.CreatedTo} {
-		if raw := c.Query(name); raw != "" {
-			parsed, err := time.Parse(time.RFC3339Nano, raw)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "时间筛选格式无效"})
-				return
-			}
-			*dest = &parsed
-		}
-	}
-	if f.CreatedFrom != nil && f.CreatedTo != nil && f.CreatedFrom.After(*f.CreatedTo) {
-		c.JSON(400, gin.H{"error": "开始时间不能晚于结束时间"})
-		return
-	}
-	if f.Status != "" && f.Status != "pending" && f.Status != "granted" && f.Status != "skipped" && f.Status != "cancelled" && f.Status != "reversed" {
-		c.JSON(400, gin.H{"error": "状态无效"})
-		return
-	}
-	if !cursor.Time.IsZero() {
-		f.BeforeTime = &cursor.Time
-		f.BeforeID = cursor.ID
-	}
-	if !admin {
-		id := rewardActor(c)
-		f.PlayerID = &id
-	} else if c.Param("id") != "" {
-		id, ok := paramUUID(c, "id")
-		if !ok {
-			return
-		}
-		f.PlayerID = &id
-	} else if raw := c.Query("user_id"); raw != "" {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "用户 ID 无效"})
-			return
-		}
-		f.PlayerID = &id
-	}
-	if admin && c.Query("actor_id") != "" {
-		id, err := uuid.Parse(c.Query("actor_id"))
-		if err != nil {
-			c.JSON(400, gin.H{"error": "操作者 ID 无效"})
-			return
-		}
-		f.ActorID = &id
-	}
-	rows, err := s.rewards.ListRecords(c.Request.Context(), f)
-	if err != nil {
-		rewardFail(c, err)
-		return
-	}
-	next := ""
-	if len(rows) > limit {
-		rows = rows[:limit]
-		last := rows[len(rows)-1]
-		next = encodeRewardCursor(last.CreatedAt, last.ID)
-	}
-	if admin {
-		views := make([]storage.AdminRewardRecord, 0, len(rows))
-		for _, row := range rows {
-			views = append(views, row.AdminView())
-		}
-		c.JSON(200, gin.H{"records": views, "next_cursor": next})
-		return
-	}
-	c.JSON(200, gin.H{"records": rows, "next_cursor": next})
-}
-
-func (s *Server) getRewardRecord(c *gin.Context)      { s.rewardRecord(c, false) }
-func (s *Server) getAdminRewardRecord(c *gin.Context) { s.rewardRecord(c, true) }
-func (s *Server) rewardRecord(c *gin.Context, admin bool) {
-	id, ok := paramUUID(c, "id")
-	if !ok {
-		return
-	}
-	var player *uuid.UUID
-	if !admin {
-		actor := rewardActor(c)
-		player = &actor
-	}
-	row, err := s.rewards.Record(c.Request.Context(), player, id)
-	if err != nil {
-		rewardFail(c, err)
-		return
-	}
-	if admin {
-		audits, err := s.rewards.RecordAudits(c.Request.Context(), id)
-		if err != nil {
-			rewardFail(c, err)
-			return
-		}
-		c.JSON(200, gin.H{"record": row.AdminView(), "audits": audits})
-		return
-	}
-	c.JSON(200, row)
-}
-
-func (s *Server) claimReward(c *gin.Context) {
-	id, ok := paramUUID(c, "id")
-	if !ok {
-		return
-	}
-	row, err := s.rewards.ClaimReward(c.Request.Context(), rewardActor(c), id)
-	if err != nil {
-		rewardFail(c, err)
-		return
-	}
-	c.JSON(200, row)
-}
-
-func (s *Server) manageReward(c *gin.Context) {
-	id, ok := paramUUID(c, "id")
-	if !ok {
-		return
-	}
-	var body struct {
-		RequestID uuid.UUID `json:"request_id"`
-		Reason    string    `json:"reason"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "操作请求无效"})
-		return
-	}
-	row, err := s.rewards.ManageReward(c.Request.Context(), rewardActor(c), id, c.Param("action"), body.Reason, body.RequestID)
-	if err != nil {
-		rewardFail(c, err)
-		return
-	}
-	c.JSON(200, row.AdminView())
-}
-
-func (s *Server) getRewardImpact(c *gin.Context) {
-	id, ok := paramUUID(c, "id")
-	if !ok {
-		return
-	}
-	impact, err := s.rewards.DefinitionImpact(c.Request.Context(), id)
-	if err != nil {
-		rewardFail(c, err)
-		return
-	}
-	c.JSON(200, impact)
-}
 func (s *Server) getRegistrationRewardRule(c *gin.Context) {
 	rule, err := s.rewards.RegistrationRule(c.Request.Context())
 	if err != nil {
@@ -321,12 +167,16 @@ func (s *Server) getRegistrationRewardRule(c *gin.Context) {
 	c.JSON(200, rule)
 }
 func (s *Server) saveRegistrationRewardRule(c *gin.Context) {
-	var body storage.RegistrationRewardRule
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var body struct {
+		ID             int64 `json:"id"`
+		Points         int64 `json:"points"`
+		RewriteCredits int64 `json:"rewrite_credits"`
+	}
+	if err := bindRewardJSON(c, &body); err != nil {
 		c.JSON(400, gin.H{"error": "注册赠送规则无效"})
 		return
 	}
-	rule, err := s.rewards.SaveRegistrationRule(c.Request.Context(), rewardActor(c), body)
+	rule, err := s.rewards.SaveRegistrationRule(c.Request.Context(), rewardActor(c), storage.RegistrationRewardRule{ID: body.ID, Points: body.Points, RewriteCredits: body.RewriteCredits})
 	if err != nil {
 		rewardFail(c, err)
 		return
@@ -340,15 +190,29 @@ func (s *Server) rewardLedgerPage(c *gin.Context, admin bool) {
 	if !ok {
 		return
 	}
-	id, ok := s.rewardTarget(c, admin)
-	if !ok {
-		return
+	var player *uuid.UUID
+	if !admin {
+		id := rewardActor(c)
+		player = &id
+	} else {
+		raw := c.Param("id")
+		if raw == "" {
+			raw = c.Query("user_id")
+		}
+		if raw != "" {
+			id, err := uuid.Parse(raw)
+			if err != nil {
+				c.JSON(400, gin.H{"error": "用户 ID 无效"})
+				return
+			}
+			player = &id
+		}
 	}
 	cursor, ok := rewardCursor(c)
 	if !ok {
 		return
 	}
-	rows, err := s.rewards.ListLedger(c.Request.Context(), id, limit+1, cursor)
+	rows, err := s.rewards.ListLedger(c.Request.Context(), player, limit+1, cursor)
 	if err != nil {
 		rewardFail(c, err)
 		return
@@ -359,5 +223,59 @@ func (s *Server) rewardLedgerPage(c *gin.Context, admin bool) {
 		last := rows[len(rows)-1]
 		next = encodeRewardCursor(last.CreatedAt, last.ID)
 	}
+	if admin {
+		views := make([]storage.AdminRewardLedgerView, 0, len(rows))
+		for _, row := range rows {
+			views = append(views, row.AdminView())
+		}
+		c.JSON(200, gin.H{"entries": views, "next_cursor": next})
+		return
+	}
 	c.JSON(200, gin.H{"entries": rows, "next_cursor": next})
+}
+
+// 奖励写接口拒绝未知字段，防止旧参数被当成新的默认配置。
+func bindRewardJSON(c *gin.Context, dest any) error {
+	d := json.NewDecoder(c.Request.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(dest); err != nil {
+		return err
+	}
+	var extra any
+	if err := d.Decode(&extra); err != io.EOF {
+		return storage.ErrRewardState
+	}
+	return nil
+}
+func (s *Server) getAdminRewardLedgerEntry(c *gin.Context) {
+	id, ok := paramUUID(c, "id")
+	if !ok {
+		return
+	}
+	row, err := s.rewards.LedgerEntry(c.Request.Context(), id)
+	if err != nil {
+		rewardFail(c, err)
+		return
+	}
+	c.JSON(200, row.AdminView())
+}
+func (s *Server) reverseAdminRewardGrant(c *gin.Context) {
+	id, ok := paramUUID(c, "id")
+	if !ok {
+		return
+	}
+	var body struct {
+		RequestID uuid.UUID `json:"request_id"`
+		Reason    string    `json:"reason"`
+	}
+	if err := bindRewardJSON(c, &body); err != nil {
+		c.JSON(400, gin.H{"error": "撤回请求格式无效"})
+		return
+	}
+	row, err := s.rewards.ReverseAdminGrant(c.Request.Context(), rewardActor(c), id, body.RequestID, body.Reason)
+	if err != nil {
+		rewardFail(c, err)
+		return
+	}
+	c.JSON(200, row.AdminView())
 }

@@ -130,7 +130,7 @@ POST /api/campaigns/:id/abandon
 
 创建存档只接收挑战 slug、Persona slug 和可选标题；标题为空时使用玩法名称。后端固定发布版本、内容哈希和资产。`POST /api/campaigns/:id/conversations` 不接收独立标题，只创建一次并继承存档名，重复创建返回 409。领域动作必须提交 `action_id`、稳定 `key`、`expected_revision` 和严格参数对象。成功响应包含更新后的 Campaign、事件和公开结果；同一 `action_id` 重试返回 `replayed=true`，并发旧 revision 返回 409。
 
-`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。完成态还包含平台保留的 `outcome_rewards`，列出本次实际带出、来源快照和当前账号余额。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
+`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。完成态还包含平台保留的 `reward_points` 与 `outcome_rewards`，展示本次实际积分和入账后余额快照。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
 
 阶段 3 玩家动作 key 为 `craft.learn_recipe`、`craft.execute_recipe`、`trade.buy` 和 `trade.sell`。配方动作只接收 `recipe_key`；交易动作接收 `market_key`、`item_kind`、`item_key`、`quality_key` 和 `quantity`，出售独立装备时还必须提交 `item_instance_id` 且数量为 1。服务端计算材料选择、成败、品质、补货和价格，响应 `result` 仅用于展示，不能作为下一次请求的可信输入。
 
@@ -194,54 +194,37 @@ DELETE /api/conversations/:id/inquiries
 
 接口都只允许 conversation 所有者。问答可读取 ended/archived 对话的已提交玩家资料，不获取主生成锁、不执行玩法动作、不写主消息或长期记忆；cancel 只取消当前实例正在执行的侧栏模型请求，DELETE 只清空专用问答历史且会拒绝与执行中请求竞态。回答返回 snapshot ID、branch epoch、revision 和 `stale`，引用的来源只包含公开标签。长期记忆没有普通玩家生成、编辑、查询或重试 API。
 
-## 玩家奖励、领取与兑换
+## 玩家积分与兑换
 
-```text
+~~~text
 GET  /api/me/rewards
 GET  /api/me/reward-ledger?limit=30&cursor=...
-GET  /api/me/reward-records?limit=30&cursor=...
-GET  /api/me/reward-records/:id
-POST /api/me/reward-records/:id/claim
 GET  /api/me/reward-exchange/offers
 POST /api/me/reward-exchange/orders
 GET  /api/me/reward-exchange/orders?limit=30&cursor=...
 GET  /api/me/reward-exchange/by-request/:request_id
-```
+~~~
 
-本人身份从认证上下文取得，不能由 user_id 参数选择。余额接口返回 {rewards}，流水返回 {entries,next_cursor}，获奖列表返回 {records,next_cursor}，商品返回 {offers}，订单列表返回 {orders,next_cursor}。游标按 (created_at,id) 倒序编码，limit 为 1–200；无下一页时 next_cursor 为空。
+本人身份来自认证，不能用 user_id 选择他人。余额返回 {rewards}，固定两项 {asset:{key,name,unit,icon},balance}；收支返回 {entries,next_cursor}，商品返回 {offers}，订单返回 {orders,next_cursor}。游标按 (created_at,id) 倒序，limit 为 1–200。
 
-获奖列表可按 reward_definition_id、status、source_type、source_id、purpose 和 created_from/created_to（RFC3339）筛选。状态为 pending/granted/skipped/cancelled；reversed 筛选有 reversal_ledger_id 的 granted 记录。用户响应不包含操作者、管理原因、管理请求 ID/哈希或审计。领取 pending 后返回实际记录，重复领取返回原结果；他人记录统一不存在。quantity 是获奖数量，只有 granted 关联实际 grant 流水；skipped 使用 already_owned/zero_quantity 区分原因。
+收支支持 reward_key、source_type、created_from/created_to（RFC3339）筛选。玩家响应不含内部原因、操作者、管理请求 ID/指纹或 metadata。余额缺行返回 0。
 
-兑换请求为：
-
-```json
-{
-  "request_id": "客户端生成的 UUID",
-  "offer_id": "商品 UUID",
-  "revision": 1,
-  "units": 1
-}
-```
-
-revision 必须与页面确认价格对应。成功返回订单、支付和目标数量、不可变商品/资产快照、cost_ledger_id 与 reward_record_id。点数扣除、奖励发放和订单同事务；相同 request ID/内容只处理一次，内容不同返回 409。响应丢失后查询原请求或原样重试，暂未查询到不代表事务失败。
+兑换请求为 {request_id,offer_id,revision,units}，全部数量为正安全整数。revision 对应页面确认价格，服务端复核价格与状态，扣积分、加改写次数、两条账本与订单同事务。响应保存成交快照及 cost_ledger_id、reward_ledger_id。相同请求重试返回原结果，换参数返回 409；响应丢失应查询或原样重试。
 
 ## 奖励管理接口
 
-以下全部需要 requireAdmin（admin 或 owner），管理写入在事务中再次校验权限：
+以下需要 admin/owner，管理写事务再次校验权限：
 
-```text
-GET  /api/admin/rewards/overview
-GET  /api/admin/rewards/rules?reward_definition_id=...&limit=30&offset=0
+~~~text
+GET  /api/admin/rewards/rules?limit=30&offset=0
 GET  /api/admin/rewards/audits?limit=30&cursor=...
 GET  /api/admin/users/:id/rewards
-GET  /api/admin/users/:id/reward-records
 GET  /api/admin/users/:id/reward-ledger
 POST /api/admin/users/:id/reward-grants
 GET  /api/admin/reward-grants/by-request/:request_id
-GET  /api/admin/reward-records
-GET  /api/admin/reward-records/:id
-POST /api/admin/reward-records/:id/:action
-GET  /api/admin/reward-definitions/:id/impact
+GET  /api/admin/reward-ledger?user_id=...&reward_key=...&source_type=...&created_from=...&created_to=...&cursor=...
+GET  /api/admin/reward-ledger/:id
+POST /api/admin/reward-ledger/:id/reverse
 GET  /api/admin/registration-reward-rule
 PUT  /api/admin/registration-reward-rule
 GET  /api/admin/reward-exchange/offers
@@ -249,29 +232,23 @@ POST /api/admin/reward-exchange/offers
 PUT  /api/admin/reward-exchange/offers/:id
 GET  /api/admin/reward-exchange/offers/:id/revisions
 GET  /api/admin/reward-exchange/orders?user_id=...&cursor=...
-```
+~~~
 
-用户资产返回 {user,rewards}；获奖全局列表另支持 user_id/actor_id 筛选，详情返回 {record,audits}。规则目录返回 {rules,has_more}，附玩法、版本、当前版本标记及资产信息；概览返回 {assets}，各项聚合数量是十进制字符串，不跨资产求和；审计返回 {audits,next_cursor}。
+用户余额返回 {user,rewards}；规则返回 {rules,has_more}，附玩法、版本、当前标记、结局和 reward_points。审计返回 {audits,next_cursor}。管理账本扩展 user_id、operator_id、request_id、reason，并通过 reversal_id 标记原发放是否已撤回。
 
-管理员发放请求：
+管理员直接发放请求：
 
-```json
-{
-  "request_id": "客户端生成的 UUID",
-  "reward_definition_id": "资产 UUID",
-  "quantity": 10,
-  "purpose": "gift",
-  "delivery_mode": "claim",
-  "reason": "内部运营原因",
-  "public_note": "感谢参与本次活动"
-}
-```
+~~~json
+{"request_id":"客户端生成的 UUID","reward_key":"fatecraft.points","quantity":100,"reason":"内部运营原因","public_note":"感谢参与"}
+~~~
 
-purpose 为 gift/compensation，delivery_mode 为 direct/claim，reason 必填。目标来自路径、操作者来自认证；数量必须是 1–9007199254740991 的整数，非叠加资产只能发 1。待领取创建不增加余额；direct 返回 granted 或合法 skipped。按请求查询可还原目标和结果；同一 ID 更改任一已确认内容返回冲突。
+reward_key 只允许积分和改写次数；数量为 1–9007199254740991 整数，原因必填，公开说明可选。目标来自路径、操作者来自认证。成功返回管理账本视图。相同请求换参数报冲突，原请求查询也可恢复撤回结果。
 
-action 仅支持 cancel/reverse/note，请求体为 {request_id,reason}。撤销仅限 pending，撤销原因用户可见；冲正仅支持余额足够的可叠加 currency/credit 整笔操作，兑换来源不可冲正；note 与冲正原因仅管理员可见。资产 impact 返回玩法规则、待领取计数、注册规则与兑换商品引用。停用注册规则正在使用的资产须在定义 PATCH 显式携带 disable_registration=true，与停用修订和审计原子提交。
+撤回请求为 {request_id,reason}，只支持原管理员发放整笔扣回，余额不足或已撤回拒绝，返回反向账本。没有通用领取、资产 CRUD、任意余额调整或兑换退款接口。
 
-注册规则 PUT 使用 {reward_definition_id,quantity,enabled}，响应含新修订 id。兑换商品 POST/PUT 使用 {name,description,cost_definition_id,cost_quantity,reward_definition_id,reward_quantity,enabled,sort_order,revision}；创建时服务端设 revision=1，编辑必须带当前修订，成功追加修订和审计。revision 历史返回 {revisions}；无兑换退款或单边返还接口。
+注册 PUT 使用 {id,points,rewrite_credits}，id 为当前配置修订，两项允许 0；成功返回新修订，旧 id 返回冲突。商品 POST/PUT 使用 {name,description,cost_quantity,reward_quantity,enabled,sort_order,revision}；cost_quantity 固定为积分单价，reward_quantity 固定为改写次数。创建 revision=1，编辑需匹配当前 revision；修订历史返回 {revisions}，系统初始化 actor_id 为空。
+
+奖励写接口拒绝未知字段，旧资产 ID、purpose、delivery_mode 等不能被静默忽略。
 
 业务错误响应为 {error,code}：
 
@@ -281,16 +258,16 @@ action 仅支持 cancel/reverse/note，请求体为 {request_id,reason}。撤销
 | admin_required | 403 | 缺少管理权限 |
 | request_conflict | 409 | 同一请求 ID 内容不一致 |
 | reward_state_conflict | 409 | 状态不允许操作 |
-| asset_conflict | 409 | 已使用资产语义不可更改或定义冲突 |
-| asset_disabled / user_disabled | 400 | 新请求目标不可用 |
-| invalid_quantity | 400 | 非正整数、不符合叠加规则或超过安全范围 |
+| user_disabled | 400 | 新请求目标账号不可用 |
+| invalid_reward_key | 400 | 非固定的余额项目 |
+| invalid_quantity | 400 | 数量不合法或超过安全范围 |
 | insufficient_balance | 400 | 余额不足 |
-| reversal_unsupported | 400 | 不支持冲正或单边返还 |
+| reversal_unsupported | 400 | 不支持撤回或单边返还 |
 | exchange_changed | 409 | 商品修订已变，须刷新确认 |
 | exchange_owned | 409 | 已拥有非叠加目标，未扣分 |
 | exchange_unavailable | 400 | 商品下架或兑换配置无效 |
 
-无新奖励 WebSocket 事件；领取、管理和兑换操作通过 REST 响应及重新读取余额/记录确认。完整语义与当前验证范围见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
+无新奖励 WebSocket 事件；管理和兑换操作通过 REST 响应及重新读取余额/记录确认。完整语义与当前验证范围见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
 ## LLM 设置
 
@@ -301,7 +278,9 @@ POST  /api/settings/fetch-models
 POST  /api/settings/llm/capabilities/check
 ```
 
-设置由管理员接入模式与直连开关共同控制。`GET /api/settings/llm` 返回用户个人配置行、`access_mode`、`source`、`editable`、`llm_route` 和 `client_route_enabled`（平台是否允许客户端直连），以及按已保存 base_url 识别的只读 `resolved_profile`（只含 `{id}`，协议完全由用户选择，档位不表达协议信息，供前端展示“已识别为 …，已自动适配请求参数”）；`platform_managed` 下返回的也是个人配置，看不到平台 base_url 与模型名，平台配置不完整时设置页仍可打开。`GET` 返回的 `llm_route` 已是有效路由（只由开关和用户保存值决定）：开关关闭时用户保存的 `client` 被忽略为 `server`。`source` 按有效路由与接入模式给出 `platform` / `user` / `client`；`editable` 表示个人配置是否可编辑（`user_managed`，或开关开启的 `platform_managed`）。GET 不返回 API Key，只返回 `has_api_key`。`client` 路由的运行时配置不解密、不要求 Key，`source` 为 `client`。PATCH 支持 `llm_route`：切到 `client` 会忽略请求中的 `api_key` 并清空服务端 Key（`user_managed` 下切回需重填，`platform_managed` 下不涉及服务端 Key）；用户设置与公共配置都没有 provider 字段，请求体出现 `provider` / `public_llm_provider` 时被忽略，不报错；`platform_managed` + 开关开启 + `server` 只把 `llm_route` 写为 `server`（个人配置与 Key 原样保留，请求体配置字段被忽略，不要求 Key）；路由变化递增 `settings_revision`；平台未开放直连时以 `client` 保存返回 403（`code=llm_client_route_disabled`），`platform_managed` + 开关关闭时用户 PATCH 返回 403，未传 `llm_route` 时沿用当前有效路由；切离 `client` 时服务端主动关闭该玩家 Relay 连接。`platform_managed` 下 `/api/settings/fetch-models` 返回 403（客户端直连由浏览器直接请求 `/models`）；`client` 路由下 `/api/settings/fetch-models` 返回 409（`code=llm_route_client`）。管理员通过 `GET/PATCH /api/admin/system-settings` 维护模式、公共配置和 `client_llm_route_enabled`（只有 owner 可改该字段）；GET 响应附带按公共 base_url 识别的只读 `public_llm_resolved_profile`；Key 只写入不回显，并通过 `POST /api/admin/system-settings/fetch-models` 获取公共模型列表；公共 LLM 能力检测走独立的 owner 接口 `POST /api/admin/system-settings/capabilities/check`（请求体 `{role}`，直接使用平台配置经服务端直连，与检测者本人的路由无关）。关闭直连开关时关闭全部 Relay 连接；切换公共 LLM 不断开。
+新建对话、基于新版本创建对话、新建 Campaign 和 Campaign 对话均在写入游戏状态前，通过 `llmsettings.ReadyRoute` 校验当前有效模型配置。个人配置缺失返回 `400/llm_configuration_incomplete`；平台配置缺失返回 400。客户端密钥不上传，后端只检查其地址和模型，前端额外校验本设备 Key。
+
+设置由管理员接入模式与直连开关共同控制。`GET /api/settings/llm` 返回用户个人配置行、`access_mode`、`source`、`editable`、`llm_route` 和 `client_route_enabled`（平台是否允许客户端直连），以及按已保存 base_url 识别的只读 `resolved_profile`（只含 `{id}`，协议完全由用户选择，档位不表达协议信息，供前端展示“已识别为 …，已自动适配请求参数”）；`platform_managed` 下返回的也是个人配置，看不到平台 base_url 与模型名，平台配置不完整时设置页仍可打开。`GET` 返回的 `llm_route` 已是有效路由（只由开关和用户保存值决定）：开关关闭时用户保存的 `client` 被忽略为 `server`。`source` 按有效路由与接入模式给出 `platform` / `user` / `client`；`editable` 表示个人配置是否可编辑（`user_managed`，或开关开启的 `platform_managed`）。GET 不返回 API Key，只返回 `has_api_key`，并通过 `configuration_ready` 表示当前有效模型配置是否齐全：平台模式检查公共配置而不公开公共地址或模型；个人服务端模式要求地址、模型和已保存 Key；客户端模式检查地址与模型，本设备 Key 由前端独立检查。`client` 路由的运行时配置不解密、不要求 Key，`source` 为 `client`。PATCH 支持 `llm_route`：切到 `client` 会忽略请求中的 `api_key` 并清空服务端 Key（`user_managed` 下切回需重填，`platform_managed` 下不涉及服务端 Key）；用户设置与公共配置都没有 provider 字段，请求体出现 `provider` / `public_llm_provider` 时被忽略，不报错；`platform_managed` + 开关开启 + `server` 只把 `llm_route` 写为 `server`（个人配置与 Key 原样保留，请求体配置字段被忽略，不要求 Key）；路由变化递增 `settings_revision`；平台未开放直连时以 `client` 保存返回 403（`code=llm_client_route_disabled`），`platform_managed` + 开关关闭时用户 PATCH 返回 403，未传 `llm_route` 时沿用当前有效路由；切离 `client` 时服务端主动关闭该玩家 Relay 连接。`platform_managed` 下 `/api/settings/fetch-models` 返回 403（客户端直连由浏览器直接请求 `/models`）；`client` 路由下 `/api/settings/fetch-models` 返回 409（`code=llm_route_client`）。管理员通过 `GET/PATCH /api/admin/system-settings` 维护模式、公共配置和 `client_llm_route_enabled`（只有 owner 可改该字段）；GET 响应附带按公共 base_url 识别的只读 `public_llm_resolved_profile`；Key 只写入不回显，并通过 `POST /api/admin/system-settings/fetch-models` 获取公共模型列表；公共 LLM 能力检测走独立的 owner 接口 `POST /api/admin/system-settings/capabilities/check`（请求体 `{role}`，直接使用平台配置经服务端直连，与检测者本人的路由无关）。关闭直连开关时关闭全部 Relay 连接；切换公共 LLM 不断开。
 
 check 是用户显式触发的同步、无副作用诊断，最长使用独立的 3 分钟请求超时。请求体只能是 `{"role":"narrative"}`、`{"role":"memory"}` 或 `{"role":"character_inquiry"}`；接口不接受 URL、密钥或模型参数，而是读取当前已保存设置。
 
@@ -345,7 +324,6 @@ POST /api/admin/builtin-challenges/:slug/import
 GET   /api/admin/gameplay-modules
 GET   /api/admin/reward-definitions
 POST  /api/admin/reward-definitions
-PATCH /api/admin/reward-definitions/:id
 
 GET  /api/admin/challenges
 POST /api/admin/challenges
@@ -367,9 +345,9 @@ POST /api/admin/challenge-versions/:id/publish
 
 内置内容列表只返回仓库包的公开元数据、版本、内容哈希、数据库当前版本和 `available/imported/update_available` 状态，不返回 Prompt 或世界书正文。导入接口只接受扫描结果中的 slug，以及请求体 `{"preview_token":"预览返回的哈希","overwrite":true}`（overwrite 按需要提供），不接受文件路径或上传内容。普通导入不会覆盖或降级；已使用版本应提升版本号并发布新快照。新版本发布事务会将旧版本标记为 retired，并把该版本下普通 active 对话标记为 archived；旧对话仍可通过只读接口浏览。`POST /conversations/:id/fork` 会按来源对话的玩法和 Persona，在当前版本创建全新的初始对话，不复制任意旧状态；Campaign 对话必须走独立的存档流程。
 
-预览接口返回共享奖励定义变化、引用影响与当前/拟导入规则，确认时在事务中重新计算 token；过期返回冲突，需重新预览。
+预览接口返回当前/拟导入结局积分规则，确认时在事务中重新计算 token；过期返回冲突，需重新预览。
 
-gameplay-modules 返回服务端已经安装的 engine、动作、verifier、calculator 与 settlement handler，仅用于选择可信能力。奖励定义接口维护全局稳定奖励；已被版本、余额或账本引用后，不允许破坏性改变 kind、stackable 或 consumable 语义。
+gameplay-modules 返回服务端已经安装的 engine、动作、verifier 与 settlement handler，仅用于选择可信能力。结局通过 reward_points 设置固定积分。
 
 挑战版本 PUT 接受：
 
@@ -379,8 +357,7 @@ gameplay-modules 返回服务端已经安装的 engine、动作、verifier、cal
   "runtime": {},
   "assets": [],
   "definitions": [],
-  "outcomes": [],
-  "reward_rules": []
+  "outcomes": []
 }
 ```
 

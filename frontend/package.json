@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:play-readiness": "node --experimental-strip-types --test tests/play-readiness.test.mjs",
     "test:admin-tabs": "node --experimental-strip-types --test tests/admin-tabs.test.mjs",
     "test:player-rewards": "node --experimental-strip-types --test tests/player-rewards.test.mjs",
     "dev": "vite",

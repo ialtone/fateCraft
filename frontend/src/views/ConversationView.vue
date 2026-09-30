@@ -67,7 +67,11 @@ const routeMismatch = computed(() => {
 })
 const mismatchText = computed(() => {
   const conv = convStore.current
-  if (conv?.llm_route === 'client' && settings.settings && !settings.settings.client_route_enabled) {
+  if (
+    conv?.llm_route === 'client' &&
+    settings.settings &&
+    !settings.settings.client_route_enabled
+  ) {
     return '平台已关闭客户端直连，此对话无法继续生成，可新建对话继续游玩。'
   }
   // server 路由随接入模式显示为“平台模型”或“服务端转发”。
@@ -113,7 +117,7 @@ function showCompletion(completion: CompletionInfo) {
       ? '客户端直连模式不发放奖励'
       : rewardLines.length
         ? `获得奖励\n${rewardLines.join('\n')}`
-        : presentation?.empty_reward_text,
+        : '本次获得 0 积分',
     metricLines.length ? metricLines.join('\n') : '',
   ].filter(Boolean)
   const replay = completion.nextActions.includes('replay')
@@ -254,6 +258,17 @@ async function forkConversation() {
   if (forking.value || !convStore.current || convStore.current.campaign_id) return
   forking.value = true
   try {
+    const issue = await settings.checkPlayReadiness()
+    if (issue) {
+      dialog.warning({
+        title: '请先完成模型配置',
+        content: issue,
+        positiveText: '前往设置',
+        negativeText: '取消',
+        onPositiveClick: () => router.push('/settings'),
+      })
+      return
+    }
     const created = await convStore.fork(convId.value)
     await router.push(`/conversations/${created.id}`)
   } catch (error: any) {

@@ -153,20 +153,20 @@ type Service struct {
 	routes         routeResolver
 }
 
-// routeResolver 解析当前用户的有效 LLM 路由（llmsettings.Service 实现）。
+// routeResolver 校验模型配置并解析创建游戏所用路由（llmsettings.Service 实现）。
 type routeResolver interface {
-	EffectiveRoute(ctx context.Context, playerID string) (string, error)
+	ReadyRoute(ctx context.Context, playerID string) (string, error)
 }
 
 // SetRouteResolver 注入路由解析器；未注入时创建默认走 server 路由（仅测试路径）。
 func (s *Service) SetRouteResolver(routes routeResolver) { s.routes = routes }
 
-// effectiveRoute 返回指定玩家的有效路由。
+// effectiveRoute 仅在模型配置完整时返回指定玩家的有效路由。
 func (s *Service) effectiveRoute(ctx context.Context, playerID string) (string, error) {
 	if s.routes == nil {
 		return storage.LLMRouteServer, nil
 	}
-	return s.routes.EffectiveRoute(ctx, playerID)
+	return s.routes.ReadyRoute(ctx, playerID)
 }
 
 func NewService(
@@ -644,14 +644,21 @@ func (s *Service) Snapshot(ctx context.Context, id uuid.UUID) (map[string]any, e
 	if snapshot == nil {
 		snapshot = map[string]any{}
 	}
-	if _, exists := snapshot["outcome_rewards"]; exists {
-		return nil, fmt.Errorf("Campaign 玩法投影覆盖了平台保留字段: outcome_rewards")
+	for _, key := range []string{"outcome_rewards", "reward_points", "rewards_disabled_reason"} {
+		if _, exists := snapshot[key]; exists {
+			return nil, fmt.Errorf("Campaign 玩法投影覆盖了平台保留字段: %s", key)
+		}
 	}
 	rewards := domain.OutcomeRewards
-	if rewards == nil {
+	if rewards == nil || row.LLMRoute == storage.LLMRouteClient {
 		rewards = []storage.CampaignOutcomeReward{}
 	}
 	snapshot["outcome_rewards"] = rewards
+	var points int64
+	for _, reward := range rewards {
+		points += reward.Quantity
+	}
+	snapshot["reward_points"] = points
 	// client 路由终局不发放奖励，快照常带原因，前端据此展示替代文案。
 	if row.LLMRoute == storage.LLMRouteClient {
 		snapshot["rewards_disabled_reason"] = storage.RewardsDisabledReasonClientRoute

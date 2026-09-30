@@ -37,7 +37,6 @@ import type {
   UpdateConversationInput,
   PlayerReward,
   PublicRuntime,
-  RewardDefinition,
   RewardLedgerEntry,
   GameplayModuleDescriptor,
   ConversationShare,
@@ -446,24 +445,6 @@ export const adminApi = {
     http
       .get<{ modules: GameplayModuleDescriptor[] }>('/admin/gameplay-modules')
       .then((response) => response.data.modules),
-  listRewardDefinitions: () =>
-    http
-      .get<{ reward_definitions: RewardDefinition[] }>('/admin/reward-definitions')
-      .then((response) => response.data.reward_definitions),
-  createRewardDefinition: (body: Partial<RewardDefinition>) =>
-    http
-      .post<RewardDefinition>('/admin/reward-definitions', body)
-      .then((response) => response.data),
-  updateRewardDefinition: (
-    id: string,
-    body: Partial<RewardDefinition>,
-    disableRegistration = false,
-  ) =>
-    http
-      .patch<RewardDefinition>(`/admin/reward-definitions/${id}`, body, {
-        params: { disable_registration: disableRegistration },
-      })
-      .then((response) => response.data),
 }
 
 // 认证

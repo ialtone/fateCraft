@@ -168,8 +168,8 @@ func TestCloneVersionDocumentDoesNotShareMutableContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	clone.Assets[0].Content[0] = 'X'
-	clone.RewardRules[0].PublicSnapshot["name"] = "changed"
-	if source.Assets[0].Content[0] == 'X' || source.RewardRules[0].PublicSnapshot["name"] == "changed" {
+	clone.Outcomes[0].RewardPoints = 999
+	if source.Assets[0].Content[0] == 'X' || source.Outcomes[0].RewardPoints == 999 {
 		t.Fatal("document clone shares mutable cache content")
 	}
 }
