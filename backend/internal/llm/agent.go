@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -200,6 +199,7 @@ type accumulatedAgentCall struct {
 	index     int
 	id        string
 	itemID    string
+	itemIDs   map[string]bool
 	name      string
 	arguments strings.Builder
 	started   bool
@@ -355,8 +355,11 @@ func (c *Client) agentChat(ctx context.Context, p Params, messages []Message, to
 func chatAgentMessages(messages []Message) []chatAgentMessage {
 	out := make([]chatAgentMessage, 0, len(messages))
 	for _, message := range messages {
-		item := chatAgentMessage{
-			Role: message.Role, ToolCallID: message.ToolCallID, Name: message.Name,
+		item := chatAgentMessage{Role: message.Role}
+		// The assistant declaration may carry the first invocation's ID as
+		// storage metadata. Only a tool result may serialize tool_call_id.
+		if message.Role == "tool" {
+			item.ToolCallID, item.Name = message.ToolCallID, message.Name
 		}
 		for _, block := range message.CanonicalBlocks() {
 			switch block.Kind {
@@ -492,10 +495,16 @@ func parseAgentChatStream(reader io.Reader, onEvent AgentEventHandler, auditOn b
 						calls[delta.Index] = call
 					}
 					if delta.ID != "" {
+						if call.id != "" && call.id != delta.ID {
+							return result, raw.String(), done, ErrToolCallConflict
+						}
 						call.id = delta.ID
 					}
 					if delta.Function.Name != "" {
-						call.name += delta.Function.Name
+						if call.name != "" && call.name != delta.Function.Name {
+							return result, raw.String(), done, ErrToolCallConflict
+						}
+						call.name = delta.Function.Name
 					}
 					if !call.started {
 						call.started = true
@@ -808,18 +817,20 @@ func parseAgentResponsesStream(reader io.Reader, onEvent AgentEventHandler, audi
 					}
 				}
 			case "response.function_call_arguments.delta", "response.function_call_arguments.done":
-				key := responseCallKey(event.ItemID, event.CallID, event.OutputIndex)
-				call := ensureResponseCall(calls, key, event.OutputIndex, event.ItemID, event.CallID, event.Name, onEvent)
-				part := event.Delta
-				if part == "" && call.arguments.Len() == 0 {
-					part = event.Arguments
+				call, err := ensureResponseCall(calls, event.OutputIndex, event.ItemID, event.CallID, event.Name, onEvent)
+				if err != nil {
+					return result, raw.String(), done, err
 				}
-				if part != "" {
-					if call.arguments.Len()+len(part) > maxAgentToolArguments {
-						return result, raw.String(), done, errors.New("模型工具参数超过 16 KiB")
+				if typ == "response.function_call_arguments.done" {
+					if err := reconcileToolArguments(call, event.Arguments); err != nil {
+						return result, raw.String(), done, err
 					}
-					call.arguments.WriteString(part)
-					emitAgent(onEvent, AgentEvent{Kind: AgentEventToolArguments, CallID: call.id, Text: part})
+				} else if event.Delta != "" {
+					if call.completed || call.arguments.Len()+len(event.Delta) > maxAgentToolArguments {
+						return result, raw.String(), done, ErrToolCallConflict
+					}
+					call.arguments.WriteString(event.Delta)
+					emitAgent(onEvent, AgentEvent{Kind: AgentEventToolArguments, CallID: call.id, Text: event.Delta})
 				}
 			case "response.completed":
 				done = true
@@ -915,16 +926,6 @@ func parseAgentResponsesStream(reader io.Reader, onEvent AgentEventHandler, audi
 	return result, raw.String(), true, nil
 }
 
-func responseCallKey(itemID, callID string, outputIndex int) string {
-	if itemID != "" {
-		return itemID
-	}
-	if callID != "" {
-		return callID
-	}
-	return strconv.Itoa(outputIndex)
-}
-
 // appendResponsesText reconciles a terminal full-text projection with any
 // deltas already received. A gateway may send the same prefix again in
 // response.completed; only the missing suffix is emitted, never a duplicate.
@@ -992,35 +993,11 @@ func appendResponsesMessageText(text *strings.Builder, result *AgentStepResult, 
 }
 
 func captureResponseFunctionCall(calls map[string]*accumulatedAgentCall, item responsesAgentOutput, outputIndex int, onEvent AgentEventHandler) error {
-	key := responseCallKey(item.ID, item.CallID, outputIndex)
-	call := ensureResponseCall(calls, key, outputIndex, item.ID, item.CallID, item.Name, onEvent)
-	if item.Arguments != "" && call.arguments.Len() == 0 {
-		if len(item.Arguments) > maxAgentToolArguments {
-			return errors.New("模型工具参数超过 16 KiB")
-		}
-		call.arguments.WriteString(item.Arguments)
+	call, err := ensureResponseCall(calls, outputIndex, item.ID, item.CallID, item.Name, onEvent)
+	if err != nil {
+		return err
 	}
-	return nil
-}
-
-func ensureResponseCall(calls map[string]*accumulatedAgentCall, key string, index int, itemID, callID, name string, onEvent AgentEventHandler) *accumulatedAgentCall {
-	call := calls[key]
-	if call == nil {
-		call = &accumulatedAgentCall{index: index, id: callID, itemID: itemID, name: name, started: true}
-		calls[key] = call
-		emitAgent(onEvent, AgentEvent{Kind: AgentEventToolCallStarted, CallID: callID, Name: name})
-		return call
-	}
-	if itemID != "" {
-		call.itemID = itemID
-	}
-	if callID != "" {
-		call.id = callID
-	}
-	if name != "" {
-		call.name = name
-	}
-	return call
+	return reconcileToolArguments(call, item.Arguments)
 }
 
 func materializeAgentCalls(values map[int]*accumulatedAgentCall, onEvent AgentEventHandler) []ToolCall {

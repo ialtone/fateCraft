@@ -32,12 +32,13 @@ func (r *ContextRepo) Create(ctx context.Context, log *ContextBuildLog) error {
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
-// Last 返回当前对话最近一次上下文构建日志。
+// Last returns the most recent context build belonging to a successful,
+// non-invalidated turn. Failed attempts remain available in admin diagnostics.
 func (r *ContextRepo) Last(ctx context.Context, convID uuid.UUID) (*ContextBuildSummary, error) {
 	var log ContextBuildSummary
 	err := r.db.WithContext(ctx).Table("context_build_logs").
 		Select(contextBuildSummarySelect()).
-		Where("conversation_id = ?", convID).
+		Where("conversation_id = ? AND EXISTS (SELECT 1 FROM generation_attempts a JOIN conversation_turns t ON t.id = a.turn_id WHERE a.id = context_build_logs.attempt_id AND a.status = ? AND t.status = ? AND t.invalidated_at IS NULL)", convID, AttemptStatusCompleted, TurnStatusCompleted).
 		Order("created_at DESC, id DESC").First(&log).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, ErrNotFound
@@ -49,7 +50,7 @@ func (r *ContextRepo) Last(ctx context.Context, convID uuid.UUID) (*ContextBuild
 // Prompt segment JSON. Get remains the administrator detail path.
 func (r *ContextRepo) GetSummary(ctx context.Context, id uuid.UUID) (*ContextBuildSummary, error) {
 	var log ContextBuildSummary
-	result := r.db.WithContext(ctx).Table("context_build_logs").Select(contextBuildSummarySelect()).Where("id = ?", id).Limit(1).Scan(&log)
+	result := r.db.WithContext(ctx).Table("context_build_logs").Select(contextBuildSummarySelect()).Where("id = ? AND EXISTS (SELECT 1 FROM generation_attempts a JOIN conversation_turns t ON t.id = a.turn_id WHERE a.id = context_build_logs.attempt_id AND a.status = ? AND t.status = ? AND t.invalidated_at IS NULL)", id, AttemptStatusCompleted, TurnStatusCompleted).Limit(1).Scan(&log)
 	if result.Error != nil {
 		return nil, result.Error
 	}

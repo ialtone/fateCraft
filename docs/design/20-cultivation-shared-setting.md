@@ -33,7 +33,9 @@
 
 青河修仙志以当前玩法版本的 `gameplay_definitions(kind=realm)` 和 Campaign 角色表为权威。角色的 `realm_key` 是境界身份，`realm_rank` 只是从同一版本定义派生的查询缓存；创建和突破必须成对写入，定义缺失、倒序或缓存漂移时直接拒绝。突破由 Campaign 领域动作根据当前定义的 `rank`、`next_realm_key`、资源、进度和随机种子结算，完整角色和世界事实保存在 Campaign 领域表中。
 
-百年飞升劫使用通用 `core.generic@1`，以当前玩法版本的 Runtime State Schema、`actions.rolls` 和 outcome 配置为权威。`profile.cultivation_realm_key`、显示境界和寿元上限都是 system 字段，八种逐级突破判定原子更新它们；模型只维护阶段、修为进度、剩余寿元和叙事后果。结局通过通用 `core.conditions` 的 `state_in` 和 `successful_roll` 校验，平台不认识境界 key 的含义。
+百年飞升劫使用 `cultivation.trial@2`，以固定版本的 `cultivation.trial_rules:life` 和受保护 `module_state` 为权威；`gameplay` 是公开投影。年龄、寿元、修为、资源、路线资格和死亡均由模块动作结算，模型仅维护叙事字段。三条路线使用本世真实事实，普通状态写入及历史同名 Roll 均不能替代。平台不内置修仙境界 key 或门槛。
+
+八种主类型中的修仙飞升同时包含上述两包，宗门经营使用独立 `sect.management` 和弟子管理规则。两者不共享存档，分类和依赖见[24 玩法模块](24-gameplay-module-architecture.md)。
 
 两个玩法的世界书分别保存共同规则的版本快照。共享条目使用相同 `shared_rule_id`，导入测试会比较标题和正文；内容加载测试还会直接比较两个内置包的境界 key、顺序、逐级关系和寿元，防止共同设定意外漂移。测试只约束这两个内置包，不给运行时建立全局修仙标准。这样既保留 ChallengeVersion 的不可变快照，也不需要新增跨玩法数据库表。
 
@@ -48,7 +50,7 @@ Campaign 还会提供权威 `realm_system` 投影。询问资料构建时，玩�
 修改两个内置玩法的共同境界时必须同步检查：
 
 1. `mortal-path` 的境界定义、逐级 `next_realm_key` 和公开世界书快照。
-2. `reincarnation-trials` 的 State Schema、突破 Roll、outcome 条件、Prompt 和公开世界书快照。
+2. `reincarnation-trials` 的 trial-rules 境界定义、模块状态与终局规则、Prompt 和公开世界书快照。
 3. 两个玩法各自的正式规格、跨包内容测试、结局校验和角色询问来源测试。
 
 禁止为了复用而在平台核心或题材模块中新增 canonical realm 数组、中文境界解析器或固定最大 rank。若两个玩法以后采用不同设定，应更新各自快照并取消对应的跨包相等断言，而不是加入兼容分支。

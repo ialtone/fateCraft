@@ -1,0 +1,123 @@
+{
+  "id": "night-blockade",
+  "name": "夜入封锁区",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "沿院落或暗渠潜入档案室，利用门禁情报或开锁器取得文件，并在追捕中寻找安全撤离机会。",
+  "author": "Fatecraft",
+  "icon": "eye-off",
+  "tags": [
+    "潜入逃脱",
+    "双路线",
+    "巡逻与警戒",
+    "门禁情报",
+    "追捕脱身"
+  ],
+  "default_config": {
+    "recommended_character": "night-blockade-narrator",
+    "recommended_persona": "night-blockade-player",
+    "recommended_scenario": "night-blockade-opening",
+    "recommended_prompt": "night-blockade-guide",
+    "required_worldbooks": [
+      "night-blockade-setting"
+    ],
+    "allowed_personas": [
+      "night-blockade-player"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "escaped",
+      "category": "success",
+      "title": "携卷脱身",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "escaped"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "withdrawn",
+      "category": "neutral",
+      "title": "空手撤离",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "withdrawn"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "captured",
+      "category": "failure",
+      "title": "落入追捕",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "captured"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "封锁完成",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "timeout"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "放弃行动",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "abandoned"
+          }
+        ]
+      }
+    }
+  ],
+  "quick_start_guide": "观察后选择院落或暗渠。门禁可以用开锁器解除，也能通过值班室情报解决。取到文件后仍要返回外墙出口；被追捕时先利用藏身处或干扰器降低警戒。 示例结局积分为 0。",
+  "features": [
+    "双路线",
+    "巡逻与警戒",
+    "门禁情报",
+    "追捕脱身"
+  ],
+  "dependencies": []
+}

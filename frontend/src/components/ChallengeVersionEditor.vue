@@ -15,6 +15,8 @@ import {
   useMessage,
 } from 'naive-ui'
 import JsonValueInput from '@/components/JsonValueInput.vue'
+import RuleSchemaInput from '@/components/RuleSchemaInput.vue'
+import { outcomeRewardBudgets } from '@/lib/reward-budget'
 import type { GameplayModuleDescriptor, SaveChallengeVersionInput } from '@/types'
 
 const props = defineProps<{
@@ -26,6 +28,14 @@ const message = useMessage()
 const activeTab = ref('basic')
 const advanced = ref('')
 const advancedBaseline = ref('')
+const rawDefinitions = ref(false)
+const category = ref('')
+const categoryOptions = computed(() => {
+  const categories = new Map<string, string>()
+  for (const module of props.modules)
+    categories.set(module.category ?? '', module.category_name ?? '通用基础模块')
+  return [...categories].map(([value, label]) => ({ value, label }))
+})
 
 const manifest = computed<any>(() => model.value.manifest)
 const runtime = computed<any>(() => model.value.runtime)
@@ -59,16 +69,25 @@ watch(
 )
 
 const moduleOptions = computed(() =>
-  props.modules.map((item) => ({
-    label: `${item.name} · ${item.key}@${item.version}`,
-    value: `${item.key}@${item.version}`,
-  })),
+  props.modules
+    .filter((item) => (item.category ?? '') === category.value)
+    .map((item) => ({
+      label: `${item.name} · ${item.key}@${item.version}`,
+      value: `${item.key}@${item.version}`,
+    })),
 )
 const selectedModule = computed(() =>
   props.modules.find(
     (item) =>
       item.key === runtime.value.engine_key && item.version === runtime.value.engine_version,
   ),
+)
+watch(
+  selectedModule,
+  (module) => {
+    category.value = module?.category ?? ''
+  },
+  { immediate: true },
 )
 const actionOptions = computed(() =>
   (selectedModule.value?.actions || []).map((value) => ({ label: value, value })),
@@ -106,6 +125,7 @@ const visibilityOptions = [
   { label: '仅后端内部', value: 'internal' },
 ]
 const updatePolicyOptions = [
+  { label: '仅可信玩法模块更新', value: 'module' },
   { label: '模型可更新', value: 'model' },
   { label: '仅系统更新', value: 'system' },
   { label: '不可变', value: 'immutable' },
@@ -120,20 +140,35 @@ const assetKindOptions = [
   { label: 'Prompt', value: 'prompt' },
   { label: '世界书', value: 'worldbook' },
 ]
-const definitionKindOptions = [
-  ['境界', 'realm'],
-  ['功法', 'technique'],
-  ['堆叠物品', 'item'],
-  ['法器装备', 'equipment'],
-  ['配方', 'recipe'],
-  ['市场', 'market'],
-  ['地点', 'location'],
-  ['势力', 'faction'],
-  ['NPC 原型', 'npc_archetype'],
-  ['遭遇', 'encounter'],
-  ['世界事件', 'world_event'],
-  ['任务', 'quest'],
-].map(([label, value]) => ({ label, value }))
+const definitionLabels = Object.fromEntries(
+  [
+    ['境界', 'realm'],
+    ['功法', 'technique'],
+    ['堆叠物品', 'item'],
+    ['法器装备', 'equipment'],
+    ['配方', 'recipe'],
+    ['市场', 'market'],
+    ['地点', 'location'],
+    ['势力', 'faction'],
+    ['NPC 原型', 'npc_archetype'],
+    ['遭遇', 'encounter'],
+    ['世界事件', 'world_event'],
+    ['任务', 'quest'],
+    ['生存场景', 'survival.scenario'],
+  ].map(([label, value]) => [value, label]),
+)
+const definitionKindOptions = computed(() =>
+  (selectedModule.value?.definition_kinds ?? []).map((value) => ({
+    label: selectedModule.value?.definition_labels?.[value] ?? definitionLabels[value] ?? value,
+    value,
+  })),
+)
+const domainActionOptions = computed(() =>
+  (selectedModule.value?.runtime_actions ?? []).map((action) => ({
+    label: action.label,
+    value: action.key,
+  })),
+)
 const outcomeCategoryOptions = [
   { label: '成功', value: 'success' },
   { label: '失败', value: 'failure' },
@@ -150,6 +185,11 @@ function changeModule(value: string) {
     (item) => item.key === key && item.version === Number(versionText),
   )
   if (!descriptor) return
+  if (
+    runtime.value.engine_key === descriptor.key &&
+    runtime.value.engine_version === descriptor.version
+  )
+    return
   runtime.value.engine_key = descriptor.key
   runtime.value.engine_version = descriptor.version
   runtime.value.mode = descriptor.modes[0] || 'challenge'
@@ -157,16 +197,95 @@ function changeModule(value: string) {
     descriptor.actions.includes(item),
   )
   runtime.value.settlement_config.handler = descriptor.settlement_handlers[0] || ''
+  actionConfig.value.domain = (descriptor.runtime_actions ?? []).map((action) => action.key)
   if (runtime.value.mode === 'campaign') {
     runtime.value.campaign_config = {
       lifecycle_handler: descriptor.campaign_lifecycle_handlers?.[0] || '',
       projection_handler: descriptor.campaign_projection_handlers?.[0] || '',
       context_policy: descriptor.campaign_context_policies?.[0] || '',
+      action_allowlist: descriptor.campaign_actions ?? [],
       initial_location_key: 'world.start',
       world_clock: { calendar_key: 'world.default', max_due_events_per_turn: 16 },
     }
   } else {
     delete runtime.value.campaign_config
+  }
+  if (descriptor.runtime_actions?.length) {
+    actionConfig.value.model = [...descriptor.actions]
+    actionConfig.value.player = []
+    actionConfig.value.rolls = {}
+    stateSchema.value.schema_version = 1
+    stateSchema.value.fields = [
+      {
+        path: 'narrative.current_focus',
+        type: 'string',
+        default: '',
+        visibility: 'player',
+        update_policy: 'model',
+      },
+    ]
+    presentation.value.state_sections = []
+    delete presentation.value.guidance
+    if (runtime.value.mode === 'challenge') {
+      stateSchema.value.fields.unshift(
+        {
+          path: 'module_state',
+          type: 'object',
+          default: {},
+          visibility: 'internal',
+          update_policy: 'module',
+        },
+        {
+          path: 'gameplay',
+          type: 'object',
+          default: {},
+          visibility: 'player',
+          update_policy: 'module',
+          allow_children: true,
+        },
+        {
+          path: 'gameplay.outcome_key',
+          type: 'string',
+          default: '',
+          visibility: 'player',
+          update_policy: 'module',
+        },
+      )
+      presentation.value.state_sections = [
+        {
+          key: 'result',
+          title: '进展',
+          order: 0,
+          fields: [{ path: 'gameplay.outcome_key', label: '结局', widget: 'text', order: 0 }],
+        },
+      ]
+    } else {
+      runtime.value.campaign_config.field_ownership = [
+        {
+          path: 'gameplay',
+          owner: 'campaign',
+          value_type: 'object',
+          allow_children: true,
+          visibility: 'player',
+          storage_projection: 'campaign_runtime_states',
+          write_capability: descriptor.runtime_actions[0]!.key,
+          event_types: [...descriptor.runtime_actions[0]!.events],
+        },
+      ]
+      presentation.value.campaign_view = {
+        renderer: 'generic',
+        title: descriptor.name,
+        sections: [],
+        actions: [],
+        empty_states: {},
+      }
+    }
+    model.value.definitions = model.value.definitions.filter((definition) =>
+      descriptor.definition_kinds.includes(definition.kind),
+    )
+    message.info(
+      '已设置新模块的状态权限与动作。请补充规则、结局和展示配置；也可从内置示例导入后修改。',
+    )
   }
 }
 
@@ -192,11 +311,13 @@ function addAsset() {
 }
 
 function addDefinition() {
+  const kind = definitionKindOptions.value[0]?.value
+  if (!kind) return
   const now = new Date().toISOString()
   model.value.definitions.push({
     id: crypto.randomUUID(),
     challenge_version_id: runtime.value.challenge_version_id,
-    kind: 'item',
+    kind,
     key: '',
     name: '',
     content: {},
@@ -432,7 +553,7 @@ function applyAdvanced() {
         <NButton v-if="!readonly" size="small" @click="addDefinition">新增定义</NButton>
       </div>
       <NAlert v-if="runtime.mode === 'campaign' && !model.definitions.length" type="warning">
-        长期世界发布前必须至少定义初始地点和一个境界。
+        定义类型与必需规则由所选模块决定，发布时会检查资源来源、引用和结局条件。
       </NAlert>
       <article
         v-for="(definition, index) in model.definitions"
@@ -482,18 +603,39 @@ function applyAdvanced() {
           <NDynamicTags v-model:value="definition.tags" :disabled="readonly" />
         </NFormItem>
         <NFormItem label="规则内容">
-          <JsonValueInput
-            v-model="definition.content"
-            :readonly="readonly"
-            :min-rows="5"
-            :max-rows="18"
-          />
+          <div class="rule-editor">
+            <div
+              v-if="selectedModule?.definition_schemas?.[definition.kind]"
+              class="section-toolbar"
+            >
+              <span>按模块字段编辑</span
+              ><NButton size="tiny" @click="rawDefinitions = !rawDefinitions">{{
+                rawDefinitions ? '返回字段' : '高级 JSON'
+              }}</NButton>
+            </div>
+            <RuleSchemaInput
+              v-if="!rawDefinitions && selectedModule?.definition_schemas?.[definition.kind]"
+              v-model="definition.content"
+              :schema="selectedModule.definition_schemas[definition.kind]!"
+              :readonly="readonly"
+            />
+            <JsonValueInput
+              v-else
+              v-model="definition.content"
+              :readonly="readonly"
+              :min-rows="5"
+              :max-rows="18"
+            />
+          </div>
         </NFormItem>
       </article>
     </NTabPane>
 
     <NTabPane name="runtime" tab="玩法运行" display-directive="show:lazy">
       <div class="form-grid">
+        <NFormItem label="玩法主类型"
+          ><NSelect v-model:value="category" :options="categoryOptions" :disabled="readonly"
+        /></NFormItem>
         <NFormItem label="可信玩法模块">
           <NSelect
             :value="`${runtime.engine_key}@${runtime.engine_version}`"
@@ -522,6 +664,15 @@ function applyAdvanced() {
             :options="actionOptions"
             :disabled="readonly"
         /></NFormItem>
+        <NFormItem v-if="domainActionOptions.length" label="模块提供的玩法行动" class="wide">
+          <NSelect
+            v-model:value="actionConfig.domain"
+            multiple
+            :options="domainActionOptions"
+            disabled
+          />
+          <template #feedback>行动由所选模块统一提供，可用条件随游戏进度变化。</template>
+        </NFormItem>
       </div>
       <NFormItem v-if="runtime.mode === 'campaign'" label="长期世界配置">
         <JsonValueInput v-model="campaignConfig" :readonly="readonly" :min-rows="8" />
@@ -713,7 +864,7 @@ function applyAdvanced() {
           <NFormItem label="色调"
             ><NSelect v-model:value="outcome.tone" :options="toneOptions" :disabled="readonly"
           /></NFormItem>
-          <NFormItem label="通关积分（0 表示不发放）"
+          <NFormItem label="终局积分（0 表示不发放）"
             ><NInputNumber
               v-model:value="outcome.reward_points"
               :min="0"
@@ -731,6 +882,22 @@ function applyAdvanced() {
             ><NSwitch v-model:value="outcome.enabled" :disabled="readonly"
           /></NFormItem>
         </div>
+        <NAlert
+          v-for="(budget, budgetIndex) in outcomeRewardBudgets(
+            model.definitions,
+            selectedModule?.definition_schemas ?? {},
+            outcome.outcome_key,
+            outcome.reward_points,
+          )"
+          :key="budgetIndex"
+          :type="budget.valid ? 'info' : 'warning'"
+          :bordered="false"
+        >
+          {{ budget.text }}。阶段积分在达成时发放；终局积分仅在通关时发放。
+          <template v-if="!budget.valid"
+            >请在“规则定义”中核对阶段与总预算，发布时会再次校验。</template
+          >
+        </NAlert>
         <NFormItem label="验证器配置"
           ><JsonValueInput v-model="outcome.verifier_config" :readonly="readonly" :min-rows="3"
         /></NFormItem>
@@ -754,6 +921,10 @@ function applyAdvanced() {
 </template>
 
 <style scoped>
+.rule-editor {
+  width: 100%;
+  min-width: 0;
+}
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,11 +1,10 @@
 package campaignview
 
 import (
-	"sort"
-
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/craftingrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/marketrules"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/craftingrules"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldview"
 	"github.com/ialtone/fatecraft/internal/storage"
+	"sort"
 )
 
 func recipeViews(row storage.Campaign, state *storage.CampaignDomainState, limit int) []map[string]any {
@@ -61,7 +60,7 @@ func recipeViews(row storage.Campaign, state *storage.CampaignDomainState, limit
 		out = append(out, map[string]any{
 			"key": definition.Key, "name": definition.Name, "craft_type": recipe.CraftType,
 			"known": false, "learnable": true, "source_item_key": recipe.SourceItemKey,
-			"source_item_name": definitionLabel(state, storage.DefinitionItem, recipe.SourceItemKey),
+			"source_item_name": worldview.DefinitionLabel(state, storage.DefinitionItem, recipe.SourceItemKey),
 			"craft_minutes":    recipe.CraftMinutes, "mana_cost": recipe.ManaCost,
 			"success_chance_bps": craftingrules.SuccessChance(recipe, 0),
 			"available":          false, "missing_requirements": []string{"recipe_knowledge"},
@@ -139,7 +138,7 @@ func recipeInputViews(state *storage.CampaignDomainState, inputs []craftingrules
 		options := make([]map[string]any, 0, len(input.Options))
 		for _, option := range input.Options {
 			options = append(options, map[string]any{
-				"item_key": option.ItemKey, "name": definitionLabel(state, storage.DefinitionItem, option.ItemKey),
+				"item_key": option.ItemKey, "name": worldview.DefinitionLabel(state, storage.DefinitionItem, option.ItemKey),
 				"quality_key": option.QualityKey,
 			})
 		}
@@ -152,70 +151,8 @@ func recipeProductViews(state *storage.CampaignDomainState, products []craftingr
 	out := make([]map[string]any, 0, len(products))
 	for _, product := range products {
 		out = append(out, map[string]any{
-			"kind": product.Kind, "key": product.Key, "name": definitionLabel(state, product.Kind, product.Key),
+			"kind": product.Kind, "key": product.Key, "name": worldview.DefinitionLabel(state, product.Kind, product.Key),
 			"quantity": product.Quantity, "quality_weights": product.QualityWeights,
-		})
-	}
-	return out
-}
-
-func marketViews(row storage.Campaign, state *storage.CampaignDomainState, itemLimit int) []map[string]any {
-	if state == nil {
-		return []map[string]any{}
-	}
-	stocks := map[string]storage.CampaignMarketStock{}
-	for _, stock := range state.MarketStocks {
-		stocks[marketProjectionIdentity(stock.MarketKey, stock.ItemKind, stock.ItemKey, stock.QualityKey)] = stock
-	}
-	standings := map[string]int64{}
-	for _, standing := range state.Factions {
-		standings[standing.FactionKey] = int64(standing.Reputation)
-	}
-	out := make([]map[string]any, 0)
-	for _, marketState := range state.Markets {
-		if marketState.LocationKey != row.CurrentLocationKey {
-			continue
-		}
-		definition, ok := state.Definition(storage.DefinitionMarket, marketState.MarketKey)
-		if !ok {
-			continue
-		}
-		market, valid := marketrules.Parse(map[string]any(definition.Content))
-		if !valid {
-			continue
-		}
-		market.PriceModifierBPS = market.PriceModifierBPS * int64(marketState.PriceModifierBPS) / 10000
-		items := make([]map[string]any, 0, len(market.Entries))
-		effectiveRestockGameTime := marketState.LastRestockGameTime
-		for _, entry := range market.Entries {
-			stock, exists := stocks[marketProjectionIdentity(marketState.MarketKey, entry.Kind, entry.Key, entry.QualityKey)]
-			if !exists {
-				continue
-			}
-			quantity, restockedAt := marketrules.Restock(stock.Quantity, marketState.LastRestockGameTime, row.GameTime, market, entry)
-			if restockedAt > effectiveRestockGameTime {
-				effectiveRestockGameTime = restockedAt
-			}
-			buyPrice, buyable := marketrules.UnitPrice(market, entry, quantity, standings[market.FactionKey], true)
-			sellPrice, sellable := marketrules.UnitPrice(market, entry, quantity, standings[market.FactionKey], false)
-			items = append(items, map[string]any{
-				"kind": entry.Kind, "key": entry.Key, "name": definitionLabel(state, entry.Kind, entry.Key),
-				"quality_key": entry.QualityKey, "stock": quantity, "max_stock": entry.MaxStock,
-				"buyable": buyable, "buy_price": buyPrice, "sellable": sellable, "sell_price": sellPrice,
-			})
-			if itemLimit > 0 && len(items) >= itemLimit {
-				break
-			}
-		}
-		sort.Slice(items, func(left, right int) bool {
-			return items[left]["key"].(string) < items[right]["key"].(string)
-		})
-		out = append(out, map[string]any{
-			"key": definition.Key, "name": definition.Name, "location_key": market.LocationKey,
-			"currency_item_key":      market.CurrencyItemKey,
-			"currency_name":          definitionLabel(state, storage.DefinitionItem, market.CurrencyItemKey),
-			"last_restock_game_time": effectiveRestockGameTime,
-			"items":                  items,
 		})
 	}
 	return out
@@ -228,8 +165,4 @@ func projectionContains(values []string, wanted string) bool {
 		}
 	}
 	return false
-}
-
-func marketProjectionIdentity(marketKey, kind, key, quality string) string {
-	return marketKey + ":" + kind + ":" + key + ":" + quality
 }

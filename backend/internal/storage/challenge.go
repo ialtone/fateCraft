@@ -102,6 +102,35 @@ func (r *ChallengeRepository) SavePack(ctx context.Context, row *ChallengePack) 
 	return r.db.WithContext(ctx).Save(row).Error
 }
 
+// SetPackEnabled controls new-game availability without changing snapshots or saves.
+func (r *ChallengeRepository) SetPackEnabled(ctx context.Context, id uuid.UUID, enabled bool) (*ChallengePack, error) {
+	var pack *ChallengePack
+	err := r.WithTx(ctx, func(tx *ChallengeRepository) error {
+		var err error
+		pack, err = tx.LockPack(ctx, id)
+		if err != nil {
+			return err
+		}
+		if pack.CurrentVersionID == nil {
+			return ErrPublishedVersion
+		}
+		version, err := tx.GetVersion(ctx, *pack.CurrentVersionID)
+		if err != nil {
+			return err
+		}
+		if version.Status != ChallengeVersionPublished {
+			return ErrPublishedVersion
+		}
+		pack.Status = ChallengePackHidden
+		if enabled {
+			pack.Status = ChallengePackActive
+		}
+		pack.UpdatedAt = time.Now()
+		return tx.SavePack(ctx, pack)
+	})
+	return pack, err
+}
+
 func (r *ChallengeRepository) GetVersion(ctx context.Context, id uuid.UUID) (*ChallengeVersion, error) {
 	var row ChallengeVersion
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
@@ -195,11 +224,19 @@ func (r *ChallengeRepository) ActivatePublishedVersion(ctx context.Context, pack
 		if version.Status != ChallengeVersionPublished {
 			return ErrPublishedVersion
 		}
+		pack, err := tx.LockPack(ctx, packID)
+		if err != nil {
+			return err
+		}
+		status := ChallengePackActive
+		if pack.CurrentVersionID != nil && pack.Status == ChallengePackHidden {
+			status = ChallengePackHidden
+		}
 		result := tx.db.WithContext(ctx).Model(&ChallengePack{}).
 			Where("id = ?", packID).
 			Updates(map[string]any{
 				"current_version_id": versionID,
-				"status":             ChallengePackActive,
+				"status":             status,
 				"updated_at":         time.Now(),
 			})
 		if result.Error != nil {
@@ -449,10 +486,14 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 				return err
 			}
 		}
+		status := ChallengePackActive
+		if pack.CurrentVersionID != nil && pack.Status == ChallengePackHidden {
+			status = ChallengePackHidden
+		}
 		return tx.db.WithContext(ctx).Model(&ChallengePack{}).
 			Where("id = ?", version.ChallengePackID).
 			Updates(map[string]any{
-				"current_version_id": version.ID, "status": ChallengePackActive, "updated_at": now,
+				"current_version_id": version.ID, "status": status, "updated_at": now,
 			}).Error
 	})
 }

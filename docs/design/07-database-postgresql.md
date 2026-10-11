@@ -1,4 +1,9 @@
 # 07. PostgreSQL 数据库设计
+## 玩法模块基线
+
+本次直接修改 `00001_init.sql`：`campaign_runtime_states` 保存纯模块的引擎、种子与状态；`campaign_checkpoints` 按回合保存完整 Campaign 可变事实；`module_action_commits` 以 `(conversation_id, branch_epoch, request_id)` 唯一记录玩家行动与结果。`gameplay_definitions.kind` 使用稳定标识约束，由对应已安装模块验证语义，不再逐题材扩张数据库枚举。
+
+恢复在一个事务内按外键顺序重建领域表，校验固定内容与存档归属，推进 revision；不恢复账号余额、账本、奖励事实、种子或追加历史。模块领域校验由投影/行动边界继续执行。已执行旧基线的库不会自动更新；使用显式 Goose 和隔离 schema 验证。实现与未验项见[24](24-gameplay-module-architecture.md)及[验收记录](gameplay-modules/validation.md)。
 
 ## 定位与初始化原则
 
@@ -30,6 +35,8 @@ users
   |-- campaigns
   |     |-- campaign_events
   |     |-- campaign_action_commits
+  |     |-- campaign_runtime_states / campaign_checkpoints
+  |     |-- campaign_stage_rewards（不随检查点恢复）
   |     `-- conversations（唯一持续对话）
   |-- conversations
   |     |-- conversation_turns
@@ -59,7 +66,7 @@ challenge_packs
         `-- challenge_outcome_rules（含 reward_points）
 ~~~
 
-基线 migration 当前包含 63 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
+基线 migration 当前包含 67 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
 
 ## 认证与平台设置
 
@@ -218,7 +225,7 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 `agent_steps` 记录每次模型调用的步骤号、模型、协议、输出通道、完整工具快照及哈希、Campaign revision、token 与结束原因。`agent_tool_invocations` 以 `attempt_id + call_id` 唯一，保存参数哈希、`received/rejected/committed/failed/abandoned` 状态和有界公开结果；所属对话已无活动租约的残留 `received` 会由回收器标记为 `abandoned/generation_lost`，不会自动重放。
 
-`chat_messages` 是进入 LLM 上下文的内部消息，使用数据库分配的稳定 `message_seq` 并关联 turn/attempt。`content_blocks` 是唯一的模型内容字段，按原始顺序保存 `text`、`thinking`、`refusal`、`tool_call` 以及 provider-owned `replay`；因此 Chat 与 Responses 的协议差异不会扩散到数据库。`content` 仅作为普通文本索引/投影，工具调用和工具结果仍通过 `kind`、`tool_call_id`、`tool_invocation_id` 关联。消息上的 Token 计数只有在 `tokenizer_version` 与当前版本一致、且内容仍是相同的单文本块时才可复用。`display_messages` 是玩家时间线投影；关联 assistant 消息时，接口只从 `content_blocks` 提取安全的可读 `thinking` 文本，忽略 provider 原始加密字段，前端默认折叠并在流式思考期间展开。重新生成与剧情改写事务都会锁定目标、扣除平台级剧情改写额度、递增 branch epoch、失效旧分支 turn/message/Memory 并建立新用户回合；含已提交 Campaign 副作用的历史不允许普通回滚。
+`chat_messages` 是进入 LLM 上下文的内部消息，使用数据库分配的稳定 `message_seq` 并关联 turn/attempt。`content_blocks` 是唯一的模型内容字段，按原始顺序保存 `text`、`thinking`、`refusal`、`tool_call` 以及 provider-owned `replay`；因此 Chat 与 Responses 的协议差异不会扩散到数据库。`content` 仅作为普通文本索引/投影，工具调用和工具结果仍通过 `kind`、`tool_call_id`、`tool_invocation_id` 关联。同一模型步骤的完整调用批次只保存一条 assistant 声明，行级关联指向首个 invocation；其余调用由同一声明内的 call_id 对应各自 invocation 和 tool_result，不能为每个调用再插入空声明。消息上的 Token 计数只有在 `tokenizer_version` 与当前版本一致、且内容仍是相同的单文本块时才可复用。`display_messages` 是玩家时间线投影；关联 assistant 消息时，接口只从 `content_blocks` 提取安全的可读 `thinking` 文本，忽略 provider 原始加密字段，前端默认折叠并在流式思考期间展开。重新生成与剧情改写事务都会锁定目标、扣除平台级剧情改写额度、递增 branch epoch、失效旧分支 turn/message/Memory 并建立新用户回合；Campaign 事实按目标回合完整检查点恢复，奖励账本不回档；缺少检查点则拒绝。
 
 ### `conversation_states` 与 `state_revisions`
 
@@ -254,6 +261,12 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 Campaign 来源为 `campaign_outcome`，source_id 为 Campaign ID，metadata 保存结局与固定版本。完成态据账本恢复积分；0 分保存于完成事实，不写零金额账本。参见 [21 终局积分](21-campaign-outcome-rewards.md)。
 
+### `campaign_stage_rewards`
+
+阶段领取事实在 `00001_init.sql` 中定义，以 `(campaign_id, stage_key)` 唯一，记录名称、配置积分、实际积分、停发原因和游戏时间。UPDATE/DELETE 由触发器拒绝，Campaign 外键为 RESTRICT。实际正积分与配置相同；0 分和客户端直连也保存事实，分别记录 `zero_points` / `client_llm_route`，不写零金额账本。
+
+领取与 Campaign 事件、revision、余额、账本及动作提交处于同一事务。正积分账本来源 `campaign_stage`，source_id 为 `CampaignID:stageKey`，与终局的 `campaign_outcome` / CampaignID 分开。事实不进入检查点；改写后重新满足当前分支前置也不会再次发放，历史领取不替代新分支的任务和胜利事实。规则与完整事务边界见 [21 阶段与终局积分](21-campaign-outcome-rewards.md)。
+
 ### 注册与兑换
 
 `registration_reward_rules` 只追加两项赠送数量的修订，最新 ID 生效，初始为 0 积分/10 次。`users.registration_reward_revision` 引用注册实际采用的规则，即使两项为 0 也保存，用于防止重试套用新规则。
@@ -270,7 +283,7 @@ Campaign 来源为 `campaign_outcome`，source_id 为 Campaign ID，metadata 保
 
 ### Agent 工具提交
 
-完整 Tool Call 先以 `received` 持久化。成功路径在同一短事务提交领域事实、`committed` invocation、assistant tool-call 消息、tool-result 消息和 attempt 写工具计数。Handler 返回业务拒绝或失败时，内部哨兵会回滚事务中全部领域写入，再单独保存 invocation 终态和公开结果。数据库事务提交失败不得广播状态、Campaign、判定或结算事件。
+完整 Tool Call 先以 `received` 持久化。成功路径在同一短事务提交领域事实、`committed` invocation、assistant tool-call 消息（同一步骤仅首项写完整批次）、各自 tool-result 消息和 attempt 写工具计数。后续结果必须匹配同一步骤已有声明中的调用 ID、名称与参数哈希。Handler 返回业务拒绝或失败时，内部哨兵会回滚事务中全部领域写入，再单独保存 invocation 终态和公开结果。数据库事务提交失败不得广播状态、Campaign、判定或结算事件。
 
 ### 挑战发布
 

@@ -1,0 +1,111 @@
+{
+  "presentation": {
+    "state_panel_title": "荒岛生存",
+    "state_sections": [
+      {
+        "key": "survival",
+        "title": "生存状态",
+        "order": 10,
+        "fields": [
+          {
+            "path": "gameplay.health",
+            "label": "生命",
+            "widget": "progress",
+            "order": 0
+          },
+          {
+            "path": "gameplay.stamina",
+            "label": "体力",
+            "widget": "progress",
+            "order": 10
+          },
+          {
+            "path": "gameplay.hunger",
+            "label": "饥饿",
+            "widget": "progress",
+            "order": 20
+          },
+          {
+            "path": "gameplay.thirst",
+            "label": "口渴",
+            "widget": "progress",
+            "order": 30
+          },
+          {
+            "path": "gameplay.location",
+            "label": "所在地点",
+            "widget": "text",
+            "order": 40
+          },
+          {
+            "path": "gameplay.inventory",
+            "label": "随身物资",
+            "widget": "item_list",
+            "order": 50
+          },
+          {
+            "path": "gameplay.weather",
+            "label": "天气",
+            "widget": "badge",
+            "order": 60
+          },
+          {
+            "path": "gameplay.game_time",
+            "label": "已过时间",
+            "widget": "number",
+            "order": 70,
+            "unit": "分钟"
+          },
+          {
+            "path": "gameplay.rescue_after_minutes",
+            "label": "救援开启时间",
+            "widget": "number",
+            "order": 80,
+            "unit": "分钟"
+          },
+          {
+            "path": "gameplay.deadline_minutes",
+            "label": "救援截止时间",
+            "widget": "number",
+            "order": 90,
+            "unit": "分钟"
+          },
+          {
+            "path": "gameplay.goal",
+            "label": "当前目标",
+            "widget": "text",
+            "order": 100
+          },
+          {
+            "path": "gameplay.outcome_key",
+            "label": "结局",
+            "widget": "text",
+            "order": 110
+          }
+        ]
+      }
+    ],
+    "completion_view": {
+      "replay_label": "再次求生",
+      "back_label": "返回玩法",
+      "empty_reward_text": "示例玩法暂不发放积分"
+    },
+    "terminology": {
+      "challenge": "生存挑战",
+      "outcome": "求生结局",
+      "reward": "积分"
+    },
+    "value_labels": {
+      "state.gameplay.weather": {
+        "clear": "晴朗",
+        "storm": "暴风雨"
+      },
+      "state.gameplay.outcome_key": {
+        "rescued": "获救归航",
+        "perished": "荒岛陨落",
+        "timeout": "错过救援",
+        "abandoned": "放弃求援"
+      }
+    }
+  }
+}

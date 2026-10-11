@@ -8,7 +8,7 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/chat"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/state"
 	"github.com/ialtone/fatecraft/internal/storage"

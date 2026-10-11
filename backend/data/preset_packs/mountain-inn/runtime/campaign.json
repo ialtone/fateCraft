@@ -1,0 +1,39 @@
+{
+  "campaign": {
+    "lifecycle_handler": "management.settlement.lifecycle",
+    "projection_handler": "management.settlement.projection",
+    "context_policy": "management.settlement.context",
+    "action_allowlist": [
+      "management.build",
+      "management.upgrade",
+      "management.buy",
+      "management.sell",
+      "management.produce",
+      "management.accept",
+      "management.deliver",
+      "management.advance",
+      "management.finish",
+      "management.close"
+    ],
+    "field_ownership": [
+      {
+        "path": "gameplay",
+        "owner": "campaign",
+        "value_type": "object",
+        "allow_children": true,
+        "visibility": "player",
+        "storage_projection": "campaign_runtime_states",
+        "write_capability": "management.advance",
+        "event_types": [
+          "management.acted",
+          "management.ended"
+        ]
+      }
+    ],
+    "initial_location_key": "inn",
+    "world_clock": {
+      "calendar_key": "business.days",
+      "max_due_events_per_turn": 32
+    }
+  }
+}

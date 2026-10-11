@@ -14,7 +14,7 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/campaign"
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/guidance"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/realtime"
@@ -54,16 +54,20 @@ const (
 	agentToolRoll         agentToolKind = "roll"
 	agentToolCompletion   agentToolKind = "completion"
 	agentToolCampaign     agentToolKind = "campaign"
+	agentToolModule       agentToolKind = "module"
 	agentToolGuidance     agentToolKind = "guidance"
+	agentToolEnding       agentToolKind = "ending_proposal"
 )
 
 type agentToolBinding struct {
+	EndingOptions    []gameplay.EndingCapability
 	Definition       llm.ToolDefinition
 	Kind             agentToolKind
 	ActionKey        string
 	CampaignRevision int64
 	Mutating         bool
 	ExecutionMode    agentToolExecutionMode
+	ModuleContent    *gameplay.Content
 }
 
 type agentToolSnapshotEntry struct {
@@ -83,6 +87,8 @@ type agentToolSnapshot struct {
 	CatalogVersion   string
 	CampaignRevision *int64
 	OwnershipHash    string
+	Restrictions     map[string]agentActionRestriction
+	ObservedRevision *int64
 }
 
 func buildAgentToolSnapshot(
@@ -111,9 +117,12 @@ func buildAgentToolSnapshot(
 		snapshot.CampaignRevision = &revision
 	}
 	if textOnly {
-		return finalizeAgentToolSnapshot(snapshot)
+		return finalizeDomainSnapshot(snapshot, contract, projection, true)
 	}
 
+	if err := addEndingTool(&snapshot, projection); err != nil {
+		return snapshot, err
+	}
 	add := func(binding agentToolBinding) error {
 		name := binding.Definition.Name
 		if _, exists := snapshot.Bindings[name]; exists {
@@ -170,6 +179,9 @@ func buildAgentToolSnapshot(
 		}
 		added := 0
 		for _, capability := range capabilities {
+			if !domainActionDeclared(contract, capability.Key) {
+				continue
+			}
 			if !capability.Available || capability.Key == "" || capability.ArgumentSchema == nil {
 				continue
 			}
@@ -192,12 +204,16 @@ func buildAgentToolSnapshot(
 					description += " 当前可用选项：" + string(encoded)
 				}
 			}
+			kind := agentToolCampaign
+			if contract.Mode == gameplay.RuntimeModeChallenge {
+				kind = agentToolModule
+			}
 			if err := add(agentToolBinding{
 				Definition: llm.ToolDefinition{
 					Name: name, Description: description,
 					Parameters: map[string]any(capability.ArgumentSchema),
 				},
-				Kind: agentToolCampaign, ActionKey: capability.Key,
+				Kind: kind, ActionKey: capability.Key,
 				CampaignRevision: capability.Revision, Mutating: true,
 			}); err != nil {
 				return snapshot, err
@@ -205,7 +221,7 @@ func buildAgentToolSnapshot(
 			added++
 		}
 	}
-	return finalizeAgentToolSnapshot(snapshot)
+	return finalizeDomainSnapshot(snapshot, contract, projection, false)
 }
 
 func stateToolBindings(schema gameplay.StateSchema, allowDynamic bool) []agentToolBinding {
@@ -500,7 +516,7 @@ func (g *Generator) executeAgentToolInTx(
 	reject := func(code string, err error) agentToolOutcome {
 		return agentToolOutcome{
 			Status: storage.ToolInvocationRejected, Code: code,
-			Result: storage.JSONMap{"ok": false, "code": code, "message": err.Error(), "data": map[string]any{}},
+			Result: storage.JSONMap{"ok": false, "code": code, "message": err.Error(), "data": rejectedActionFacts()},
 		}
 	}
 	fail := func(code string, err error) agentToolOutcome {
@@ -517,6 +533,10 @@ func (g *Generator) executeAgentToolInTx(
 	}
 
 	switch binding.Kind {
+	case agentToolEnding:
+		return g.proposeEnding(ctx, conv, binding, arguments, callID, tx)
+	case agentToolModule:
+		return g.executeModuleToolInTx(ctx, conv, binding, arguments, tx)
 	case agentToolGuidance:
 		raw, err := json.Marshal(arguments)
 		if err != nil {
@@ -592,9 +612,16 @@ func (g *Generator) executeAgentToolInTx(
 			}
 			return fail("action_commit_failed", err)
 		}
+		domainResult := storage.JSONMap{}
+		for key, value := range result.Result {
+			if key != "narrative_feedback" {
+				domainResult[key] = value
+			}
+		}
 		outcome := success("action_committed", "领域动作已执行", map[string]any{
 			"action_key": binding.ActionKey, "revision": result.Campaign.Revision,
-			"result": result.Result, "events": result.Events,
+			"result": domainResult, "events": result.Events,
+			"narrative_feedback": result.Result["narrative_feedback"],
 		})
 		if result.RollMessage != nil {
 			outcome.Events = append(outcome.Events, realtime.Event{
@@ -606,6 +633,12 @@ func (g *Generator) executeAgentToolInTx(
 			Type: realtime.TypeCampaignUpdated, ConversationID: conv.ID.String(),
 			Campaign: result.Campaign, DomainEvents: result.Events,
 		})
+		if result.Campaign.Status != storage.CampaignStatusActive {
+			outcome.Result["data"].(map[string]any)["completion"] = storage.CompletionFromResult(result.Result)
+			outcome.Code = "module_settled"
+			outcome.Result["code"] = "module_settled"
+			outcome.Events = append(outcome.Events, realtime.Event{Type: realtime.TypeChallengeCompleted, ConversationID: conv.ID.String(), Completion: storage.CompletionFromResult(result.Result)})
+		}
 		return outcome
 
 	case agentToolRoll:
@@ -699,7 +732,12 @@ func (g *Generator) executeAgentToolInTx(
 			}
 			return fail("settlement_failed", err)
 		}
-		outcomePayload := map[string]any{"outcome_key": result.Outcome.Key, "rewards": result.Rewards}
+		view := storage.NewCompletion(*conv, 0, "challenge:"+result.Run.ID.String(), storage.ChallengeOutcomeRule{OutcomeKey: result.Outcome.Key, Category: result.Outcome.Category, Title: result.Outcome.Title, Tone: result.Outcome.Tone})
+		view.Summary, view.RewardsDisabledReason = result.Run.Summary, result.RewardsDisabledReason
+		for _, reward := range result.Rewards {
+			view.Rewards = append(view.Rewards, storage.CompletionReward{RewardKey: reward.RewardKeySnapshot, Name: reward.NameSnapshot, Unit: reward.UnitSnapshot, Icon: reward.IconSnapshot, Quantity: reward.Quantity, BalanceAfter: reward.BalanceAfter})
+		}
+		outcomePayload := map[string]any{"completion": view, "outcome_key": result.Outcome.Key, "rewards": result.Rewards}
 		outcomeMap := map[string]any{"key": result.Outcome.Key, "category": result.Outcome.Category, "title": result.Outcome.Title, "summary": result.Run.Summary, "tone": result.Outcome.Tone}
 		if result.RewardsDisabledReason != "" {
 			outcomePayload["rewards_disabled_reason"] = result.RewardsDisabledReason
@@ -707,7 +745,7 @@ func (g *Generator) executeAgentToolInTx(
 		}
 		outcome := success("settlement_committed", "玩法已结算", outcomePayload)
 		outcome.Events = append(outcome.Events, realtime.Event{
-			Type: realtime.TypeChallengeCompleted, ConversationID: conv.ID.String(), RunID: result.Run.ID.String(),
+			Type: realtime.TypeChallengeCompleted, ConversationID: conv.ID.String(), RunID: result.Run.ID.String(), Completion: view,
 			Outcome:      outcomeMap,
 			RewardGrants: result.Rewards, NextActions: []string{"replay", "back_to_challenges"},
 		})
@@ -741,7 +779,7 @@ func hashJSONMap(value map[string]any) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func removeCapabilityProjection(projection map[string]any) map[string]any {
+func narrativeProjection(projection map[string]any) map[string]any {
 	if projection == nil {
 		return nil
 	}

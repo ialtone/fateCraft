@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/operation"
 	"github.com/ialtone/fatecraft/internal/state"
 	"github.com/ialtone/fatecraft/internal/storage"

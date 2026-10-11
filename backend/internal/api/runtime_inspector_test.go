@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +11,23 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/storage"
 )
+
+func TestPlayerMemoryJobSummaryIncludesProgressWithoutWorkerSecrets(t *testing.T) {
+	now := time.Now()
+	summary := summarizePlayerMemoryJob(storage.MemoryJob{Status: storage.MemoryJobRunning, TargetUntilTurnSeq: 12, ExecutionCount: 2, MaxExecutions: 3, CreatedAt: now, StartedAt: &now, WorkerID: "private-worker", LastErrorMessage: "provider-secret", SourceHash: "private-source"})
+	if summary.TargetUntilTurn != 12 || summary.ExecutionCount != 2 || summary.StartedAt == nil {
+		t.Fatalf("missing task progress: %+v", summary)
+	}
+	raw, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"private-worker", "provider-secret", "private-source", "lease_token", "last_error_message"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("public memory task exposed %s", secret)
+		}
+	}
+}
 
 func TestSummarizePlayerTurnPerformanceUsesWeightedTPS(t *testing.T) {
 	started := time.Date(2026, time.September, 18, 12, 0, 0, 0, time.UTC)

@@ -1,6 +1,14 @@
 # 19. Agent Tool Loop 与模型协议
 
+## 可信模块工具边界
+
+纯模块动作共用现有步骤快照和工具事务，model 只收到允许主体与当前方案。内核负责参数、资源与新状态复核；事务适配器保存状态、内部随机证据、事件与提交结果。玩家专属终局不会因为模型自由文本声明确认而执行。
+
+Campaign 模型动作结束存档后，当前相同 attempt/turn/revision 的提交保留收尾叙事权限；旧尝试、旧修订和仅持有 run 的工作不具备该权限。显式改写使用完整检查点，模型传输失败和 partial 续写不回档已提交动作。架构见[24](24-gameplay-module-architecture.md)。
+
 本文是 Fatecraft 主叙事 Agent 的统一传输、协调、事务和恢复规范。设计与题材无关，适用于导入任何符合 Runtime Contract 的挑战或长期玩法。
+
+百年飞升劫的可信数值通过模块行动更新，普通状态工具仅操作声明为 model 的叙事字段；结局按模块终态结算。青河阶段积分属于已提交账号事实，改写不回滚，当前分支的任务证据仍需重新满足。模型步骤失败或余额刷新失败都不能触发重复发放。规则与验收见 [14](14-ascension-trial-gameplay.md)、[21](21-campaign-outcome-rewards.md) 和 [25](25-core-gameplay-validation.md)。
 
 ## Agent 边界
 
@@ -45,9 +53,13 @@ type AgentEvent struct {
 
 两种协议的文本增量、拒答、工具开始、参数增量、工具完成和步骤结束都会归一化。Chat 工具历史转换为 assistant `tool_calls` 与 role=tool；Responses 转换为 `function_call` 与 `function_call_output`。
 
+Responses 流式工具调用按稳定 `call_id`、输出位置及 item ID 别名关联到唯一累积条目。同一输出位置的同一 `call_id` 在完成事件改变 item ID 时，仍只产生一次工具调用；早期缺少 call ID 的片段先按位置和 item ID 关联，后续补齐，不能用 item ID 或位置伪造执行 ID。不同输出位置重复使用同一 call ID、同一位置更换 call ID、名称或最终参数冲突均拒绝。参数增量累积，完成事件的完整参数只核对和补齐，不重复追加；完整 JSON 可忽略空白和对象字段顺序差异，不能忽略值变化。
+
+Chat Completions 按 `tool_calls[].index` 汇总，各调用的参数增量独立累积。重复发送相同完整 ID/名称不会重复拼接；同一 index 的 ID 或名称改变拒绝，不覆盖早先身份。两种协议的最终批次仍校验调用 ID、工具名及重复 ID，不靠静默去重放行异常，也不因解析错误重放已执行工具。协议冲突对玩家返回具体说明，管理日志保留 `tool_call_conflict`。
+
 思考模型的 reasoning 同时有两条用途：`content_blocks` 中的原始 replay 用于下一次请求回放，可读文本投影用于玩家查看。Responses 适配器保留完整 `type=reasoning` item（包括 DeepSeek 的 `reasoning_text`）及 function call 的原始 item ID；Chat Completions 适配器把 reasoning 增量归一化为 thinking block。下一次请求只由当前协议 Adapter 解释 replay：Responses 原样回传 reasoning item，Chat 转换为 `reasoning_content`。`chat_messages.content_blocks` 是唯一持久化来源；展示接口只从中提取可读 reasoning 文本，忽略 `encrypted_content` 等 provider 原始字段，且 thinking/replay token 会计入上下文预算。不能把 reasoning 文本拼进普通 `content` 或工具参数，也不能用吞掉 400 的方式代替回放。
 
-每次 Agent 请求在协议序列化前都经过 `PrepareToolReplay` 纯整理器。它按历史顺序校验 assistant 工具调用与 tool 结果的 `call_id` 配对：缺少结果的调用补一个明确的失败结果，空结果补非空错误文本，无前置调用的孤立结果丢弃；同一条未完成调用链中的重复 ID、参数冲突或空 ID直接在本地阻止请求。多工具事务产生的空 assistant 占位行会被跳过，不会打断仍在等待结果的调用链。不同已完成回合可以继续使用供应商生成的同名短 ID，避免破坏兼容网关。整理器不访问数据库、不执行工具、不改变领域事实。这样即使模型步骤中断、超时、取消、进程重启或历史被异常截断，也不会把孤立 `function_call` 发送给 Responses API。Chat Completions 与 Responses 共用同一整理结果，前者投影为 `tool_calls`/`role=tool`，后者投影为 `function_call`/`function_call_output`，两端的配对 ID 始终保持一致。修复数量和类型写入结构化日志；不可修复历史使用 `tool_replay_invalid_history` 错误码，不重试同一请求。
+每次 Agent 请求在协议序列化前都经过 `PrepareToolReplay` 纯整理器。它按历史顺序校验 assistant 工具调用与 tool 结果的 `call_id` 配对：缺少结果的调用补一个明确的失败结果，空结果补非空错误文本，无前置调用的孤立结果丢弃；同一条未完成调用链中的重复 ID、参数冲突或空 ID直接在本地阻止请求。同一模型步骤只保存一条包含完整批次的 assistant 声明，其后紧接每个工具的独立结果；不创建空 assistant 占位行。不同已完成回合可以继续使用供应商生成的同名短 ID，避免破坏兼容网关。整理器不访问数据库、不执行工具、不改变领域事实。这样即使模型步骤中断、超时、取消、进程重启或历史被异常截断，也不会把孤立 `function_call` 发送给 Responses API。Chat Completions 与 Responses 共用同一整理结果，前者投影为 `tool_calls`/`role=tool`，后者投影为 `function_call`/`function_call_output`，两端的配对 ID 始终保持一致；Chat 的 `tool_call_id` 只出现在 role=tool 的结果中，assistant 不序列化存储用的首调用关联 ID。修复数量和类型写入结构化日志；不可修复历史使用 `tool_replay_invalid_history` 错误码，不重试同一请求。
 
 提供工具时省略可选的 `tool_choice`，使用 OpenAI 协议规定的默认 `auto` 语义，使生产调用与显式诊断保持同一种请求形态，并兼容会拒绝显式 `tool_choice` 的思考模式网关。Chat Completions 和 Responses 都设置 `parallel_tool_calls=false`，但兼容网关可能忽略该参数；服务端必须保留自己的批次校验和执行策略，不能只依赖供应商限制。
 
@@ -64,7 +76,7 @@ otherwise                            -> empty/error
 - 同一步存在任意 Tool Call 时优先进入 tool lane；伴随文本只作为中间输出，不进入玩家时间线。只有没有工具调用且存在文本/拒答时才进入 text lane。
 - 流式正文增量在尚未确认通道时作为临时预览立即通过 `agent.text.delta` 发送；预览只存在客户端和本步骤内存缓冲，不进入数据库。若随后观察到工具调用，协调器发送一次 `agent.text.reset` 清空预览，再执行工具；工具步骤后续的中间正文不再发送。
 - text lane 确认后，已经发送的预览直接对应最终文本；只有经过非空、UTF-8、重复文本等校验后才保存普通 assistant 文本。若流式上游没有发送正文增量，则在最终确认时补发一次；非流式请求仍只发送一次。
-- 零文本、零拒答、零工具为空响应；多个工具进入受控工具批次。当前内置工具都是权威写操作，按模型返回顺序逐个执行并各自经过幂等事务；未声明安全策略的工具不会被并发执行。
+- 零文本、零拒答、零工具为空响应；多个工具进入受控工具批次。工具包含权威写操作与只暂存建议的 `fc_present_guidance`，按模型返回顺序逐个执行并各自经过幂等事务；未声明安全策略的工具不会被并发执行。
 
 EOF、超时、取消、`finish_reason=length` 或 Responses `max_output_tokens` 都不会把临时文本保存为最终消息。
 
@@ -77,7 +89,7 @@ EOF、超时、取消、`finish_reason=length` 或 Responses `max_output_tokens`
 3. 将工具定义 token 纳入必选上下文预算，保存 context build 日志。
 4. 固定 attempt 的工具目录版本与 runtime hash，保存 `agent_steps`。
 5. 调用模型一次并锁定输出通道。
-6. text lane 校验并保存最终文本；tool lane 执行一个或多个工具，把每个 call/result 消息按稳定顺序加入历史，再回到步骤 1。
+6. text lane 校验并保存最终文本；tool lane 执行一个或多个工具，把整批调用声明与每个结果按稳定顺序加入历史，再回到步骤 1。
 
 同一模型步骤不因解析、工具或结构化契约错误而内部重放，不换模型、不切协议、不降低输出约束。响应体交付前的连接错误、429 和网关临时错误由传输层按有限策略重试；一旦开始解析正文或工具调用，就不会重放整个 Agent 步骤。工具拒绝是正常业务结果，可以进入下一个模型步骤。一个 attempt 最多成功提交 6 个写工具；后续写调用在执行前返回 `mutating_tool_limit`。
 
@@ -91,9 +103,21 @@ EOF、超时、取消、`finish_reason=length` 或 Responses `max_output_tokens`
 
 每个 `agent_steps` 记录完整工具定义、快照哈希、Handler key/version 和 Campaign revision。工具名必须匹配稳定小写标识；状态、判定、结算和 Campaign 动作都通过同一快照鉴权。
 
-Campaign `action_capabilities` 不直接暴露为可伪造的上下文对象。协调器把可用能力转换为独立 `fc_action_*` 工具，然后从 Projection 正文移除能力目录，避免重复消耗 token 和让模型自行拼装 revision。
+Challenge 与 Campaign 的 `action_capabilities` 用于构建原生工具目录，只有当前内容启用且对 model 主体可用的动作进入 `fc_action_*`。移除内部能力目录前保留只读限制说明；参数 Schema 与可执行选项只通过原生工具传输，不在 Projection 重复。
 
 Provider Tool Schema 用于提高参数正确率，Handler 始终重新验证名称、JSON、大小、权限、State Schema、revision、资源和领域前置。
+
+## 可信事实与动作叙事反馈
+
+每个模型步骤重新读取 model 投影。模块声明的关键事实通过必选 `<narrative_facts>` 放在历史之后、平台输出契约之前；当前境界、修为、资源身份与终局事实优先于历史正文、记忆、世界书和玩家说法，普通状态问答也使用这一优先级。
+
+领域动作在原有事务内构建 `narrative_feedback`，与状态及工具结果一起提交。反馈包含版本、action key、执行前后 revision、`execution=committed`、当前关键事实及有界 `changes`；只有领域结果明确返回 `success` 时才写 `goal_succeeded`。提交成功不等于目标成功，失败结算的材料、时间和伤势变化仍然保留。工具结果超出 16 KiB 时省略大事件等详情，保留最多 8 KiB 的事实反馈及 revision。
+
+纯模块根据执行前后受众投影生成反馈；Campaign 在同一事务中读取实际领域变化和动作后头部，反馈保存在原有动作提交 JSON 中供幂等重放。共享结果仅包含 player 与 model 均可见且值一致的事实，不包含种子、随机证据或任一受众独占的信息。按稳定 key/id/name 比较的集合只列变化项；省略字段不视为事实删除。`details_partial`、有界省略路径和数量明确说明反馈不完整，不能把未知解释成空或零。
+
+不可用原因通过必选 runtime directive 中的 `<action_restrictions>` 提供，正文最多 4 KiB，近期尝试动作优先，并记录省略数量。这些说明不注册工具、不授予权限。调用可识别但规则不可用的动作返回 `action_unavailable`；动作可用却因步骤目录限制未提供返回 `action_not_provided`；真正未知的名称返回 `unknown_tool`。同批前序动作使 revision 变化时，旧原因改为 `action_snapshot_stale`，下一步重新读取状态。拒绝说明只针对本调用，不能否认本回合此前已提交的其他动作。
+
+普通生成、继续叙事、重新生成和终局收尾共用上述装配。继续叙事不重放动作，重新生成依照既有检查点与分支协议使用恢复后的状态。Chat Completions 和 Responses 共享同一反馈与权限边界。本次没有新增正文关键词审核、额外语义审核模型请求或历史数据修复；自由叙事仍可能出错，反馈正确性不能等同于模型正文准确率。
 
 ## 调用幂等与事务
 
@@ -104,14 +128,18 @@ Provider Tool Schema 用于提高参数正确率，Handler 始终重新验证名
 ```text
 领域事实
   + invocation(status=committed)
-  + assistant tool_call chat message
+  + assistant tool_call chat message（本步骤仅第一项写完整批次）
   + tool_result chat message
   + generation_attempts.committed_mutating_tool_count
 ```
 
-Handler 返回 `rejected` 或 `failed` 时使用内部哨兵错误回滚整个领域事务，再单独保存终态 invocation 和有界公开结果。事务提交本身失败会记录 `tool_transaction_failed`；不会广播领域事件或增加写工具计数。
+Handler 返回 `rejected` 或 `failed` 时使用内部哨兵错误回滚整个领域事务，再单独保存终态 invocation 和有界公开结果。事务提交本身失败会记录 `tool_transaction_failed`；不会广播领域事件或增加写工具计数。若失败结果本身也无法保存，返回 `tool_persistence_failed`，日志保留原事务与后续保存错误。
 
 所有数据库提交完成后才广播 `state_update`、`campaign_updated`、判定消息或 `challenge_completed`。
+
+后续工具只追加自己的结果，仓储要求同一 conversation/attempt/step 已有唯一声明，并核对 call_id、工具名和原始参数哈希。缺少声明、重复声明或参数不一致会回滚该工具；每个 invocation 和其结果仍各自唯一。数据库原有非空 tool_call 内容约束保持不变，消息仓储也在写入前拒绝空声明。
+
+2026-10-09 已在临时本地 PostgreSQL 17.6（完整 00001）中先复现旧版第二工具触发 `ck_chat_message_tool_shape`，再验证修复。`agent_batch_postgres_test.go` 覆盖人物状态 + 行动建议、重复请求、连续写入、业务拒绝、结果保存故障回滚、中途停止和参数篡改；通过真实上下文构建及本地 HTTP 模型替身检查 Chat/Responses 回放与最终叙事保存。没有对业务库进行测试写入或调用付费模型。
 
 ## Attempt 状态与恢复
 
@@ -216,3 +244,8 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 每个 Agent 工具快照都绑定 Runtime 编译出的 Ownership Registry hash。Campaign 模式只生成 `narrative.*` conversation 字段的 `fc_state_*` 工具；Campaign 权威字段不会出现在状态工具目录，必须通过对应的 `fc_action_*`。服务端执行时再次解析 Registry，未知路径或跨域路径统一返回 `state_path_forbidden`，拒绝状态、revision 和领域事件副作用。该校验不能只依赖模型收到的 JSON Schema，因为旧步骤、兼容网关或伪造调用都可能绕过目录。
 
 性能日志的正常模型步骤/工具耗时为 Debug，模型达到 60 秒、工具达到 1 秒记 Warn，失败和回合摘要保留。脱敏、正文状态和容量细则见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
+
+
+## 终局提议（2026-10-11）
+
+`fc_propose_ending` 读取玩家终局预览，在原工具事务中校验后记录待确认提议；不执行玩家动作。`ending.proposed` 通知前端读取确认入口。当前终局目录与事实约束在历史之后；真实结束才进入既有有限收尾授权。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。

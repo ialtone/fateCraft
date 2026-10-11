@@ -7,6 +7,7 @@
       "character.rename",
       "cultivation.practice",
       "cultivation.attempt_breakthrough",
+      "cultivation.begin_ascension",
       "fortune.resolve_uncertain",
       "cultivation.learn_technique",
       "cultivation.equip_technique",
@@ -36,25 +37,149 @@
       "quest.submit",
       "encounter.start",
       "encounter.act",
-      "encounter.flee"
+      "encounter.flee",
+      "cultivation.retreat",
+      "character.recover",
+      "campaign.abandon"
     ],
     "field_ownership": [
-      {"path": "campaign", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaigns"},
-      {"path": "character", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaign_characters", "write_capability": "character.rename", "event_types": ["character.renamed"]},
-      {"path": "realm_system", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "gameplay_definitions"},
-      {"path": "techniques", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_techniques"},
-      {"path": "inventory", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaign_item_stacks"},
-      {"path": "recipes", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_known_recipes"},
-      {"path": "markets", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_market_states"},
-      {"path": "world", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaigns"},
-      {"path": "relationships", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_relationships"},
-      {"path": "factions", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_faction_standings"},
-      {"path": "region_state", "owner": "campaign", "value_type": "object", "visibility": "player", "storage_projection": "campaign_region_states"},
-      {"path": "quests", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_quests"},
-      {"path": "obligations", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_quests"},
-      {"path": "encounters", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_encounters"},
-      {"path": "available_encounters", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "campaign_encounters"},
-      {"path": "outcome_rewards", "owner": "campaign", "value_type": "list", "visibility": "player", "storage_projection": "reward_ledger"}
+      {
+        "path": "ascension",
+        "owner": "campaign",
+        "value_type": "object",
+        "visibility": "player",
+        "storage_projection": "campaign_encounters"
+      },
+      {
+        "path": "campaign",
+        "owner": "campaign",
+        "value_type": "object",
+        "visibility": "player",
+        "storage_projection": "campaigns"
+      },
+      {
+        "path": "character",
+        "owner": "campaign",
+        "value_type": "object",
+        "visibility": "player",
+        "storage_projection": "campaign_characters",
+        "write_capability": "character.rename",
+        "event_types": [
+          "character.renamed"
+        ]
+      },
+      {
+        "path": "realm_system",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "gameplay_definitions"
+      },
+      {
+        "path": "techniques",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_techniques"
+      },
+      {
+        "path": "inventory",
+        "owner": "campaign",
+        "value_type": "object",
+        "visibility": "player",
+        "storage_projection": "campaign_item_stacks"
+      },
+      {
+        "path": "recipes",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_known_recipes"
+      },
+      {
+        "path": "markets",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_market_states"
+      },
+      {
+        "path": "world",
+        "owner": "campaign",
+        "value_type": "object",
+        "visibility": "player",
+        "storage_projection": "campaigns"
+      },
+      {
+        "path": "relationships",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_relationships"
+      },
+      {
+        "path": "factions",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_faction_standings"
+      },
+      {
+        "path": "region_state",
+        "owner": "campaign",
+        "value_type": "object",
+        "visibility": "player",
+        "storage_projection": "campaign_region_states"
+      },
+      {
+        "path": "quests",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_quests"
+      },
+      {
+        "path": "obligations",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_quests"
+      },
+      {
+        "path": "encounters",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_encounters"
+      },
+      {
+        "path": "available_encounters",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_encounters"
+      },
+      {
+        "path": "outcome_rewards",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "reward_ledger"
+      },
+      {
+        "path": "training",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "gameplay_definitions"
+      },
+      {
+        "path": "progression",
+        "owner": "campaign",
+        "value_type": "list",
+        "visibility": "player",
+        "storage_projection": "campaign_stage_rewards"
+      }
     ],
     "initial_location_key": "green-river-village",
     "world_clock": {

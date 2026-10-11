@@ -1,73 +1,72 @@
-# 21. Campaign 终局积分
+# 21. Campaign 阶段与终局积分
 
-## 固定版本、固定积分
+局内灵石、材料和装备属于各自存档，账号积分来自固定版本声明的奖励，二者不互相折算。本轮的字段、表结构和本地验证见 [25 核心玩法验证](25-core-gameplay-validation.md)，数据库真实验收仍由维护者执行。
 
-Campaign 的成长、库存、装备和市场属于单个存档。账号收益只取固定版本结局的 `reward_points`，不读取财富倍率或终局库存来决定积分，也不会为了账号收益额外扣除来源物。正常任务交付、消耗和局内奖励仍由原领域动作执行。
+## 固定版本预算
 
-带有 `campaign_outcome_key` 的终局任务经过后端目标核验后，在原 Campaign 动作事务内完成任务结算、积分发放、终局事件与 Campaign 完成。模型只能提出动作，不能提交积分金额。
+通用 Campaign 终局使用 `pack.json.outcomes[].reward_points`，缺省或 0 不发积分。经营、关系和宗门模块只提交合法完成事实，平台在原事务读取当前固定版本金额；七个新增示例默认仍为 0 分。
 
-`pack.json` 中示例：
+青河 `mortal-path 3.7.0` 另有 `cultivation.progress_rewards:progress-rewards`：
 
-```json
-{
-  "outcomes": [{
-    "outcome_key": "world_warden",
-    "category": "success",
-    "title": "执掌天关",
-    "tone": "success",
-    "verifier_key": "core.always",
-    "verifier_config": {},
-    "reward_points": 1000
-  }]
-}
-```
+| 阶段 | 必需的当前分支事实 | 积分 |
+| --- | --- | ---: |
+| 青河立足 | 筑基；救援、宗门准备或郡城路线任一完成 | 100 |
+| 星海立业 | 结丹；完成星海讨伐且有实际星兽遭遇胜利 | 100 |
+| 守界有成 | 化神；封闭裂隙任务且有实际守护者遭遇胜利 | 100 |
+| 执掌天关或携律远行 | 完成全部阶段事实、大乘圆满、实际最终渡劫及各自终局任务 | 700 |
 
-此处 `core.always` 不替代终局任务的领域核验。发布时要求终局任务引用当前版本已启用结局，正积分结局必须有真实终局任务。金额为非负安全整数，缺省或 0 表示不发积分，完成事实仍保存 `reward_points: 0`。
+两个终局各自总预算都是 1000，不能将两个互斥结局相加。阶段会随合法动作自动核验和发放；最终任务的 `core.always` 不能代替修仙领域门槛。模型不能提交发分数值。
 
-积分值进入内容哈希并随版本复制；编辑已发布内容需要创建新草稿。青河修仙志的“执掌天关”和“携律远行”初始各 1000 积分，数值维护在内置 `pack.json`。
+发布验证阶段 key 唯一、境界/任务/遭遇引用、递进条件、终局动作与总预算，要求每个配置终局的“阶段合计 + 终局金额”等于 `total_points`。后台依据模块 Schema 的 `x-reward-budget` 元数据显示同样的预算关系，错误配置仍由后端最终拒绝。
 
-## 事务与幂等
+## 事务、幂等与回档
 
-`GrantCampaignOutcomeRewards` 使用当前动作的 GORM 事务调用统一 `GrantInCurrentTx`。来源固定为 `campaign_outcome`，`source_id` 为 Campaign ID，幂等键为 `campaign:{campaign_id}:points`。metadata 保存结局 key 与固定版本 ID。
+阶段记录保存在 `campaign_stage_rewards`，唯一键为 `(campaign_id, stage_key)`。配置积分、实际积分、名称和禁用原因形成不可变领取事实，版本由关联 Campaign 固定；正数入账通过原动作事务调用统一账号资产服务：
 
-Campaign 行锁、动作提交记录、来源唯一约束和账本幂等共同防止重复终局。更换动作请求 ID 或重复调用同一终局不能重新发分。余额、账本、领域变更、事件与 Campaign 完成中任何一步失败，全部回滚。
+- 账本来源 `campaign_stage`，来源 ID 为 `campaignID:stageKey`。
+- 同阶段并发、换请求 ID、网络重试或重复条件命中，不会再次入账。
+- 0 分和直连仍保存实际发放为 0 的阶段记录，不生成 0 元账本。
+- 角色、任务、事件、领取记录、账本及余额任何一步失败，整个动作回滚。
 
-0 积分不产生账本，正常终局结果和 `campaign.completed` 事件仍保存实际积分。完成态重新加载从真实账本恢复收益，不从聊天、Memory、自由状态或模型上下文推断。
+终局由 `GrantCampaignOutcomeRewards` 在 Campaign 动作事务调用 `GrantInCurrentTx`，来源 `campaign_outcome`、来源 ID 为 Campaign ID，幂等键为 `campaign:{campaign_id}:points`。完成状态、结局事件和实际收益一起提交。
 
-## 玩家投影
+终局积分只对 Outcome `category=success` 发放。`failure` 和 `neutral` 终局仍保存结局键、分类和标题，但实际终局积分为 0；Campaign 的 `dead`、`abandoned` 与 `completed` 一样都可以是已结算状态，不能仅凭状态推断成功。
 
-平台在玩法 Projection Provider 返回后追加保留字段 `outcome_rewards`、`reward_points`，并按路由追加 `rewards_disabled_reason`；Provider 不能覆盖这些字段。
+检查点恢复当前分支的可变角色、库存、任务和遭遇事实，**不恢复或删除**阶段领取记录、终局账本和账号余额。回档后即使历史上领过某阶段，仍需重新满足当前分支的任务与遭遇门槛才能结束本局；再次达到条件只重建当前玩法进度，不重复发分。已结算终局同样不能重复领取。
 
-```json
-{
-  "reward_points": 1000,
-  "outcome_rewards": [{
-    "key": "fatecraft.points",
-    "name": "积分",
-    "unit": "分",
-    "icon": "sparkles",
-    "quantity": 1000,
-    "balance": 1300
-  }]
-}
-```
+## 玩家展示与交互
 
-`balance` 为入账后的余额快照，当前总余额以账号余额接口为准。没有正积分流水时列表为空，`reward_points` 为 0。通用 Campaign 视图在完成态显示本次所得；玩家奖励页汇总账号余额、兑换订单和收支。
+平台在玩法投影之后追加保留字段，模块 Provider 不能覆盖：
 
-## 直连边界
-
-`client` 路由的任务与终局照常核验和完成，存储层直接跳过通关入账。结果、完成事件和玩家快照包含 `rewards_disabled_reason=client_llm_route`，界面显示“客户端直连模式不发放奖励”。正常任务消耗继续生效。
-
-后续排行、积分统计和解锁不得把直连结局当成可信积分来源。注册赠送、管理员发放与已有合法余额依然可用。
-
-## 维护与验证
-
-| 关注点 | 入口 |
+| 字段 | 含义 |
 | --- | --- |
-| 版本校验与内容哈希 | `backend/internal/challenge/service.go` |
-| 事务入账与完成态加载 | `backend/internal/storage/campaign_domain.go` |
-| 可信终局任务与事件 | `backend/internal/gameplay/cultivation/campaignactions/world_actions.go` |
-| 平台保留字段 | `backend/internal/campaign/service.go` |
-| 完成态显示 | `frontend/src/components/CampaignViewRenderer.vue` |
+| `stage_rewards` | 本 Campaign 的不可变阶段领取记录 |
+| `stage_reward_points` | 已实际发放的阶段积分合计 |
+| `reward_points` | 已实际发放的终局积分 |
+| `total_reward_points` | 阶段与终局实际积分之和 |
+| `outcome_rewards` | 终局正积分流水对应的账号奖励视图 |
+| `rewards_disabled_reason` | 如 `client_llm_route`，说明为何没有实际积分 |
 
-真实环境应验证两条内置结局、0 积分、直连、重复终局、事务失败回滚以及局内库存未被奖励层额外扣除。环境验收仍由用户执行，完整分工和检查表见 [22 奖励管理](22-reward-management-and-exchange.md)。积分兑换和误发撤回只操作账号层，不重开 Campaign；只有原管理员发放可撤回，终局积分没有管理员通用冲正入口。
+历史到账也会在回档后的 active 状态展示。不要从当前任务状态推算累计所得，或把金额为 0 的领取记录渲染成“尚未领取”。账号当前总余额以余额接口为准；历史流水的 balance 是当时余额快照。
+
+青河面板区分当前阶段目标、已经到账、终局所得和整局累计。玩家动作与模型回合完成后刷新账号余额；操作已经提交但刷新失败时提示刷新失败，不误报动作未执行。请求结果不明时保留原请求重查，切换对话或重开同一对话不接受旧响应覆盖当前状态。
+
+## 直连与管理边界
+
+客户端直连照常执行任务、阶段与终局验证，但不产生玩法账号积分；实际记录为 0，并显示原因。注册赠送、管理员发放、已有合法余额和积分兑换仍沿用账号层规则。
+
+管理员误发撤回仅针对可撤回的管理员发放，不提供任意阶段或终局积分冲正。兑换只操作账号余额和订单，不改变 Campaign 任务、物品或结局。完整账号管理协议见 [22 奖励管理](22-reward-management-and-exchange.md)。
+
+## 验证入口
+
+- `storage/campaign_stage_reward_postgres_test.go`：并发唯一性、失败回滚、重试、回档与直连。
+- `campaignactions/progress_test.go`：当前事实门槛、顺序、回档后缺事实拒绝。
+- `challengeimport/progress_rules_test.go`：发布引用、总预算和必要动作。
+- `campaignactions/playthrough_test.go`：真实开局到两个终局的经济、主线与阶段流程。
+
+PostgreSQL 用例当前已编写且编译通过，本机未执行。维护者需要实际观察 receipt、全部账本、余额和事务回滚，不能只看 HTTP 成功或页面显示。新项目表结构并入 `00001_init.sql`，没有新增 `00002` 或启动时补表。
+
+
+## 主动退出与完成窗口（2026-10-11）
+
+玩家提前退出不领取终局积分，已到账阶段积分保留，不以修为、时间或资源兑换离场积分。实际终局收益与保留的阶段积分在统一 CompletionView 中分别展示，读取结果不会重新发分。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。

@@ -1,4 +1,9 @@
 import axios from 'axios'
+import type {
+  ModuleActionInput,
+  ModuleActionResult,
+  ModuleActionSnapshot,
+} from '@/types/module-actions'
 import type { BuiltinRewardPreview } from '@/types/rewards'
 import type {
   AdminAuthSettings,
@@ -237,6 +242,17 @@ export const runtimeApi = {
       .then((response) => response.data.runtime),
 }
 
+export const moduleActionsApi = {
+  endings: (convId: string) =>
+    http
+      .get<import('@/types/endings').EndingSnapshot>(`/conversations/${convId}/endings`)
+      .then((r) => r.data),
+  get: (convId: string) =>
+    http.get<ModuleActionSnapshot>(`/conversations/${convId}/actions`).then((r) => r.data),
+  execute: (convId: string, input: ModuleActionInput) =>
+    http.post<ModuleActionResult>(`/conversations/${convId}/actions`, input).then((r) => r.data),
+}
+
 export const rewardsApi = {
   list: () =>
     http.get<{ rewards: PlayerReward[] }>('/me/rewards').then((response) => response.data.rewards),
@@ -427,6 +443,8 @@ export const adminApi = {
       .then((r) => r.data.challenges),
   createChallenge: (body: { slug: string; name: string; description: string }) =>
     http.post<ChallengePack>('/admin/challenges', body).then((r) => r.data),
+  setChallengeEnabled: (id: string, enabled: boolean) =>
+    http.put<ChallengePack>(`/admin/challenges/${id}/enabled`, { enabled }).then((r) => r.data),
   getChallengeVersion: (id: string) =>
     http.get<ChallengeVersionDocument>(`/admin/challenge-versions/${id}`).then((r) => r.data),
   createChallengeVersion: (packId: string, version: string) =>

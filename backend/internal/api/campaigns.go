@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ialtone/fatecraft/internal/campaign"
+	"github.com/ialtone/fatecraft/internal/realtime"
+	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 func (s *Server) createCampaign(c *gin.Context) {
@@ -127,6 +129,7 @@ func (s *Server) executeCampaignAction(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	s.broadcastCampaignCompletion(result)
 	c.JSON(http.StatusOK, result)
 }
 
@@ -145,6 +148,7 @@ func (s *Server) abandonCampaign(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	s.broadcastCampaignCompletion(result)
 	c.JSON(http.StatusOK, result)
 }
 
@@ -153,4 +157,14 @@ func optionalInt64(raw string, fallback int64) (int64, error) {
 		return fallback, nil
 	}
 	return strconv.ParseInt(raw, 10, 64)
+}
+
+func (s *Server) broadcastCampaignCompletion(result *storage.CampaignActionResult) {
+	if s.hub == nil || result == nil {
+		return
+	}
+	if receipt := storage.CompletionFromResult(result.Result); receipt != nil {
+		s.hub.Broadcast(receipt.ConversationID, realtime.Event{Type: realtime.TypeModuleActionCommitted, ConversationID: receipt.ConversationID.String()})
+		s.hub.Broadcast(receipt.ConversationID, realtime.Event{Type: realtime.TypeChallengeCompleted, ConversationID: receipt.ConversationID.String(), Completion: receipt})
+	}
 }

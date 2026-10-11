@@ -1,0 +1,24 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action",
+      "complete_challenge"
+    ],
+    "player": [],
+    "domain": [
+      "tomb.move",
+      "tomb.inspect",
+      "tomb.solve",
+      "tomb.bypass",
+      "tomb.take",
+      "tomb.drop",
+      "tomb.rest",
+      "tomb.wait",
+      "tomb.extract",
+      "tomb.retreat",
+      "tomb.abandon"
+    ],
+    "capabilities": {}
+  }
+}

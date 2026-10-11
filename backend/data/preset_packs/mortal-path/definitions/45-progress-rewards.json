@@ -1,0 +1,17 @@
+[
+  {
+    "kind": "cultivation.progress_rewards",
+    "key": "progress-rewards",
+    "name": "青河历程积分",
+    "content": {
+      "stages": [
+        {"key": "qinghe-established", "name": "青河立足", "points": 100, "min_realm_rank": 2, "quest_groups": [["cave-rescue", "foundation-preparation", "county-stability-choice"]], "encounter_keys": []},
+        {"key": "star-sea-experienced", "name": "星海历练", "points": 100, "min_realm_rank": 3, "quest_groups": [["hunt-abyssal-isle"]], "encounter_keys": ["abyssal-isle-star-beast"]},
+        {"key": "boundary-defended", "name": "守界有成", "points": 100, "min_realm_rank": 5, "quest_groups": [["seal-rift-heart"]], "encounter_keys": ["rift-heart-guardian"]}
+      ],
+      "outcome_keys": ["world_warden", "law_seeker"],
+      "total_points": 1000
+    },
+    "tags": ["阶段积分"], "search_text": "青河立足 星海历练 守界有成 通关预算", "visibility": "player", "sort_order": 20
+  }
+]

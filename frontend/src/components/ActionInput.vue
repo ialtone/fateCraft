@@ -19,6 +19,8 @@ import GuidanceRenderer from '@/components/GuidanceRenderer.vue'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useStateStore } from '@/stores/state'
 import { useCampaignStore } from '@/stores/campaign'
+import { useConversationStore } from '@/stores/conversations'
+import { usePlayerActionStore } from '@/stores/playerActions'
 import { useRewardStore } from '@/stores/rewards'
 import type { GuidanceItem } from '@/types'
 import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
@@ -30,6 +32,8 @@ const context = useContextStore()
 const runtime = useRuntimeStore()
 const state = useStateStore()
 const campaign = useCampaignStore()
+const conversations = useConversationStore()
+const playerActions = usePlayerActionStore()
 const rewards = useRewardStore()
 const message = useMessage()
 const dialog = useDialog()
@@ -49,6 +53,15 @@ const campaignSnapshot = computed(() => campaign.snapshot)
 // 剧情改写是平台能力，不属于当前玩法 Runtime；玩法只能声明自己的动作。
 const rewriteCapability = computed(() =>
   runtime.platformCapability(PLATFORM_CAPABILITY_MESSAGE_REWRITE),
+)
+const regenerateCost = computed(
+  () => context.activity.regenerate_cost_quantity ?? rewriteCapability.value?.cost_quantity,
+)
+const regenerateIsFree = computed(
+  () =>
+    context.activity.can_regenerate &&
+    rewriteCapability.value?.enabled &&
+    regenerateCost.value === 0,
 )
 
 watch(
@@ -86,7 +99,7 @@ const canContinue = computed(() => {
 const canRegenerate = computed(() => {
   const capability = rewriteCapability.value
   if (!capability?.enabled) return false
-  const cost = context.activity.regenerate_cost_quantity ?? capability.cost_quantity ?? 0
+  const cost = regenerateCost.value ?? 0
   const affordable =
     !rewards.loaded || cost <= 0 || rewards.balanceFor(capability.cost_reward_key) >= cost
   return (
@@ -172,7 +185,42 @@ function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown
     actionPending.value
   )
     return
-  campaign.execute(item.action_key, args).catch(() => {})
+  const conv = conversations.current
+  const row = campaign.snapshot?.campaign
+  if (
+    !conv ||
+    !row ||
+    conv.status !== 'active' ||
+    conv.is_processing ||
+    playerActions.pending ||
+    playerActions.acting
+  )
+    return
+  const input = {
+    request_id: crypto.randomUUID(),
+    branch_epoch: conv.branch_epoch,
+    expected_revision: row.revision,
+    key: item.action_key,
+    arguments: args as Record<string, string | number | boolean>,
+  }
+  const run = () => playerActions.execute(conv.id, input)
+  const ending = conversations.endingState?.ending_capabilities.find(
+    (cap) =>
+      cap.key === item.action_key &&
+      (!cap.plans?.length ||
+        cap.plans.some((plan) =>
+          Object.entries(plan.arguments).every(([name, value]) => args[name] === value),
+        )),
+  )
+  if (ending)
+    dialog.warning({
+      title: `确认${ending.metadata.label || ending.description}`,
+      content: `${ending.description}。确认后由后端重新校验并执行；达到结局后不能继续本局。`,
+      positiveText: '确认执行',
+      negativeText: '取消',
+      onPositiveClick: run,
+    })
+  else void run()
 }
 
 function send() {
@@ -216,7 +264,7 @@ async function submitRegenerate() {
 async function regenerate() {
   if (!canRegenerate.value) return
   const capability = rewriteCapability.value
-  const cost = context.activity.regenerate_cost_quantity ?? capability?.cost_quantity ?? 0
+  const cost = regenerateCost.value ?? 0
 
   // 免费恢复失败/取消的回合，不需要确认，也不读取额度余额。
   if (cost <= 0) {
@@ -323,15 +371,21 @@ function cancel() {
         :state="state.state"
         :snapshot="campaignSnapshot"
         :placement="['composer', 'after_message']"
-        :disabled="disabled || chat.isGenerating || awaitingRestGen || actionPending"
-        :loading="campaign.acting"
+        :disabled="
+          disabled ||
+          chat.isGenerating ||
+          awaitingRestGen ||
+          actionPending ||
+          !!playerActions.pending
+        "
+        :loading="playerActions.acting"
         @message="dispatchGuidanceMessage"
         @action="dispatchGuidanceAction"
       />
       <div class="toolbar row">
         <NButton quaternary size="tiny" :disabled="!canRegenerate" @click="regenerate">
           <template #icon><NIcon :component="RefreshOutline" /></template>
-          重新生成
+          重新生成{{ regenerateIsFree ? '（本次免费）' : '' }}
         </NButton>
         <NButton v-if="canContinue" quaternary size="tiny" @click="continueGen">
           <template #icon><NIcon :component="PlayForwardOutline" /></template>

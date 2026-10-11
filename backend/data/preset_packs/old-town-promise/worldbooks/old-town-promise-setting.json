@@ -1,0 +1,22 @@
+{
+  "id": "old-town-promise-setting",
+  "name": "小镇旧约见闻",
+  "description": "叙事背景，数值以可信状态与行动预览为准。",
+  "entries": [
+    {
+      "id": "old-town-promise-world",
+      "world_book_id": "old-town-promise-setting",
+      "title": "小镇旧约",
+      "content": "小镇的旧桥和一封旧信串起三位故人的关系。修桥和保留边界都是正当选择。所有信任、精力和期限以行动预览与已知事实为准。",
+      "keywords": [
+        "小镇旧约",
+        "关系叙事"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

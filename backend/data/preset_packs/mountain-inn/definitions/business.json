@@ -1,0 +1,135 @@
+[
+  {
+    "kind": "management.business",
+    "key": "inn",
+    "name": "山间客栈经营规则",
+    "visibility": "internal",
+    "sort_order": 0,
+    "tags": [
+      "经营"
+    ],
+    "search_text": "厨房 客房 订单 生产",
+    "content": {
+      "initial_stock": {
+        "cash": 120,
+        "wood": 6,
+        "grain": 6
+      },
+      "resources": [
+        {
+          "key": "wood",
+          "name": "木料",
+          "buy": 5,
+          "sell": 2
+        },
+        {
+          "key": "grain",
+          "name": "粮食",
+          "buy": 3,
+          "sell": 1
+        },
+        {
+          "key": "meal",
+          "name": "餐食",
+          "buy": 0,
+          "sell": 2
+        },
+        {
+          "key": "stay",
+          "name": "住宿服务",
+          "buy": 0,
+          "sell": 6
+        }
+      ],
+      "facilities": [
+        {
+          "key": "kitchen",
+          "name": "厨房",
+          "build_cost": {
+            "cash": 20,
+            "wood": 2
+          },
+          "upgrade_cost": {
+            "cash": 15,
+            "wood": 1
+          },
+          "max_level": 2
+        },
+        {
+          "key": "guestroom",
+          "name": "客房",
+          "build_cost": {
+            "cash": 30,
+            "wood": 3
+          },
+          "upgrade_cost": {
+            "cash": 20,
+            "wood": 1
+          },
+          "max_level": 2
+        }
+      ],
+      "recipes": [
+        {
+          "key": "meal",
+          "name": "准备餐食",
+          "facility": "kitchen",
+          "level": 1,
+          "inputs": {
+            "grain": 1
+          },
+          "outputs": {
+            "meal": 2
+          },
+          "minutes": 60
+        },
+        {
+          "key": "lodging",
+          "name": "准备住宿",
+          "facility": "guestroom",
+          "level": 2,
+          "inputs": {
+            "meal": 1,
+            "grain": 1
+          },
+          "outputs": {
+            "stay": 1
+          },
+          "minutes": 120
+        }
+      ],
+      "orders": [
+        {
+          "key": "caravan",
+          "name": "商队食宿",
+          "items": {
+            "meal": 2,
+            "stay": 2
+          },
+          "income": 100,
+          "deadline": 1800,
+          "penalty": 20
+        },
+        {
+          "key": "pilgrims",
+          "name": "香客食宿",
+          "items": {
+            "meal": 1,
+            "stay": 1
+          },
+          "income": 60,
+          "deadline": 2880,
+          "penalty": 10
+        }
+      ],
+      "daily_expense": 10,
+      "goal_facilities": {
+        "kitchen": 1,
+        "guestroom": 2
+      },
+      "goal_orders": 2,
+      "goal_revenue": 160,
+      "deadline": 10080
+    }
+  }
+]

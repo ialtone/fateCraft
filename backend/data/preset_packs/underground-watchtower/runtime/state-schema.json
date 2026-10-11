@@ -1,0 +1,135 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "module_state",
+        "type": "object",
+        "default": {},
+        "visibility": "internal",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "narrative",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.goal",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.location",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.health",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.supplies",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.remaining_minutes",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.medicine",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.rest_remaining",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.outcome_key",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.nodes",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.weight",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.capacity",
+        "type": "number",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.carried",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.secured",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.lost",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.enemies",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      }
+    ]
+  }
+}

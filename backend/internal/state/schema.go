@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 )
 
 // PatchValidationError reports every invalid key in one atomic state patch.

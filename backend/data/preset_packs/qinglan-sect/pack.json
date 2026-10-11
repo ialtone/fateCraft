@@ -1,0 +1,83 @@
+{
+  "id": "qinglan-sect",
+  "name": "青岚宗重建",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "以掌门身份招收弟子、恢复设施与传承，在生产和派遣中筹集资源，并为来袭危机留下守宗力量。",
+  "author": "Fatecraft",
+  "icon": "sect",
+  "tags": [
+    "宗门经营",
+    "独立弟子身份",
+    "岗位互斥",
+    "传承培养",
+    "供养与守宗"
+  ],
+  "default_config": {
+    "recommended_character": "qinglan-sect-narrator",
+    "recommended_persona": "qinglan-sect-player",
+    "recommended_scenario": "qinglan-sect-opening",
+    "recommended_prompt": "qinglan-sect-guide",
+    "required_worldbooks": [
+      "qinglan-sect-setting"
+    ],
+    "allowed_personas": [
+      "qinglan-sect-player"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "rebuilt",
+      "category": "success",
+      "title": "青岚重立",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "fallen",
+      "category": "failure",
+      "title": "山门失守",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "dispersed",
+      "category": "failure",
+      "title": "弟子离散",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "重建未成",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "dissolved",
+      "category": "neutral",
+      "title": "解散宗门",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    }
+  ],
+  "quick_start_guide": "先建设大殿与工坊，安排生产补足升级石材。招收青禾，培养并传承给合适弟子；派遣可获得资源但可能失败受伤。留出驻守弟子应对一天后的危机，推进时间时会支付每日供养。达到人数、设施、传承、派遣和守宗目标后亲自确认重建。 示例结局积分为 0。",
+  "features": [
+    "独立弟子身份",
+    "岗位互斥",
+    "传承培养",
+    "供养与守宗"
+  ],
+  "dependencies": []
+}

@@ -17,10 +17,18 @@ func (testProjectionProvider) Snapshot(_ context.Context, _ ProjectionContext) (
 	return map[string]any{"topic": "snapshot"}, nil
 }
 
+func (testProjectionProvider) Inquiry(_ context.Context, _ ProjectionContext) (map[string]any, error) {
+	return map[string]any{"topic": "inquiry"}, nil
+}
+
 type reservedSnapshotProjectionProvider struct{}
 
 func (reservedSnapshotProjectionProvider) Snapshot(_ context.Context, _ ProjectionContext) (map[string]any, error) {
 	return map[string]any{"outcome_rewards": "forged"}, nil
+}
+
+func (p reservedSnapshotProjectionProvider) Inquiry(ctx context.Context, input ProjectionContext) (map[string]any, error) {
+	return p.Snapshot(ctx, input)
 }
 
 func (reservedSnapshotProjectionProvider) Context(_ context.Context, _ ProjectionContext) (ProjectionView, error) {
@@ -56,6 +64,13 @@ func TestSnapshotAddsPlatformOutcomeRewardsAndRejectsProviderOverride(t *testing
 	if snapshot["reward_points"] != int64(3) {
 		t.Fatalf("fixed points: %#v", snapshot["reward_points"])
 	}
+	if header, ok := snapshot["campaign"].(storage.Campaign); !ok || header.ID != repo.row.ID {
+		t.Fatal("platform omitted the campaign header")
+	}
+	inquiry, err := service.InquirySnapshot(ctx, repo.row.ID)
+	if err != nil || inquiry["topic"] != "inquiry" || inquiry["reward_points"] != int64(3) {
+		t.Fatalf("inquiry used wrong audience or omitted platform facts: %+v %v", inquiry, err)
+	}
 	domain.OutcomeRewards = nil
 	snapshot, err = service.Snapshot(ctx, repo.row.ID)
 	if err != nil || snapshot["reward_points"] != int64(0) {
@@ -86,7 +101,7 @@ func TestContextProjectionUsesRuntimeProviderAndDynamicCapabilities(t *testing.T
 	contract.Campaign.ActionAllowlist = []string{"test.dynamic"}
 	service := NewService(repo, challengeStub{contract: contract}, nil, identityProvider)
 	service.RegisterProjection("test.projection", testProjectionProvider{})
-	service.RegisterAction(RegisteredAction{
+	service.RegisterAction(campaignContract().Engine, RegisteredAction{
 		Definition: ActionDefinition{
 			Key: "test.dynamic", Description: "dynamic action", Actors: []string{"model"},
 			ArgumentSchema: storage.JSONMap{
@@ -245,7 +260,7 @@ func TestCapabilityBudgetsAndProviderFailureAreEnforced(t *testing.T) {
 
 	t.Run("options are truncated explicitly", func(t *testing.T) {
 		service := NewService(nil, nil, nil, nil)
-		service.RegisterAction(RegisteredAction{
+		service.RegisterAction(campaignContract().Engine, RegisteredAction{
 			Definition: definition, Handler: handler,
 			Capability: ActionCapabilityProviderFunc(func(context.Context, CapabilityContext, ActionDefinition) (ActionCapability, error) {
 				options := make([]storage.JSONMap, 100)
@@ -255,7 +270,7 @@ func TestCapabilityBudgetsAndProviderFailureAreEnforced(t *testing.T) {
 				return ActionCapability{Available: true, Options: options}, nil
 			}),
 		})
-		capabilities, err := service.actionCapabilities(context.Background(), storage.Campaign{}, &storage.CampaignDomainState{}, []string{definition.Key}, "model", "")
+		capabilities, err := service.actionCapabilities(context.Background(), storage.Campaign{}, &storage.CampaignDomainState{}, campaignContract().Engine, []string{definition.Key}, "model", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,27 +281,27 @@ func TestCapabilityBudgetsAndProviderFailureAreEnforced(t *testing.T) {
 
 	t.Run("provider failure stops projection", func(t *testing.T) {
 		service := NewService(nil, nil, nil, nil)
-		service.RegisterAction(RegisteredAction{
+		service.RegisterAction(campaignContract().Engine, RegisteredAction{
 			Definition: definition, Handler: handler,
 			Capability: ActionCapabilityProviderFunc(func(ctx context.Context, _ CapabilityContext, _ ActionDefinition) (ActionCapability, error) {
 				<-ctx.Done()
 				return ActionCapability{}, ctx.Err()
 			}),
 		})
-		if _, err := service.actionCapabilities(context.Background(), storage.Campaign{}, &storage.CampaignDomainState{}, []string{definition.Key}, "model", ""); err == nil {
+		if _, err := service.actionCapabilities(context.Background(), storage.Campaign{}, &storage.CampaignDomainState{}, campaignContract().Engine, []string{definition.Key}, "model", ""); err == nil {
 			t.Fatal("timed-out provider was treated as available")
 		}
 	})
 
 	t.Run("total bytes are bounded", func(t *testing.T) {
 		service := NewService(nil, nil, nil, nil)
-		service.RegisterAction(RegisteredAction{
+		service.RegisterAction(campaignContract().Engine, RegisteredAction{
 			Definition: definition, Handler: handler,
 			Capability: ActionCapabilityProviderFunc(func(context.Context, CapabilityContext, ActionDefinition) (ActionCapability, error) {
 				return ActionCapability{Available: true, Metadata: storage.JSONMap{"large": strings.Repeat("x", defaultCapabilityTotalBytes)}}, nil
 			}),
 		})
-		if _, err := service.actionCapabilities(context.Background(), storage.Campaign{}, &storage.CampaignDomainState{}, []string{definition.Key}, "model", ""); err == nil {
+		if _, err := service.actionCapabilities(context.Background(), storage.Campaign{}, &storage.CampaignDomainState{}, campaignContract().Engine, []string{definition.Key}, "model", ""); err == nil {
 			t.Fatal("oversized capability projection was accepted")
 		}
 	})

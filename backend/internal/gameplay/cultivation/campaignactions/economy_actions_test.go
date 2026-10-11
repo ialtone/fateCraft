@@ -3,6 +3,7 @@ package campaignactions
 import (
 	"context"
 	"errors"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldactions"
 	"testing"
 
 	"github.com/google/uuid"
@@ -155,14 +156,14 @@ func TestTradeRestocksThenBuysAndSellsAtomicallyInStore(t *testing.T) {
 	arguments := map[string]any{
 		"market_key": marketKey, "item_kind": "item", "item_key": "herb", "quality_key": "common", "quantity": int64(1),
 	}
-	if _, err := tradeBuy(context.Background(), execution, arguments); err != nil {
+	if _, err := worldactions.TradeBuy(context.Background(), execution, arguments); err != nil {
 		t.Fatal(err)
 	}
 	if store.marketStocks[stockKey].Quantity != 1 || store.stacks[stackKey("herb", "common")].Quantity != 1 {
 		t.Fatalf("buy state = stock:%#v stacks:%#v", store.marketStocks[stockKey], store.stacks)
 	}
 	execution.ActionID = "trade-sell"
-	if _, err := tradeSell(context.Background(), execution, arguments); err != nil {
+	if _, err := worldactions.TradeSell(context.Background(), execution, arguments); err != nil {
 		t.Fatal(err)
 	}
 	if store.marketStocks[stockKey].Quantity != 2 || store.stacks[stackKey("herb", "common")] != nil {
@@ -214,7 +215,7 @@ func TestTradeRejectsWrongLocationAndFullMarketWithoutMutation(t *testing.T) {
 	arguments := map[string]any{"market_key": marketKey, "item_kind": "item", "item_key": "herb", "quality_key": "common", "quantity": int64(1)}
 
 	wrongLocation := campaign.ActionExecution{Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "village"}, Store: store, ActorType: "player"}
-	if _, err := tradeBuy(context.Background(), wrongLocation, arguments); !errors.Is(err, campaign.ErrActionRejected) {
+	if _, err := worldactions.TradeBuy(context.Background(), wrongLocation, arguments); !errors.Is(err, campaign.ErrActionRejected) {
 		t.Fatalf("wrong-location trade error = %v", err)
 	}
 	if store.marketStocks[stockKey].Quantity != 10 || store.stacks[stackKey("stone", "common")].Quantity != 100 {
@@ -222,7 +223,7 @@ func TestTradeRejectsWrongLocationAndFullMarketWithoutMutation(t *testing.T) {
 	}
 
 	fullMarket := campaign.ActionExecution{Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "market"}, Store: store, ActorType: "player"}
-	if _, err := tradeSell(context.Background(), fullMarket, arguments); !errors.Is(err, campaign.ErrActionRejected) {
+	if _, err := worldactions.TradeSell(context.Background(), fullMarket, arguments); !errors.Is(err, campaign.ErrActionRejected) {
 		t.Fatalf("full-market trade error = %v", err)
 	}
 	if store.marketStocks[stockKey].Quantity != 10 || store.stacks[stackKey("herb", "common")].Quantity != 1 {
@@ -251,7 +252,7 @@ func TestTradeBuysAndSellsEquipmentInstances(t *testing.T) {
 	execution := campaign.ActionExecution{Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "market"}, Store: store, ActorType: "player"}
 	arguments := map[string]any{"market_key": marketKey, "item_kind": "equipment", "item_key": "token", "quality_key": "common", "quantity": int64(1)}
 
-	if _, err := tradeBuy(context.Background(), execution, arguments); err != nil {
+	if _, err := worldactions.TradeBuy(context.Background(), execution, arguments); err != nil {
 		t.Fatal(err)
 	}
 	var purchased *storage.CampaignItemInstance
@@ -262,7 +263,7 @@ func TestTradeBuysAndSellsEquipmentInstances(t *testing.T) {
 		t.Fatalf("equipment purchase state: instance=%#v stock=%#v currency=%#v", purchased, store.marketStocks[stockKey], store.stacks[stackKey("stone", "common")])
 	}
 	arguments["item_instance_id"] = purchased.ID.String()
-	if _, err := tradeSell(context.Background(), execution, arguments); err != nil {
+	if _, err := worldactions.TradeSell(context.Background(), execution, arguments); err != nil {
 		t.Fatal(err)
 	}
 	if purchased.State != "consumed" || store.marketStocks[stockKey].Quantity != 2 || store.stacks[stackKey("stone", "common")].Quantity != 90 {
@@ -321,5 +322,5 @@ func stackableDefinition(key, name string) *storage.GameplayDefinition {
 }
 
 func marketStockTestKey(market, kind, item, quality string) string {
-	return market + ":" + marketStockIdentity(kind, item, quality)
+	return market + ":" + worldactions.MarketStockIdentity(kind, item, quality)
 }

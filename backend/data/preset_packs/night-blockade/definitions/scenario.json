@@ -1,0 +1,99 @@
+[
+  {
+    "kind": "stealth.operation",
+    "key": "night-blockade",
+    "name": "夜入封锁区规则",
+    "content": {
+      "locations": [
+        {
+          "key": "entry",
+          "name": "外墙出口",
+          "links": [
+            "courtyard",
+            "tunnel"
+          ],
+          "risk": 5,
+          "locked": false,
+          "hiding": true,
+          "intel": false,
+          "minutes": 5
+        },
+        {
+          "key": "courtyard",
+          "name": "巡逻院落",
+          "links": [
+            "entry",
+            "guardroom",
+            "archive"
+          ],
+          "risk": 20,
+          "locked": false,
+          "hiding": false,
+          "intel": false,
+          "minutes": 5
+        },
+        {
+          "key": "tunnel",
+          "name": "废弃暗渠",
+          "links": [
+            "entry",
+            "archive"
+          ],
+          "risk": 5,
+          "locked": false,
+          "hiding": true,
+          "intel": false,
+          "minutes": 10
+        },
+        {
+          "key": "guardroom",
+          "name": "值班室",
+          "links": [
+            "courtyard"
+          ],
+          "risk": 15,
+          "locked": false,
+          "hiding": true,
+          "intel": true,
+          "minutes": 5
+        },
+        {
+          "key": "archive",
+          "name": "档案室",
+          "links": [
+            "courtyard",
+            "tunnel"
+          ],
+          "risk": 10,
+          "locked": true,
+          "hiding": false,
+          "intel": false,
+          "minutes": 5
+        }
+      ],
+      "start": "entry",
+      "target": "archive",
+      "exits": [
+        "entry"
+      ],
+      "patrol": [
+        "courtyard",
+        "guardroom",
+        "courtyard",
+        "archive"
+      ],
+      "patrol_minutes": 5,
+      "patrol_risk": 20,
+      "pursuit_threshold": 60,
+      "lockpicks": 1,
+      "decoys": 2,
+      "deadline": 120
+    },
+    "tags": [
+      "潜入逃脱"
+    ],
+    "search_text": "夜入封锁区",
+    "visibility": "internal",
+    "sort_order": 0
+  }
+]

@@ -1,7 +1,7 @@
 {
   "id": "mortal-path",
   "name": "青河修仙志",
-  "version": "3.6.2",
+  "version": "3.7.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "从青河村起步，跨越天星海、界墟与上灵界的长期修仙世界。成长、生产、经济、遭遇、任务、NPC 与世界演化均由后端可信规则持续维护。",
   "author": "ialtone",
@@ -37,7 +37,7 @@
       "tone": "success",
       "verifier_key": "core.always",
       "verifier_config": {},
-      "reward_points": 1000
+      "reward_points": 700
     },
     {
       "outcome_key": "law_seeker",
@@ -46,7 +46,34 @@
       "tone": "info",
       "verifier_key": "core.always",
       "verifier_config": {},
-      "reward_points": 1000
+      "reward_points": 700
+    },
+    {
+      "outcome_key": "perished",
+      "category": "failure",
+      "title": "身陨道消",
+      "tone": "error",
+      "verifier_key": "core.always",
+      "verifier_config": {},
+      "reward_points": 0
+    },
+    {
+      "outcome_key": "lifespan_exhausted",
+      "category": "failure",
+      "title": "寿元耗尽",
+      "tone": "error",
+      "verifier_key": "core.always",
+      "verifier_config": {},
+      "reward_points": 0
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "中止求道",
+      "tone": "info",
+      "verifier_key": "core.always",
+      "verifier_config": {},
+      "reward_points": 0
     }
   ],
   "quick_start_guide": "从青河村调查、采集和委托起步，以修炼、生产、交易和遭遇积累实力。境界按凡人、练气、筑基、结丹、元婴、化神、炼虚、合体、大乘递进；筑基后可由落雷崖前往天星海，结丹后进入界墟，化神后登临上灵界。大乘圆满后以渡劫飞升作为终局转折，玩家可选择执掌天关或携律远行。",

@@ -1,0 +1,148 @@
+[
+  {
+    "kind": "sect.foundation",
+    "key": "qinglan-sect",
+    "name": "青岚宗重建规则",
+    "content": {
+      "resources": {
+        "food": "口粮",
+        "wood": "木材",
+        "stone": "石材",
+        "manual": "传承典籍"
+      },
+      "initial_stock": {
+        "food": 25,
+        "wood": 10,
+        "stone": 5,
+        "manual": 1
+      },
+      "facilities": [
+        {
+          "key": "hall",
+          "name": "传承大殿",
+          "build_cost": {
+            "wood": 4,
+            "stone": 3
+          },
+          "upgrade_cost": {
+            "wood": 3,
+            "stone": 3
+          },
+          "max_level": 2
+        },
+        {
+          "key": "workshop",
+          "name": "营造工坊",
+          "build_cost": {
+            "wood": 3,
+            "stone": 2
+          },
+          "upgrade_cost": {
+            "wood": 2,
+            "stone": 2
+          },
+          "max_level": 2
+        }
+      ],
+      "recipes": [
+        {
+          "key": "stone",
+          "name": "开采石材",
+          "facility": "workshop",
+          "level": 1,
+          "inputs": {
+            "food": 1
+          },
+          "outputs": {
+            "stone": 3
+          },
+          "minutes": 240
+        }
+      ],
+      "disciples": [
+        {
+          "key": "shiyan",
+          "name": "石砚",
+          "specialty": "craft",
+          "aptitude": 2,
+          "power": 2,
+          "initial": true,
+          "recruit_cost": {
+            "food": 2
+          }
+        },
+        {
+          "key": "lufeng",
+          "name": "陆锋",
+          "specialty": "guard",
+          "aptitude": 2,
+          "power": 4,
+          "initial": true,
+          "recruit_cost": {
+            "food": 2
+          }
+        },
+        {
+          "key": "shuning",
+          "name": "书宁",
+          "specialty": "study",
+          "aptitude": 3,
+          "power": 1,
+          "initial": true,
+          "recruit_cost": {
+            "food": 2
+          }
+        },
+        {
+          "key": "qinghe",
+          "name": "青禾",
+          "specialty": "craft",
+          "aptitude": 2,
+          "power": 2,
+          "initial": false,
+          "recruit_cost": {
+            "food": 2
+          }
+        }
+      ],
+      "missions": [
+        {
+          "key": "recover",
+          "name": "寻回散落典籍",
+          "cost": {
+            "food": 2
+          },
+          "reward": {
+            "manual": 1,
+            "stone": 2
+          },
+          "minutes": 480,
+          "difficulty": 20
+        }
+      ],
+      "upkeep_resource": "food",
+      "upkeep": 1,
+      "train_cost": {
+        "food": 1
+      },
+      "teach_cost": {
+        "manual": 1
+      },
+      "hall": "hall",
+      "crisis_time": 1440,
+      "threat": 9,
+      "goal_facilities": {
+        "hall": 2,
+        "workshop": 1
+      },
+      "goal_disciples": 4,
+      "deadline": 4320
+    },
+    "tags": [
+      "宗门经营"
+    ],
+    "search_text": "青岚宗重建",
+    "visibility": "internal",
+    "sort_order": 0
+  }
+]

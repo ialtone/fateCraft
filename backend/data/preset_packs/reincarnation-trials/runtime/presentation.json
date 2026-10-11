@@ -1,237 +1,233 @@
 {
   "presentation": {
-    "state_panel_title": "角色状态",
+    "state_panel_title": "此世修行",
     "state_sections": [
       {
-        "key": "identity",
-        "title": "人物档案",
-        "order": 10,
+        "key": "portrait",
+        "title": "人物",
+        "order": 0,
         "fields": [
           {
-            "path": "profile.name",
+            "path": "narrative.name",
             "label": "姓名",
+            "widget": "text",
+            "order": 0
+          },
+          {
+            "path": "narrative.appearance",
+            "label": "外貌",
             "widget": "text",
             "order": 10
           },
           {
-            "path": "profile.gender",
-            "label": "性别",
+            "path": "narrative.background",
+            "label": "身世",
             "widget": "text",
             "order": 20
-          },
+          }
+        ]
+      },
+      {
+        "key": "identity",
+        "title": "这一世",
+        "order": 10,
+        "fields": [
           {
-            "path": "profile.title",
-            "label": "称号",
-            "widget": "text",
-            "order": 30
-          },
-          {
-            "path": "profile.talent",
-            "label": "天赋",
-            "widget": "text",
-            "order": 40
-          },
-          {
-            "path": "profile.background",
+            "path": "gameplay.birth",
             "label": "出身",
             "widget": "text",
-            "order": 50
+            "order": 0
           },
           {
-            "path": "profile.appearance",
-            "label": "外貌",
+            "path": "gameplay.realm",
+            "label": "境界",
             "widget": "text",
+            "order": 10
+          },
+          {
+            "path": "gameplay.age",
+            "label": "年龄",
+            "widget": "number",
+            "order": 20,
+            "unit": "年"
+          },
+          {
+            "path": "gameplay.lifespan",
+            "label": "寿元上限",
+            "widget": "number",
+            "order": 30,
+            "unit": "年"
+          },
+          {
+            "path": "gameplay.remaining_days",
+            "label": "剩余寿元",
+            "widget": "number",
+            "order": 40,
+            "unit": "天"
+          },
+          {
+            "path": "gameplay.elapsed_days",
+            "label": "已过时间",
+            "widget": "number",
+            "order": 50,
+            "unit": "天"
+          },
+          {
+            "path": "gameplay.vigor",
+            "label": "根骨",
+            "widget": "number",
             "order": 60
           },
           {
-            "path": "profile.attire",
-            "label": "服饰",
-            "widget": "text",
+            "path": "gameplay.insight",
+            "label": "悟性",
+            "widget": "number",
             "order": 70
+          },
+          {
+            "path": "gameplay.luck",
+            "label": "气运",
+            "widget": "number",
+            "order": 80
           }
         ]
       },
       {
         "key": "cultivation",
-        "title": "修行",
+        "title": "修行与资源",
         "order": 20,
         "fields": [
           {
-            "path": "profile.cultivation_level",
-            "label": "境界",
-            "widget": "badge",
+            "path": "gameplay.health",
+            "label": "生命",
+            "widget": "progress",
+            "order": 0
+          },
+          {
+            "path": "gameplay.injury",
+            "label": "伤势",
+            "widget": "progress",
             "order": 10
           },
           {
-            "path": "profile.cultivation_stage",
-            "label": "阶段",
-            "widget": "text",
+            "path": "gameplay.progress",
+            "label": "修为进度",
+            "widget": "progress",
             "order": 20
           },
           {
-            "path": "profile.cultivation_progress",
-            "label": "修为进度",
-            "widget": "progress",
-            "unit": "%",
+            "path": "gameplay.method",
+            "label": "传承功法",
+            "widget": "text",
             "order": 30
           },
           {
-            "path": "cultivation.cultivation_method",
-            "label": "当前功法",
-            "widget": "text",
+            "path": "gameplay.karma",
+            "label": "业力",
+            "widget": "number",
             "order": 40
           },
           {
-            "path": "cultivation.breakthrough_attempts",
-            "label": "突破尝试",
-            "widget": "number",
-            "unit": "次",
+            "path": "gameplay.inventory",
+            "label": "随身物资",
+            "widget": "item_list",
             "order": 50
           },
           {
-            "path": "cultivation.failed_breakthroughs",
-            "label": "突破失败",
-            "widget": "number",
-            "unit": "次",
+            "path": "gameplay.goal",
+            "label": "当前目标",
+            "widget": "text",
             "order": 60
-          },
-          {
-            "path": "cultivation.talent_awakened",
-            "label": "天赋觉醒",
-            "widget": "boolean",
-            "order": 70
           }
         ]
       },
       {
-        "key": "lifespan",
-        "title": "寿元",
+        "key": "routes",
+        "title": "飞升准备",
         "order": 30,
         "fields": [
           {
-            "path": "profile.age",
-            "label": "年龄",
+            "path": "gameplay.affinity_qualified",
+            "label": "已完成仙缘委托",
+            "widget": "badge",
+            "order": 0
+          },
+          {
+            "path": "gameplay.affinity_remaining",
+            "label": "剩余仙缘机会",
             "widget": "number",
-            "unit": "年",
             "order": 10
           },
           {
-            "path": "profile.lifespan",
-            "label": "寿元上限",
-            "widget": "number",
-            "unit": "年",
+            "path": "gameplay.affinity_token",
+            "label": "持有仙缘符",
+            "widget": "badge",
             "order": 20
           },
           {
-            "path": "profile.remaining_lifespan",
-            "label": "剩余寿元",
-            "widget": "number",
-            "unit": "年",
-            "order": 30
-          }
-        ]
-      },
-      {
-        "key": "resources",
-        "title": "属性与状态",
-        "order": 40,
-        "fields": [
-          {
-            "path": "attributes",
-            "label": "属性",
-            "widget": "item_list",
-            "order": 10
-          },
-          {
-            "path": "traits",
-            "label": "当前特质",
-            "widget": "list",
-            "order": 20
-          }
-        ]
-      },
-      {
-        "key": "world",
-        "title": "行囊与尘缘",
-        "order": 50,
-        "fields": [
-          {
-            "path": "location.current",
-            "label": "当前位置",
-            "widget": "text",
-            "order": 10
-          },
-          {
-            "path": "inventory",
-            "label": "持有物",
-            "widget": "item_list",
-            "order": 20
-          },
-          {
-            "path": "relationships",
-            "label": "人物关系",
-            "widget": "item_list",
+            "path": "gameplay.rift_discovered",
+            "label": "已发现可用裂缝",
+            "widget": "badge",
             "order": 30
           },
           {
-            "path": "quests",
-            "label": "当前任务",
-            "widget": "list",
-            "order": 40
+            "path": "gameplay.cooldown_days",
+            "label": "准备冷却",
+            "widget": "number",
+            "order": 40,
+            "unit": "天"
           },
           {
-            "path": "risks",
-            "label": "风险与伤势",
-            "widget": "list",
+            "path": "gameplay.preparation",
+            "label": "随身防护准备",
+            "widget": "number",
             "order": 50
-          }
-        ]
-      },
-      {
-        "key": "ascension",
-        "title": "飞升准备",
-        "order": 60,
-        "fields": [
-          {
-            "path": "ascension.void_rift_discovered",
-            "label": "发现虚空裂缝",
-            "widget": "boolean",
-            "order": 10
           },
           {
-            "path": "ascension.ascension_token_owned",
-            "label": "持有飞升符",
-            "widget": "boolean",
-            "order": 20
+            "path": "gameplay.tribulation_active",
+            "label": "正在渡劫",
+            "widget": "badge",
+            "order": 60
           },
           {
-            "path": "ascension.tribulation_preparation",
-            "label": "渡劫准备度",
-            "widget": "progress",
-            "unit": "%",
-            "order": 30
-          },
-          {
-            "path": "ascension.karma_debt",
-            "label": "因果业债",
+            "path": "gameplay.tribulation_attempt",
+            "label": "本世引劫次数",
             "widget": "number",
-            "order": 40
+            "order": 70
+          },
+          {
+            "path": "gameplay.tribulation_wave",
+            "label": "当前雷劫波次",
+            "widget": "number",
+            "order": 80
+          },
+          {
+            "path": "gameplay.outcome_key",
+            "label": "结局",
+            "widget": "text",
+            "order": 90
+          },
+          {
+            "path": "gameplay.death_cause",
+            "label": "死因",
+            "widget": "text",
+            "order": 100
           }
         ]
       }
     ],
     "completion_view": {
       "replay_label": "再入轮回",
-      "back_label": "返回挑战",
-      "empty_reward_text": "此世未能带回奖励"
+      "back_label": "返回玩法",
+      "empty_reward_text": "此世未获飞升积分"
     },
     "terminology": {
-      "challenge": "试炼",
-      "outcome": "结局",
-      "reward": "天命所得"
+      "challenge": "修仙试炼",
+      "outcome": "此世结局",
+      "reward": "积分"
     },
     "value_labels": {
-      "state.profile.cultivation_realm_key": {
+      "state.gameplay.realm_key": {
         "mortal": "凡人",
         "qi-refining": "练气期",
         "foundation": "筑基期",
@@ -241,6 +237,31 @@
         "void-refining": "炼虚期",
         "body-integration": "合体期",
         "great-ascension": "大乘期"
+      },
+      "state.gameplay.outcome_key": {
+        "orthodox_ascension": "渡劫飞升",
+        "void_ascension": "破碎虚空",
+        "affinity_ascension": "仙缘飞升",
+        "peaceful_passing": "从容坐化",
+        "lifespan_exhausted": "寿元耗尽",
+        "perished": "道消身陨",
+        "abandoned": "提前中止"
+      },
+      "state.gameplay.affinity_qualified": {
+        "true": "是",
+        "false": "否"
+      },
+      "state.gameplay.affinity_token": {
+        "true": "是",
+        "false": "否"
+      },
+      "state.gameplay.rift_discovered": {
+        "true": "是",
+        "false": "否"
+      },
+      "state.gameplay.tribulation_active": {
+        "true": "是",
+        "false": "否"
       }
     }
   }

@@ -1,5 +1,20 @@
 # 10. API 与 WebSocket 契约
 
+## 统一玩法行动
+
+仅当前用户可以读取和执行所属对话的纯模块行动：
+
+| 接口 | 输入/输出 |
+| --- | --- |
+| `GET /api/conversations/:id/actions` | `branch_epoch`、`revision`、公开 `gameplay`、`action_capabilities`；不支持纯行动或当前忙碌/已结束时返回空目录 |
+| `POST /api/conversations/:id/actions` | `{request_id, branch_epoch, expected_revision, key, arguments}`；成功返回新 revision、公开 result 及按模式提供的 events/campaign/settlement |
+
+请求 ID 是 UUID，参数与整个行动输入受 8 KiB 限制。服务端复核权限、分支、实时状态和规则；冲突/规则拒绝为 409，`code` 提供 `state.conflict` 或模块原因。同请求重试读取已提交结果，不生成第二次效果。
+
+成功提交广播 `module_action_committed`，客户端重新读取真实状态；Challenge 和 Campaign 同次终局均广播 `challenge_completed.completion`。Campaign 的收尾以领域终态为准，模型不能再写后续行动。模块 DTO、菜单方案与可见性见[24](24-gameplay-module-architecture.md)。
+
+Campaign 玩家动作结果不明时，客户端按存档保存原 `action_id`、参数与 revision，重试同一请求；切换/重新打开对话后，迟到响应不得覆盖新作用域。动作已提交但快照刷新失败时保留成功事实并提示刷新，不重新执行。玩家动作成功和 `agent.turn.completed` 后刷新账号余额，涵盖阶段到账与终局所得。青河通过 `cultivation.retreat` 闭关、`character.recover` 恢复，阶段奖励随合法动作自动核验和发放；`cultivation.begin_ascension` 引劫与终局任务仍须玩家行动，具体参数取动态目录，见 [16](16-cultivation-campaign-agent-reference.md) 与 [21](21-campaign-outcome-rewards.md)。
+
 ## 通用约定
 
 - REST 前缀为 `/api`，WebSocket 前缀为 `/ws`。
@@ -130,9 +145,9 @@ POST /api/campaigns/:id/abandon
 
 创建存档只接收挑战 slug、Persona slug 和可选标题；标题为空时使用玩法名称。后端固定发布版本、内容哈希和资产。`POST /api/campaigns/:id/conversations` 不接收独立标题，只创建一次并继承存档名，重复创建返回 409。领域动作必须提交 `action_id`、稳定 `key`、`expected_revision` 和严格参数对象。成功响应包含更新后的 Campaign、事件和公开结果；同一 `action_id` 重试返回 `replayed=true`，并发旧 revision 返回 409。
 
-`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。完成态还包含平台保留的 `reward_points` 与 `outcome_rewards`，展示本次实际积分和入账后余额快照。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
+`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。所有快照均包含平台保留的 `reward_points`（实际终局积分）、`outcome_rewards`、`stage_rewards`、`stage_reward_points`（实际阶段合计）和 `total_reward_points`（两者之和）。`stage_rewards` 保存阶段 key、名称、配置/实际积分、停发原因与领取时间。改写后的活动存档仍保留已经领取的账号事实；直连实际积分为 0。局内阶段可用性由 `progression` 提供，不能用历史到账代替当前分支前置。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
 
-阶段 3 玩家动作 key 为 `craft.learn_recipe`、`craft.execute_recipe`、`trade.buy` 和 `trade.sell`。配方动作只接收 `recipe_key`；交易动作接收 `market_key`、`item_kind`、`item_key`、`quality_key` 和 `quantity`，出售独立装备时还必须提交 `item_instance_id` 且数量为 1。服务端计算材料选择、成败、品质、补货和价格，响应 `result` 仅用于展示，不能作为下一次请求的可信输入。
+制作交易玩家动作 key 包括 `craft.learn_recipe`、`craft.execute_recipe`、`trade.buy` 和 `trade.sell`。配方动作只接收 `recipe_key`；交易动作接收 `market_key`、`item_kind`、`item_key`、`quality_key` 和 `quantity`，出售独立装备时还必须提交 `item_instance_id` 且数量为 1。服务端计算材料选择、成败、品质、补货和价格，响应 `result` 仅用于展示，不能作为下一次请求的可信输入。
 
 阶段 4 玩家动作 key 为 `quest.accept` 与 `quest.submit`，两者只接收 `quest_key`。接受时由后端确定截止游戏时间并创建计划事件；提交时重新读取权威领域表核验目标，客户端不能提交进度、完成状态或奖励。世界事件由所有领域动作统一的事务包装器在时间推进后处理，不提供允许客户端指定模板、变体或效果的 API。
 
@@ -148,7 +163,7 @@ POST   /api/conversations/:id/continue
 POST   /api/messages/:id/edit-and-regenerate
 ```
 
-消息写操作必须解析消息所属对话，再校验当前用户和 active 状态。不能只按 message ID 更新。内部消息没有通用 PATCH/DELETE API；edit-and-regenerate 必须经过 Runtime capability、奖励消费、分支和不可回滚副作用检查。
+消息写操作必须解析消息所属对话，再校验当前用户和 active 状态。不能只按 message ID 更新。内部消息没有通用 PATCH/DELETE API；edit-and-regenerate 必须经过 Runtime capability、奖励消费、分支与完整检查点检查。
 
 `roll_result` 的 `metadata` 可包含版本化判定详情：`details_version`、`roll_key`、`roll_title`、`roll_category`、`roll_outcome` 和 `conditions`。`roll_outcome` 至少包含 `rolled`、`sides`、`success_rate`、`success`、`level`、`breakdown` 与服务端计算的 `success_range`；`conditions` 只返回公开条件投影，客户端必须忽略未知版本和非公开条件。该详情随现有消息 REST 响应及 `message_created` 一起传输，不新增接口或数据库列；旧客户端继续只渲染 `markdown`。
 
@@ -347,7 +362,7 @@ POST /api/admin/challenge-versions/:id/publish
 
 预览接口返回当前/拟导入结局积分规则，确认时在事务中重新计算 token；过期返回冲突，需重新预览。
 
-gameplay-modules 返回服务端已经安装的 engine、动作、verifier 与 settlement handler，仅用于选择可信能力。结局通过 reward_points 设置固定积分。
+gameplay-modules 返回已安装的 engine、动作、定义 Schema、verifier 与 settlement handler。结局通过 reward_points 设置固定终局积分；支持阶段预算的定义 Schema 以 `x-reward-budget` 声明阶段数组、积分、结局与总额字段，后台据此显示“阶段 + 终局 = 总预算”，发布时仍由后端复核。
 
 挑战版本 PUT 接受：
 
@@ -440,7 +455,9 @@ GET /ws/llm-relay
 生产推荐由同一域名反代前后端，避免跨站 Cookie 的 SameSite 限制。
 ### 回合运行面板
 
-`GET /api/conversations/:id/runtime-inspector` 返回玩家可见的本回合运行投影，聚合当前活动、最近上下文请求、性能、记忆状态、安全诊断和进程级只读内容缓存统计。`cache` 包含驻留条目与上限、估算字节与上限、命中/未命中、加载/失败、冷加载合并、淘汰及累计加载/编译耗时；不包含缓存键或正文。该接口不暴露 Prompt、世界书、密钥、原始响应或隐藏工具参数；前端可在重连/刷新时用快照恢复，实时状态仍由现有 WebSocket 活动事件驱动。
+`GET /api/conversations/:id/runtime-inspector` 返回玩家运行面板投影。当前活动实时更新；性能和上下文只取最近一次成功完成且未失效的回合尝试，失败、部分完成、取消或运行中的尝试不替换上次成功结果。性能仅统计完成的模型步骤及已提交工具，失败诊断仍完整保留于管理日志。`context_built` 不直接更新玩家统计，成功完成后或重连时读取快照。
+
+`activity.memory_job` 返回最新归档任务的公开元数据：状态、目标回合、执行次数/上限、排队/开始/结束时间；`memory_archive` 返回当前有效归档覆盖回合和 Token 数。活动接口也返回 `memory_job`，用于轮询更新。归档正文、Worker、租约和原始错误不公开。进程级共享内容缓存与当前用户回合成功无关，不再通过此接口返回或在回合面板展示；底层缓存与诊断日志不因生成失败而伪造回滚。该接口不暴露 Prompt、世界书、密钥、原始响应或隐藏工具参数。
 
 ## 对话分享 API
 
@@ -503,3 +520,13 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 模型、上下文、管理员审计列表统一返回 `{logs,next_cursor,has_more}`，均支持 `from/until/limit/cursor`，按 `(created_at DESC,id DESC)` 分页并保留时间精度；游标绑定种类与筛选。模型另支持 conversation_id、attempt_id、trace_id、purpose、model、success；上下文支持 conversation_id、attempt_id；管理审计支持 actor_id、action。非法游标返回 400；详情 404 可能是已清理。
 
 诊断状态返回 `{instance_id,writer,cleanup}`，读取进程内队列和最近清理状态，不扫描日志表。具体字段与权限边界见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
+
+
+## 结局提议与恢复接口（2026-10-11）
+
+新增 `GET /conversations/:id/endings`：返回 revision、branch_epoch、has_trusted_actions、abandon_action、ending_capabilities、proposal、completion、is_processing。提议事件为 `ending.proposed`；两种模式的真实结束都返回/广播 `CompletionView`，WS 字段为 `challenge_completed.completion`。确认仍调用现有玩家动作端点。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
+
+
+### 玩法入口启用状态
+
+`PUT /api/admin/challenges/:id/enabled`（管理员）请求 `{ "enabled": true }` 或 `{ "enabled": false }`，返回更新后的 ChallengePack。缺少布尔值返回 400；没有当前已发布版本的包拒绝操作。停用使玩家列表、详情和新开局不可用，已有存档可继续。`GET /api/admin/builtin-challenges` 额外返回每个已导入包的 `pack_id` 和 `enabled`，未导入项没有 `pack_id`。

@@ -12,7 +12,7 @@ func TestCapabilityAndRequestedSessionEvaluationShareBoundary(t *testing.T) {
 		Character: &storage.CampaignCharacter{Mana: 11},
 		Technique: storage.CampaignTechnique{TechniqueKey: "breathing", Status: "active", EquippedSlot: &slot, LearnedLayer: 1},
 		Definition: storage.GameplayDefinition{Content: storage.JSONMap{
-			"mana_cost": int64(1), "practice_minutes": int64(60), "cultivation_gain": int64(10), "mastery_gain": int64(25),
+			"max_layer": int64(12), "mana_cost": int64(1), "practice_minutes": int64(60), "cultivation_gain": int64(10), "mastery_gain": int64(25),
 			"layer_effects": []any{map[string]any{"layer": int64(1), "effects": map[string]any{}}},
 		}},
 	}

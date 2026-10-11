@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 )
 
 func TestGenericCampaignViewFixtureUsesSharedContract(t *testing.T) {
@@ -93,9 +93,6 @@ func TestGenericCampaignModuleAcceptsRealmFreeRuntime(t *testing.T) {
 		}}},
 		Actions:      gameplay.ActionConfig{Model: []string{"update_state", "domain_action"}},
 		Presentation: gameplay.Presentation{StatePanelTitle: "World"},
-	}
-	if registry.CampaignRequiresRealm(contract) {
-		t.Fatal("generic Campaign must not require cultivation realms")
 	}
 	if err := registry.ValidateRuntime(contract); err != nil {
 		t.Fatalf("generic runtime rejected: %v", err)

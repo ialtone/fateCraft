@@ -1,0 +1,977 @@
+[
+  {
+    "kind": "recipe",
+    "key": "healing-pill-recipe",
+    "name": "回春丸方",
+    "content": {
+      "craft_type": "alchemy",
+      "starting_known": true,
+      "allowed_location_keys": [
+        "green-river-village",
+        "bluestone-market"
+      ],
+      "inputs": [
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "green-river-herb",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "clear-spring-water",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "novice-pill-furnace"
+      ],
+      "technique_key": "basic-alchemy",
+      "min_technique_mastery": 0,
+      "min_realm_rank": 0,
+      "mana_cost": 2,
+      "craft_minutes": 180,
+      "success_chance_bps": 7200,
+      "mastery_bonus_bps": 1800,
+      "failure_input_loss_bps": 7500,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "healing-pill",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 7500,
+            "fine": 2200,
+            "superior": 300
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "pill-dregs",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ],
+      "failure_effect": {
+        "mana_damage": 2,
+        "category": "poison",
+        "effect_key": "minor-pill-toxin",
+        "severity": 8,
+        "duration_minutes": 720,
+        "description": "试药时吸入少量驳杂丹气"
+      }
+    },
+    "tags": [
+      "炼丹",
+      "丹方"
+    ],
+    "search_text": "回春丸 炼丹 青河草",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "recipe",
+    "key": "greenwood-token-recipe",
+    "name": "灵木护符炼法",
+    "content": {
+      "craft_type": "artifact",
+      "source_item_key": "recipe-jade.greenwood-token",
+      "allowed_location_keys": [
+        "bluestone-market"
+      ],
+      "inputs": [
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "green-pattern-ore",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "spirit-wood",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "hundred-forge-hammer"
+      ],
+      "technique_key": "basic-forging",
+      "min_technique_mastery": 0,
+      "min_realm_rank": 0,
+      "mana_cost": 4,
+      "craft_minutes": 360,
+      "success_chance_bps": 6200,
+      "mastery_bonus_bps": 2200,
+      "failure_input_loss_bps": 10000,
+      "outputs": [
+        {
+          "kind": "equipment",
+          "key": "spirit-wood-token",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 8000,
+            "fine": 1800,
+            "superior": 200
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "refining-slag",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ],
+      "failure_effect": {
+        "health_damage": 8,
+        "category": "injury",
+        "effect_key": "forge-burn",
+        "severity": 12,
+        "duration_minutes": 1440,
+        "description": "炉火失控造成轻微灼伤"
+      }
+    },
+    "tags": [
+      "炼器",
+      "法器配方"
+    ],
+    "search_text": "灵木护符 炼器 青纹矿",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "recipe",
+    "key": "ward-talisman-recipe",
+    "name": "护身符法",
+    "content": {
+      "craft_type": "talisman",
+      "starting_known": true,
+      "allowed_location_keys": [
+        "green-river-village",
+        "bluestone-market"
+      ],
+      "inputs": [
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "blank-talisman-paper",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "spirit-cinnabar",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "spirit-line-brush"
+      ],
+      "technique_key": "basic-talisman",
+      "min_technique_mastery": 0,
+      "min_realm_rank": 0,
+      "mana_cost": 3,
+      "craft_minutes": 120,
+      "success_chance_bps": 7600,
+      "mastery_bonus_bps": 1600,
+      "failure_input_loss_bps": 10000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "ward-talisman",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 8200,
+            "fine": 1600,
+            "superior": 200
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "ruined-talisman",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "制符",
+      "符法"
+    ],
+    "search_text": "护身符 制符 灵砂",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "recipe",
+    "key": "detox-pill-recipe",
+    "name": "清瘴丹方",
+    "content": {
+      "craft_type": "alchemy",
+      "source_item_key": "recipe-slip.detox-pill",
+      "allowed_location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "herb-valley"
+      ],
+      "inputs": [
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "green-river-herb",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "swamp-venom-sac",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "novice-pill-furnace"
+      ],
+      "technique_key": "basic-alchemy",
+      "min_technique_mastery": 120,
+      "min_realm_rank": 0,
+      "mana_cost": 3,
+      "craft_minutes": 210,
+      "success_chance_bps": 6600,
+      "mastery_bonus_bps": 2200,
+      "failure_input_loss_bps": 8000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "detox-pill",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 7600,
+            "fine": 2100,
+            "superior": 300
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "pill-dregs",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ],
+      "failure_effect": {
+        "health_damage": 4,
+        "category": "poison",
+        "effect_key": "swamp-pill-toxin",
+        "severity": 12,
+        "duration_minutes": 720,
+        "description": "未炼净的瘴毒反噬经脉"
+      }
+    },
+    "tags": [
+      "炼丹",
+      "解毒"
+    ],
+    "search_text": "清瘴丹 南沼 解毒",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "recipe",
+    "key": "spirit-restoring-recipe",
+    "name": "复灵散方",
+    "content": {
+      "craft_type": "alchemy",
+      "source_item_key": "recipe-slip.spirit-restoring",
+      "allowed_location_keys": [
+        "bluestone-market",
+        "outer-courtyard",
+        "herb-valley"
+      ],
+      "inputs": [
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "moon-dew",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "clear-spring-water",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "spirit-rice",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "novice-pill-furnace"
+      ],
+      "technique_key": "basic-alchemy",
+      "min_technique_mastery": 260,
+      "min_realm_rank": 1,
+      "mana_cost": 5,
+      "craft_minutes": 240,
+      "success_chance_bps": 6000,
+      "mastery_bonus_bps": 2600,
+      "failure_input_loss_bps": 9000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "spirit-restoring-powder",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 7200,
+            "fine": 2400,
+            "superior": 400
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "pill-dregs",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼丹",
+      "法力"
+    ],
+    "search_text": "复灵散 月华露 法力",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "recipe",
+    "key": "body-tempering-recipe",
+    "name": "淬体汤方",
+    "content": {
+      "craft_type": "alchemy",
+      "source_item_key": "recipe-slip.body-tempering",
+      "allowed_location_keys": [
+        "green-river-village",
+        "county-town",
+        "bluestone-market"
+      ],
+      "inputs": [
+        {
+          "quantity": 3,
+          "options": [
+            {
+              "item_key": "spirit-rice",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "green-river-herb",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "red-flame-fruit",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "novice-pill-furnace"
+      ],
+      "technique_key": "basic-alchemy",
+      "min_technique_mastery": 180,
+      "min_realm_rank": 0,
+      "mana_cost": 3,
+      "craft_minutes": 300,
+      "success_chance_bps": 6800,
+      "mastery_bonus_bps": 2000,
+      "failure_input_loss_bps": 7000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "body-tempering-brew",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 7800,
+            "fine": 1900,
+            "superior": 300
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "pill-dregs",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼丹",
+      "炼体"
+    ],
+    "search_text": "淬体汤 灵米 炼体",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "recipe",
+    "key": "green-mist-sword-recipe",
+    "name": "青岚灵剑炼法",
+    "content": {
+      "craft_type": "artifact",
+      "source_item_key": "recipe-slip.green-mist-sword",
+      "allowed_location_keys": [
+        "bluestone-market",
+        "outer-courtyard",
+        "county-town"
+      ],
+      "inputs": [
+        {
+          "quantity": 3,
+          "options": [
+            {
+              "item_key": "green-pattern-ore",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "star-iron-sand",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "spirit-wood",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "hundred-forge-hammer"
+      ],
+      "technique_key": "basic-forging",
+      "min_technique_mastery": 420,
+      "min_realm_rank": 1,
+      "mana_cost": 10,
+      "craft_minutes": 720,
+      "success_chance_bps": 5400,
+      "mastery_bonus_bps": 3000,
+      "failure_input_loss_bps": 10000,
+      "outputs": [
+        {
+          "kind": "equipment",
+          "key": "green-mist-sword",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 7200,
+            "fine": 2400,
+            "superior": 400
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "refining-slag",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ],
+      "failure_effect": {
+        "health_damage": 12,
+        "category": "injury",
+        "effect_key": "sword-forge-burn",
+        "severity": 18,
+        "duration_minutes": 1440,
+        "description": "灵材失衡引起炉火爆燃"
+      }
+    },
+    "tags": [
+      "炼器",
+      "剑器"
+    ],
+    "search_text": "青岚灵剑 星铁砂 炼器",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "recipe",
+    "key": "blackwater-cloak-recipe",
+    "name": "玄水隐袍炼法",
+    "content": {
+      "craft_type": "artifact",
+      "source_item_key": "recipe-slip.blackwater-cloak",
+      "allowed_location_keys": [
+        "south-marsh",
+        "bluestone-market"
+      ],
+      "inputs": [
+        {
+          "quantity": 3,
+          "options": [
+            {
+              "item_key": "mist-beast-hide",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "moon-dew",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "spirit-cinnabar",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "hundred-forge-hammer"
+      ],
+      "technique_key": "basic-forging",
+      "min_technique_mastery": 360,
+      "min_realm_rank": 1,
+      "mana_cost": 8,
+      "craft_minutes": 600,
+      "success_chance_bps": 5700,
+      "mastery_bonus_bps": 2800,
+      "failure_input_loss_bps": 9000,
+      "outputs": [
+        {
+          "kind": "equipment",
+          "key": "blackwater-cloak",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 7500,
+            "fine": 2200,
+            "superior": 300
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "refining-slag",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼器",
+      "隐匿"
+    ],
+    "search_text": "玄水隐袍 雾狸皮 炼器",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "recipe",
+    "key": "flame-talisman-recipe",
+    "name": "烈焰符法",
+    "content": {
+      "craft_type": "talisman",
+      "source_item_key": "recipe-slip.flame-talisman",
+      "allowed_location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town"
+      ],
+      "inputs": [
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "blank-talisman-paper",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "spirit-cinnabar",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "red-flame-fruit",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "spirit-line-brush"
+      ],
+      "technique_key": "basic-talisman",
+      "min_technique_mastery": 180,
+      "min_realm_rank": 0,
+      "mana_cost": 5,
+      "craft_minutes": 150,
+      "success_chance_bps": 6500,
+      "mastery_bonus_bps": 2400,
+      "failure_input_loss_bps": 10000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "flame-talisman",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 7800,
+            "fine": 1900,
+            "superior": 300
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "ruined-talisman",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "制符",
+      "火行"
+    ],
+    "search_text": "烈焰符 赤焰果 制符",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "recipe",
+    "key": "thunder-talisman-recipe",
+    "name": "惊雷符法",
+    "content": {
+      "craft_type": "talisman",
+      "source_item_key": "recipe-slip.thunder-talisman",
+      "allowed_location_keys": [
+        "bluestone-market",
+        "outer-courtyard",
+        "mist-cliff"
+      ],
+      "inputs": [
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "blank-talisman-paper",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "spirit-cinnabar",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "lightning-bamboo",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "spirit-line-brush"
+      ],
+      "technique_key": "basic-talisman",
+      "min_technique_mastery": 420,
+      "min_realm_rank": 1,
+      "mana_cost": 9,
+      "craft_minutes": 240,
+      "success_chance_bps": 5200,
+      "mastery_bonus_bps": 3200,
+      "failure_input_loss_bps": 10000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "thunder-talisman",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 7000,
+            "fine": 2500,
+            "superior": 500
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "ruined-talisman",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ],
+      "failure_effect": {
+        "mana_damage": 8,
+        "category": "injury",
+        "effect_key": "talisman-shock",
+        "severity": 16,
+        "duration_minutes": 720,
+        "description": "雷意逸散灼伤经脉"
+      }
+    },
+    "tags": [
+      "制符",
+      "雷行"
+    ],
+    "search_text": "惊雷符 雷纹竹 制符",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "recipe",
+    "key": "core-forming-pill-recipe",
+    "name": "凝丹星露炼法",
+    "content": {
+      "craft_type": "alchemy",
+      "source_item_key": "recipe-slip.core-forming-pill",
+      "allowed_location_keys": [
+        "tide-star-market",
+        "ancient-star-observatory"
+      ],
+      "inputs": [
+        {
+          "quantity": 1,
+          "options": [
+            {
+              "item_key": "abyssal-beast-core",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "celestial-herb",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "novice-pill-furnace"
+      ],
+      "technique_key": "basic-alchemy",
+      "min_technique_mastery": 600,
+      "min_realm_rank": 2,
+      "mana_cost": 40,
+      "craft_minutes": 1440,
+      "success_chance_bps": 4600,
+      "mastery_bonus_bps": 3600,
+      "failure_input_loss_bps": 10000,
+      "outputs": [
+        {
+          "kind": "item",
+          "key": "core-forming-pill",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 7000,
+            "fine": 2500,
+            "superior": 500
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "refining-slag",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼丹",
+      "结丹"
+    ],
+    "search_text": "凝丹星露 炼丹",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "recipe",
+    "key": "void-compass-recipe",
+    "name": "定界盘炼法",
+    "content": {
+      "craft_type": "artifact",
+      "source_item_key": "recipe-slip.void-compass",
+      "allowed_location_keys": [
+        "tide-star-market",
+        "void-crossing-gate"
+      ],
+      "inputs": [
+        {
+          "quantity": 4,
+          "options": [
+            {
+              "item_key": "void-crystal",
+              "quality_key": "common"
+            }
+          ]
+        },
+        {
+          "quantity": 2,
+          "options": [
+            {
+              "item_key": "star-iron-sand",
+              "quality_key": "common"
+            }
+          ]
+        }
+      ],
+      "required_equipment_keys": [
+        "hundred-forge-hammer"
+      ],
+      "technique_key": "basic-forging",
+      "min_technique_mastery": 700,
+      "min_realm_rank": 3,
+      "mana_cost": 55,
+      "craft_minutes": 2160,
+      "success_chance_bps": 4200,
+      "mastery_bonus_bps": 3800,
+      "failure_input_loss_bps": 9000,
+      "outputs": [
+        {
+          "kind": "equipment",
+          "key": "void-compass",
+          "quantity": 1,
+          "quality_weights": {
+            "common": 7200,
+            "fine": 2400,
+            "superior": 400
+          }
+        }
+      ],
+      "failure_outputs": [
+        {
+          "kind": "item",
+          "key": "refining-slag",
+          "quantity": 2,
+          "quality_weights": {
+            "common": 1
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼器",
+      "虚空"
+    ],
+    "search_text": "定界盘 炼器",
+    "visibility": "player",
+    "sort_order": 120
+  }
+]

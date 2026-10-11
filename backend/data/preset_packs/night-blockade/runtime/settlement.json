@@ -1,0 +1,5 @@
+{
+  "settlement": {
+    "handler": "core.challenge_completion"
+  }
+}

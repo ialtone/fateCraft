@@ -1,0 +1,23 @@
+{
+  "id": "inn-setting",
+  "name": "客栈经营见闻",
+  "description": "经营背景与公开规则",
+  "entries": [
+    {
+      "id": "inn-world",
+      "world_book_id": "inn-setting",
+      "title": "食宿相依",
+      "content": "厨房制作餐食，升级后的客房用餐食与原料准备住宿服务。订单需要实际库存。每日经营支出和订单违约可能形成欠款，出售库存或完成订单会优先还债；建筑不能变卖。生产和订单只随游戏时间推进。",
+      "keywords": [
+        "客栈",
+        "订单",
+        "生产"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

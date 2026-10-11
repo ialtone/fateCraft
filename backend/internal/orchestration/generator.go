@@ -21,7 +21,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/chat"
 	"github.com/ialtone/fatecraft/internal/conversation"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/guidance"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/llm"
@@ -370,7 +370,7 @@ func (g *Generator) Regenerate(ctx context.Context, convID, requestID uuid.UUID,
 		InitialState:   storage.JSONMap(gameplay.InitialState(contract.StateSchema)),
 	})
 	if err != nil {
-		if errors.Is(err, storage.ErrCampaignHistoryImmutable) || errors.Is(err, storage.ErrRegenerateNotAllowed) || errors.Is(err, storage.ErrInsufficientReward) {
+		if errors.Is(err, storage.ErrCampaignCheckpointMissing) || errors.Is(err, storage.ErrRegenerateNotAllowed) || errors.Is(err, storage.ErrInsufficientReward) {
 			emit(infoEvent(convID, err.Error()))
 		} else {
 			emit(errorEvent(convID, "准备重新生成失败: "+err.Error()))
@@ -439,7 +439,7 @@ func (g *Generator) Rewrite(ctx context.Context, convID, requestID, messageID uu
 		InitialState:   storage.JSONMap(gameplay.InitialState(contract.StateSchema)),
 	})
 	if err != nil {
-		if errors.Is(err, storage.ErrInsufficientReward) || errors.Is(err, storage.ErrCampaignHistoryImmutable) {
+		if errors.Is(err, storage.ErrInsufficientReward) || errors.Is(err, storage.ErrCampaignCheckpointMissing) {
 			emit(infoEvent(convID, err.Error()))
 		} else {
 			emit(errorEvent(convID, "准备剧情改写失败: "+err.Error()))

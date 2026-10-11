@@ -49,11 +49,11 @@ type repository interface {
 }
 
 type campaignSnapshotter interface {
-	Snapshot(context.Context, uuid.UUID) (map[string]any, error)
+	InquirySnapshot(context.Context, uuid.UUID) (map[string]any, error)
 }
 
 type playerStateProjector interface {
-	ProjectPlayer(context.Context, uuid.UUID, map[string]any) (map[string]any, error)
+	ProjectInquiry(context.Context, uuid.UUID, map[string]any) (map[string]any, error)
 }
 
 type settingsProvider interface {
@@ -230,7 +230,7 @@ func (s *Service) Ask(ctx context.Context, conversationID uuid.UUID, question st
 	if s.states == nil {
 		return nil, errors.New("角色问答缺少玩家状态投影器")
 	}
-	snapshot.State, err = s.states.ProjectPlayer(ctx, conversationID, snapshot.State)
+	snapshot.State, err = s.states.ProjectInquiry(ctx, conversationID, snapshot.State)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func (s *Service) Ask(ctx context.Context, conversationID uuid.UUID, question st
 	sources := authoritativeSources(snapshot)
 	snapshotBecameStale := false
 	if snapshot.Conversation.CampaignID != nil && s.campaigns != nil {
-		projection, projectionErr := s.campaigns.Snapshot(ctx, *snapshot.Conversation.CampaignID)
+		projection, projectionErr := s.campaigns.InquirySnapshot(ctx, *snapshot.Conversation.CampaignID)
 		if projectionErr != nil {
 			return nil, projectionErr
 		}

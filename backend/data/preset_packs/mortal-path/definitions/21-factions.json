@@ -1,0 +1,251 @@
+[
+  {
+    "kind": "faction",
+    "key": "green-mist-sect",
+    "name": "青岚门",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {
+        "outer_gate_access": 100
+      },
+      "position_thresholds": {
+        "outer_disciple": 1000,
+        "inner_disciple": 5000
+      },
+      "resource": "北山灵脉",
+      "goal": "维持青河郡修行秩序与灵脉控制"
+    },
+    "tags": [
+      "宗门",
+      "正道"
+    ],
+    "search_text": "青岚门 宗门 灵脉",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "faction",
+    "key": "hundred-herbs-guild",
+    "name": "百草商会",
+    "content": {
+      "initial_reputation": 50,
+      "position_thresholds": {
+        "registered_trader": 500,
+        "guild_steward": 3000
+      },
+      "resource": "药材商路",
+      "goal": "维持坊市贸易并扩张药材收购网络"
+    },
+    "tags": [
+      "商会",
+      "中立"
+    ],
+    "search_text": "百草商会 药材 坊市",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "faction",
+    "key": "blackwater-league",
+    "name": "黑水盟",
+    "content": {
+      "initial_reputation": -100,
+      "resource": "南沼暗线",
+      "goal": "绕过宗门与商会控制建立地下商路"
+    },
+    "tags": [
+      "灰色势力",
+      "黑市"
+    ],
+    "search_text": "黑水盟 南沼 黑市",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "faction",
+    "key": "liang-magistracy",
+    "name": "大梁青河署",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {
+        "county_archive_access": 120
+      },
+      "position_thresholds": {
+        "registered_agent": 600,
+        "county_consultant": 2600
+      },
+      "resource": "凡俗户籍、驿道与地方武备",
+      "goal": "维持县境秩序并避免修士冲突波及凡人"
+    },
+    "tags": [
+      "官府",
+      "凡俗势力"
+    ],
+    "search_text": "大梁 青河署 官府 县城",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "faction",
+    "key": "loose-cultivator-association",
+    "name": "青河散修会",
+    "content": {
+      "initial_reputation": 20,
+      "permission_thresholds": {
+        "member_trade_access": 80
+      },
+      "position_thresholds": {
+        "registered_member": 400,
+        "route_keeper": 2200
+      },
+      "resource": "散修信息、临时队伍与旧街会馆",
+      "goal": "为无宗门修士维持安全商路和公平委托"
+    },
+    "tags": [
+      "散修",
+      "互助组织"
+    ],
+    "search_text": "青河 散修会 会馆 委托",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "faction",
+    "key": "red-cloud-temple",
+    "name": "赤霞观",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {
+        "inner_fire_hall_access": 160
+      },
+      "position_thresholds": {
+        "registered_disciple": 800,
+        "fire_hall_disciple": 3600
+      },
+      "resource": "落雷崖火脉与火行符法",
+      "goal": "保住小宗传承并争取落雷崖资源"
+    },
+    "tags": [
+      "宗门",
+      "火行"
+    ],
+    "search_text": "赤霞观 宗门 火行 落雷崖",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "faction",
+    "key": "green-river-lin-clan",
+    "name": "青河林氏",
+    "content": {
+      "initial_reputation": 10,
+      "permission_thresholds": {
+        "clan_library_access": 140
+      },
+      "position_thresholds": {
+        "guest_farmer": 500,
+        "clan_guest": 2800
+      },
+      "resource": "北麓灵田、药苗与水行家传",
+      "goal": "维持灵田收益并避免被宗门和商会吞并"
+    },
+    "tags": [
+      "修仙家族",
+      "灵植"
+    ],
+    "search_text": "青河 林氏 修仙家族 灵田",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "faction",
+    "key": "star-sail-alliance",
+    "name": "星舟盟",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {
+        "deep_sea_charter": 180
+      },
+      "position_thresholds": {
+        "registered_passenger": 500,
+        "star_navigator": 4000
+      },
+      "resource": "跨海星舟、潮汐星图与海市",
+      "goal": "维持天星海航路和星图垄断"
+    },
+    "tags": [
+      "商盟",
+      "星海"
+    ],
+    "search_text": "星舟盟 航路 星图",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "faction",
+    "key": "boundary-watch",
+    "name": "守界司",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {
+        "rift_clearance": 220
+      },
+      "position_thresholds": {
+        "registered_scout": 800,
+        "rift_warden": 5200
+      },
+      "resource": "渡虚关、界隙监测阵与守界军",
+      "goal": "封合失控界隙并阻止渊庭渗透"
+    },
+    "tags": [
+      "守界",
+      "军府"
+    ],
+    "search_text": "守界司 渡虚关",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "faction",
+    "key": "nine-law-court",
+    "name": "九律道庭",
+    "content": {
+      "initial_reputation": 0,
+      "permission_thresholds": {
+        "law_archive_access": 260
+      },
+      "position_thresholds": {
+        "outer_auditor": 1200,
+        "law_warden": 8000
+      },
+      "resource": "万律城、法则典籍与天关阵枢",
+      "goal": "维持上灵界法则秩序并决定下界接引名额"
+    },
+    "tags": [
+      "道统",
+      "上界"
+    ],
+    "search_text": "九律道庭 万律城",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "faction",
+    "key": "abyss-court",
+    "name": "渊庭",
+    "content": {
+      "initial_reputation": -200,
+      "permission_thresholds": {},
+      "position_thresholds": {},
+      "resource": "海渊兽群与界外裂隙",
+      "goal": "借空间潮汐侵入人间与上灵界"
+    },
+    "tags": [
+      "敌对势力",
+      "界外"
+    ],
+    "search_text": "渊庭 渊兽 界外",
+    "visibility": "player",
+    "sort_order": 110
+  }
+]

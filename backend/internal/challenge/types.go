@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/platformcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
@@ -72,10 +72,11 @@ type RewardView struct {
 }
 
 type PublicRuntime struct {
-	EngineKey    string                         `json:"engine_key"`
-	Mode         string                         `json:"mode"`
-	Presentation gameplay.Presentation          `json:"presentation"`
-	Capabilities map[string]gameplay.Capability `json:"capabilities"`
+	EngineKey         string                         `json:"engine_key"`
+	Mode              string                         `json:"mode"`
+	HasTrustedActions bool                           `json:"has_trusted_actions"`
+	Presentation      gameplay.Presentation          `json:"presentation"`
+	Capabilities      map[string]gameplay.Capability `json:"capabilities"`
 	// PlatformCapabilities are owned by Fatecraft and are independent of the
 	// selected challenge package. Gameplay capabilities remain in Capabilities.
 	PlatformCapabilities map[string]platformcapability.Capability `json:"platform_capabilities"`

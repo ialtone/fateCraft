@@ -1,0 +1,104 @@
+{
+  "id": "island-rescue",
+  "name": "荒岛求援",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "在有限的食物、饮水与体力中探索荒岛，制作求援装置并赶上救援窗口。",
+  "author": "Fatecraft",
+  "icon": "leaf",
+  "tags": [
+    "生存探索",
+    "资源管理",
+    "制作"
+  ],
+  "default_config": {
+    "recommended_character": "island-narrator",
+    "recommended_persona": "castaway",
+    "recommended_scenario": "island-beach",
+    "recommended_prompt": "island-guide",
+    "required_worldbooks": [
+      "island-setting"
+    ],
+    "allowed_personas": [
+      "castaway"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "rescued",
+      "category": "success",
+      "title": "获救归航",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "rescued"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "perished",
+      "category": "failure",
+      "title": "荒岛陨落",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "perished"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "错过救援",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "timeout"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "放弃求援",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "abandoned"
+          }
+        ]
+      }
+    }
+  ],
+  "quick_start_guide": "观察周围，采集制作材料，留意饥渴与环境风险。制作求援装置后返回海滩，在救援窗口点击发出求援信号。示例结局暂不发放积分。",
+  "features": [
+    "有限资源",
+    "可信制作",
+    "饥渴与天气",
+    "救援窗口"
+  ],
+  "dependencies": []
+}

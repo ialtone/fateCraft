@@ -1,0 +1,36 @@
+{
+  "campaign": {
+    "lifecycle_handler": "relationship.story.lifecycle",
+    "projection_handler": "relationship.story.projection",
+    "context_policy": "relationship.story.context",
+    "action_allowlist": [
+      "relationship.listen",
+      "relationship.choose",
+      "relationship.fulfill",
+      "relationship.wait",
+      "relationship.conclude",
+      "relationship.leave"
+    ],
+    "field_ownership": [
+      {
+        "path": "gameplay",
+        "owner": "campaign",
+        "value_type": "object",
+        "allow_children": true,
+        "visibility": "player",
+        "storage_projection": "campaign_runtime_states",
+        "write_capability": "relationship.listen",
+        "event_types": [
+          "relationship.interacted",
+          "relationship.promise_expired",
+          "relationship.ended"
+        ]
+      }
+    ],
+    "initial_location_key": "old-town-promise",
+    "world_clock": {
+      "calendar_key": "relationship.story.days",
+      "max_due_events_per_turn": 32
+    }
+  }
+}

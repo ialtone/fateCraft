@@ -1,0 +1,81 @@
+{
+  "id": "old-town-promise",
+  "name": "小镇旧约",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "与三位旧友重谈往事，在修桥承诺与旧信的抉择中决定彼此的未来。",
+  "author": "Fatecraft",
+  "icon": "story",
+  "tags": [
+    "关系叙事",
+    "一次性关系事件",
+    "限时承诺",
+    "互斥结局"
+  ],
+  "default_config": {
+    "recommended_character": "old-town-promise-narrator",
+    "recommended_persona": "old-town-promise-player",
+    "recommended_scenario": "old-town-promise-opening",
+    "recommended_prompt": "old-town-promise-guide",
+    "required_worldbooks": [
+      "old-town-promise-setting"
+    ],
+    "allowed_personas": [
+      "old-town-promise-player"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "reunited",
+      "category": "success",
+      "title": "旧约重续",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "honest_distance",
+      "category": "success",
+      "title": "各有归处",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "broken",
+      "category": "failure",
+      "title": "旧约难续",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "归期已至",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "leave",
+      "category": "neutral",
+      "title": "暂别故乡",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    }
+  ],
+  "quick_start_guide": "先倾听各人的想法，再回应旧桥与旧信的事件。答应修桥会产生限时承诺，需要先了解木匠方案；坦诚拒绝也有独立结局。故事结局需由你在行动页确认。 示例结局积分为 0。",
+  "features": [
+    "一次性关系事件",
+    "限时承诺",
+    "互斥结局"
+  ],
+  "dependencies": []
+}

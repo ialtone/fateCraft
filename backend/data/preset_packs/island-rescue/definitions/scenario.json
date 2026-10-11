@@ -1,0 +1,113 @@
+[
+  {
+    "kind": "survival.scenario",
+    "key": "island",
+    "name": "荒岛环境",
+    "content": {
+      "start_location": "beach",
+      "rescue_location": "beach",
+      "rescue_item": "signal",
+      "rescue_after_minutes": 240,
+      "deadline_minutes": 2880,
+      "hunger_per_hour": 4,
+      "thirst_per_hour": 6,
+      "weather_risk_percent": 12,
+      "weather_damage": 8,
+      "initial_stock": {
+        "water": 2,
+        "fruit": 2
+      },
+      "resources": [
+        {
+          "key": "water",
+          "name": "饮水",
+          "hunger_recovery": 0,
+          "thirst_recovery": 40
+        },
+        {
+          "key": "fruit",
+          "name": "野果",
+          "hunger_recovery": 30,
+          "thirst_recovery": 0
+        },
+        {
+          "key": "wood",
+          "name": "木材",
+          "hunger_recovery": 0,
+          "thirst_recovery": 0
+        },
+        {
+          "key": "rope",
+          "name": "藤绳",
+          "hunger_recovery": 0,
+          "thirst_recovery": 0
+        },
+        {
+          "key": "signal",
+          "name": "求援装置",
+          "hunger_recovery": 0,
+          "thirst_recovery": 0
+        }
+      ],
+      "locations": [
+        {
+          "key": "beach",
+          "name": "海滩",
+          "connections": [
+            "forest",
+            "spring"
+          ],
+          "resources": {
+            "fruit": 4
+          },
+          "travel_minutes": 30,
+          "gather_minutes": 30
+        },
+        {
+          "key": "forest",
+          "name": "树林",
+          "connections": [
+            "beach"
+          ],
+          "resources": {
+            "wood": 5,
+            "rope": 2
+          },
+          "travel_minutes": 30,
+          "gather_minutes": 30
+        },
+        {
+          "key": "spring",
+          "name": "山泉",
+          "connections": [
+            "beach"
+          ],
+          "resources": {
+            "water": 6,
+            "fruit": 3
+          },
+          "travel_minutes": 45,
+          "gather_minutes": 20
+        }
+      ],
+      "recipes": [
+        {
+          "key": "signal",
+          "name": "求援装置",
+          "inputs": {
+            "wood": 2,
+            "rope": 1
+          },
+          "output": "signal",
+          "quantity": 1,
+          "minutes": 60
+        }
+      ]
+    },
+    "tags": [
+      "生存"
+    ],
+    "visibility": "internal",
+    "sort_order": 0
+  }
+]

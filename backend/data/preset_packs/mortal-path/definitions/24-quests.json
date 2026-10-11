@@ -1,0 +1,1235 @@
+[
+  {
+    "kind": "quest",
+    "key": "guild-herb-order",
+    "name": "百草行的药材单",
+    "content": {
+      "quest_type": "quest",
+      "initial": true,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "green-river-village",
+        "bluestone-market"
+      ],
+      "objectives": [
+        {
+          "key": "deliver-herbs",
+          "type": "item",
+          "item_key": "green-river-herb",
+          "quality_key": "common",
+          "quantity": 6,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 12
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "hundred-herbs-guild",
+          "amount": 40
+        }
+      ],
+      "unlock_quest_keys": [
+        "bamboo-trail-clue"
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "hundred-herbs-guild"
+        ],
+        "npc_keys": [
+          "gu-herbalist"
+        ]
+      }
+    },
+    "tags": [
+      "任务",
+      "采药",
+      "商会"
+    ],
+    "search_text": "百草行 青河草 药材单",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "quest",
+    "key": "sect-ward-promise",
+    "name": "山门护符之约",
+    "content": {
+      "quest_type": "obligation",
+      "initial": true,
+      "starting_status": "offered",
+      "deadline_minutes": 1440,
+      "accept_location_keys": [
+        "bluestone-market",
+        "green-mist-gate"
+      ],
+      "objectives": [
+        {
+          "key": "deliver-ward",
+          "type": "item",
+          "item_key": "ward-talisman",
+          "quality_key": "common",
+          "quantity": 1,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "faction_reputation",
+          "faction_key": "green-mist-sect",
+          "amount": 120
+        },
+        {
+          "type": "faction_contribution",
+          "faction_key": "green-mist-sect",
+          "amount": 100
+        }
+      ],
+      "unlock_quest_keys": [
+        "sect-cave-investigation"
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "green-mist-sect"
+        ],
+        "npc_keys": [
+          "lu-disciple"
+        ],
+        "world_event_keys": [
+          "county-shadow-conflict"
+        ]
+      }
+    },
+    "tags": [
+      "承诺",
+      "宗门",
+      "截止时间"
+    ],
+    "search_text": "青岚门 护符 承诺 山门",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "quest",
+    "key": "bamboo-trail-clue",
+    "name": "竹林里的断绳",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "green-river-village",
+        "bamboo-woods"
+      ],
+      "objectives": [
+        {
+          "key": "reach-herb-valley",
+          "type": "location",
+          "location_key": "herb-valley"
+        },
+        {
+          "key": "recover-basket",
+          "type": "item",
+          "item_key": "torn-herb-basket",
+          "quality_key": "common",
+          "quantity": 1,
+          "consume": true
+        },
+        {
+          "key": "follow-mist-beast",
+          "type": "encounter_win",
+          "encounter_key": "bamboo-woods-mist-beast",
+          "quantity": 1
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.hundred-herbs-sense",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 8
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "hundred-herbs-guild",
+          "amount": 35
+        }
+      ],
+      "unlock_quest_keys": [
+        "cave-rescue"
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "hundred-herbs-guild"
+        ],
+        "npc_keys": [
+          "gu-herbalist",
+          "lin-hunter"
+        ],
+        "world_event_keys": [
+          "mist-beast-migration",
+          "loose-route-expedition"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "采药人",
+      "探索"
+    ],
+    "search_text": "竹林 断绳 百药涧 采药人",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "quest",
+    "key": "cave-rescue",
+    "name": "伏流中的求救声",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "herb-valley",
+        "abandoned-cave"
+      ],
+      "objectives": [
+        {
+          "key": "reach-underground-river",
+          "type": "location",
+          "location_key": "underground-river"
+        },
+        {
+          "key": "earn-guide-trust",
+          "type": "npc_relationship",
+          "npc_key": "lin-hunter",
+          "dimension": "trust",
+          "target": 8
+        },
+        {
+          "key": "free-captives",
+          "type": "encounter_win",
+          "encounter_key": "underground-river-captive-rescue",
+          "quantity": 1
+        },
+        {
+          "key": "return-traveler-token",
+          "type": "item",
+          "item_key": "rescued-traveler-token",
+          "quality_key": "common",
+          "quantity": 1,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.vine-binding",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "recipe-slip.spirit-restoring",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 20
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "hundred-herbs-guild",
+          "amount": 70
+        }
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "hundred-herbs-guild",
+          "loose-cultivator-association"
+        ],
+        "npc_keys": [
+          "gu-herbalist",
+          "lin-hunter"
+        ],
+        "world_event_keys": [
+          "mist-beast-migration",
+          "northern-vein-shift"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "救援",
+      "洞窟"
+    ],
+    "search_text": "伏流 求救 采药人 洞窟",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "quest",
+    "key": "sect-cave-investigation",
+    "name": "外门失踪案",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "green-mist-gate",
+        "outer-courtyard"
+      ],
+      "objectives": [
+        {
+          "key": "inspect-abandoned-cave",
+          "type": "location",
+          "location_key": "abandoned-cave"
+        },
+        {
+          "key": "free-missing-disciple",
+          "type": "encounter_win",
+          "encounter_key": "underground-river-captive-rescue",
+          "quantity": 1
+        },
+        {
+          "key": "deliver-testimony",
+          "type": "item",
+          "item_key": "missing-disciple-testimony",
+          "quality_key": "common",
+          "quantity": 1,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.green-mist-sword",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "green-mist-sect",
+          "amount": 100
+        },
+        {
+          "type": "faction_contribution",
+          "faction_key": "green-mist-sect",
+          "amount": 240
+        }
+      ],
+      "unlock_quest_keys": [
+        "foundation-preparation"
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "green-mist-sect",
+          "blackwater-league"
+        ],
+        "npc_keys": [
+          "lu-disciple",
+          "su-steward"
+        ],
+        "world_event_keys": [
+          "county-shadow-conflict",
+          "northern-vein-shift"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "宗门",
+      "洞窟"
+    ],
+    "search_text": "外门 失踪 采石洞 伏流 证词",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "quest",
+    "key": "foundation-preparation",
+    "name": "筑基之前",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "outer-courtyard"
+      ],
+      "objectives": [
+        {
+          "key": "sect-recognition",
+          "type": "faction_reputation",
+          "faction_key": "green-mist-sect",
+          "target": 200
+        },
+        {
+          "key": "stable-county",
+          "type": "region_state",
+          "region_key": "green-river-county",
+          "region_field": "stability",
+          "comparison": "at_least",
+          "target": 5600
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.foundation-guide",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "recipe-slip.green-mist-sword",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "faction_contribution",
+          "faction_key": "green-mist-sect",
+          "amount": 700
+        }
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "green-mist-sect"
+        ],
+        "npc_keys": [
+          "su-steward",
+          "wen-scribe"
+        ],
+        "world_event_keys": [
+          "northern-vein-shift",
+          "spirit-field-harvest-cycle"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "筑基",
+      "宗门"
+    ],
+    "search_text": "筑基 准备 青岚门 小周天",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "quest",
+    "key": "ferry-night-boat",
+    "name": "旧渡的夜船",
+    "content": {
+      "quest_type": "quest",
+      "initial": true,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "green-river-village",
+        "old-ferry",
+        "county-town"
+      ],
+      "objectives": [
+        {
+          "key": "reach-south-marsh",
+          "type": "location",
+          "location_key": "south-marsh"
+        },
+        {
+          "key": "ferryman-trust",
+          "type": "npc_relationship",
+          "npc_key": "xing-ferryman",
+          "dimension": "trust",
+          "target": 5
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.breath-concealment",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "recipe-slip.detox-pill",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "liang-magistracy",
+          "amount": 60
+        }
+      ],
+      "unlock_quest_keys": [
+        "marsh-broker-choice"
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "liang-magistracy",
+          "blackwater-league"
+        ],
+        "npc_keys": [
+          "xing-ferryman",
+          "han-clerk",
+          "mo-broker"
+        ],
+        "world_event_keys": [
+          "marsh-smuggling-cycle",
+          "county-patrol-cycle"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "旧渡",
+      "黑水盟"
+    ],
+    "search_text": "旧渡 夜船 南沼 黑水盟",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "quest",
+    "key": "marsh-broker-choice",
+    "name": "莫十三的价码",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "south-marsh"
+      ],
+      "objectives": [
+        {
+          "key": "find-underground-route",
+          "type": "location",
+          "location_key": "underground-river"
+        },
+        {
+          "key": "broker-debt",
+          "type": "npc_relationship",
+          "npc_key": "mo-broker",
+          "dimension": "debt",
+          "target": 10
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "recipe-slip.blackwater-cloak",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "manual.blood-burning",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "blackwater-league",
+          "amount": 80
+        }
+      ],
+      "unlock_quest_keys": [
+        "county-stability-choice"
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "blackwater-league",
+          "liang-magistracy"
+        ],
+        "npc_keys": [
+          "mo-broker",
+          "han-clerk"
+        ],
+        "world_event_keys": [
+          "marsh-smuggling-cycle",
+          "county-shadow-conflict"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "抉择",
+      "黑水盟"
+    ],
+    "search_text": "莫十三 价码 地下伏流",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "quest",
+    "key": "county-stability-choice",
+    "name": "青河的秤盘",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "county-town",
+        "bluestone-market"
+      ],
+      "objectives": [
+        {
+          "key": "county-trust",
+          "type": "faction_reputation",
+          "faction_key": "liang-magistracy",
+          "target": 50
+        },
+        {
+          "key": "contain-danger",
+          "type": "region_state",
+          "region_key": "green-river-county",
+          "region_field": "danger_level",
+          "comparison": "at_most",
+          "target": 4200
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.water-mirror",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 35
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "loose-cultivator-association",
+          "amount": 100
+        }
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "liang-magistracy",
+          "blackwater-league",
+          "loose-cultivator-association"
+        ],
+        "npc_keys": [
+          "han-clerk",
+          "mo-broker",
+          "qiao-coordinator"
+        ],
+        "world_event_keys": [
+          "marsh-smuggling-cycle",
+          "county-patrol-cycle",
+          "county-shadow-conflict"
+        ]
+      }
+    },
+    "tags": [
+      "任务链",
+      "区域结局",
+      "势力"
+    ],
+    "search_text": "青河 秤盘 官府 黑水盟 散修会",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "quest",
+    "key": "artificer-star-iron-order",
+    "name": "铁七的星砂委托",
+    "content": {
+      "quest_type": "quest",
+      "initial": true,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "county-town"
+      ],
+      "objectives": [
+        {
+          "key": "deliver-star-iron",
+          "type": "item",
+          "item_key": "star-iron-sand",
+          "quality_key": "common",
+          "quantity": 3,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "recipe-slip.green-mist-sword",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 18
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "loose-cultivator-association",
+          "amount": 60
+        },
+        {
+          "type": "faction_contribution",
+          "faction_key": "loose-cultivator-association",
+          "amount": 120
+        }
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "loose-cultivator-association"
+        ],
+        "npc_keys": [
+          "tie-smith"
+        ],
+        "world_event_keys": [
+          "northern-vein-shift",
+          "loose-route-expedition"
+        ]
+      }
+    },
+    "tags": [
+      "任务",
+      "炼器",
+      "散修会"
+    ],
+    "search_text": "铁七 星铁砂 炼器 委托",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "quest",
+    "key": "red-cloud-fire-trial",
+    "name": "赤霞试火",
+    "content": {
+      "quest_type": "quest",
+      "initial": true,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "herb-valley",
+        "red-cloud-temple"
+      ],
+      "objectives": [
+        {
+          "key": "reach-red-cloud",
+          "type": "location",
+          "location_key": "red-cloud-temple"
+        },
+        {
+          "key": "deliver-flame-fruit",
+          "type": "item",
+          "item_key": "red-flame-fruit",
+          "quality_key": "common",
+          "quantity": 3,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.iron-body",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 16
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "red-cloud-temple",
+          "amount": 80
+        },
+        {
+          "type": "faction_contribution",
+          "faction_key": "red-cloud-temple",
+          "amount": 160
+        }
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "red-cloud-temple"
+        ],
+        "npc_keys": [
+          "yu-abbot"
+        ],
+        "world_event_keys": [
+          "northern-vein-shift"
+        ]
+      }
+    },
+    "tags": [
+      "任务",
+      "赤霞观",
+      "炼体"
+    ],
+    "search_text": "赤霞观 试火 赤焰果 铁衣法",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "quest",
+    "key": "lin-clan-harvest-order",
+    "name": "林庄的轮作单",
+    "content": {
+      "quest_type": "quest",
+      "initial": true,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "county-town",
+        "spirit-field",
+        "lin-family-manor"
+      ],
+      "objectives": [
+        {
+          "key": "reach-lin-manor",
+          "type": "location",
+          "location_key": "lin-family-manor"
+        },
+        {
+          "key": "deliver-spirit-rice",
+          "type": "item",
+          "item_key": "spirit-rice",
+          "quality_key": "common",
+          "quantity": 8,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.water-mirror",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 18
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "green-river-lin-clan",
+          "amount": 85
+        },
+        {
+          "type": "faction_contribution",
+          "faction_key": "green-river-lin-clan",
+          "amount": 180
+        }
+      ],
+      "associations": {
+        "region_keys": [
+          "green-river-county"
+        ],
+        "faction_keys": [
+          "green-river-lin-clan"
+        ],
+        "npc_keys": [
+          "lin-steward"
+        ],
+        "world_event_keys": [
+          "spirit-field-harvest-cycle"
+        ]
+      }
+    },
+    "tags": [
+      "任务",
+      "青河林氏",
+      "灵田"
+    ],
+    "search_text": "林氏灵庄 灵田 灵米 轮作",
+    "visibility": "player",
+    "sort_order": 120
+  },
+  {
+    "kind": "quest",
+    "key": "star-sea-charter",
+    "name": "星海航契",
+    "content": {
+      "quest_type": "quest",
+      "initial": true,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "mist-cliff",
+        "cloud-sail-port"
+      ],
+      "objectives": [
+        {
+          "key": "reach-cloud-sail",
+          "type": "location",
+          "location_key": "cloud-sail-port"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.star-tide-scripture",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "star-sail-alliance",
+          "amount": 220
+        },
+        {
+          "type": "item",
+          "item_key": "manual.star-bone-body",
+          "quantity": 1
+        }
+      ],
+      "unlock_quest_keys": [
+        "hunt-abyssal-isle"
+      ],
+      "milestone_key": "entered-star-sea"
+    },
+    "tags": [
+      "主线",
+      "星海"
+    ],
+    "search_text": "星海航契 云帆港",
+    "visibility": "player",
+    "sort_order": 130
+  },
+  {
+    "kind": "quest",
+    "key": "hunt-abyssal-isle",
+    "name": "沉星猎渊",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "cloud-sail-port",
+        "abyssal-isle"
+      ],
+      "objectives": [
+        {
+          "key": "defeat-star-beast",
+          "type": "encounter_win",
+          "encounter_key": "abyssal-isle-star-beast",
+          "quantity": 1
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "recipe-slip.core-forming-pill",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "star-sail-alliance",
+          "amount": 180
+        }
+      ],
+      "unlock_quest_keys": [
+        "cross-boundary-ruins"
+      ],
+      "milestone_key": "star-chart-restored"
+    },
+    "tags": [
+      "主线",
+      "遭遇"
+    ],
+    "search_text": "沉星 猎渊 星图",
+    "visibility": "player",
+    "sort_order": 140
+  },
+  {
+    "kind": "quest",
+    "key": "cross-boundary-ruins",
+    "name": "渡虚关征召",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "tide-star-market",
+        "void-crossing-gate"
+      ],
+      "objectives": [
+        {
+          "key": "reach-void-gate",
+          "type": "location",
+          "location_key": "void-crossing-gate"
+        },
+        {
+          "key": "deliver-void-crystal",
+          "type": "item",
+          "item_key": "void-crystal",
+          "quality_key": "common",
+          "quantity": 3,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.void-crossing-step",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "recipe-slip.void-compass",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "boundary-watch",
+          "amount": 260
+        },
+        {
+          "type": "item",
+          "item_key": "manual.void-unity-scripture",
+          "quantity": 1
+        }
+      ],
+      "unlock_quest_keys": [
+        "seal-rift-heart"
+      ],
+      "milestone_key": "entered-boundary-ruins"
+    },
+    "tags": [
+      "主线",
+      "界墟"
+    ],
+    "search_text": "渡虚关 征召",
+    "visibility": "player",
+    "sort_order": 150
+  },
+  {
+    "kind": "quest",
+    "key": "seal-rift-heart",
+    "name": "封合界隙核心",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "void-crossing-gate",
+        "rift-heart"
+      ],
+      "objectives": [
+        {
+          "key": "defeat-rift-guardian",
+          "type": "encounter_win",
+          "encounter_key": "rift-heart-guardian",
+          "quantity": 1
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "law-fragment",
+          "quantity": 2
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "boundary-watch",
+          "amount": 320
+        }
+      ],
+      "unlock_quest_keys": [
+        "enter-upper-spirit-realm"
+      ],
+      "milestone_key": "rift-heart-sealed"
+    },
+    "tags": [
+      "主线",
+      "界墟"
+    ],
+    "search_text": "封合 界隙核心",
+    "visibility": "player",
+    "sort_order": 160
+  },
+  {
+    "kind": "quest",
+    "key": "enter-upper-spirit-realm",
+    "name": "上灵界接引",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "rift-heart",
+        "ascension-platform"
+      ],
+      "objectives": [
+        {
+          "key": "reach-ascension-platform",
+          "type": "location",
+          "location_key": "ascension-platform"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.nine-law-sword",
+          "quantity": 1
+        },
+        {
+          "type": "item",
+          "item_key": "manual.celestial-body",
+          "quantity": 1
+        },
+        {
+          "type": "faction_reputation",
+          "faction_key": "nine-law-court",
+          "amount": 300
+        },
+        {
+          "type": "item",
+          "item_key": "manual.law-harmonizing-scripture",
+          "quantity": 1
+        }
+      ],
+      "unlock_quest_keys": [
+        "void-spatial-survey"
+      ],
+      "milestone_key": "entered-upper-spirit-realm"
+    },
+    "tags": [
+      "主线",
+      "上界"
+    ],
+    "search_text": "上灵界 接引台",
+    "visibility": "player",
+    "sort_order": 170
+  },
+  {
+    "kind": "quest",
+    "key": "warden-ending",
+    "name": "执掌天关",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "celestial-frontier"
+      ],
+      "objectives": [
+        {
+          "key": "defeat-law-devourer",
+          "type": "encounter_win",
+          "encounter_key": "celestial-frontier-breach",
+          "quantity": 1
+        }
+      ],
+      "rewards": [
+        {
+          "type": "faction_reputation",
+          "faction_key": "nine-law-court",
+          "amount": 600
+        }
+      ],
+      "milestone_key": "celestial-frontier-held",
+      "campaign_outcome_key": "world_warden"
+    },
+    "tags": [
+      "终局",
+      "守界"
+    ],
+    "search_text": "执掌天关 守界结局",
+    "visibility": "player",
+    "sort_order": 180
+  },
+  {
+    "kind": "quest",
+    "key": "seeker-ending",
+    "name": "携律远行",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "law-market",
+        "celestial-frontier"
+      ],
+      "objectives": [
+        {
+          "key": "collect-law-fragments",
+          "type": "item",
+          "item_key": "law-fragment",
+          "quality_key": "common",
+          "quantity": 6,
+          "consume": true
+        },
+        {
+          "key": "reach-celestial-frontier",
+          "type": "location",
+          "location_key": "celestial-frontier"
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "law-fragment",
+          "quantity": 1
+        }
+      ],
+      "milestone_key": "independent-law-path",
+      "campaign_outcome_key": "law_seeker"
+    },
+    "tags": [
+      "终局",
+      "求道"
+    ],
+    "search_text": "携律远行 求道结局",
+    "visibility": "player",
+    "sort_order": 190
+  }
+]

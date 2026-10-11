@@ -13,10 +13,9 @@ import (
 )
 
 var (
-	ErrTurnInProgress           = errors.New("对话已有进行中的回合")
-	ErrContinueNotAllowed       = errors.New("当前回合不能继续叙事")
-	ErrRegenerateNotAllowed     = errors.New("当前回合不能重新生成")
-	ErrCampaignHistoryImmutable = errors.New("该回合包含已提交的长期存档动作，不能重新生成或改写")
+	ErrTurnInProgress       = errors.New("对话已有进行中的回合")
+	ErrContinueNotAllowed   = errors.New("当前回合不能继续叙事")
+	ErrRegenerateNotAllowed = errors.New("当前回合不能重新生成")
 )
 
 type TurnRepo struct{ db *gorm.DB }
@@ -439,25 +438,8 @@ func prepareBranchInTx(
 	if err := tx.First(&target, "id = ? AND conversation_id = ? AND invalidated_at IS NULL", targetTurnID, conversationID).Error; err != nil {
 		return nil, err
 	}
-	if conv.CampaignID != nil {
-		var sideEffects int64
-		if err := tx.Model(&CampaignActionCommit{}).
-			Joins("JOIN conversation_turns t ON t.id = campaign_action_commits.turn_id").
-			Where("campaign_action_commits.campaign_id = ? AND t.conversation_id = ? AND t.turn_seq >= ?", *conv.CampaignID, conversationID, target.TurnSeq).
-			Count(&sideEffects).Error; err != nil {
-			return nil, err
-		}
-		if sideEffects == 0 {
-			if err := tx.Model(&CampaignEvent{}).
-				Joins("JOIN conversation_turns t ON t.id = campaign_events.turn_id").
-				Where("campaign_events.campaign_id = ? AND t.conversation_id = ? AND t.turn_seq >= ?", *conv.CampaignID, conversationID, target.TurnSeq).
-				Count(&sideEffects).Error; err != nil {
-				return nil, err
-			}
-		}
-		if sideEffects > 0 {
-			return nil, ErrCampaignHistoryImmutable
-		}
+	if err := restoreCampaignCheckpoint(tx, conv, targetTurnID); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -605,6 +587,9 @@ func beginTurnInTx(ctx context.Context, tx *gorm.DB, conversationID uuid.UUID, t
 		MemoryCoveredUntilTurnSeq: coveredUntil, Status: AttemptStatusRunning, StartedAt: now,
 	}
 	if err := tx.Create(turn).Error; err != nil {
+		return nil, nil, err
+	}
+	if err := captureCampaignCheckpoint(tx, conv, turn.ID); err != nil {
 		return nil, nil, err
 	}
 	if err := tx.Create(attempt).Error; err != nil {

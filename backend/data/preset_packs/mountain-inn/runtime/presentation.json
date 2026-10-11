@@ -1,0 +1,198 @@
+{
+  "presentation": {
+    "state_panel_title": "客栈经营",
+    "state_sections": [],
+    "completion_view": {},
+    "terminology": {},
+    "value_labels": {
+      "business.outcome": {
+        "prosperous": "客栈兴旺",
+        "bankrupt": "无力维持",
+        "timeout": "目标未达成",
+        "closed": "歇业归去"
+      }
+    },
+    "campaign_view": {
+      "renderer": "generic",
+      "sections": [
+        {
+          "key": "summary",
+          "title": "经营",
+          "order": 0,
+          "fields": [
+            {
+              "path": "gameplay.goal",
+              "label": "当前目标",
+              "widget": "text",
+              "order": 10
+            },
+            {
+              "path": "gameplay.cash",
+              "label": "经营资金",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.debt",
+              "label": "欠款",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.revenue",
+              "label": "订单总收入",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.goal_revenue",
+              "label": "收入目标",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.daily_expense",
+              "label": "每日支出",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.game_time",
+              "label": "经营时间（分钟）",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.deadline",
+              "label": "经营期限（分钟）",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.outcome_key",
+              "label": "结局",
+              "widget": "text",
+              "order": 10,
+              "value_namespace": "business.outcome"
+            }
+          ]
+        },
+        {
+          "key": "production",
+          "title": "设施与生产",
+          "order": 10,
+          "fields": [
+            {
+              "path": "gameplay.facilities",
+              "label": "设施",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "名称"
+                },
+                {
+                  "path": "level",
+                  "label": "等级"
+                },
+                {
+                  "path": "goal",
+                  "label": "目标等级"
+                }
+              ]
+            },
+            {
+              "path": "gameplay.jobs",
+              "label": "生产队列",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "任务"
+                },
+                {
+                  "path": "remaining_minutes",
+                  "label": "剩余分钟"
+                }
+              ]
+            },
+            {
+              "path": "gameplay.inventory",
+              "label": "库存",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "物资"
+                },
+                {
+                  "path": "quantity",
+                  "label": "数量"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "orders",
+          "title": "订单",
+          "order": 20,
+          "fields": [
+            {
+              "path": "gameplay.delivered",
+              "label": "已完成订单",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.goal_orders",
+              "label": "订单目标",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.orders",
+              "label": "订单列表",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "订单"
+                },
+                {
+                  "path": "status",
+                  "label": "状态"
+                },
+                {
+                  "path": "items",
+                  "label": "所需物资"
+                },
+                {
+                  "path": "income",
+                  "label": "收入"
+                },
+                {
+                  "path": "penalty",
+                  "label": "违约金"
+                },
+                {
+                  "path": "remaining_minutes",
+                  "label": "剩余分钟"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "actions": [],
+      "empty_states": {
+        "production": "暂无在产任务",
+        "orders": "暂无订单"
+      }
+    }
+  }
+}

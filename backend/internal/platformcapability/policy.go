@@ -5,6 +5,8 @@
 // from accidentally becoming the authorization source for a platform feature.
 package platformcapability
 
+import "github.com/ialtone/fatecraft/internal/accountasset"
+
 const (
 	// MessageRewriteKey is the stable public key used by both regenerate and
 	// edit-and-regenerate.  It is intentionally not declared in a challenge
@@ -12,7 +14,7 @@ const (
 	MessageRewriteKey = "message_rewrite"
 	// MessageRewriteRewardKey is the stable platform reward consumed by both
 	// regenerate and edit-and-regenerate.
-	MessageRewriteRewardKey = "fatecraft.message-rewrite-credit"
+	MessageRewriteRewardKey = accountasset.RewriteCredits
 	// MessageRewriteCostQuantity is kept beside the policy, so storage and API
 	// layers cannot silently disagree about the charge.
 	MessageRewriteCostQuantity int64 = 1

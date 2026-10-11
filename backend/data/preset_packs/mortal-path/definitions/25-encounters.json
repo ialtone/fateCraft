@@ -1,0 +1,265 @@
+[
+  {
+    "kind": "encounter",
+    "key": "bamboo-woods-mist-beast",
+    "name": "竹林雾兽",
+    "content": {
+      "location_key": "bamboo-woods",
+      "opponent_key": "mist-beast",
+      "opponent_name": "受惊雾狸",
+      "opponent_realm_rank": 0,
+      "opponent_max_health": 70,
+      "opponent_attack": 16,
+      "opponent_defense": 3,
+      "player_damage_base": 16,
+      "player_damage_scale_bps": 1200,
+      "player_mana_cost": 0,
+      "round_minutes": 30,
+      "max_rounds": 8,
+      "flee_chance_bps": 6500,
+      "rewards": [
+        {
+          "item_key": "mist-beast-hide",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "item_key": "torn-herb-basket",
+          "quality_key": "common",
+          "quantity": 1
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "野兽",
+      "竹林"
+    ],
+    "search_text": "竹林 雾狸 遭遇",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "encounter",
+    "key": "south-marsh-venom-beast",
+    "name": "南沼毒兽",
+    "content": {
+      "location_key": "south-marsh",
+      "opponent_key": "marsh-venom-beast",
+      "opponent_name": "黑沼毒蜥",
+      "opponent_realm_rank": 1,
+      "opponent_max_health": 130,
+      "opponent_attack": 28,
+      "opponent_defense": 8,
+      "player_damage_base": 22,
+      "player_damage_scale_bps": 1400,
+      "player_mana_cost": 2,
+      "round_minutes": 45,
+      "max_rounds": 10,
+      "flee_chance_bps": 4800,
+      "rewards": [
+        {
+          "item_key": "swamp-venom-sac",
+          "quality_key": "common",
+          "quantity": 2
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "毒兽",
+      "南沼"
+    ],
+    "search_text": "南沼 毒蜥 沼毒囊",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "encounter",
+    "key": "underground-river-vein-guardian",
+    "name": "伏流守脉兽",
+    "content": {
+      "location_key": "underground-river",
+      "opponent_key": "vein-guardian",
+      "opponent_name": "星铁甲兽",
+      "opponent_realm_rank": 2,
+      "opponent_max_health": 220,
+      "opponent_attack": 42,
+      "opponent_defense": 15,
+      "player_damage_base": 30,
+      "player_damage_scale_bps": 1700,
+      "player_mana_cost": 3,
+      "round_minutes": 60,
+      "max_rounds": 12,
+      "flee_chance_bps": 3200,
+      "rewards": [
+        {
+          "item_key": "star-iron-sand",
+          "quality_key": "common",
+          "quantity": 3
+        },
+        {
+          "item_key": "low-spirit-stone",
+          "quality_key": "common",
+          "quantity": 8
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "守脉兽",
+      "伏流"
+    ],
+    "search_text": "伏流 星铁甲兽 守脉",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "encounter",
+    "key": "abyssal-isle-star-beast",
+    "name": "沉星岛猎渊",
+    "content": {
+      "location_key": "abyssal-isle",
+      "opponent_key": "star-abyss-beast",
+      "opponent_name": "噬星渊兽",
+      "opponent_realm_rank": 3,
+      "opponent_max_health": 420,
+      "opponent_attack": 48,
+      "opponent_defense": 18,
+      "player_damage_base": 12,
+      "player_damage_scale_bps": 15000,
+      "player_mana_cost": 8,
+      "round_minutes": 12,
+      "max_rounds": 24,
+      "flee_chance_bps": 1800,
+      "rewards": [
+        {
+          "item_key": "abyssal-beast-core",
+          "quantity": 1
+        },
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 45
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "星海"
+    ],
+    "search_text": "沉星岛 渊兽",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "encounter",
+    "key": "deep-trench-leviathan",
+    "name": "海渊镇星兽",
+    "content": {
+      "location_key": "deep-star-trench",
+      "opponent_key": "trench-leviathan",
+      "opponent_name": "镇星古兽",
+      "opponent_realm_rank": 4,
+      "opponent_max_health": 980,
+      "opponent_attack": 95,
+      "opponent_defense": 38,
+      "player_damage_base": 18,
+      "player_damage_scale_bps": 17000,
+      "player_mana_cost": 14,
+      "round_minutes": 18,
+      "max_rounds": 30,
+      "flee_chance_bps": 1200,
+      "rewards": [
+        {
+          "item_key": "abyssal-beast-core",
+          "quantity": 3
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 1
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "海渊"
+    ],
+    "search_text": "海渊 镇星古兽",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "encounter",
+    "key": "rift-heart-guardian",
+    "name": "界隙阵枢守卫",
+    "content": {
+      "location_key": "rift-heart",
+      "opponent_key": "rift-array-guardian",
+      "opponent_name": "折界傀儡",
+      "opponent_realm_rank": 4,
+      "opponent_max_health": 1200,
+      "opponent_attack": 115,
+      "opponent_defense": 52,
+      "player_damage_base": 22,
+      "player_damage_scale_bps": 18000,
+      "player_mana_cost": 18,
+      "round_minutes": 20,
+      "max_rounds": 32,
+      "flee_chance_bps": 900,
+      "rewards": [
+        {
+          "item_key": "void-crystal",
+          "quantity": 5
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 2
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "界墟"
+    ],
+    "search_text": "界隙 阵枢 傀儡",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "encounter",
+    "key": "celestial-frontier-breach",
+    "name": "天关破口",
+    "content": {
+      "location_key": "celestial-frontier",
+      "opponent_key": "outer-law-devourer",
+      "opponent_name": "噬律者",
+      "opponent_realm_rank": 6,
+      "opponent_max_health": 2600,
+      "opponent_attack": 230,
+      "opponent_defense": 100,
+      "player_damage_base": 35,
+      "player_damage_scale_bps": 22000,
+      "player_mana_cost": 30,
+      "round_minutes": 24,
+      "max_rounds": 36,
+      "flee_chance_bps": 600,
+      "rewards": [
+        {
+          "item_key": "law-fragment",
+          "quantity": 4
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 3
+        }
+      ]
+    },
+    "tags": [
+      "遭遇",
+      "终局"
+    ],
+    "search_text": "天关 噬律者",
+    "visibility": "player",
+    "sort_order": 70
+  }
+]

@@ -1,0 +1,703 @@
+[
+  {
+    "kind": "world_event",
+    "key": "county-shadow-conflict",
+    "name": "青河暗流",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 360,
+      "repeat_interval_minutes": 259200,
+      "priority": 300,
+      "variants": [
+        {
+          "key": "blackwater-pressure",
+          "weight": 45,
+          "summary": "黑水盟的暗线向渡口与山路扩张，青河郡局势趋于紧张。",
+          "effects": {
+            "danger_delta": 260,
+            "stability_delta": -180,
+            "conflict_stage": 1,
+            "faction_power_deltas": {
+              "blackwater-league": 180,
+              "green-mist-sect": -80
+            }
+          }
+        },
+        {
+          "key": "sect-patrol",
+          "weight": 35,
+          "summary": "青岚门增派巡山弟子，压制了郡内数处可疑据点。",
+          "effects": {
+            "danger_delta": -180,
+            "stability_delta": 220,
+            "conflict_stage": 1,
+            "faction_power_deltas": {
+              "green-mist-sect": 160,
+              "blackwater-league": -100
+            }
+          }
+        },
+        {
+          "key": "uneasy-balance",
+          "weight": 20,
+          "summary": "各方暂时收敛锋芒，但旧渡附近仍流传着夜船出没的消息。",
+          "effects": {
+            "danger_delta": 60,
+            "stability_delta": -40
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "势力冲突"
+    ],
+    "search_text": "青河郡 黑水盟 青岚门 冲突",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "world_event",
+    "key": "guild-market-cycle",
+    "name": "半年商路盘点",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 720,
+      "repeat_interval_minutes": 259200,
+      "priority": 200,
+      "variants": [
+        {
+          "key": "herb-shortage",
+          "weight": 50,
+          "summary": "山中药材来货减少，百草行临时上调了坊市价格。",
+          "effects": {
+            "resource_delta": -140,
+            "market_price_modifier_deltas_bps": {
+              "bluestone-guild-market": 900
+            }
+          }
+        },
+        {
+          "key": "caravan-arrival",
+          "weight": 50,
+          "summary": "一支药材商队抵达青石坊市，常用物资的行情有所回落。",
+          "effects": {
+            "resource_delta": 180,
+            "market_price_modifier_deltas_bps": {
+              "bluestone-guild-market": -700
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "市场"
+    ],
+    "search_text": "青石坊市 行情 药材 商队",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "world_event",
+    "key": "appraiser-investigation",
+    "name": "鉴定师的暗查",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 540,
+      "repeat_interval_minutes": 259200,
+      "priority": 100,
+      "variants": [
+        {
+          "key": "new-lead",
+          "weight": 70,
+          "summary": "沈青禾沿着假丹药的来路查到了一条新线索。",
+          "effects": {
+            "npc_goal_deltas": {
+              "shen-appraiser": {
+                "investigation_progress": 12
+              }
+            }
+          }
+        },
+        {
+          "key": "cold-trail",
+          "weight": 30,
+          "summary": "假丹药的线索一度中断，沈青禾转而排查坊市中的旧账。",
+          "effects": {
+            "npc_goal_deltas": {
+              "shen-appraiser": {
+                "investigation_progress": 4
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "NPC 目标"
+    ],
+    "search_text": "沈青禾 假丹药 调查",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "world_event",
+    "key": "spirit-field-harvest-cycle",
+    "name": "灵田半载收成",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 1080,
+      "repeat_interval_minutes": 259200,
+      "priority": 180,
+      "variants": [
+        {
+          "key": "good-harvest",
+          "weight": 55,
+          "summary": "北麓灵田收成顺利，灵米和常用药材流入县城与坊市。",
+          "effects": {
+            "resource_delta": 240,
+            "stability_delta": 80,
+            "faction_power_deltas": {
+              "green-mist-sect": 80,
+              "loose-cultivator-association": 40,
+              "green-river-lin-clan": 120
+            },
+            "market_price_modifier_deltas_bps": {
+              "bluestone-guild-market": -350,
+              "county-association-market": -500
+            },
+            "npc_goal_deltas": {
+              "su-steward": {
+                "sect_readiness": 4
+              },
+              "lin-steward": {
+                "harvest_readiness": 6
+              }
+            }
+          }
+        },
+        {
+          "key": "blight",
+          "weight": 45,
+          "summary": "灵田出现虫害，灵农开始高价收购清水、符箓与驱虫药材。",
+          "effects": {
+            "resource_delta": -220,
+            "danger_delta": 100,
+            "stability_delta": -100,
+            "faction_power_deltas": {
+              "green-river-lin-clan": -90
+            },
+            "market_price_modifier_deltas_bps": {
+              "bluestone-guild-market": 450,
+              "county-association-market": 650
+            },
+            "npc_goal_deltas": {
+              "su-steward": {
+                "sect_readiness": -3
+              },
+              "lin-steward": {
+                "harvest_readiness": -5
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "灵田",
+      "经济"
+    ],
+    "search_text": "北麓 灵田 收成 虫害",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "world_event",
+    "key": "marsh-smuggling-cycle",
+    "name": "南沼夜船",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 900,
+      "repeat_interval_minutes": 259200,
+      "priority": 260,
+      "variants": [
+        {
+          "key": "route-expands",
+          "weight": 50,
+          "summary": "南沼夜船接连靠岸，稀有材料增多，失踪与劫掠传闻也随之扩散。",
+          "effects": {
+            "danger_delta": 220,
+            "stability_delta": -160,
+            "conflict_stage": 2,
+            "faction_power_deltas": {
+              "blackwater-league": 180,
+              "liang-magistracy": -60
+            },
+            "market_price_modifier_deltas_bps": {
+              "blackwater-night-market": -500
+            },
+            "npc_goal_deltas": {
+              "mo-broker": {
+                "smuggling_progress": 8
+              },
+              "han-clerk": {
+                "case_progress": 3
+              }
+            }
+          }
+        },
+        {
+          "key": "route-disrupted",
+          "weight": 50,
+          "summary": "官差与散修联手截断一段夜船路线，南沼物价上涨而县境稍显安定。",
+          "effects": {
+            "danger_delta": -140,
+            "stability_delta": 130,
+            "conflict_stage": 2,
+            "faction_power_deltas": {
+              "blackwater-league": -120,
+              "liang-magistracy": 100,
+              "loose-cultivator-association": 60
+            },
+            "market_price_modifier_deltas_bps": {
+              "blackwater-night-market": 700
+            },
+            "npc_goal_deltas": {
+              "mo-broker": {
+                "smuggling_progress": -5
+              },
+              "han-clerk": {
+                "case_progress": 6
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "黑水盟",
+      "走私"
+    ],
+    "search_text": "南沼 夜船 走私 黑水盟",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "world_event",
+    "key": "loose-route-expedition",
+    "name": "散修探路队",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 1260,
+      "repeat_interval_minutes": 259200,
+      "priority": 140,
+      "variants": [
+        {
+          "key": "safe-route",
+          "weight": 60,
+          "summary": "散修会标出一条避开妖兽与暗哨的新路线，山野采集逐渐恢复。",
+          "effects": {
+            "resource_delta": 160,
+            "danger_delta": -120,
+            "stability_delta": 90,
+            "faction_power_deltas": {
+              "loose-cultivator-association": 120
+            },
+            "npc_goal_deltas": {
+              "qiao-coordinator": {
+                "route_progress": 7
+              }
+            }
+          }
+        },
+        {
+          "key": "team-missing",
+          "weight": 40,
+          "summary": "一支探路小队迟迟未归，散修会暂停了百药涧外的低价委托。",
+          "effects": {
+            "resource_delta": -100,
+            "danger_delta": 180,
+            "stability_delta": -70,
+            "faction_power_deltas": {
+              "loose-cultivator-association": -80
+            },
+            "npc_goal_deltas": {
+              "qiao-coordinator": {
+                "route_progress": -3
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "散修会",
+      "探索"
+    ],
+    "search_text": "散修 探路 百药涧",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "world_event",
+    "key": "mist-beast-migration",
+    "name": "雾狸迁徙",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 1800,
+      "repeat_interval_minutes": 259200,
+      "priority": 120,
+      "variants": [
+        {
+          "key": "peaceful-migration",
+          "weight": 55,
+          "summary": "雾狸群沿百药涧迁往高处，山谷短期内更适合采药。",
+          "effects": {
+            "resource_delta": 190,
+            "danger_delta": -80,
+            "npc_goal_deltas": {
+              "lin-hunter": {
+                "valley_balance": 5
+              }
+            }
+          }
+        },
+        {
+          "key": "poachers-arrive",
+          "weight": 45,
+          "summary": "逐利猎手追着雾狸进入百药涧，陷阱伤到了采药人，也激怒了兽群。",
+          "effects": {
+            "resource_delta": -150,
+            "danger_delta": 210,
+            "stability_delta": -60,
+            "npc_goal_deltas": {
+              "lin-hunter": {
+                "valley_balance": -6
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "妖兽",
+      "生态"
+    ],
+    "search_text": "雾狸 迁徙 百药涧",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "world_event",
+    "key": "northern-vein-shift",
+    "name": "北山灵脉震动",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 2880,
+      "repeat_interval_minutes": 259200,
+      "priority": 320,
+      "variants": [
+        {
+          "key": "vein-rises",
+          "weight": 45,
+          "summary": "北山灵气短暂上涌，灵田与落雷崖资源丰沛，各方争夺随之加剧。",
+          "effects": {
+            "resource_delta": 420,
+            "danger_delta": 150,
+            "conflict_stage": 3,
+            "faction_power_deltas": {
+              "green-mist-sect": 140,
+              "hundred-herbs-guild": 60,
+              "red-cloud-temple": 100
+            },
+            "npc_goal_deltas": {
+              "su-steward": {
+                "sect_readiness": 8
+              },
+              "wen-scribe": {
+                "talisman_progress": 5
+              },
+              "yu-abbot": {
+                "fire_vein_control": 6
+              }
+            }
+          }
+        },
+        {
+          "key": "vein-fades",
+          "weight": 55,
+          "summary": "北山灵气回落，旧矿道出现塌陷，青岚门收紧了灵材外流。",
+          "effects": {
+            "resource_delta": -360,
+            "stability_delta": -120,
+            "faction_power_deltas": {
+              "red-cloud-temple": -80
+            },
+            "market_price_modifier_deltas_bps": {
+              "bluestone-guild-market": 600,
+              "county-association-market": 450
+            },
+            "npc_goal_deltas": {
+              "su-steward": {
+                "sect_readiness": -4
+              },
+              "yu-abbot": {
+                "fire_vein_control": -4
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "灵脉",
+      "长期局势"
+    ],
+    "search_text": "北山 灵脉 震动 资源",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "world_event",
+    "key": "county-patrol-cycle",
+    "name": "郡衙半年巡察",
+    "content": {
+      "region_key": "green-river-county",
+      "initial_delay_minutes": 1500,
+      "repeat_interval_minutes": 259200,
+      "priority": 160,
+      "variants": [
+        {
+          "key": "cooperation",
+          "weight": 55,
+          "summary": "青河署与散修会交换线索，驿道和渡口的盘查更有效率。",
+          "effects": {
+            "danger_delta": -160,
+            "stability_delta": 170,
+            "faction_power_deltas": {
+              "liang-magistracy": 110,
+              "loose-cultivator-association": 70,
+              "blackwater-league": -70
+            },
+            "npc_goal_deltas": {
+              "han-clerk": {
+                "case_progress": 5
+              },
+              "qiao-coordinator": {
+                "route_progress": 3
+              }
+            }
+          }
+        },
+        {
+          "key": "jurisdiction-dispute",
+          "weight": 45,
+          "summary": "官府与修士因处置俘虏发生争执，巡查草草收场。",
+          "effects": {
+            "danger_delta": 90,
+            "stability_delta": -130,
+            "faction_power_deltas": {
+              "liang-magistracy": -60,
+              "green-mist-sect": -40,
+              "blackwater-league": 50
+            },
+            "npc_goal_deltas": {
+              "han-clerk": {
+                "case_progress": -2
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "官府",
+      "巡查"
+    ],
+    "search_text": "青河署 散修会 巡查",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "world_event",
+    "key": "star-tide-cycle",
+    "name": "星潮涨落",
+    "content": {
+      "region_key": "storm-sea",
+      "initial_delay_minutes": 4320,
+      "repeat_interval_minutes": 259200,
+      "priority": 420,
+      "variants": [
+        {
+          "key": "clear-route",
+          "weight": 55,
+          "summary": "星潮平稳，云帆港与沉星岛之间的航标重新显现。",
+          "effects": {
+            "resource_delta": 380,
+            "danger_delta": -220,
+            "stability_delta": 160,
+            "faction_power_deltas": {
+              "star-sail-alliance": 120
+            },
+            "market_price_modifier_deltas_bps": {
+              "tide-star-exchange": -350
+            },
+            "npc_goal_deltas": {
+              "shen-navigator": {
+                "chart_progress": 6
+              }
+            }
+          }
+        },
+        {
+          "key": "abyss-surge",
+          "weight": 45,
+          "summary": "海渊星核躁动，渊兽群冲击外海航道。",
+          "effects": {
+            "resource_delta": -280,
+            "danger_delta": 420,
+            "stability_delta": -240,
+            "conflict_stage": 6,
+            "faction_power_deltas": {
+              "abyss-court": 180,
+              "star-sail-alliance": -100
+            },
+            "market_price_modifier_deltas_bps": {
+              "tide-star-exchange": 520
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "星海"
+    ],
+    "search_text": "星潮 渊兽 航路",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "world_event",
+    "key": "rift-tide",
+    "name": "界隙潮汐",
+    "content": {
+      "region_key": "boundary-ruins",
+      "initial_delay_minutes": 5760,
+      "repeat_interval_minutes": 259200,
+      "priority": 520,
+      "variants": [
+        {
+          "key": "temporary-seal",
+          "weight": 48,
+          "summary": "守界司阵师暂时压低了空间潮汐，古星台重新开放。",
+          "effects": {
+            "danger_delta": -360,
+            "stability_delta": 420,
+            "faction_power_deltas": {
+              "boundary-watch": 160
+            },
+            "npc_goal_deltas": {
+              "gu-warden": {
+                "rift_stability": 8
+              }
+            }
+          }
+        },
+        {
+          "key": "rift-expands",
+          "weight": 52,
+          "summary": "界外侵蚀扩大，渡虚关外出现新的空间裂口。",
+          "effects": {
+            "resource_delta": 220,
+            "danger_delta": 560,
+            "stability_delta": -460,
+            "conflict_stage": 9,
+            "faction_power_deltas": {
+              "abyss-court": 220,
+              "boundary-watch": -140
+            },
+            "npc_goal_deltas": {
+              "gu-warden": {
+                "rift_stability": -9
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "界墟"
+    ],
+    "search_text": "界隙 潮汐 守界司",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "world_event",
+    "key": "celestial-frontier-war",
+    "name": "天关轮战",
+    "content": {
+      "region_key": "nine-heavens-march",
+      "initial_delay_minutes": 7200,
+      "repeat_interval_minutes": 259200,
+      "priority": 620,
+      "variants": [
+        {
+          "key": "law-line-holds",
+          "weight": 50,
+          "summary": "九律阵线守住了界外冲击，万律城秩序暂稳。",
+          "effects": {
+            "danger_delta": -240,
+            "stability_delta": 360,
+            "faction_power_deltas": {
+              "nine-law-court": 180,
+              "abyss-court": -120
+            },
+            "market_price_modifier_deltas_bps": {
+              "nine-law-exchange": -280
+            },
+            "npc_goal_deltas": {
+              "wen-auditor": {
+                "audit_progress": 5
+              }
+            }
+          }
+        },
+        {
+          "key": "frontier-breach",
+          "weight": 50,
+          "summary": "天关一处阵眼失守，界外潮汐逼近接引台。",
+          "effects": {
+            "danger_delta": 520,
+            "stability_delta": -420,
+            "conflict_stage": 10,
+            "faction_power_deltas": {
+              "nine-law-court": -160,
+              "abyss-court": 200
+            },
+            "market_price_modifier_deltas_bps": {
+              "nine-law-exchange": 460
+            }
+          }
+        }
+      ]
+    },
+    "tags": [
+      "区域事件",
+      "上界"
+    ],
+    "search_text": "天关 轮战 九律",
+    "visibility": "player",
+    "sort_order": 120
+  }
+]

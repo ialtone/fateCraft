@@ -1,0 +1,138 @@
+{
+  "id": "lost-chambers",
+  "name": "失落墓室",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "循两条相连线索破解石门机关，在照明和负重耗尽之前将古印带出墓室。",
+  "author": "Fatecraft",
+  "icon": "explore",
+  "tags": [
+    "古墓探险",
+    "关联线索",
+    "机关绕行",
+    "负重与返程"
+  ],
+  "default_config": {
+    "recommended_character": "lost-chambers-narrator",
+    "recommended_persona": "lost-chambers-player",
+    "recommended_scenario": "lost-chambers-opening",
+    "recommended_prompt": "lost-chambers-guide",
+    "required_worldbooks": [
+      "lost-chambers-setting"
+    ],
+    "allowed_personas": [
+      "lost-chambers-player"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "recovered",
+      "category": "success",
+      "title": "遗物重见天日",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "recovered"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "retreated",
+      "category": "neutral",
+      "title": "适时收手",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "retreated"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "perished",
+      "category": "failure",
+      "title": "埋骨墓室",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "perished"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "darkness",
+      "category": "failure",
+      "title": "照明耗尽",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "darkness"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "错失出墓时机",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "timeout"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "放弃探险",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "abandoned"
+          }
+        ]
+      }
+    }
+  ],
+  "quick_start_guide": "在壁画室研读方位图，再到祭台理解机关顺序。可以依线索解门，也可消耗工具冒险绕行。古印在深处，拿到后须返回墓口；留出足够照明、返程补给和负重。 示例结局积分为 0。",
+  "features": [
+    "关联线索",
+    "机关绕行",
+    "负重与返程"
+  ],
+  "dependencies": []
+}

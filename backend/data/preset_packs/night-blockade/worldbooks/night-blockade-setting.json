@@ -1,0 +1,22 @@
+{
+  "id": "night-blockade-setting",
+  "name": "夜入封锁区见闻",
+  "description": "叙事背景，数值以可信状态与行动预览为准。",
+  "entries": [
+    {
+      "id": "night-blockade-world",
+      "world_book_id": "night-blockade-setting",
+      "title": "夜入封锁区",
+      "content": "外墙入口是可撤离的位置。院落通往值班室与档案室，暗渠提供另一条通路与临时掩护。值班室可能留有门禁情报。取到档案不代表任务完成，携带者必须摆脱追捕返回外墙。",
+      "keywords": [
+        "夜入封锁区",
+        "潜入逃脱"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

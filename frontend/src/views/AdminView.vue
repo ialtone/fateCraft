@@ -167,6 +167,7 @@ const savingVersion = ref(false)
 const publishingVersion = ref(false)
 const deletingVersion = ref(false)
 const importingBuiltin = ref('')
+const updatingChallenge = ref('')
 const versionDoc = ref<ChallengeVersionDocument | null>(null)
 const versionPayload = ref<SaveChallengeVersionInput | null>(null)
 const selectedVersionId = ref('')
@@ -655,6 +656,25 @@ async function loadBuiltins() {
     message.error(`读取内置内容失败：${err.message || '未知错误'}`)
   } finally {
     loadingBuiltins.value = false
+  }
+}
+
+async function setChallengeEnabled(id: string, enabled: boolean) {
+  if (updatingChallenge.value) return
+  updatingChallenge.value = id
+  try {
+    const pack = await adminApi.setChallengeEnabled(id, enabled)
+    for (const item of builtins.value) {
+      if (item.pack_id === id) item.enabled = pack.status === 'active'
+    }
+    for (const item of packs.value) {
+      if (item.pack.id === id) item.pack = pack
+    }
+    message.success(enabled ? '玩法已启用，可供玩家新开局' : '玩法已停用，已有存档仍可继续')
+  } catch (err: any) {
+    message.error(err.message || '更新玩法启用状态失败')
+  } finally {
+    updatingChallenge.value = ''
   }
 }
 
@@ -1639,6 +1659,7 @@ watch(
             <div>
               <h3>仓库内置挑战</h3>
               <p class="section-sub">
+                全部内置玩法默认导入。启用后对玩家开放；停用后隐藏入口并禁止新开局，已有存档仍可继续。
                 导入和覆盖都会经过完整发布校验；已使用内容请提升版本号。发布新版本后，旧普通对话会自动封存并可只读浏览。
               </p>
             </div>
@@ -1661,9 +1682,26 @@ watch(
                 <p class="builtin-description">{{ item.description }}</p>
                 <span class="hash-line">SHA-256：{{ item.content_hash }}</span>
               </div>
+              <NSwitch
+                :value="item.enabled"
+                :disabled="
+                  !item.pack_id ||
+                  !item.current_version ||
+                  !!updatingChallenge ||
+                  !!importingBuiltin
+                "
+                :loading="updatingChallenge === item.pack_id"
+                :aria-label="`${item.name}是否启用`"
+                @update:value="
+                  (value: boolean) => item.pack_id && setChallengeEnabled(item.pack_id, value)
+                "
+              >
+                <template #checked>已启用</template>
+                <template #unchecked>已停用</template>
+              </NSwitch>
               <NButton
                 type="primary"
-                :disabled="!item.importable && !item.overwritable"
+                :disabled="(!item.importable && !item.overwritable) || !!updatingChallenge"
                 :loading="importingBuiltin === item.slug"
                 @click="importBuiltin(item)"
               >
@@ -1699,6 +1737,21 @@ watch(
                       <strong>{{ item.pack.name }}</strong>
                       <span class="muted">{{ item.pack.slug }} · {{ item.pack.status }}</span>
                     </div>
+                    <NSwitch
+                      :value="item.pack.status === 'active'"
+                      :disabled="
+                        !item.pack.current_version_id ||
+                        !!updatingChallenge ||
+                        !!importingBuiltin ||
+                        publishingVersion
+                      "
+                      :loading="updatingChallenge === item.pack.id"
+                      :aria-label="`${item.pack.name}是否启用`"
+                      @update:value="(value: boolean) => setChallengeEnabled(item.pack.id, value)"
+                    >
+                      <template #checked>已启用</template>
+                      <template #unchecked>已停用</template>
+                    </NSwitch>
                     <NButton size="small" secondary @click="createVersion(item.pack.id)"
                       >复制新版本</NButton
                     >
@@ -2605,7 +2658,7 @@ h3 {
 
 .builtin-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 20px;
   align-items: center;
   padding: 18px 0;

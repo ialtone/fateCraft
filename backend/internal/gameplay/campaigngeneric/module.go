@@ -4,33 +4,33 @@
 package campaigngeneric
 
 import (
-	"github.com/ialtone/fatecraft/internal/gameplay"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaignactions"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaignview"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldcontent"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldcontract"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 )
 
 const (
 	EngineKey         = "campaign.generic"
 	LifecycleHandler  = "campaign.generic_lifecycle"
 	ProjectionHandler = "campaign.generic_projection"
-	ContextPolicy     = campaignview.GenericContextPolicy
+	ContextPolicy     = worldcontract.ContextPolicy
 )
 
 var actionKeys = []string{
-	campaignactions.ActionGainItem,
-	campaignactions.ActionTradeBuy,
-	campaignactions.ActionTradeSell,
-	campaignactions.ActionAdjustMarket,
-	campaignactions.ActionTravel,
-	campaignactions.ActionInvestigate,
-	campaignactions.ActionResolveUncertain,
-	campaignactions.ActionInstantiateNPC,
-	campaignactions.ActionMoveNPC,
-	campaignactions.ActionSetNPCStatus,
-	campaignactions.ActionRecordInteraction,
-	campaignactions.ActionAdjustFaction,
-	campaignactions.ActionAcceptQuest,
-	campaignactions.ActionSubmitQuest,
+	worldcontract.ActionGainItem,
+	worldcontract.ActionTradeBuy,
+	worldcontract.ActionTradeSell,
+	worldcontract.ActionAdjustMarket,
+	worldcontract.ActionTravel,
+	worldcontract.ActionInvestigate,
+	worldcontract.ActionResolveUncertain,
+	worldcontract.ActionInstantiateNPC,
+	worldcontract.ActionMoveNPC,
+	worldcontract.ActionSetNPCStatus,
+	worldcontract.ActionRecordInteraction,
+	worldcontract.ActionAdjustFaction,
+	worldcontract.ActionAcceptQuest,
+	worldcontract.ActionSubmitQuest,
 }
 
 func ActionKeys() []string { return append([]string(nil), actionKeys...) }
@@ -46,5 +46,7 @@ func Register(registry *gameplay.Registry) {
 		CampaignProjectionHandlers: []string{ProjectionHandler},
 		CampaignContextPolicies:    []string{ContextPolicy},
 		CampaignActions:            ActionKeys(),
+		DefinitionValidators:       worldcontent.Shapes(),
+		ValidateContent:            worldcontent.ValidateGeneric,
 	})
 }

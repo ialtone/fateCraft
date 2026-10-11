@@ -1,0 +1,1590 @@
+[
+  {
+    "kind": "item",
+    "key": "manual.void-unity-scripture",
+    "name": "太虚归一经传承",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [],
+    "search_text": "太虚归一经传承",
+    "visibility": "player",
+    "sort_order": 200
+  },
+  {
+    "kind": "technique",
+    "key": "void-unity-scripture",
+    "name": "太虚归一经",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 18,
+      "minimum_realm_rank": 4,
+      "practice_minutes": 1200,
+      "mana_cost": 120,
+      "cultivation_gain": 3000,
+      "mastery_gain": 400,
+      "insight_gain": 4,
+      "allowed_slots": [
+        "primary"
+      ],
+      "source_item_key": "manual.void-unity-scripture",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 100,
+            "spiritual_attack": 20
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "spiritual_attack": 100,
+            "spiritual_defense": 30
+          }
+        },
+        {
+          "layer": 18,
+          "effects": {
+            "spiritual_attack": 250,
+            "spiritual_defense": 80
+          }
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "太虚归一经",
+    "visibility": "player",
+    "sort_order": 201
+  },
+  {
+    "kind": "item",
+    "key": "manual.law-harmonizing-scripture",
+    "name": "万律合真经传承",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [],
+    "search_text": "万律合真经传承",
+    "visibility": "player",
+    "sort_order": 202
+  },
+  {
+    "kind": "technique",
+    "key": "law-harmonizing-scripture",
+    "name": "万律合真经",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 18,
+      "minimum_realm_rank": 5,
+      "practice_minutes": 1440,
+      "mana_cost": 500,
+      "cultivation_gain": 12000,
+      "mastery_gain": 400,
+      "insight_gain": 4,
+      "allowed_slots": [
+        "primary"
+      ],
+      "source_item_key": "manual.law-harmonizing-scripture",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 100,
+            "spiritual_attack": 20
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "spiritual_attack": 100,
+            "spiritual_defense": 30
+          }
+        },
+        {
+          "layer": 18,
+          "effects": {
+            "spiritual_attack": 250,
+            "spiritual_defense": 80
+          }
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "万律合真经",
+    "visibility": "player",
+    "sort_order": 203
+  },
+  {
+    "kind": "item",
+    "key": "manual.great-unity-scripture",
+    "name": "大衍圆融经传承",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [],
+    "search_text": "大衍圆融经传承",
+    "visibility": "player",
+    "sort_order": 204
+  },
+  {
+    "kind": "technique",
+    "key": "great-unity-scripture",
+    "name": "大衍圆融经",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 18,
+      "minimum_realm_rank": 7,
+      "practice_minutes": 1440,
+      "mana_cost": 3500,
+      "cultivation_gain": 90000,
+      "mastery_gain": 400,
+      "insight_gain": 4,
+      "allowed_slots": [
+        "primary"
+      ],
+      "source_item_key": "manual.great-unity-scripture",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 100,
+            "spiritual_attack": 20
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "spiritual_attack": 100,
+            "spiritual_defense": 30
+          }
+        },
+        {
+          "layer": 18,
+          "effects": {
+            "spiritual_attack": 250,
+            "spiritual_defense": 80
+          }
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "大衍圆融经",
+    "visibility": "player",
+    "sort_order": 205
+  },
+  {
+    "kind": "item",
+    "key": "manual.star-bone-body",
+    "name": "星骨炼体诀传承",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [],
+    "search_text": "星骨炼体诀传承",
+    "visibility": "player",
+    "sort_order": 206
+  },
+  {
+    "kind": "technique",
+    "key": "star-bone-body",
+    "name": "星骨炼体诀",
+    "content": {
+      "category": "body",
+      "max_layer": 18,
+      "minimum_realm_rank": 3,
+      "practice_minutes": 720,
+      "mana_cost": 15,
+      "cultivation_gain": 180,
+      "mastery_gain": 400,
+      "insight_gain": 4,
+      "allowed_slots": [
+        "body"
+      ],
+      "source_item_key": "manual.star-bone-body",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_health": 50,
+            "physical_defense": 12
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "physical_attack": 50,
+            "physical_defense": 30
+          }
+        },
+        {
+          "layer": 18,
+          "effects": {
+            "max_health": 200,
+            "physical_defense": 80
+          }
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "星骨炼体诀",
+    "visibility": "player",
+    "sort_order": 207
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-mortal",
+    "name": "凡人静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 0,
+      "max_realm_rank": 0,
+      "days": 1,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "basic-breathing",
+        "greenwood-nurturing",
+        "red-sun-breathing",
+        "water-mirror-art",
+        "earth-vein-method"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 1
+        },
+        {
+          "item_key": "green-river-herb",
+          "quantity": 1
+        }
+      ],
+      "cultivation_gain": 25,
+      "mastery_gain": 2500,
+      "mana_cost": 1,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "凡人静修",
+    "visibility": "player",
+    "sort_order": 208
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-mortal",
+    "name": "凡人炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 0,
+      "max_realm_rank": 0,
+      "days": 1,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "iron-body",
+        "stone-skin-method"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 1
+        },
+        {
+          "item_key": "green-river-herb",
+          "quantity": 1
+        }
+      ],
+      "cultivation_gain": 20,
+      "mastery_gain": 2000,
+      "mana_cost": 1,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "凡人炼体闭关",
+    "visibility": "player",
+    "sort_order": 209
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-qi-refining",
+    "name": "练气静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 1,
+      "max_realm_rank": 1,
+      "days": 7,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "basic-breathing",
+        "greenwood-nurturing",
+        "red-sun-breathing",
+        "water-mirror-art",
+        "earth-vein-method",
+        "foundation-condensing-guide"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 3
+        },
+        {
+          "item_key": "green-river-herb",
+          "quantity": 2
+        }
+      ],
+      "cultivation_gain": 250,
+      "mastery_gain": 2500,
+      "mana_cost": 10,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "练气静修",
+    "visibility": "player",
+    "sort_order": 210
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-qi-refining",
+    "name": "练气炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 1,
+      "max_realm_rank": 1,
+      "days": 7,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "iron-body",
+        "stone-skin-method"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 3
+        },
+        {
+          "item_key": "green-river-herb",
+          "quantity": 2
+        }
+      ],
+      "cultivation_gain": 200,
+      "mastery_gain": 2000,
+      "mana_cost": 5,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "练气炼体闭关",
+    "visibility": "player",
+    "sort_order": 211
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-foundation",
+    "name": "筑基静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 2,
+      "max_realm_rank": 2,
+      "days": 30,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "star-tide-scripture",
+        "foundation-condensing-guide"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 10
+        },
+        {
+          "item_key": "green-river-herb",
+          "quantity": 3
+        }
+      ],
+      "cultivation_gain": 1250,
+      "mastery_gain": 2500,
+      "mana_cost": 40,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "筑基静修",
+    "visibility": "player",
+    "sort_order": 212
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-foundation",
+    "name": "筑基炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 2,
+      "max_realm_rank": 2,
+      "days": 30,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "iron-body",
+        "stone-skin-method"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 7
+        },
+        {
+          "item_key": "green-river-herb",
+          "quantity": 3
+        }
+      ],
+      "cultivation_gain": 1000,
+      "mastery_gain": 2000,
+      "mana_cost": 20,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "筑基炼体闭关",
+    "visibility": "player",
+    "sort_order": 213
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-golden-core",
+    "name": "结丹静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 3,
+      "max_realm_rank": 3,
+      "days": 60,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "star-tide-scripture"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 40
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 1
+        }
+      ],
+      "cultivation_gain": 4500,
+      "mastery_gain": 2500,
+      "mana_cost": 150,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "结丹静修",
+    "visibility": "player",
+    "sort_order": 214
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-golden-core",
+    "name": "结丹炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 3,
+      "max_realm_rank": 3,
+      "days": 60,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "star-bone-body"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 28
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 1
+        }
+      ],
+      "cultivation_gain": 3600,
+      "mastery_gain": 2000,
+      "mana_cost": 75,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "结丹炼体闭关",
+    "visibility": "player",
+    "sort_order": 215
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-nascent-soul",
+    "name": "元婴静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 4,
+      "max_realm_rank": 4,
+      "days": 90,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "void-unity-scripture",
+        "star-tide-scripture"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 80
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 2
+        }
+      ],
+      "cultivation_gain": 15000,
+      "mastery_gain": 2500,
+      "mana_cost": 700,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "元婴静修",
+    "visibility": "player",
+    "sort_order": 216
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-nascent-soul",
+    "name": "元婴炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 4,
+      "max_realm_rank": 4,
+      "days": 90,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "star-bone-body"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 56
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 2
+        }
+      ],
+      "cultivation_gain": 12000,
+      "mastery_gain": 2000,
+      "mana_cost": 350,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "元婴炼体闭关",
+    "visibility": "player",
+    "sort_order": 217
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-spirit-transformation",
+    "name": "化神静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 5,
+      "max_realm_rank": 5,
+      "days": 120,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "law-harmonizing-scripture",
+        "void-unity-scripture"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 150
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 3
+        }
+      ],
+      "cultivation_gain": 45000,
+      "mastery_gain": 2500,
+      "mana_cost": 3000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "化神静修",
+    "visibility": "player",
+    "sort_order": 218
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-spirit-transformation",
+    "name": "化神炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 5,
+      "max_realm_rank": 5,
+      "days": 120,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "celestial-body"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 105
+        },
+        {
+          "item_key": "celestial-herb",
+          "quantity": 3
+        }
+      ],
+      "cultivation_gain": 36000,
+      "mastery_gain": 2000,
+      "mana_cost": 1500,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "化神炼体闭关",
+    "visibility": "player",
+    "sort_order": 219
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-void-refining",
+    "name": "炼虚静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 6,
+      "max_realm_rank": 6,
+      "days": 180,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "law-harmonizing-scripture"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 250
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 1
+        }
+      ],
+      "cultivation_gain": 150000,
+      "mastery_gain": 2500,
+      "mana_cost": 12000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "炼虚静修",
+    "visibility": "player",
+    "sort_order": 220
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-void-refining",
+    "name": "炼虚炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 6,
+      "max_realm_rank": 6,
+      "days": 180,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "celestial-body"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 175
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 1
+        }
+      ],
+      "cultivation_gain": 120000,
+      "mastery_gain": 2000,
+      "mana_cost": 6000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "炼虚炼体闭关",
+    "visibility": "player",
+    "sort_order": 221
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-body-integration",
+    "name": "合体静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 7,
+      "max_realm_rank": 7,
+      "days": 180,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "great-unity-scripture"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 400
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 2
+        }
+      ],
+      "cultivation_gain": 450000,
+      "mastery_gain": 2500,
+      "mana_cost": 30000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "合体静修",
+    "visibility": "player",
+    "sort_order": 222
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-body-integration",
+    "name": "合体炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 7,
+      "max_realm_rank": 7,
+      "days": 180,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "celestial-body"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 280
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 2
+        }
+      ],
+      "cultivation_gain": 360000,
+      "mastery_gain": 2000,
+      "mana_cost": 15000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "合体炼体闭关",
+    "visibility": "player",
+    "sort_order": 223
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "retreat-great-ascension",
+    "name": "大乘静修",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 8,
+      "max_realm_rank": 8,
+      "days": 180,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "great-unity-scripture"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 600
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 3
+        }
+      ],
+      "cultivation_gain": 1350000,
+      "mastery_gain": 2500,
+      "mana_cost": 60000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "大乘静修",
+    "visibility": "player",
+    "sort_order": 224
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "body-great-ascension",
+    "name": "大乘炼体闭关",
+    "content": {
+      "mode": "retreat",
+      "min_realm_rank": 8,
+      "max_realm_rank": 8,
+      "days": 180,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [
+        "celestial-body"
+      ],
+      "materials": [
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 420
+        },
+        {
+          "item_key": "law-fragment",
+          "quantity": 3
+        }
+      ],
+      "cultivation_gain": 1080000,
+      "mastery_gain": 2000,
+      "mana_cost": 30000,
+      "health_restore_bps": 0,
+      "mana_restore_bps": 0,
+      "sense_restore_bps": 0,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "大乘炼体闭关",
+    "visibility": "player",
+    "sort_order": 225
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "quiet-rest",
+    "name": "七日调息",
+    "content": {
+      "mode": "recovery",
+      "min_realm_rank": 0,
+      "max_realm_rank": 8,
+      "days": 7,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [],
+      "materials": [],
+      "cultivation_gain": 0,
+      "mastery_gain": 0,
+      "mana_cost": 0,
+      "health_restore_bps": 1000,
+      "mana_restore_bps": 2500,
+      "sense_restore_bps": 2500,
+      "injury_relief": 0
+    },
+    "tags": [],
+    "search_text": "七日调息",
+    "visibility": "player",
+    "sort_order": 226
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "herbal-recovery",
+    "name": "草药休养",
+    "content": {
+      "mode": "recovery",
+      "min_realm_rank": 0,
+      "max_realm_rank": 2,
+      "days": 1,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [],
+      "materials": [
+        {
+          "item_key": "green-river-herb",
+          "quantity": 2
+        },
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 4
+        }
+      ],
+      "cultivation_gain": 0,
+      "mastery_gain": 0,
+      "mana_cost": 0,
+      "health_restore_bps": 7500,
+      "mana_restore_bps": 10000,
+      "sense_restore_bps": 10000,
+      "injury_relief": 50
+    },
+    "tags": [],
+    "search_text": "草药休养",
+    "visibility": "player",
+    "sort_order": 227
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "spiritual-recovery",
+    "name": "灵泉疗养",
+    "content": {
+      "mode": "recovery",
+      "min_realm_rank": 3,
+      "max_realm_rank": 5,
+      "days": 1,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [],
+      "materials": [
+        {
+          "item_key": "celestial-herb",
+          "quantity": 1
+        },
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 20
+        }
+      ],
+      "cultivation_gain": 0,
+      "mastery_gain": 0,
+      "mana_cost": 0,
+      "health_restore_bps": 7500,
+      "mana_restore_bps": 10000,
+      "sense_restore_bps": 10000,
+      "injury_relief": 50
+    },
+    "tags": [],
+    "search_text": "灵泉疗养",
+    "visibility": "player",
+    "sort_order": 228
+  },
+  {
+    "kind": "cultivation.training",
+    "key": "celestial-recovery",
+    "name": "上清养神",
+    "content": {
+      "mode": "recovery",
+      "min_realm_rank": 6,
+      "max_realm_rank": 8,
+      "days": 1,
+      "location_keys": [
+        "green-river-village",
+        "bluestone-market",
+        "county-town",
+        "herb-valley",
+        "outer-courtyard",
+        "red-cloud-temple",
+        "lin-family-manor",
+        "cloud-sail-port",
+        "tide-star-market",
+        "void-crossing-gate",
+        "ancient-star-observatory",
+        "ascension-platform",
+        "law-market"
+      ],
+      "technique_keys": [],
+      "materials": [
+        {
+          "item_key": "celestial-herb",
+          "quantity": 2
+        },
+        {
+          "item_key": "low-spirit-stone",
+          "quantity": 80
+        }
+      ],
+      "cultivation_gain": 0,
+      "mastery_gain": 0,
+      "mana_cost": 0,
+      "health_restore_bps": 7500,
+      "mana_restore_bps": 10000,
+      "sense_restore_bps": 10000,
+      "injury_relief": 50
+    },
+    "tags": [],
+    "search_text": "上清养神",
+    "visibility": "player",
+    "sort_order": 229
+  },
+  {
+    "kind": "location",
+    "key": "void-survey-platform",
+    "name": "虚空标定台",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "celestial-frontier",
+      "description": "虚空标定台用于当前境界的准备与验证。",
+      "realm_layer": "void-refining",
+      "danger_rank": 6,
+      "spiritual_energy": 600,
+      "facilities": [
+        "research"
+      ],
+      "investigation_minutes": 360,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 6
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "celestial-frontier",
+          "travel_minutes": 360
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "虚空标定台",
+    "visibility": "player",
+    "sort_order": 230
+  },
+  {
+    "kind": "location",
+    "key": "dharma-training-hall",
+    "name": "法身试炼殿",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "law-market",
+      "description": "法身试炼殿用于当前境界的准备与验证。",
+      "realm_layer": "body-integration",
+      "danger_rank": 7,
+      "spiritual_energy": 600,
+      "facilities": [
+        "research"
+      ],
+      "investigation_minutes": 360,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 7
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "law-market",
+          "travel_minutes": 360
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "法身试炼殿",
+    "visibility": "player",
+    "sort_order": 231
+  },
+  {
+    "kind": "location",
+    "key": "ascension-sanctum",
+    "name": "问道天坛",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "celestial-frontier",
+      "description": "问道天坛用于当前境界的准备与验证。",
+      "realm_layer": "great-ascension",
+      "danger_rank": 8,
+      "spiritual_energy": 600,
+      "facilities": [
+        "research"
+      ],
+      "investigation_minutes": 360,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 8
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "celestial-frontier",
+          "travel_minutes": 360
+        }
+      ]
+    },
+    "tags": [],
+    "search_text": "问道天坛",
+    "visibility": "player",
+    "sort_order": 232
+  },
+  {
+    "kind": "quest",
+    "key": "void-spatial-survey",
+    "name": "架设虚空航标",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "celestial-frontier"
+      ],
+      "objectives": [
+        {
+          "key": "reach-void-survey-platform",
+          "type": "location",
+          "location_key": "void-survey-platform"
+        },
+        {
+          "key": "deliver-void-crystal",
+          "type": "item",
+          "item_key": "void-crystal",
+          "quality_key": "common",
+          "quantity": 3,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "manual.great-unity-scripture",
+          "quantity": 1
+        }
+      ],
+      "unlock_quest_keys": [
+        "integration-body-trial"
+      ],
+      "milestone_key": "void-spatial-survey"
+    },
+    "tags": [],
+    "search_text": "架设虚空航标",
+    "visibility": "player",
+    "sort_order": 233
+  },
+  {
+    "kind": "quest",
+    "key": "integration-body-trial",
+    "name": "法身承压试炼",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "law-market"
+      ],
+      "objectives": [
+        {
+          "key": "hold-dharma",
+          "type": "encounter_win",
+          "encounter_key": "dharma-pressure-trial",
+          "quantity": 1
+        },
+        {
+          "key": "deliver-celestial-herb",
+          "type": "item",
+          "item_key": "celestial-herb",
+          "quality_key": "common",
+          "quantity": 3,
+          "consume": true
+        }
+      ],
+      "rewards": [
+        {
+          "type": "item",
+          "item_key": "law-fragment",
+          "quantity": 2
+        }
+      ],
+      "unlock_quest_keys": [
+        "great-ascension-preparation"
+      ],
+      "milestone_key": "integration-body-trial"
+    },
+    "tags": [],
+    "search_text": "法身承压试炼",
+    "visibility": "player",
+    "sort_order": 234
+  },
+  {
+    "kind": "quest",
+    "key": "great-ascension-preparation",
+    "name": "天坛问道与引劫准备",
+    "content": {
+      "quest_type": "quest",
+      "initial": false,
+      "starting_status": "offered",
+      "accept_location_keys": [
+        "celestial-frontier"
+      ],
+      "objectives": [
+        {
+          "key": "reach-ascension-sanctum",
+          "type": "location",
+          "location_key": "ascension-sanctum"
+        },
+        {
+          "key": "deliver-law-fragment",
+          "type": "item",
+          "item_key": "law-fragment",
+          "quality_key": "common",
+          "quantity": 4,
+          "consume": true
+        }
+      ],
+      "rewards": [],
+      "unlock_quest_keys": [
+        "warden-ending",
+        "seeker-ending"
+      ],
+      "milestone_key": "great-ascension-preparation"
+    },
+    "tags": [],
+    "search_text": "天坛问道与引劫准备",
+    "visibility": "player",
+    "sort_order": 235
+  },
+  {
+    "kind": "encounter",
+    "key": "dharma-pressure-trial",
+    "name": "法身承压阵",
+    "content": {
+      "location_key": "dharma-training-hall",
+      "opponent_key": "dharma-projection",
+      "opponent_name": "法身试炼投影",
+      "opponent_realm_rank": 7,
+      "opponent_max_health": 7000,
+      "opponent_attack": 600,
+      "opponent_defense": 80,
+      "player_damage_base": 700,
+      "player_damage_scale_bps": 16000,
+      "player_mana_cost": 1000,
+      "round_minutes": 60,
+      "max_rounds": 25,
+      "flee_chance_bps": 10000,
+      "rewards": []
+    },
+    "tags": [],
+    "search_text": "法身承压阵",
+    "visibility": "player",
+    "sort_order": 236
+  }
+]

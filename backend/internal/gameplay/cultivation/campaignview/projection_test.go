@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/ialtone/fatecraft/internal/campaign"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldview"
+	"github.com/ialtone/fatecraft/internal/storage"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
-
-	"github.com/ialtone/fatecraft/internal/campaign"
-	"github.com/ialtone/fatecraft/internal/storage"
 )
 
 func TestContextProjectionRemainsBoundedWithLargeDomainState(t *testing.T) {
@@ -51,9 +50,9 @@ func TestGenericContextProjectionOmitsCultivationDomain(t *testing.T) {
 			},
 		},
 	}
-	view, err := (Provider{}).Context(context.Background(), campaign.ProjectionContext{
+	view, err := (worldview.Provider{}).Context(context.Background(), campaign.ProjectionContext{
 		Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "start"},
-		Domain:   state, ContextPolicy: GenericContextPolicy,
+		Domain:   state, ContextPolicy: "campaign.generic_context",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +259,7 @@ func TestWorldProjectionMarksFactionGatedRoutes(t *testing.T) {
 		},
 	}
 
-	world := worldView(row, state, false)
+	world := worldview.WorldView(row, state, false)
 	routes := world["available_routes"].([]map[string]any)
 	if len(routes) != 1 || routes[0]["accessible"] != false {
 		t.Fatalf("locked route projection = %#v", routes)
@@ -273,7 +272,7 @@ func TestWorldProjectionMarksFactionGatedRoutes(t *testing.T) {
 
 	state.Factions[0].Reputation = 100
 	state.Factions[0].Permissions = storage.JSONMap{"outer_gate_access": true}
-	world = worldView(row, state, false)
+	world = worldview.WorldView(row, state, false)
 	routes = world["available_routes"].([]map[string]any)
 	if routes[0]["accessible"] != true || len(routes[0]["missing_requirements"].([]map[string]any)) != 0 {
 		t.Fatalf("unlocked route projection = %#v", routes)
@@ -288,7 +287,7 @@ func TestProjectionIncludesActiveEffectsAndCurrentLocationPath(t *testing.T) {
 			BaseMaxMana: 20, MaxMana: 25, BaseMaxSpiritualSense: 10, MaxSpiritualSense: 10,
 		},
 		Techniques: []storage.CampaignTechnique{{
-			TechniqueKey: "breathing", LearnedLayer: 2, Status: "active", EquippedSlot: &slot,
+			TechniqueKey: "breathing", Mastery: 10000, LearnedLayer: 2, Status: "active", EquippedSlot: &slot,
 		}},
 		ItemInstances: []storage.CampaignItemInstance{{
 			DefinitionKey: "robe", State: "equipped", EquippedSlot: &equipmentSlot, Durability: 10,
@@ -296,7 +295,7 @@ func TestProjectionIncludesActiveEffectsAndCurrentLocationPath(t *testing.T) {
 		Definitions: map[string]storage.GameplayDefinition{
 			storage.DefinitionTechnique + ":breathing": {
 				Kind: storage.DefinitionTechnique, Key: "breathing",
-				Content: storage.JSONMap{"layer_effects": []any{map[string]any{
+				Content: storage.JSONMap{"max_layer": int64(2), "layer_effects": []any{map[string]any{
 					"layer": int64(1), "effects": map[string]any{"max_mana": int64(5)},
 				}}},
 			},
@@ -323,7 +322,7 @@ func TestProjectionIncludesActiveEffectsAndCurrentLocationPath(t *testing.T) {
 	if effects["max_mana"] != 5 || effects["max_health"] != 10 || effects["physical_defense"] != 3 {
 		t.Fatalf("active effects projection = %#v", effects)
 	}
-	world := worldView(storage.Campaign{CurrentLocationKey: "village"}, state, false)
+	world := worldview.WorldView(storage.Campaign{CurrentLocationKey: "village"}, state, false)
 	path := world["current_path"].([]map[string]any)
 	if len(path) != 3 || path[0]["key"] != "world" || path[2]["key"] != "village" {
 		t.Fatalf("current location path = %#v", path)
@@ -360,7 +359,7 @@ func TestTechniqueProjectionIncludesDynamicPracticeLimit(t *testing.T) {
 			storage.DefinitionTechnique + ":basic-breathing": {
 				Kind: storage.DefinitionTechnique, Key: "basic-breathing", Name: "基础引气诀",
 				Content: storage.JSONMap{
-					"mana_cost": int64(1), "practice_minutes": int64(120),
+					"max_layer": int64(12), "mana_cost": int64(1), "practice_minutes": int64(120),
 					"cultivation_gain": int64(12), "mastery_gain": int64(35),
 					"layer_effects": []any{map[string]any{
 						"layer": int64(1), "effects": map[string]any{"max_mana": int64(5)},
@@ -428,7 +427,7 @@ func TestEconomyProjectionBoundsMarketsAndLearnableRecipes(t *testing.T) {
 		t.Fatalf("learnable recipe projection = %#v", recipes[1])
 	}
 
-	markets := marketViews(row, state, 0)
+	markets := worldview.MarketViews(row, state, 0)
 	if len(markets) != 1 || markets[0]["key"] != "town-market" {
 		t.Fatalf("remote market entered current projection: %#v", markets)
 	}

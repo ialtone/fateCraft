@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "packs": [
+    "mortal-path", "reincarnation-trials", "island-rescue", "mountain-inn",
+    "night-blockade", "old-town-promise", "lost-chambers",
+    "underground-watchtower", "qinglan-sect"
+  ]
+}

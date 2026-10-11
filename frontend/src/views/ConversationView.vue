@@ -27,6 +27,7 @@ import { useContextStore } from '@/stores/context'
 import { useSocketStore } from '@/stores/socket'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useRewardStore } from '@/stores/rewards'
+import { usePlayerActionStore } from '@/stores/playerActions'
 import { useCampaignStore } from '@/stores/campaign'
 import { useInquiryStore } from '@/stores/inquiry'
 import type { CompletionInfo } from '@/stores/conversations'
@@ -48,6 +49,7 @@ const runtime = useRuntimeStore()
 const guidance = useGuidanceStore()
 const rewards = useRewardStore()
 const campaign = useCampaignStore()
+const playerActions = usePlayerActionStore()
 const inquiry = useInquiryStore()
 const settings = useSettingsStore()
 const relay = useLlmRelayStore()
@@ -99,7 +101,13 @@ const inputDisabled = computed(() => !editable.value || routeMismatch.value || r
 
 watch(
   () => convStore.completion,
-  (completion) => completion && showCompletion(completion),
+  (completion, _previous, onCleanup) => {
+    if (completion) {
+      const popup = showCompletion(completion)
+      onCleanup(() => popup.destroy())
+    }
+  },
+  { immediate: true },
 )
 
 function showCompletion(completion: CompletionInfo) {
@@ -141,11 +149,12 @@ function showCompletion(completion: CompletionInfo) {
       convStore.clearEnding()
       if (back) router.push('/')
     },
+    onClose: () => convStore.clearEnding(),
     onMaskClick: () => convStore.clearEnding(),
   }
-  if (completion.category === 'success') dialog.success(options)
-  else if (completion.category === 'failure') dialog.error(options)
-  else dialog.info(options)
+  if (completion.category === 'success') return dialog.success(options)
+  else if (completion.category === 'failure') return dialog.error(options)
+  else return dialog.info(options)
 }
 
 // 组件是否已卸载：卸载后进行中的 open() 不得再触碰 store / socket
@@ -161,6 +170,8 @@ function stale(id: string) {
 
 async function open(id: string) {
   // 切换对话时清空所有缓存（doc 05）。
+  playerActions.enter(id)
+  convStore.clearCurrent()
   chat.reset()
   guidance.reset()
   stateStore.reset()
@@ -189,6 +200,7 @@ async function open(id: string) {
     stateStore.load(id),
     context.loadRuntimeInspector(id),
     runtime.load(id),
+    convStore.loadEndingState(id),
     convStore.current?.campaign_id
       ? campaign.load(convStore.current.campaign_id)
       : Promise.resolve(null),
@@ -204,7 +216,12 @@ onMounted(async () => {
   // 轮询先于任何 await 启动：首次加载失败时仍需要它兜底解锁输入框。
   activityTimer = setInterval(async () => {
     if (disposed || !convId.value) return
-    await context.loadActivity(convId.value)
+    const id = convId.value
+    await context.loadActivity(id)
+    if (stale(id)) return
+    if (convStore.endingState?.is_processing && context.activity.narrative === 'idle') {
+      convStore.loadEndingState(id).catch(() => {})
+    }
     // 兜底复位：open() 因 is_processing 标记的“生成中”在服务端结束、而
     // 本端又错过了收尾事件时（narrative 回到 idle 且没有流式占位），把
     // 状态收回来，避免输入框永久锁死。有流式占位说明生成仍在事件流内，
@@ -216,6 +233,7 @@ onMounted(async () => {
       context.activity.narrative === 'idle'
     ) {
       chat.stopGenerating()
+      convStore.loadEndingState(convId.value).catch(() => {})
       guidance.load(convId.value)
       chat.load(convId.value).catch(() => {})
     }
@@ -240,18 +258,85 @@ onBeforeUnmount(() => {
   }
   socket.disconnect()
   convStore.clearCurrent()
+  playerActions.reset()
   campaign.reset()
   inquiry.reset()
 })
 
-function endConversation() {
+async function confirmEnding(
+  key: string,
+  arguments_: Record<string, string | number | boolean>,
+  label: string,
+) {
+  if (playerActions.pending) return
+  const id = convId.value
+  const snapshot = convStore.endingState
+  if (!snapshot || snapshot.is_processing || chat.isGenerating) return
+  const capability = snapshot.ending_capabilities.find((item) => item.key === key)
+  if (!capability?.available) {
+    message.warning(capability?.violations?.[0]?.message || '当前条件不满足，请刷新状态。')
+    return
+  }
+  const plan = capability.plans?.find(
+    (item) => JSON.stringify(item.arguments) === JSON.stringify(arguments_),
+  )
+  const metadata = plan || capability.metadata
+  const costs = Object.entries(metadata.costs || {})
+    .map(([name, value]) => `${capability.cost_labels?.[name] || name}：${value}`)
+    .join('，')
+  const request = {
+    request_id: crypto.randomUUID(),
+    branch_epoch: snapshot.branch_epoch,
+    expected_revision: snapshot.revision,
+    key,
+    arguments: arguments_,
+  }
   dialog.warning({
-    title: '结束对话',
-    content: '确定结束这个对话？结束后将无法继续生成。',
-    positiveText: '结束',
+    title: label,
+    content: [
+      capability.description,
+      costs,
+      metadata.minutes ? `耗时 ${metadata.minutes} 分钟` : '',
+      metadata.risk,
+      '确认后由后端重新校验条件并执行；结束后无法继续本局。主动终止保留已到账阶段积分，不额外发放通关积分。',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    positiveText: '确认执行',
     negativeText: '取消',
-    onPositiveClick: () => convStore.end(convId.value),
+    onPositiveClick: () => playerActions.execute(id, request),
   })
+}
+
+async function endConversation() {
+  const id = convId.value
+  if (playerActions.pending) {
+    await playerActions.execute(convId.value)
+    return
+  }
+  try {
+    const snapshot = await convStore.loadEndingState(id)
+    if (stale(id)) return
+    if (snapshot?.abandon_action) {
+      await confirmEnding(snapshot.abandon_action, {}, '中止本局')
+      return
+    }
+    if (!snapshot || snapshot.has_trusted_actions) {
+      message.warning('此玩法尚未提供中止动作，请使用玩法行动面板。')
+      return
+    }
+    dialog.warning({
+      title: '结束对话',
+      content: '结束后无法继续生成。',
+      positiveText: '结束',
+      negativeText: '取消',
+      onPositiveClick: () => {
+        if (!stale(id)) return convStore.end(id)
+      },
+    })
+  } catch (cause: any) {
+    message.error(cause?.message || '读取结局条件失败，请重试')
+  }
 }
 
 async function forkConversation() {
@@ -332,7 +417,20 @@ async function forkConversation() {
         >
           {{ showInspector ? '隐藏检查器' : '显示检查器' }}
         </NButton>
-        <NButton v-if="editable" quaternary size="small" type="error" @click="endConversation"
+        <NButton
+          v-if="convStore.lastCompletion"
+          quaternary
+          size="small"
+          @click="convStore.showLastCompletion()"
+          >查看结局</NButton
+        >
+        <NButton
+          v-if="editable"
+          :disabled="chat.isGenerating || playerActions.acting"
+          quaternary
+          size="small"
+          type="error"
+          @click="endConversation"
           >结束</NButton
         >
         <NButton
@@ -382,6 +480,47 @@ async function forkConversation() {
           ? '此版本已封存，只能浏览；可基于新版本继续。'
           : '此挑战已结束'
       }}
+    </div>
+
+    <div v-if="playerActions.pending || playerActions.error" class="route-banner">
+      <span>{{ playerActions.error || '上次操作结果尚未确认' }}</span>
+      <NButton
+        v-if="playerActions.pending"
+        size="small"
+        :loading="playerActions.acting"
+        @click="playerActions.execute(convId)"
+        >查询原请求</NButton
+      >
+    </div>
+    <div v-if="editable && convStore.endingState?.proposal" class="route-banner">
+      <span
+        >{{ convStore.endingState.proposal.label }}：{{
+          convStore.endingState.proposal.reason || '模型建议此结局，由您决定是否执行。'
+        }}</span
+      >
+      <NButton
+        size="small"
+        :disabled="
+          !convStore.endingState.proposal.available ||
+          chat.isGenerating ||
+          playerActions.acting ||
+          !!playerActions.pending
+        "
+        @click="
+          confirmEnding(
+            convStore.endingState.proposal.key,
+            convStore.endingState.proposal.arguments,
+            convStore.endingState.proposal.label,
+          )
+        "
+        >查看并确认</NButton
+      >
+      <NButton
+        size="small"
+        quaternary
+        @click="convStore.dismissProposal(convStore.endingState.proposal.id)"
+        >暂不执行</NButton
+      >
     </div>
 
     <!-- 错误提示统一由输入区（ActionInput）的可关闭警示条展示，页头不再重复挂一份 -->

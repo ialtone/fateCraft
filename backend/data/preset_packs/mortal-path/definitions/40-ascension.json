@@ -1,0 +1,73 @@
+[
+  {
+    "kind": "cultivation.ascension",
+    "key": "ascension",
+    "name": "大乘圆满与最终渡劫",
+    "content": {
+      "realm_key": "great-ascension",
+      "encounter_key": "final-ascension-tribulation",
+      "quest_groups": [
+        [
+          "cave-rescue",
+          "foundation-preparation",
+          "county-stability-choice"
+        ],
+        [
+          "hunt-abyssal-isle"
+        ],
+        [
+          "seal-rift-heart"
+        ],
+        [
+          "great-ascension-preparation"
+        ]
+      ],
+      "materials": [
+        {
+          "item_key": "law-fragment",
+          "quality": "common",
+          "quantity": 3
+        }
+      ],
+      "outcome_keys": [
+        "world_warden",
+        "law_seeker"
+      ]
+    },
+    "tags": [
+      "飞升",
+      "终局"
+    ],
+    "search_text": "大乘圆满 主线 渡劫 终局资格",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "encounter",
+    "key": "final-ascension-tribulation",
+    "name": "飞升天劫",
+    "content": {
+      "location_key": "celestial-frontier",
+      "opponent_key": "ascension-storm",
+      "opponent_name": "九霄劫云",
+      "opponent_realm_rank": 8,
+      "opponent_max_health": 14000,
+      "opponent_attack": 1200,
+      "opponent_defense": 150,
+      "player_damage_base": 1100,
+      "player_damage_scale_bps": 16000,
+      "player_mana_cost": 1800,
+      "round_minutes": 120,
+      "max_rounds": 30,
+      "flee_chance_bps": 3500,
+      "rewards": []
+    },
+    "tags": [
+      "飞升",
+      "渡劫"
+    ],
+    "search_text": "大乘 圆满 天劫",
+    "visibility": "player",
+    "sort_order": 90
+  }
+]

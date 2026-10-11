@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:campaign-actions": "node --test tests/campaign-actions.test.mjs",
+    "test:module-actions": "node --experimental-strip-types --test tests/module-actions.test.mjs",
     "test:play-readiness": "node --experimental-strip-types --test tests/play-readiness.test.mjs",
     "test:admin-tabs": "node --experimental-strip-types --test tests/admin-tabs.test.mjs",
     "test:player-rewards": "node --experimental-strip-types --test tests/player-rewards.test.mjs",
@@ -11,7 +13,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,vue}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,vue}\""
+    "format:check": "prettier --check \"src/**/*.{ts,vue}\"",
+    "test:endings": "node --test tests/endings.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",

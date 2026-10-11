@@ -1,0 +1,179 @@
+[
+  {
+    "kind": "relationship.story",
+    "key": "old-town-promise",
+    "name": "小镇旧约规则",
+    "content": {
+      "people": [
+        {
+          "key": "keeper",
+          "name": "掌柜阿岚",
+          "trust": 10,
+          "listen_gain": 10,
+          "fact": "flood",
+          "fact_label": "洪水冲断旧桥，掌柜盼着商路重开"
+        },
+        {
+          "key": "teacher",
+          "name": "教书人闻溪",
+          "trust": 10,
+          "listen_gain": 10,
+          "fact": "letter",
+          "fact_label": "旧信澄清了当年的误会，公开与否仍需尊重当事人"
+        },
+        {
+          "key": "carpenter",
+          "name": "木匠陈叔",
+          "trust": 10,
+          "listen_gain": 10,
+          "fact": "plan",
+          "fact_label": "陈叔准备了可实施的修桥方案"
+        }
+      ],
+      "events": [
+        {
+          "key": "meeting",
+          "name": "重修旧桥的请求",
+          "requires": {
+            "facts": [
+              "flood"
+            ],
+            "trust": {},
+            "promises": []
+          },
+          "choices": [
+            {
+              "key": "support",
+              "name": "答应亲自修桥",
+              "facts": {
+                "supported": "已答应参与修桥"
+              },
+              "trust_changes": {
+                "keeper": 5,
+                "carpenter": 5
+              },
+              "promise": "bridge"
+            },
+            {
+              "key": "refuse",
+              "name": "坦诚拒绝无法承担的事",
+              "facts": {
+                "refused": "已坦诚拒绝修桥"
+              },
+              "trust_changes": {
+                "keeper": -5,
+                "teacher": 5
+              },
+              "promise": ""
+            }
+          ]
+        },
+        {
+          "key": "revelation",
+          "name": "旧信的去向",
+          "requires": {
+            "facts": [
+              "letter"
+            ],
+            "trust": {},
+            "promises": []
+          },
+          "choices": [
+            {
+              "key": "share",
+              "name": "征得同意后共同读信",
+              "facts": {
+                "shared": "众人共同读过澄清误会的旧信"
+              },
+              "trust_changes": {
+                "teacher": 10,
+                "keeper": 5
+              },
+              "promise": ""
+            },
+            {
+              "key": "private",
+              "name": "保留私信并说明边界",
+              "facts": {
+                "private": "尊重当事人选择，保留旧信"
+              },
+              "trust_changes": {
+                "teacher": 5,
+                "carpenter": 5
+              },
+              "promise": ""
+            }
+          ]
+        }
+      ],
+      "promises": [
+        {
+          "key": "bridge",
+          "name": "帮助陈叔完成旧桥修缮",
+          "requires": {
+            "facts": [
+              "plan"
+            ],
+            "trust": {},
+            "promises": []
+          },
+          "effort": 2,
+          "duration": 60,
+          "trust_changes": {
+            "keeper": 15,
+            "carpenter": 20,
+            "teacher": 5
+          },
+          "breach_changes": {
+            "keeper": -30,
+            "carpenter": -30,
+            "teacher": -10
+          }
+        }
+      ],
+      "endings": [
+        {
+          "key": "reunited",
+          "name": "旧约重续",
+          "requires": {
+            "facts": [
+              "supported",
+              "shared"
+            ],
+            "trust": {
+              "keeper": 30,
+              "carpenter": 30
+            },
+            "promises": [
+              "bridge"
+            ]
+          }
+        },
+        {
+          "key": "honest_distance",
+          "name": "各有归处",
+          "requires": {
+            "facts": [
+              "refused",
+              "private"
+            ],
+            "trust": {
+              "teacher": 25,
+              "keeper": 15
+            },
+            "promises": []
+          }
+        }
+      ],
+      "effort": 3,
+      "max_breaches": 1,
+      "deadline": 360
+    },
+    "tags": [
+      "关系叙事"
+    ],
+    "search_text": "小镇旧约",
+    "visibility": "internal",
+    "sort_order": 0
+  }
+]

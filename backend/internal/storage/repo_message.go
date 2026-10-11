@@ -187,15 +187,17 @@ func normalizeChatMessage(m *ChatMessage) error {
 		m.Kind = "text"
 	}
 	if contentBlocksMissing(m.ContentBlocks) {
-		// Tool-call messages carry their payload in the tool_call block supplied
-		// by the caller. Do not synthesize a text block from the diagnostic
-		// Content field for that kind.
 		if m.Kind == "tool_call" {
-			m.ContentBlocks = JSONDoc("[]")
-		} else {
-			m.ContentBlocks = messageTextContentBlocks(m.Content)
+			return errors.New("工具调用消息必须包含非空内容数组")
 		}
+		m.ContentBlocks = messageTextContentBlocks(m.Content)
 		return nil
+	}
+	if m.Kind == "tool_call" {
+		var blocks []json.RawMessage
+		if json.Unmarshal(m.ContentBlocks, &blocks) != nil || len(blocks) == 0 {
+			return errors.New("工具调用消息必须包含非空内容数组")
+		}
 	}
 	return validateContentBlocks(m.ContentBlocks)
 }

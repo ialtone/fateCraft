@@ -1,0 +1,92 @@
+[
+  {
+    "kind": "item",
+    "key": "torn-herb-basket",
+    "name": "雾狸巢中的断绳药篓",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "剧情证据"
+    ],
+    "visibility": "player",
+    "sort_order": 0,
+    "search_text": "雾狸巢中的断绳药篓"
+  },
+  {
+    "kind": "item",
+    "key": "rescued-traveler-token",
+    "name": "获救采药人的信物",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "剧情证据"
+    ],
+    "visibility": "player",
+    "sort_order": 1,
+    "search_text": "获救采药人的信物"
+  },
+  {
+    "kind": "item",
+    "key": "missing-disciple-testimony",
+    "name": "失踪弟子的亲笔证词",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "剧情证据"
+    ],
+    "visibility": "player",
+    "sort_order": 2,
+    "search_text": "失踪弟子的亲笔证词"
+  },
+  {
+    "kind": "encounter",
+    "key": "underground-river-captive-rescue",
+    "name": "伏流囚室救援",
+    "content": {
+      "location_key": "underground-river",
+      "opponent_key": "captive-jailer",
+      "opponent_name": "看守失踪者的黑水匪修",
+      "opponent_realm_rank": 1,
+      "opponent_max_health": 105,
+      "opponent_attack": 18,
+      "opponent_defense": 5,
+      "player_damage_base": 20,
+      "player_damage_scale_bps": 2000,
+      "player_mana_cost": 1,
+      "round_minutes": 20,
+      "max_rounds": 12,
+      "flee_chance_bps": 7000,
+      "rewards": [
+        {
+          "item_key": "rescued-traveler-token",
+          "quality_key": "common",
+          "quantity": 1
+        },
+        {
+          "item_key": "missing-disciple-testimony",
+          "quality_key": "common",
+          "quantity": 1
+        }
+      ]
+    },
+    "tags": [
+      "救援",
+      "证据"
+    ],
+    "visibility": "player",
+    "sort_order": 35,
+    "search_text": "伏流 囚室 采药人 失踪弟子 解救"
+  }
+]

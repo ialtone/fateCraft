@@ -1,0 +1,680 @@
+[
+  {
+    "kind": "market",
+    "key": "bluestone-guild-market",
+    "name": "青石坊市百草行",
+    "content": {
+      "location_key": "bluestone-market",
+      "currency_item_key": "low-spirit-stone",
+      "faction_key": "hundred-herbs-guild",
+      "restock_interval_minutes": 1440,
+      "price_modifier_bps": 10000,
+      "scarcity_markup_bps": 3000,
+      "reputation_adjustment_bps": 1800,
+      "items": [
+        {
+          "kind": "item",
+          "key": "green-river-herb",
+          "quality_key": "common",
+          "max_stock": 40,
+          "initial_stock": 24,
+          "restock_quantity": 8,
+          "restock_target_stock": 24,
+          "base_buy_price": 2,
+          "base_sell_price": 1
+        },
+        {
+          "kind": "item",
+          "key": "clear-spring-water",
+          "quality_key": "common",
+          "max_stock": 30,
+          "initial_stock": 18,
+          "restock_quantity": 6,
+          "restock_target_stock": 18,
+          "base_buy_price": 2,
+          "base_sell_price": 1
+        },
+        {
+          "kind": "item",
+          "key": "green-pattern-ore",
+          "quality_key": "common",
+          "max_stock": 20,
+          "initial_stock": 8,
+          "restock_quantity": 4,
+          "restock_target_stock": 8,
+          "base_buy_price": 5,
+          "base_sell_price": 3
+        },
+        {
+          "kind": "item",
+          "key": "spirit-wood",
+          "quality_key": "common",
+          "max_stock": 16,
+          "initial_stock": 6,
+          "restock_quantity": 3,
+          "restock_target_stock": 6,
+          "base_buy_price": 8,
+          "base_sell_price": 4
+        },
+        {
+          "kind": "item",
+          "key": "blank-talisman-paper",
+          "quality_key": "common",
+          "max_stock": 50,
+          "initial_stock": 30,
+          "restock_quantity": 10,
+          "restock_target_stock": 30,
+          "base_buy_price": 2,
+          "base_sell_price": 1
+        },
+        {
+          "kind": "item",
+          "key": "spirit-cinnabar",
+          "quality_key": "common",
+          "max_stock": 30,
+          "initial_stock": 16,
+          "restock_quantity": 6,
+          "restock_target_stock": 16,
+          "base_buy_price": 4,
+          "base_sell_price": 2
+        },
+        {
+          "kind": "item",
+          "key": "healing-pill",
+          "quality_key": "common",
+          "max_stock": 20,
+          "initial_stock": 10,
+          "restock_quantity": 4,
+          "restock_target_stock": 10,
+          "base_buy_price": 8,
+          "base_sell_price": 4
+        },
+        {
+          "kind": "item",
+          "key": "ward-talisman",
+          "quality_key": "common",
+          "max_stock": 20,
+          "initial_stock": 6,
+          "restock_quantity": 3,
+          "restock_target_stock": 6,
+          "base_buy_price": 10,
+          "base_sell_price": 5
+        },
+        {
+          "kind": "equipment",
+          "key": "spirit-wood-token",
+          "quality_key": "common",
+          "max_stock": 4,
+          "initial_stock": 1,
+          "restock_quantity": 1,
+          "restock_target_stock": 1,
+          "base_buy_price": 80,
+          "base_sell_price": 42
+        }
+      ]
+    },
+    "tags": [
+      "市场",
+      "百草商会"
+    ],
+    "search_text": "青石坊市 百草行 交易",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "market",
+    "key": "county-association-market",
+    "name": "散修会旧街货栈",
+    "content": {
+      "location_key": "county-town",
+      "currency_item_key": "low-spirit-stone",
+      "faction_key": "loose-cultivator-association",
+      "restock_interval_minutes": 2160,
+      "price_modifier_bps": 9600,
+      "scarcity_markup_bps": 2600,
+      "reputation_adjustment_bps": 2000,
+      "items": [
+        {
+          "kind": "item",
+          "key": "spirit-rice",
+          "quality_key": "common",
+          "max_stock": 60,
+          "initial_stock": 30,
+          "restock_quantity": 12,
+          "restock_target_stock": 30,
+          "base_buy_price": 2,
+          "base_sell_price": 1
+        },
+        {
+          "kind": "item",
+          "key": "red-flame-fruit",
+          "quality_key": "common",
+          "max_stock": 24,
+          "initial_stock": 10,
+          "restock_quantity": 5,
+          "restock_target_stock": 10,
+          "base_buy_price": 7,
+          "base_sell_price": 4
+        },
+        {
+          "kind": "item",
+          "key": "moon-dew",
+          "quality_key": "common",
+          "max_stock": 24,
+          "initial_stock": 8,
+          "restock_quantity": 4,
+          "restock_target_stock": 8,
+          "base_buy_price": 9,
+          "base_sell_price": 5
+        },
+        {
+          "kind": "item",
+          "key": "star-iron-sand",
+          "quality_key": "common",
+          "max_stock": 16,
+          "initial_stock": 5,
+          "restock_quantity": 3,
+          "restock_target_stock": 5,
+          "base_buy_price": 14,
+          "base_sell_price": 8
+        },
+        {
+          "kind": "item",
+          "key": "mist-beast-hide",
+          "quality_key": "common",
+          "max_stock": 16,
+          "initial_stock": 6,
+          "restock_quantity": 3,
+          "restock_target_stock": 6,
+          "base_buy_price": 12,
+          "base_sell_price": 7
+        },
+        {
+          "kind": "item",
+          "key": "manual.basic-breathing",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 45,
+          "base_sell_price": 22
+        },
+        {
+          "kind": "item",
+          "key": "manual.greenwood",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 75,
+          "base_sell_price": 36
+        },
+        {
+          "kind": "item",
+          "key": "manual.light-step",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 55,
+          "base_sell_price": 26
+        },
+        {
+          "kind": "item",
+          "key": "manual.basic-alchemy",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 60,
+          "base_sell_price": 29
+        },
+        {
+          "kind": "item",
+          "key": "manual.basic-forging",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 60,
+          "base_sell_price": 29
+        },
+        {
+          "kind": "item",
+          "key": "manual.basic-talisman",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 60,
+          "base_sell_price": 29
+        },
+        {
+          "kind": "item",
+          "key": "manual.red-sun-breathing",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 90,
+          "base_sell_price": 45
+        },
+        {
+          "kind": "item",
+          "key": "manual.water-mirror",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 90,
+          "base_sell_price": 45
+        },
+        {
+          "kind": "item",
+          "key": "manual.earth-vein",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 90,
+          "base_sell_price": 45
+        },
+        {
+          "kind": "item",
+          "key": "manual.stone-skin",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 75,
+          "base_sell_price": 36
+        },
+        {
+          "kind": "item",
+          "key": "manual.iron-body",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 70,
+          "base_sell_price": 34
+        },
+        {
+          "kind": "item",
+          "key": "manual.hundred-herbs-sense",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 65,
+          "base_sell_price": 32
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.detox-pill",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 55,
+          "base_sell_price": 25
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.body-tempering",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 70,
+          "base_sell_price": 34
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.flame-talisman",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 60,
+          "base_sell_price": 28
+        },
+        {
+          "kind": "equipment",
+          "key": "medicine-basket",
+          "quality_key": "common",
+          "max_stock": 3,
+          "initial_stock": 1,
+          "restock_quantity": 1,
+          "restock_target_stock": 1,
+          "base_buy_price": 110,
+          "base_sell_price": 55
+        },
+        {
+          "kind": "equipment",
+          "key": "spirit-gathering-mat",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 160,
+          "base_sell_price": 78
+        }
+      ]
+    },
+    "tags": [
+      "市场",
+      "散修会"
+    ],
+    "search_text": "散修会 旧街 货栈 交易",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "market",
+    "key": "blackwater-night-market",
+    "name": "黑苇夜市",
+    "content": {
+      "location_key": "south-marsh",
+      "currency_item_key": "low-spirit-stone",
+      "faction_key": "blackwater-league",
+      "restock_interval_minutes": 4320,
+      "price_modifier_bps": 11200,
+      "scarcity_markup_bps": 4200,
+      "reputation_adjustment_bps": 2500,
+      "items": [
+        {
+          "kind": "item",
+          "key": "swamp-venom-sac",
+          "quality_key": "common",
+          "max_stock": 30,
+          "initial_stock": 14,
+          "restock_quantity": 6,
+          "restock_target_stock": 14,
+          "base_buy_price": 6,
+          "base_sell_price": 3
+        },
+        {
+          "kind": "item",
+          "key": "lightning-bamboo",
+          "quality_key": "common",
+          "max_stock": 12,
+          "initial_stock": 3,
+          "restock_quantity": 2,
+          "restock_target_stock": 3,
+          "base_buy_price": 22,
+          "base_sell_price": 12
+        },
+        {
+          "kind": "item",
+          "key": "manual.cloud-shadow-step",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 140,
+          "base_sell_price": 68
+        },
+        {
+          "kind": "item",
+          "key": "manual.spirit-shield",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 125,
+          "base_sell_price": 60
+        },
+        {
+          "kind": "item",
+          "key": "manual.blood-burning",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 80,
+          "base_sell_price": 35
+        },
+        {
+          "kind": "item",
+          "key": "manual.breath-concealment",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 95,
+          "base_sell_price": 45
+        },
+        {
+          "kind": "item",
+          "key": "manual.thunder-finger",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 210,
+          "base_sell_price": 100
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.blackwater-cloak",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 180,
+          "base_sell_price": 85
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.thunder-talisman",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 170,
+          "base_sell_price": 80
+        },
+        {
+          "kind": "item",
+          "key": "detox-pill",
+          "quality_key": "common",
+          "max_stock": 15,
+          "initial_stock": 6,
+          "restock_quantity": 3,
+          "restock_target_stock": 6,
+          "base_buy_price": 15,
+          "base_sell_price": 8
+        },
+        {
+          "kind": "equipment",
+          "key": "blackwater-cloak",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 240,
+          "base_sell_price": 115
+        }
+      ]
+    },
+    "tags": [
+      "市场",
+      "黑市"
+    ],
+    "search_text": "黑苇 夜市 黑水盟 交易",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "market",
+    "key": "tide-star-exchange",
+    "name": "潮星易所",
+    "content": {
+      "location_key": "tide-star-market",
+      "currency_item_key": "low-spirit-stone",
+      "faction_key": "star-sail-alliance",
+      "restock_interval_minutes": 10080,
+      "price_modifier_bps": 12500,
+      "scarcity_markup_bps": 4800,
+      "reputation_adjustment_bps": 2200,
+      "items": [
+        {
+          "kind": "item",
+          "key": "manual.star-tide-scripture",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 1200,
+          "base_sell_price": 520
+        },
+        {
+          "kind": "item",
+          "key": "manual.void-crossing-step",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 1800,
+          "base_sell_price": 760
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.core-forming-pill",
+          "quality_key": "common",
+          "max_stock": 2,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 900,
+          "base_sell_price": 380
+        },
+        {
+          "kind": "item",
+          "key": "recipe-slip.void-compass",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 1400,
+          "base_sell_price": 600
+        },
+        {
+          "kind": "item",
+          "key": "celestial-herb",
+          "quality_key": "common",
+          "max_stock": 20,
+          "initial_stock": 8,
+          "restock_quantity": 4,
+          "restock_target_stock": 8,
+          "base_buy_price": 90,
+          "base_sell_price": 38
+        },
+        {
+          "kind": "item",
+          "key": "void-crystal",
+          "quality_key": "common",
+          "max_stock": 20,
+          "initial_stock": 6,
+          "restock_quantity": 3,
+          "restock_target_stock": 6,
+          "base_buy_price": 130,
+          "base_sell_price": 55
+        }
+      ]
+    },
+    "tags": [
+      "市场",
+      "星海"
+    ],
+    "search_text": "潮星易所 高阶交易",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "market",
+    "key": "nine-law-exchange",
+    "name": "万律宝署",
+    "content": {
+      "location_key": "law-market",
+      "currency_item_key": "low-spirit-stone",
+      "faction_key": "nine-law-court",
+      "restock_interval_minutes": 20160,
+      "price_modifier_bps": 15000,
+      "scarcity_markup_bps": 5200,
+      "reputation_adjustment_bps": 2600,
+      "items": [
+        {
+          "kind": "item",
+          "key": "manual.nine-law-sword",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 5200,
+          "base_sell_price": 2100
+        },
+        {
+          "kind": "item",
+          "key": "manual.celestial-body",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 4800,
+          "base_sell_price": 1900
+        },
+        {
+          "kind": "item",
+          "key": "law-fragment",
+          "quality_key": "common",
+          "max_stock": 10,
+          "initial_stock": 3,
+          "restock_quantity": 1,
+          "restock_target_stock": 3,
+          "base_buy_price": 900,
+          "base_sell_price": 360
+        },
+        {
+          "kind": "equipment",
+          "key": "law-edge",
+          "quality_key": "common",
+          "max_stock": 1,
+          "initial_stock": 1,
+          "restock_quantity": 0,
+          "base_buy_price": 9000,
+          "base_sell_price": 3600
+        },
+        {
+          "kind": "item",
+          "key": "celestial-herb",
+          "quality_key": "common",
+          "max_stock": 30,
+          "initial_stock": 12,
+          "restock_quantity": 6,
+          "restock_target_stock": 12,
+          "base_buy_price": 70,
+          "base_sell_price": 28
+        },
+        {
+          "kind": "item",
+          "key": "void-crystal",
+          "quality_key": "common",
+          "max_stock": 30,
+          "initial_stock": 12,
+          "restock_quantity": 6,
+          "restock_target_stock": 12,
+          "base_buy_price": 110,
+          "base_sell_price": 44
+        }
+      ]
+    },
+    "tags": [
+      "市场",
+      "上界"
+    ],
+    "search_text": "万律宝署 法则交易",
+    "visibility": "player",
+    "sort_order": 50
+  }
+]

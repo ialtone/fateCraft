@@ -1,0 +1,22 @@
+{
+  "id": "lost-chambers-setting",
+  "name": "失落墓室见闻",
+  "description": "叙事背景，数值以可信状态与行动预览为准。",
+  "entries": [
+    {
+      "id": "lost-chambers-world",
+      "world_book_id": "lost-chambers-setting",
+      "title": "失落墓室",
+      "content": "古墓以壁画和祭台记录建造者的礼仪。石门可按线索解除，也有需工具和承担伤害的绕行方式。出墓的时限与照明由当前状态显示。",
+      "keywords": [
+        "失落墓室",
+        "古墓探险"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

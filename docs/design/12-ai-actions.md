@@ -1,5 +1,13 @@
 # 12. AI 状态、判定与动作系统
 
+## 纯模块行动
+
+七种新玩法及百年飞升劫通过 `RuntimeModule` 暴露 domain 动作，模型目录只提供 actor=model 的当前行动；Challenge 经 `domain_action`，Campaign 经现有领域工具适配。最终选择、主动撤离/关闭等 player 行动由玩家 API 执行，模型自述“玩家确认”不构成授权。
+
+`module_state` 与 `gameplay` 使用 module 更新策略，普通状态工具不能覆盖；Execute 经参数、预算、写入范围和新状态验证后整体提交。终态停止后续效果，随机证据由平台保存，模型不填概率或收益。完整目录与契约见[24](24-gameplay-module-architecture.md)。
+
+百年飞升劫只允许模型修改姓名、外貌和背景等叙事字段；境界、寿元、物资、九波归属和结局均由模块行动计算，历史同名 Roll 不能代替资格。青河模型不能通过正向 `adjust_vitals` 免费恢复，不能覆盖或删除突破反噬，救援证物必须通过实际行动取得。阶段积分在合法动作后自动核验；最终引劫/结局取当前玩家能力目录，不能靠文本确认扩大 actor 权限。具体规则见 [14](14-ascension-trial-gameplay.md) 和 [16](16-cultivation-campaign-agent-reference.md)。
+
 ## 设计目标
 
 主叙事模型负责理解玩家、选择工具和生成叙事，不是可信规则执行器。可信事实只能由后端工具 Handler 提交：
@@ -27,7 +35,7 @@
 | `fc_state_set_dynamic_json` | 更新允许动态子路径的 object（仅非 Campaign Runtime；长期玩法必须使用显式字段或领域 Action） |
 | `fc_request_roll` | 请求服务端执行已发布判定 |
 | `fc_complete_challenge` | 提交已发布结局供服务端验证和结算 |
-| `fc_action_*` | 执行当前 Campaign 动态开放的领域动作 |
+| `fc_action_*` | 执行当前 Campaign 或纯 Challenge 模块开放给 model 的领域行动 |
 
 `continue` 生成是纯续写，只提供普通文本通道，不提供写工具。
 

@@ -74,12 +74,6 @@ func PrepareToolReplay(messages []Message) (ToolReplayResult, error) {
 		switch message.Role {
 		case "assistant":
 			calls := message.ToolCallBlocks()
-			// A multi-tool transaction persists one assistant tool-call row per
-			// invocation, but only the first row carries the complete block list.
-			// Empty assistant rows are storage placeholders, not a new model turn.
-			if len(calls) == 0 && len(pending) > 0 && strings.TrimSpace(message.TextProjection()) == "" {
-				continue
-			}
 			// A new assistant item cannot legally appear before the previous
 			// assistant's tool results. Close the previous chain first.
 			flushPending()

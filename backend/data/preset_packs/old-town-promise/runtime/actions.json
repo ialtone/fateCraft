@@ -1,0 +1,18 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action"
+    ],
+    "player": [],
+    "domain": [
+      "relationship.listen",
+      "relationship.choose",
+      "relationship.fulfill",
+      "relationship.wait",
+      "relationship.conclude",
+      "relationship.leave"
+    ],
+    "capabilities": {}
+  }
+}

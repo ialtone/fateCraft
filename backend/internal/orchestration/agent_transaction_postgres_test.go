@@ -41,7 +41,7 @@ func TestPostgresAgentToolTransactionAtomicity(t *testing.T) {
 	if err := agents.FinishInvocation(
 		ctx, rejected.ID, storage.ToolInvocationRejected, "state_rejected",
 		storage.JSONMap{"ok": false, "code": "state_rejected", "message": "rejected"}, false,
-		storage.JSONDoc(`[{"id":"rejected-call","name":"fc_test","arguments":"{}"}]`),
+		storage.JSONDoc(`[{"id":"rejected-call","name":"fc_test","arguments":"{}"},{"id":"committed-call","name":"fc_test","arguments":"{}"}]`),
 		`{"ok":false,"code":"state_rejected","message":"rejected"}`,
 	); err != nil {
 		t.Fatal(err)
@@ -56,10 +56,10 @@ func TestPostgresAgentToolTransactionAtomicity(t *testing.T) {
 		}); err != nil {
 			return err
 		}
-		return tx.agents.FinishInvocationInCurrentTx(
+		return tx.agents.FinishInvocationInCurrentTxWithBlocks(
 			ctx, tx.db, committed.ID, storage.ToolInvocationCommitted, "state_committed",
 			storage.JSONMap{"ok": true, "code": "state_committed", "message": "committed"}, true,
-			storage.JSONDoc(`[{"id":"committed-call","name":"fc_test","arguments":"{}"}]`),
+			nil,
 			`{"ok":true,"code":"state_committed","message":"committed"}`,
 		)
 	})
@@ -70,7 +70,7 @@ func TestPostgresAgentToolTransactionAtomicity(t *testing.T) {
 	if err != nil || state.State["marker"] != "committed" {
 		t.Fatalf("committed domain state = %+v, err=%v", state, err)
 	}
-	assertAgentTransactionState(t, db, ids, committed.ID, storage.ToolInvocationCommitted, 1, 4)
+	assertAgentTransactionState(t, db, ids, committed.ID, storage.ToolInvocationCommitted, 1, 3)
 }
 
 type agentTransactionIDs struct {
@@ -116,7 +116,7 @@ func claimAgentTransactionInvocation(t *testing.T, ctx context.Context, agents *
 	invocation, replayed, err := agents.ClaimInvocation(ctx, &storage.AgentToolInvocation{
 		ID: uuid.New(), ConversationID: ids.conversationID, StepID: ids.stepID,
 		StepToolSnapshotHash: strings.Repeat("0", 64), CallID: callID, ToolName: "fc_test",
-		Arguments: storage.JSONMap{}, ArgumentsHash: strings.Repeat("1", 64),
+		Arguments: storage.JSONMap{}, ArgumentsHash: hashAgentArguments("{}"),
 	})
 	if err != nil || replayed {
 		t.Fatalf("claim invocation: replayed=%v err=%v", replayed, err)

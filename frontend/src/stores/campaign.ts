@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import axios from 'axios'
 import { campaignsApi } from '@/api'
-import type { Campaign, CampaignSnapshot } from '@/types'
+import type { Campaign, CampaignActionInput, CampaignSnapshot } from '@/types'
 import { useChatStore } from '@/stores/chat'
+import { useConversationStore } from '@/stores/conversations'
+import { useRewardStore } from '@/stores/rewards'
 
 export const useCampaignStore = defineStore('campaign', () => {
   const chat = useChatStore()
@@ -10,16 +13,28 @@ export const useCampaignStore = defineStore('campaign', () => {
   const loading = ref(false)
   const acting = ref(false)
   const error = ref<string | null>(null)
+  const pending = ref<CampaignActionInput | null>(null)
   let generation = 0
+  let campaignID = ''
   let activeRequests = 0
   let latestRequest = 0
 
   async function load(id: string) {
+    if (campaignID !== id) {
+      reset()
+      campaignID = id
+      try {
+        pending.value = JSON.parse(
+          sessionStorage.getItem(`fatecraft:campaign-action:${id}`) || 'null',
+        )
+      } catch {
+        /* Storage may be unavailable. */
+      }
+    }
     const requestGeneration = generation
     const requestID = ++latestRequest
     activeRequests++
     loading.value = true
-    error.value = null
     try {
       const loaded = await campaignsApi.snapshot(id)
       if (generation !== requestGeneration) return loaded
@@ -46,38 +61,102 @@ export const useCampaignStore = defineStore('campaign', () => {
   }
 
   function applyCampaign(campaign: Campaign) {
-    if (snapshot.value?.campaign.id === campaign.id) snapshot.value.campaign = campaign
+    if (
+      snapshot.value?.campaign.id === campaign.id &&
+      campaign.revision >= snapshot.value.campaign.revision
+    )
+      snapshot.value.campaign = campaign
   }
 
   async function execute(key: string, args: Record<string, unknown>) {
     const current = snapshot.value
-    if (!current || current.campaign.status !== 'active' || acting.value) return null
+    if (!current || current.campaign.status !== 'active' || acting.value || pending.value)
+      return null
+    const input: CampaignActionInput = {
+      action_id: globalThis.crypto.randomUUID(),
+      key,
+      expected_revision: current.campaign.revision,
+      arguments: structuredClone(args),
+    }
+    pending.value = input
+    try {
+      sessionStorage.setItem(
+        `fatecraft:campaign-action:${current.campaign.id}`,
+        JSON.stringify(input),
+      )
+    } catch {
+      /* The in-memory request still supports retry. */
+    }
+    return retry()
+  }
+
+  async function retry() {
+    const input = pending.value
+    const conversations = useConversationStore()
+    const conversationID = conversations.current?.id
+    if (
+      !input ||
+      acting.value ||
+      !campaignID ||
+      !conversationID ||
+      conversations.current?.campaign_id !== campaignID
+    )
+      return null
+    const id = campaignID
+    const actionGeneration = generation
+    const isCurrent = () =>
+      generation === actionGeneration && conversations.current?.id === conversationID
+    const clearPending = () => {
+      try {
+        const key = `fatecraft:campaign-action:${id}`
+        const saved = JSON.parse(sessionStorage.getItem(key) || 'null')
+        if (saved?.action_id === input.action_id) sessionStorage.removeItem(key)
+      } catch {
+        /* Storage may be unavailable. */
+      }
+      if (isCurrent() && pending.value?.action_id === input.action_id) pending.value = null
+    }
     acting.value = true
     error.value = null
-    const actionID =
-      globalThis.crypto?.randomUUID?.() || `ui-${Date.now()}-${Math.random().toString(36).slice(2)}`
     try {
-      const result = await campaignsApi.action(current.campaign.id, {
-        action_id: actionID,
-        key,
-        expected_revision: current.campaign.revision,
-        arguments: args,
-      })
+      const result = await campaignsApi.action(id, input)
+      clearPending()
+      if (!isCurrent()) return result
       applyCampaign(result.campaign)
       if (result.roll_message) chat.applyServerMessage(result.roll_message)
-      await load(current.campaign.id)
+      if (result.result?.completion)
+        conversations.consumeCompletion(
+          result.result.completion as import('@/types/endings').CompletionView,
+        )
+      if (result.campaign.status !== 'active') conversations.markEnded()
+      // A committed action remains successful even if a display refresh fails.
+      const refreshed = await Promise.allSettled([
+        load(id),
+        chat.load(conversationID),
+        conversations.load(conversationID),
+        useRewardStore().load(),
+      ])
+      if (isCurrent() && refreshed.some((r) => r.status === 'rejected'))
+        error.value = '操作已完成，部分展示未刷新。请刷新页面查看最新结果。'
       return result
     } catch (cause: any) {
-      await load(current.campaign.id).catch(() => {})
-      error.value = cause?.message || '领域动作执行失败'
+      const status = axios.isAxiosError(cause) ? cause.response?.status : undefined
+      if (status && status >= 400 && status < 500 && status !== 408) clearPending()
+      if (!isCurrent()) return null
+      error.value = pending.value
+        ? '尚不能确认操作结果，请查询上次操作结果；重复查询不会再次消耗资源。'
+        : cause?.response?.data?.error || cause?.message || '领域动作执行失败'
+      if (!pending.value) await load(id).catch(() => {})
       throw cause
     } finally {
-      acting.value = false
+      if (isCurrent()) acting.value = false
     }
   }
 
   function reset() {
     generation++
+    campaignID = ''
+    pending.value = null
     activeRequests = 0
     snapshot.value = null
     loading.value = false
@@ -85,5 +164,5 @@ export const useCampaignStore = defineStore('campaign', () => {
     error.value = null
   }
 
-  return { snapshot, loading, acting, error, load, execute, applyCampaign, reset }
+  return { snapshot, loading, acting, error, pending, load, execute, retry, applyCampaign, reset }
 })

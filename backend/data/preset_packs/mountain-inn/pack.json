@@ -1,0 +1,72 @@
+{
+  "id": "mountain-inn",
+  "name": "山间客栈",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "建设厨房与客房，把餐食投入住宿服务，在有限资金和订单期限间经营山间客栈。",
+  "author": "Fatecraft",
+  "icon": "business",
+  "tags": [
+    "经营建设",
+    "生产",
+    "订单"
+  ],
+  "default_config": {
+    "recommended_character": "inn-narrator",
+    "recommended_persona": "innkeeper",
+    "recommended_scenario": "mountain-inn",
+    "recommended_prompt": "inn-guide",
+    "required_worldbooks": [
+      "inn-setting"
+    ],
+    "allowed_personas": [
+      "innkeeper"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "prosperous",
+      "category": "success",
+      "title": "客栈兴旺",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "bankrupt",
+      "category": "failure",
+      "title": "无力维持",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "经营目标未达成",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    },
+    {
+      "outcome_key": "closed",
+      "category": "neutral",
+      "title": "歇业归去",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.always",
+      "verifier_config": {}
+    }
+  ],
+  "quick_start_guide": "先建厨房和客房，升级客房后安排餐食与住宿服务生产。承接订单前检查截止时间；生产需推进游戏时间。最后亲自确认经营目标。示例积分为 0。",
+  "features": [
+    "关联生产链",
+    "设施升级",
+    "限时订单",
+    "欠款与周转"
+  ],
+  "dependencies": []
+}

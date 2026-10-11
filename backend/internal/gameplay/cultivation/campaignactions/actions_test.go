@@ -3,6 +3,7 @@ package campaignactions
 import (
 	"context"
 	"errors"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldactions"
 	"sort"
 	"strconv"
 	"testing"
@@ -30,6 +31,8 @@ type actionStoreStub struct {
 	regions       map[string]*storage.CampaignRegionState
 	quests        map[string]*storage.CampaignQuest
 	encounters    map[uuid.UUID]*storage.CampaignEncounter
+	stageRewards  map[string]*storage.CampaignStageReward
+	stageGranted  int64
 }
 
 func (s *actionStoreStub) Definition(_ uuid.UUID, kind, key string) (*storage.GameplayDefinition, error) {
@@ -332,6 +335,25 @@ func (s *actionStoreStub) GrantCampaignOutcomeRewards(_ context.Context, _ stora
 	return []storage.CampaignOutcomeReward{{Key: storage.PointsKey, Name: "积分", Unit: "枚", Quantity: 1, Balance: 1}}, nil
 }
 
+func (s *actionStoreStub) GrantCampaignStageReward(_ context.Context, c storage.Campaign, key, name string, points int64) (*storage.CampaignStageReward, bool, error) {
+	if s.stageRewards == nil {
+		s.stageRewards = map[string]*storage.CampaignStageReward{}
+	}
+	if prior := s.stageRewards[key]; prior != nil {
+		return prior, false, nil
+	}
+	row := &storage.CampaignStageReward{CampaignID: c.ID, StageKey: key, Name: name, ConfiguredPoints: points, GrantedPoints: points, GameTime: c.GameTime}
+	if c.LLMRoute == storage.LLMRouteClient {
+		row.GrantedPoints = 0
+		row.DisabledReason = storage.RewardsDisabledReasonClientRoute
+	} else if points == 0 {
+		row.DisabledReason = "zero_points"
+	}
+	s.stageRewards[key] = row
+	s.stageGranted += row.GrantedPoints
+	return row, true, nil
+}
+
 func newActionStore() *actionStoreStub {
 	return &actionStoreStub{
 		definitions: map[string]*storage.GameplayDefinition{}, techniques: map[string]*storage.CampaignTechnique{},
@@ -373,11 +395,11 @@ func TestPracticeMutatesCharacterAndTechniqueFromDefinition(t *testing.T) {
 		Mana: 20, MaxMana: 20, LifespanDays: 1000,
 	}
 	store.techniques["breathing"] = &storage.CampaignTechnique{
-		ID: uuid.New(), CampaignID: campaignID, TechniqueKey: "breathing", Status: "active", EquippedSlot: &slot,
+		ID: uuid.New(), CampaignID: campaignID, TechniqueKey: "breathing", LearnedLayer: 1, Status: "active", EquippedSlot: &slot,
 	}
 	store.definitions[storage.DefinitionTechnique+":breathing"] = &storage.GameplayDefinition{
 		Kind: storage.DefinitionTechnique, Key: "breathing",
-		Content: storage.JSONMap{"practice_minutes": int64(60), "mana_cost": int64(2), "cultivation_gain": int64(10), "mastery_gain": int64(25), "insight_gain": int64(1)},
+		Content: storage.JSONMap{"max_layer": int64(12), "practice_minutes": int64(60), "mana_cost": int64(2), "cultivation_gain": int64(10), "mastery_gain": int64(25), "insight_gain": int64(1)},
 	}
 	store.definitions[storage.DefinitionRealm+":mortal"] = &storage.GameplayDefinition{
 		Kind: storage.DefinitionRealm, Key: "mortal", Content: storage.JSONMap{"stages": []any{"early", "late"}},
@@ -404,14 +426,13 @@ func TestPracticeAppliesLayerEffectsAndRecalculatesEffectiveStats(t *testing.T) 
 	}
 	store.techniques["breathing"] = &storage.CampaignTechnique{
 		ID: uuid.New(), CampaignID: campaignID, TechniqueKey: "breathing", LearnedLayer: 1,
-		Mastery: 950, Status: "active", EquippedSlot: &slot,
+		Mastery: 4950, Status: "active", EquippedSlot: &slot,
 	}
 	store.definitions[storage.DefinitionTechnique+":breathing"] = &storage.GameplayDefinition{
 		Kind: storage.DefinitionTechnique, Key: "breathing",
 		Content: storage.JSONMap{
 			"practice_minutes": int64(60), "mana_cost": int64(3), "cultivation_gain": int64(10),
 			"mastery_gain": int64(100), "insight_gain": int64(1), "max_layer": int64(3),
-			"mastery_per_layer": int64(1000),
 			"layer_effects": []any{
 				map[string]any{"layer": int64(1), "effects": map[string]any{
 					"cultivation_gain": int64(2), "mana_cost_reduction": int64(1),
@@ -451,14 +472,14 @@ func TestPracticeAdvancesTechniqueLayerFromMastery(t *testing.T) {
 	}
 	store.techniques["breathing"] = &storage.CampaignTechnique{
 		ID: uuid.New(), CampaignID: campaignID, TechniqueKey: "breathing",
-		LearnedLayer: 1, Mastery: 990, Status: "active", EquippedSlot: &slot,
+		LearnedLayer: 1, Mastery: 4990, Status: "active", EquippedSlot: &slot,
 	}
 	store.definitions[storage.DefinitionTechnique+":breathing"] = &storage.GameplayDefinition{
 		Kind: storage.DefinitionTechnique, Key: "breathing",
 		Content: storage.JSONMap{
 			"practice_minutes": int64(10), "cultivation_gain": int64(1),
 			"mastery_gain": int64(20), "insight_gain": int64(1),
-			"max_layer": int64(3), "mastery_per_layer": int64(1000),
+			"max_layer": int64(3),
 		},
 	}
 	store.definitions[storage.DefinitionRealm+":mortal"] = &storage.GameplayDefinition{
@@ -485,29 +506,29 @@ func TestGainItemRequiresModelAuthorityAndDefinitionBound(t *testing.T) {
 	}
 	arguments := map[string]any{"item_key": "herb", "quantity": float64(3)}
 	player := campaign.ActionExecution{Campaign: storage.Campaign{ID: campaignID}, Store: store, ActorType: "player", ActionKey: ActionGainItem}
-	if _, err := gainItem(context.Background(), player, arguments); !errors.Is(err, campaign.ErrActionRejected) {
+	if _, err := worldactions.GainItem(context.Background(), player, arguments); !errors.Is(err, campaign.ErrActionRejected) {
 		t.Fatalf("player grant error = %v", err)
 	}
 	model := player
 	model.ActorType = "model"
-	if _, err := gainItem(context.Background(), model, arguments); !errors.Is(err, campaign.ErrActionRejected) {
+	if _, err := worldactions.GainItem(context.Background(), model, arguments); !errors.Is(err, campaign.ErrActionRejected) {
 		t.Fatalf("non-whitelisted model grant error = %v", err)
 	}
 	store.definitions[storage.DefinitionItem+":herb"].Content["model_grantable"] = true
-	outcome, err := gainItem(context.Background(), model, arguments)
+	outcome, err := worldactions.GainItem(context.Background(), model, arguments)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if store.stacks["herb:common"].Quantity != 3 || outcome.Result["quantity_after"] != int64(3) {
 		t.Fatalf("unexpected grant: %+v", outcome)
 	}
-	if _, err := gainItem(context.Background(), model, map[string]any{"item_key": "herb", "quantity": float64(6)}); !errors.Is(err, campaign.ErrInvalidAction) {
+	if _, err := worldactions.GainItem(context.Background(), model, map[string]any{"item_key": "herb", "quantity": float64(6)}); !errors.Is(err, campaign.ErrInvalidAction) {
 		t.Fatalf("unbounded grant error = %v", err)
 	}
 	system := model
 	system.ActorType = "system"
 	delete(store.definitions[storage.DefinitionItem+":herb"].Content, "model_grantable")
-	if _, err := gainItem(context.Background(), system, map[string]any{"item_key": "herb", "quantity": float64(1)}); err != nil {
+	if _, err := worldactions.GainItem(context.Background(), system, map[string]any{"item_key": "herb", "quantity": float64(1)}); err != nil {
 		t.Fatalf("system grant error = %v", err)
 	}
 }
@@ -615,7 +636,7 @@ func TestFactionPermissionIsDerivedAndGatesTravel(t *testing.T) {
 	}
 
 	model := campaign.ActionExecution{Campaign: campaignRow, Store: store, ActorType: "model", ActionKey: ActionAdjustFaction}
-	if _, err := adjustFaction(context.Background(), model, map[string]any{
+	if _, err := worldactions.AdjustFaction(context.Background(), model, map[string]any{
 		"faction_key": "sect", "reputation_delta": int64(1),
 	}); err != nil {
 		t.Fatal(err)
@@ -623,7 +644,7 @@ func TestFactionPermissionIsDerivedAndGatesTravel(t *testing.T) {
 	if granted, _ := store.factions["sect"].Permissions["outer_gate_access"].(bool); !granted {
 		t.Fatalf("permission was not granted at threshold: %+v", store.factions["sect"])
 	}
-	if _, err := adjustFaction(context.Background(), model, map[string]any{
+	if _, err := worldactions.AdjustFaction(context.Background(), model, map[string]any{
 		"faction_key": "sect", "contribution_delta": int64(1000),
 	}); err != nil {
 		t.Fatal(err)
@@ -635,7 +656,7 @@ func TestFactionPermissionIsDerivedAndGatesTravel(t *testing.T) {
 		t.Fatalf("travel with permission failed: %v", err)
 	}
 
-	if _, err := adjustFaction(context.Background(), model, map[string]any{
+	if _, err := worldactions.AdjustFaction(context.Background(), model, map[string]any{
 		"faction_key": "sect", "reputation_delta": int64(-1),
 	}); err != nil {
 		t.Fatal(err)
@@ -709,7 +730,7 @@ func TestNPCLifecycleMovementAndStatusTransitionsAreBounded(t *testing.T) {
 		Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "village", GameTime: 90},
 		Store:    store, ActorType: "model", ActionKey: ActionMoveNPC,
 	}
-	if _, err := moveNPC(context.Background(), execution, map[string]any{
+	if _, err := worldactions.MoveNPC(context.Background(), execution, map[string]any{
 		"npc_key": "ferryman", "destination_key": "ferry",
 	}); err != nil {
 		t.Fatal(err)
@@ -717,23 +738,23 @@ func TestNPCLifecycleMovementAndStatusTransitionsAreBounded(t *testing.T) {
 	if store.npcs["ferryman"].CurrentLocationKey != "ferry" || store.npcs["ferryman"].LastActiveAt != 90 {
 		t.Fatalf("NPC move was not persisted: %+v", store.npcs["ferryman"])
 	}
-	if _, err := setNPCStatus(context.Background(), execution, map[string]any{
+	if _, err := worldactions.SetNPCStatus(context.Background(), execution, map[string]any{
 		"npc_key": "ferryman", "status": "missing",
 	}); !errors.Is(err, campaign.ErrActionRejected) {
 		t.Fatalf("model changed remote NPC status: %v", err)
 	}
 	execution.ActorType = "system"
-	if _, err := setNPCStatus(context.Background(), execution, map[string]any{
+	if _, err := worldactions.SetNPCStatus(context.Background(), execution, map[string]any{
 		"npc_key": "ferryman", "status": "missing",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := setNPCStatus(context.Background(), execution, map[string]any{
+	if _, err := worldactions.SetNPCStatus(context.Background(), execution, map[string]any{
 		"npc_key": "ferryman", "status": "dead",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := setNPCStatus(context.Background(), execution, map[string]any{
+	if _, err := worldactions.SetNPCStatus(context.Background(), execution, map[string]any{
 		"npc_key": "ferryman", "status": "active",
 	}); !errors.Is(err, campaign.ErrActionRejected) {
 		t.Fatalf("dead NPC was revived: %v", err)
@@ -762,7 +783,7 @@ func TestBreakthroughIsDeterministicForSameAction(t *testing.T) {
 		}
 		return store, campaign.ActionExecution{
 			Campaign: storage.Campaign{ID: campaignID, RandomSeed: 42, Revision: 7},
-			Store:    store, ActorType: "player", ActionID: "same-action",
+			Store:    store, ActorType: "player", ActionID: "same-action", MaxDueEventsPerTurn: 32,
 		}
 	}
 	firstStore, firstExecution := build()
@@ -800,7 +821,7 @@ func TestBreakthroughUsesAuthoritativeCampaignRoll(t *testing.T) {
 	}
 	execution := campaign.ActionExecution{
 		Campaign: storage.Campaign{ID: campaignID, RandomSeed: 42}, Store: store, ActorType: "player",
-		ActionID: "forced-roll", Roll: forcedCampaignRoll(false, "failure", 99, 95),
+		ActionID: "forced-roll", Roll: forcedCampaignRoll(false, "failure", 99, 95), MaxDueEventsPerTurn: 32,
 	}
 	outcome, err := attemptBreakthrough(context.Background(), execution, map[string]any{})
 	if err != nil {
@@ -808,28 +829,6 @@ func TestBreakthroughUsesAuthoritativeCampaignRoll(t *testing.T) {
 	}
 	if outcome.Result["success"] != false || outcome.Result["roll"] != 99 || outcome.Roll == nil || store.character.RealmKey != "mortal" {
 		t.Fatalf("authoritative roll did not decide breakthrough: outcome=%+v character=%+v", outcome, store.character)
-	}
-}
-
-func TestUncertainActionIsRollOnlyAndServerBounded(t *testing.T) {
-	store := newActionStore()
-	execution := campaign.ActionExecution{
-		Campaign: storage.Campaign{ID: uuid.New()}, Store: store, ActorType: "model", ActionID: "social-roll",
-		Roll: forcedCampaignRoll(true, "success", 12, 60),
-	}
-	outcome, err := resolveUncertainAction(context.Background(), execution, map[string]any{
-		"kind": "social", "description": "向守门弟子说明来意",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome.Result["success"] != true || outcome.GameTimeDelta != 0 || outcome.Roll == nil || len(outcome.Events) != 1 {
-		t.Fatalf("unexpected uncertain action result: %+v", outcome)
-	}
-	if _, err := resolveUncertainAction(context.Background(), execution, map[string]any{
-		"kind": "breakthrough", "description": "绕过专用突破动作",
-	}); !errors.Is(err, campaign.ErrInvalidAction) {
-		t.Fatalf("unsupported generic roll kind was accepted: %v", err)
 	}
 }
 
@@ -908,11 +907,11 @@ func TestBreakthroughUpdatesRealmKeyAndDerivedRankTogether(t *testing.T) {
 	}
 	execution := campaign.ActionExecution{
 		Campaign: storage.Campaign{ID: campaignID, RandomSeed: 42, Revision: 7},
-		Store:    store, ActorType: "player",
+		Store:    store, ActorType: "player", MaxDueEventsPerTurn: 32,
 	}
 	for attempt := 0; ; attempt++ {
 		execution.ActionID = "rank-pair-" + strconv.Itoa(attempt)
-		if deterministicPercent(execution, "breakthrough:mortal") <= 95 {
+		if worldactions.DeterministicPercent(execution, "breakthrough:mortal") <= 95 {
 			break
 		}
 	}
@@ -935,12 +934,12 @@ func TestPracticeExhaustsLifespanAtDayBoundary(t *testing.T) {
 	}
 	store.techniques["breathing"] = &storage.CampaignTechnique{
 		ID: uuid.New(), CampaignID: campaignID, TechniqueKey: "breathing",
-		Status: "active", EquippedSlot: &slot,
+		LearnedLayer: 1, Status: "active", EquippedSlot: &slot,
 	}
 	store.definitions[storage.DefinitionTechnique+":breathing"] = &storage.GameplayDefinition{
 		Kind: storage.DefinitionTechnique, Key: "breathing",
 		Content: storage.JSONMap{
-			"practice_minutes": int64(20), "cultivation_gain": int64(1),
+			"max_layer": int64(12), "practice_minutes": int64(20), "cultivation_gain": int64(1),
 			"mastery_gain": int64(1), "insight_gain": int64(1),
 		},
 	}
@@ -1123,7 +1122,7 @@ func TestRelationshipDeltasAreBounded(t *testing.T) {
 		Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "village", GameTime: 120},
 		Store:    store, ActorType: "model", ActionKey: ActionRecordInteraction,
 	}
-	_, err := recordInteraction(context.Background(), execution, map[string]any{
+	_, err := worldactions.RecordInteraction(context.Background(), execution, map[string]any{
 		"npc_key": "herbalist", "trust_delta": int64(20), "fear_delta": int64(-20),
 		"affinity_delta": int64(-20), "hostility_delta": int64(20),
 	})

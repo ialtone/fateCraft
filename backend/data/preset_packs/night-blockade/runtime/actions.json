@@ -1,0 +1,23 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action",
+      "complete_challenge"
+    ],
+    "player": [],
+    "domain": [
+      "stealth.observe",
+      "stealth.sneak",
+      "stealth.rush",
+      "stealth.unlock",
+      "stealth.distract",
+      "stealth.hide",
+      "stealth.take",
+      "stealth.escape",
+      "stealth.withdraw",
+      "stealth.abandon"
+    ],
+    "capabilities": {}
+  }
+}

@@ -28,11 +28,12 @@ const (
 	orderPresetSystem
 	orderCampaign
 	orderState
-	orderRuntimeDirective
 	orderMemoryPolicy
 	orderSummary
 	orderWorldBook
 	orderStyle
+	orderNarrativeFacts
+	orderRuntimeDirective
 	// orderOutputContract 与安全提示位于历史消息之后：服务端契约离生成位置越近，
 	// 模型遵守率越高（参照 SillyTavern 的 post-history instructions）。
 	orderOutputContract
@@ -55,6 +56,7 @@ type Input struct {
 	CampaignProjection         map[string]any
 	CampaignProjectionPriority []string
 	State                      map[string]any
+	StateFingerprint           string
 	Summary                    *storage.ConversationMemory
 	WorldActivated             []worldbook.Activated
 	// RuntimeDirective 是服务端为本次生成注入的必选约束，不写入聊天历史。
@@ -159,6 +161,28 @@ func Build(in Input, counter tokenizer.Counter) (*Result, error) {
 	// 当前对话状态是必选段。Campaign 投影要等其他必选段和当前回合
 	// 记账后再按剩余窗口压缩，避免一个大 JSON 原子撑爆整个 prompt。
 	add("current_state", storage.RoleSystem, renderState(in.State), true, orderState, "state")
+	// Repeat only the small authoritative core after history, then leave the
+	// larger projection to normal compaction. Do not send the core twice.
+	campaignProjection := in.CampaignProjection
+	if facts, exists := campaignProjection["narrative_facts"]; exists {
+		authority := map[string]any{"facts": facts}
+		for _, key := range []string{"revision", "status", "current_location_key", "game_time"} {
+			if value, exists := campaignProjection[key]; exists {
+				authority[key] = value
+			}
+		}
+		raw, err := json.Marshal(authority)
+		if err != nil {
+			return nil, fmt.Errorf("序列化叙事关键事实: %w", err)
+		}
+		add("narrative_facts", storage.RoleSystem, "<narrative_facts>\n"+string(raw)+"\n</narrative_facts>", true, orderNarrativeFacts, "state")
+		campaignProjection = make(map[string]any, len(in.CampaignProjection))
+		for key, value := range in.CampaignProjection {
+			if key != "narrative_facts" {
+				campaignProjection[key] = value
+			}
+		}
+	}
 	if strings.TrimSpace(in.RuntimeDirective) != "" {
 		add("runtime_directive", storage.RoleSystem,
 			"<runtime_directive>\n"+in.RuntimeDirective+"\n</runtime_directive>",
@@ -204,7 +228,7 @@ func Build(in Input, counter tokenizer.Counter) (*Result, error) {
 
 	// Campaign 的平台核心保持必选；动作能力和玩法主题由通用压缩器按
 	// 模块优先级装入。小窗口会降级投影，而不是阻塞当前叙事回合。
-	if in.CampaignProjection != nil {
+	if campaignProjection != nil {
 		fixedRequired := currentCost
 		for _, segment := range segs {
 			if segment.Required {
@@ -220,13 +244,13 @@ func Build(in Input, counter tokenizer.Counter) (*Result, error) {
 			projectionBudget = remaining
 		}
 		fitted, fitErr := fitCampaignProjection(
-			in.CampaignProjection, in.CampaignProjectionPriority, projectionBudget, counter,
+			campaignProjection, in.CampaignProjectionPriority, projectionBudget, counter,
 		)
 		if fitErr != nil && projectionBudget < remaining {
 			// The preferred share is a history-preservation target, not a reason
 			// to reject an otherwise valid required core.
 			fitted, fitErr = fitCampaignProjection(
-				in.CampaignProjection, in.CampaignProjectionPriority, remaining, counter,
+				campaignProjection, in.CampaignProjectionPriority, remaining, counter,
 			)
 		}
 		if fitErr != nil {
@@ -343,7 +367,7 @@ func Build(in Input, counter tokenizer.Counter) (*Result, error) {
 	var postHistory []llm.Message
 	for _, s := range included {
 		// 输出契约和安全提示都必须置于历史之后，且安全提示最后到达模型。
-		if s.order >= orderOutputContract {
+		if s.order >= orderNarrativeFacts {
 			postHistory = append(postHistory, llm.Message{Role: s.Role, Content: s.content})
 			continue
 		}

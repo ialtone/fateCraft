@@ -1,0 +1,24 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action",
+      "complete_challenge"
+    ],
+    "player": [],
+    "domain": [
+      "dungeon.move",
+      "dungeon.fight",
+      "dungeon.flee",
+      "dungeon.take",
+      "dungeon.drop",
+      "dungeon.heal",
+      "dungeon.rest",
+      "dungeon.wait",
+      "dungeon.extract",
+      "dungeon.retreat",
+      "dungeon.abandon"
+    ],
+    "capabilities": {}
+  }
+}

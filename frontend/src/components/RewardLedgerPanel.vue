@@ -24,6 +24,7 @@ const rows = ref<RewardLedgerEntry[]>([]),
 const sources = [
   'challenge_run',
   'campaign_outcome',
+  'campaign_stage',
   'user_registration',
   'admin_grant',
   'admin_reversal',

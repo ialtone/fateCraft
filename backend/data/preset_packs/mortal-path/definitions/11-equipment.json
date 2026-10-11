@@ -1,0 +1,259 @@
+[
+  {
+    "kind": "equipment",
+    "key": "mortal-iron-sword",
+    "name": "百炼铁剑",
+    "content": {
+      "allowed_slots": [
+        "weapon"
+      ],
+      "durability_max": 100,
+      "starting_owned": true,
+      "bonuses": {
+        "physical_attack": 8
+      }
+    },
+    "tags": [
+      "武器",
+      "凡器"
+    ],
+    "search_text": "铁剑 武器",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "equipment",
+    "key": "traveler-robe",
+    "name": "青布行衣",
+    "content": {
+      "allowed_slots": [
+        "body"
+      ],
+      "durability_max": 80,
+      "starting_owned": true,
+      "bonuses": {
+        "physical_defense": 3
+      }
+    },
+    "tags": [
+      "防具",
+      "凡器"
+    ],
+    "search_text": "行衣 防具",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "equipment",
+    "key": "spirit-wood-token",
+    "name": "灵木护符",
+    "content": {
+      "allowed_slots": [
+        "accessory"
+      ],
+      "durability_max": 60,
+      "bonuses": {
+        "max_mana": 10
+      }
+    },
+    "tags": [
+      "法器",
+      "护符"
+    ],
+    "search_text": "灵木 护符 法力",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "equipment",
+    "key": "novice-pill-furnace",
+    "name": "青陶丹炉",
+    "content": {
+      "allowed_slots": [
+        "craft_tool"
+      ],
+      "durability_max": 80,
+      "starting_owned": true
+    },
+    "tags": [
+      "器具",
+      "炼丹"
+    ],
+    "search_text": "丹炉 炼丹 器具",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "equipment",
+    "key": "hundred-forge-hammer",
+    "name": "百炼锤",
+    "content": {
+      "allowed_slots": [
+        "craft_tool"
+      ],
+      "durability_max": 120,
+      "starting_owned": true
+    },
+    "tags": [
+      "器具",
+      "炼器"
+    ],
+    "search_text": "锻锤 炼器 器具",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "equipment",
+    "key": "spirit-line-brush",
+    "name": "引灵符笔",
+    "content": {
+      "allowed_slots": [
+        "craft_tool"
+      ],
+      "durability_max": 70,
+      "starting_owned": true
+    },
+    "tags": [
+      "器具",
+      "制符"
+    ],
+    "search_text": "符笔 制符 器具",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "equipment",
+    "key": "green-mist-sword",
+    "name": "青岚灵剑",
+    "content": {
+      "allowed_slots": [
+        "weapon"
+      ],
+      "durability_max": 160,
+      "bonuses": {
+        "physical_attack": 12,
+        "spiritual_attack": 9
+      }
+    },
+    "tags": [
+      "法器",
+      "剑"
+    ],
+    "search_text": "青岚 灵剑 法器",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "equipment",
+    "key": "blackwater-cloak",
+    "name": "玄水隐袍",
+    "content": {
+      "allowed_slots": [
+        "body"
+      ],
+      "durability_max": 130,
+      "bonuses": {
+        "physical_defense": 6,
+        "spiritual_defense": 8,
+        "movement": 3
+      }
+    },
+    "tags": [
+      "法器",
+      "隐匿"
+    ],
+    "search_text": "玄水 隐袍 黑水盟",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "equipment",
+    "key": "medicine-basket",
+    "name": "温玉药篓",
+    "content": {
+      "allowed_slots": [
+        "accessory"
+      ],
+      "durability_max": 100,
+      "bonuses": {
+        "healing_power": 8,
+        "max_spiritual_sense": 5
+      }
+    },
+    "tags": [
+      "法器",
+      "采药"
+    ],
+    "search_text": "温玉 药篓 采药",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "equipment",
+    "key": "spirit-gathering-mat",
+    "name": "小聚灵蒲团",
+    "content": {
+      "allowed_slots": [
+        "accessory"
+      ],
+      "durability_max": 120,
+      "bonuses": {
+        "max_mana": 18,
+        "cultivation_gain": 5
+      }
+    },
+    "tags": [
+      "法器",
+      "修炼"
+    ],
+    "search_text": "聚灵 蒲团 修炼",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "equipment",
+    "key": "void-compass",
+    "name": "定界盘",
+    "content": {
+      "allowed_slots": [
+        "accessory"
+      ],
+      "durability_max": 260,
+      "bonuses": {
+        "movement": 28,
+        "spiritual_defense": 42,
+        "max_spiritual_sense": 120
+      }
+    },
+    "tags": [
+      "法宝",
+      "虚空"
+    ],
+    "search_text": "定界盘 界墟 航路",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "equipment",
+    "key": "law-edge",
+    "name": "律光道锋",
+    "content": {
+      "allowed_slots": [
+        "weapon"
+      ],
+      "durability_max": 320,
+      "bonuses": {
+        "physical_attack": 95,
+        "spiritual_attack": 180,
+        "max_mana": 240
+      }
+    },
+    "tags": [
+      "法宝",
+      "法则"
+    ],
+    "search_text": "律光 道锋 法则",
+    "visibility": "player",
+    "sort_order": 120
+  }
+]

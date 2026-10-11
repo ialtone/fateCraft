@@ -1,0 +1,1471 @@
+[
+  {
+    "kind": "location",
+    "key": "mortal-realm",
+    "name": "人间界",
+    "content": {
+      "node_type": "realm",
+      "description": "凡俗王朝与低阶修行地域所在的下层界域。",
+      "connections": []
+    },
+    "tags": [
+      "界域"
+    ],
+    "search_text": "人间界 凡俗 修行界",
+    "visibility": "player",
+    "sort_order": 1
+  },
+  {
+    "kind": "location",
+    "key": "green-river-county",
+    "name": "青河郡",
+    "content": {
+      "node_type": "region",
+      "parent_key": "mortal-realm",
+      "description": "位于北山灵脉南麓的边郡，宗门、商会与凡俗聚落沿青河分布。",
+      "connections": [],
+      "initial_state": {
+        "resource_level": 6200,
+        "danger_level": 2400,
+        "stability": 6800,
+        "conflict_stage": 0,
+        "faction_power": {
+          "green-mist-sect": 5600,
+          "hundred-herbs-guild": 4200,
+          "blackwater-league": 1800,
+          "liang-magistracy": 3600,
+          "loose-cultivator-association": 2400,
+          "red-cloud-temple": 2600,
+          "green-river-lin-clan": 3000
+        }
+      }
+    },
+    "tags": [
+      "地区",
+      "低阶修行区"
+    ],
+    "search_text": "青河郡 北山灵脉",
+    "visibility": "player",
+    "sort_order": 2
+  },
+  {
+    "kind": "location",
+    "key": "green-river-village",
+    "name": "青河村",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "沿河而建的凡俗村落，靠采药、捕鱼和驿道生计。",
+      "realm_layer": "mortal",
+      "danger_rank": 0,
+      "spiritual_energy": 5,
+      "facilities": [
+        "inn",
+        "herbalist"
+      ],
+      "investigation_minutes": 90,
+      "gathering": {
+        "minutes": 120,
+        "risk_chance_bps": 500,
+        "risk_health_damage": 3,
+        "entries": [
+          {
+            "item_key": "green-river-herb",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 70
+          },
+          {
+            "item_key": "clear-spring-water",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 30
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "old-ferry",
+          "travel_minutes": 45
+        },
+        {
+          "location_key": "bamboo-woods",
+          "travel_minutes": 90
+        },
+        {
+          "location_key": "county-town",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "reed-marsh",
+          "travel_minutes": 120
+        }
+      ]
+    },
+    "tags": [
+      "村落",
+      "安全"
+    ],
+    "search_text": "青河村 村民 药铺",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "location",
+    "key": "old-ferry",
+    "name": "青河旧渡",
+    "content": {
+      "node_type": "location",
+      "description": "通往青石坊市的旧渡口，夜间常有身份不明的船只靠岸。",
+      "parent_key": "green-river-county",
+      "realm_layer": "mortal",
+      "danger_rank": 1,
+      "spiritual_energy": 4,
+      "facilities": [
+        "ferry"
+      ],
+      "investigation_minutes": 120,
+      "gathering": {
+        "minutes": 120,
+        "entries": [
+          {
+            "item_key": "clear-spring-water",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 75
+          },
+          {
+            "item_key": "moon-dew",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 25
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "green-river-village",
+          "travel_minutes": 45
+        },
+        {
+          "location_key": "bluestone-market",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "south-marsh",
+          "travel_minutes": 210
+        }
+      ]
+    },
+    "tags": [
+      "渡口",
+      "商路"
+    ],
+    "search_text": "旧渡 渡船 黑泥",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "location",
+    "key": "bamboo-woods",
+    "name": "听风竹林",
+    "content": {
+      "node_type": "location",
+      "description": "村北的大片竹林，外围可采药，深处偶有妖气。",
+      "parent_key": "green-river-county",
+      "realm_layer": "mortal",
+      "danger_rank": 1,
+      "spiritual_energy": 12,
+      "facilities": [
+        "foraging"
+      ],
+      "investigation_minutes": 150,
+      "gathering": {
+        "minutes": 150,
+        "risk_chance_bps": 1200,
+        "risk_health_damage": 5,
+        "entries": [
+          {
+            "item_key": "green-river-herb",
+            "min_quantity": 1,
+            "max_quantity": 4,
+            "weight": 55
+          },
+          {
+            "item_key": "spirit-wood",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 30
+          },
+          {
+            "item_key": "mist-beast-hide",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 15
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "green-river-village",
+          "travel_minutes": 90
+        },
+        {
+          "location_key": "abandoned-cave",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "herb-valley",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "mist-cliff",
+          "travel_minutes": 240
+        }
+      ]
+    },
+    "tags": [
+      "野外",
+      "药材"
+    ],
+    "search_text": "竹林 药材 妖兽",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "location",
+    "key": "abandoned-cave",
+    "name": "废弃采石洞",
+    "content": {
+      "node_type": "scene",
+      "description": "早年开采青纹石留下的洞窟，入口被藤蔓与落石遮蔽。",
+      "parent_key": "bamboo-woods",
+      "realm_layer": "qi-refining",
+      "danger_rank": 2,
+      "spiritual_energy": 22,
+      "facilities": [
+        "exploration"
+      ],
+      "investigation_minutes": 180,
+      "gathering": {
+        "minutes": 210,
+        "risk_chance_bps": 2500,
+        "risk_health_damage": 10,
+        "entries": [
+          {
+            "item_key": "green-pattern-ore",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 75
+          },
+          {
+            "item_key": "star-iron-sand",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 25
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "bamboo-woods",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "underground-river",
+          "travel_minutes": 90
+        }
+      ]
+    },
+    "tags": [
+      "洞窟",
+      "探索"
+    ],
+    "search_text": "采石洞 遗迹 妖气",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "location",
+    "key": "bluestone-market",
+    "name": "青石坊市",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "百草商会主持的低阶坊市，散修、药农与宗门弟子在此交易。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 1,
+      "spiritual_energy": 18,
+      "facilities": [
+        "market",
+        "inn",
+        "message-board"
+      ],
+      "investigation_minutes": 120,
+      "connections": [
+        {
+          "location_key": "old-ferry",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "green-mist-gate",
+          "travel_minutes": 240
+        },
+        {
+          "location_key": "county-town",
+          "travel_minutes": 120
+        }
+      ]
+    },
+    "tags": [
+      "坊市",
+      "交易"
+    ],
+    "search_text": "青石坊市 商会 散修",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "location",
+    "key": "green-mist-gate",
+    "name": "青岚山门",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "青岚门外山门，未持令牌者只能在迎客坪等候。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 1,
+      "spiritual_energy": 35,
+      "facilities": [
+        "sect-gate"
+      ],
+      "investigation_minutes": 90,
+      "connections": [
+        {
+          "location_key": "bluestone-market",
+          "travel_minutes": 240
+        },
+        {
+          "location_key": "outer-courtyard",
+          "travel_minutes": 30
+        }
+      ],
+      "entry_requirements": [
+        {
+          "faction_key": "green-mist-sect",
+          "permission_key": "outer_gate_access"
+        }
+      ]
+    },
+    "tags": [
+      "宗门",
+      "山门"
+    ],
+    "search_text": "青岚门 山门 宗门",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "location",
+    "key": "county-town",
+    "name": "青河县城",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "青河郡的凡俗治所，衙门、驿站与散修会馆挤在城东旧街。",
+      "realm_layer": "mortal",
+      "danger_rank": 0,
+      "spiritual_energy": 8,
+      "facilities": [
+        "inn",
+        "workshop",
+        "message-board"
+      ],
+      "investigation_minutes": 120,
+      "connections": [
+        {
+          "location_key": "green-river-village",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "bluestone-market",
+          "travel_minutes": 120
+        },
+        {
+          "location_key": "spirit-field",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "lin-family-manor",
+          "travel_minutes": 90
+        }
+      ]
+    },
+    "tags": [
+      "县城",
+      "凡俗"
+    ],
+    "search_text": "青河县城 衙门 驿站 散修会馆",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "location",
+    "key": "reed-marsh",
+    "name": "芦苇浅泽",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "青河村下游的浅泽，盛产水草与月露，雨季会有低阶毒物出没。",
+      "realm_layer": "mortal",
+      "danger_rank": 1,
+      "spiritual_energy": 14,
+      "facilities": [
+        "foraging",
+        "fishing"
+      ],
+      "investigation_minutes": 150,
+      "gathering": {
+        "minutes": 150,
+        "risk_chance_bps": 1000,
+        "risk_health_damage": 4,
+        "entries": [
+          {
+            "item_key": "moon-dew",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 55
+          },
+          {
+            "item_key": "green-river-herb",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 30
+          },
+          {
+            "item_key": "swamp-venom-sac",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 15
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "green-river-village",
+          "travel_minutes": 120
+        },
+        {
+          "location_key": "south-marsh",
+          "travel_minutes": 180
+        }
+      ]
+    },
+    "tags": [
+      "野外",
+      "水泽"
+    ],
+    "search_text": "芦苇 浅泽 月华露 毒物",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "location",
+    "key": "spirit-field",
+    "name": "北麓灵田",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "青岚门租给灵农耕种的低阶灵田，青穗灵米与常用药苗在此轮作。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 1,
+      "spiritual_energy": 28,
+      "facilities": [
+        "spirit-farm",
+        "foraging"
+      ],
+      "investigation_minutes": 120,
+      "gathering": {
+        "minutes": 180,
+        "risk_chance_bps": 600,
+        "risk_health_damage": 3,
+        "entries": [
+          {
+            "item_key": "spirit-rice",
+            "min_quantity": 2,
+            "max_quantity": 5,
+            "weight": 70
+          },
+          {
+            "item_key": "green-river-herb",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 30
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "county-town",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "outer-courtyard",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "lin-family-manor",
+          "travel_minutes": 120
+        }
+      ]
+    },
+    "tags": [
+      "灵田",
+      "资源地"
+    ],
+    "search_text": "北麓 灵田 灵米 灵农",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "location",
+    "key": "herb-valley",
+    "name": "百药涧",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "听风竹林深处的湿润山涧，药材密集，也吸引了争食灵草的雾狸。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 2,
+      "spiritual_energy": 32,
+      "facilities": [
+        "foraging",
+        "alchemy"
+      ],
+      "investigation_minutes": 180,
+      "gathering": {
+        "minutes": 210,
+        "risk_chance_bps": 1800,
+        "risk_health_damage": 7,
+        "entries": [
+          {
+            "item_key": "green-river-herb",
+            "min_quantity": 2,
+            "max_quantity": 5,
+            "weight": 40
+          },
+          {
+            "item_key": "red-flame-fruit",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 25
+          },
+          {
+            "item_key": "moon-dew",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 20
+          },
+          {
+            "item_key": "mist-beast-hide",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 15
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "bamboo-woods",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "mist-cliff",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "red-cloud-temple",
+          "travel_minutes": 180
+        }
+      ]
+    },
+    "tags": [
+      "药谷",
+      "野外"
+    ],
+    "search_text": "百药涧 灵草 雾狸",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "location",
+    "key": "mist-cliff",
+    "name": "落雷崖",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "herb-valley",
+      "description": "北山支脉上一处终年积雾的断崖，雷雨后偶尔能找到雷纹竹。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 3,
+      "spiritual_energy": 45,
+      "facilities": [
+        "exploration",
+        "talisman"
+      ],
+      "investigation_minutes": 240,
+      "gathering": {
+        "minutes": 300,
+        "risk_chance_bps": 3200,
+        "risk_health_damage": 12,
+        "entries": [
+          {
+            "item_key": "lightning-bamboo",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 55
+          },
+          {
+            "item_key": "star-iron-sand",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 30
+          },
+          {
+            "item_key": "red-flame-fruit",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 15
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "bamboo-woods",
+          "travel_minutes": 240
+        },
+        {
+          "location_key": "herb-valley",
+          "travel_minutes": 150
+        },
+        {
+          "location_key": "cloud-sail-port",
+          "travel_minutes": 2880
+        }
+      ]
+    },
+    "tags": [
+      "险地",
+      "雷行资源"
+    ],
+    "search_text": "落雷崖 雷纹竹 雷雨",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "location",
+    "key": "underground-river",
+    "name": "伏流石窟",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "bamboo-woods",
+      "description": "采石洞下方的地下伏流，水路最终通向南沼，岩壁夹杂星铁砂。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 3,
+      "spiritual_energy": 38,
+      "facilities": [
+        "mining",
+        "exploration"
+      ],
+      "investigation_minutes": 240,
+      "gathering": {
+        "minutes": 270,
+        "risk_chance_bps": 3000,
+        "risk_health_damage": 12,
+        "entries": [
+          {
+            "item_key": "star-iron-sand",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 55
+          },
+          {
+            "item_key": "green-pattern-ore",
+            "min_quantity": 2,
+            "max_quantity": 4,
+            "weight": 30
+          },
+          {
+            "item_key": "clear-spring-water",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 15
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "abandoned-cave",
+          "travel_minutes": 90
+        },
+        {
+          "location_key": "south-marsh",
+          "travel_minutes": 210
+        }
+      ]
+    },
+    "tags": [
+      "洞窟",
+      "矿脉"
+    ],
+    "search_text": "伏流 石窟 星铁砂 地下河",
+    "visibility": "player",
+    "sort_order": 120
+  },
+  {
+    "kind": "location",
+    "key": "outer-courtyard",
+    "name": "青岚外院",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "青岚门处理外门事务与低阶委托的院落，设有练功坪、丹房和炼器棚。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 0,
+      "spiritual_energy": 52,
+      "facilities": [
+        "sect",
+        "alchemy",
+        "forge",
+        "talisman"
+      ],
+      "investigation_minutes": 90,
+      "connections": [
+        {
+          "location_key": "green-mist-gate",
+          "travel_minutes": 30
+        },
+        {
+          "location_key": "spirit-field",
+          "travel_minutes": 150
+        }
+      ],
+      "entry_requirements": [
+        {
+          "faction_key": "green-mist-sect",
+          "permission_key": "outer_gate_access"
+        }
+      ]
+    },
+    "tags": [
+      "宗门",
+      "外院"
+    ],
+    "search_text": "青岚 外院 外门 丹房",
+    "visibility": "player",
+    "sort_order": 130
+  },
+  {
+    "kind": "location",
+    "key": "south-marsh",
+    "name": "黑苇南沼",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "青河下游水网密布的危险沼泽，黑水盟夜船、毒兽和私采者都在芦苇后活动。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 3,
+      "spiritual_energy": 30,
+      "facilities": [
+        "foraging",
+        "black-market",
+        "exploration"
+      ],
+      "investigation_minutes": 210,
+      "gathering": {
+        "minutes": 240,
+        "risk_chance_bps": 3500,
+        "risk_health_damage": 14,
+        "entries": [
+          {
+            "item_key": "swamp-venom-sac",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 45
+          },
+          {
+            "item_key": "moon-dew",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 25
+          },
+          {
+            "item_key": "mist-beast-hide",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 20
+          },
+          {
+            "item_key": "lightning-bamboo",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 10
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "old-ferry",
+          "travel_minutes": 210
+        },
+        {
+          "location_key": "reed-marsh",
+          "travel_minutes": 180
+        },
+        {
+          "location_key": "underground-river",
+          "travel_minutes": 210
+        }
+      ]
+    },
+    "tags": [
+      "南沼",
+      "险地",
+      "黑市"
+    ],
+    "search_text": "黑苇 南沼 黑水盟 夜船",
+    "visibility": "player",
+    "sort_order": 140
+  },
+  {
+    "kind": "location",
+    "key": "red-cloud-temple",
+    "name": "赤霞观",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "落雷崖南侧的小型火行传承，门人不多，以炼体、火法和符箓闻名。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 1,
+      "spiritual_energy": 40,
+      "facilities": [
+        "sect",
+        "talisman",
+        "alchemy"
+      ],
+      "investigation_minutes": 120,
+      "connections": [
+        {
+          "location_key": "herb-valley",
+          "travel_minutes": 180
+        }
+      ]
+    },
+    "tags": [
+      "宗门",
+      "火行"
+    ],
+    "search_text": "赤霞观 火行 炼体 符箓",
+    "visibility": "player",
+    "sort_order": 150
+  },
+  {
+    "kind": "location",
+    "key": "lin-family-manor",
+    "name": "林氏灵庄",
+    "content": {
+      "node_type": "location",
+      "parent_key": "green-river-county",
+      "description": "依靠北麓灵田立足的修仙家族庄院，兼营灵米、药苗和低阶水法传承。",
+      "realm_layer": "qi-refining",
+      "danger_rank": 0,
+      "spiritual_energy": 34,
+      "facilities": [
+        "clan",
+        "spirit-farm",
+        "inn"
+      ],
+      "investigation_minutes": 90,
+      "connections": [
+        {
+          "location_key": "county-town",
+          "travel_minutes": 90
+        },
+        {
+          "location_key": "spirit-field",
+          "travel_minutes": 120
+        }
+      ]
+    },
+    "tags": [
+      "修仙家族",
+      "灵田"
+    ],
+    "search_text": "林氏 灵庄 修仙家族 灵田",
+    "visibility": "player",
+    "sort_order": 160
+  },
+  {
+    "kind": "location",
+    "key": "storm-sea",
+    "name": "天星海",
+    "content": {
+      "node_type": "region",
+      "parent_key": "mortal-realm",
+      "connections": [],
+      "initial_state": {
+        "resource_level": 6200,
+        "danger_level": 4300,
+        "stability": 4200,
+        "conflict_stage": 4,
+        "faction_power": {
+          "star-sail-alliance": 4200,
+          "abyss-court": 3600
+        }
+      }
+    },
+    "tags": [
+      "区域",
+      "星海"
+    ],
+    "search_text": "天星海 星舟 海渊",
+    "visibility": "player",
+    "sort_order": 170
+  },
+  {
+    "kind": "location",
+    "key": "cloud-sail-port",
+    "name": "云帆港",
+    "content": {
+      "node_type": "location",
+      "parent_key": "storm-sea",
+      "description": "青河郡通往天星海的星舟港，只接待筑基以上修士。",
+      "realm_layer": "foundation",
+      "danger_rank": 2,
+      "spiritual_energy": 85,
+      "facilities": [
+        "harbor",
+        "inn"
+      ],
+      "investigation_minutes": 240,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 2
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "mist-cliff",
+          "travel_minutes": 2880
+        },
+        {
+          "location_key": "tide-star-market",
+          "travel_minutes": 360
+        },
+        {
+          "location_key": "abyssal-isle",
+          "travel_minutes": 720
+        }
+      ]
+    },
+    "tags": [
+      "港口",
+      "跨域"
+    ],
+    "search_text": "云帆港 星舟 天星海",
+    "visibility": "player",
+    "sort_order": 180
+  },
+  {
+    "kind": "location",
+    "key": "tide-star-market",
+    "name": "潮星坊",
+    "content": {
+      "node_type": "location",
+      "parent_key": "storm-sea",
+      "description": "星舟联盟维持的中阶坊市，也是界墟航路的补给站。",
+      "realm_layer": "golden-core",
+      "danger_rank": 1,
+      "spiritual_energy": 110,
+      "facilities": [
+        "market",
+        "alchemy",
+        "artifact"
+      ],
+      "investigation_minutes": 180,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 2
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "cloud-sail-port",
+          "travel_minutes": 360
+        },
+        {
+          "location_key": "void-crossing-gate",
+          "travel_minutes": 1440
+        }
+      ]
+    },
+    "tags": [
+      "坊市",
+      "星海"
+    ],
+    "search_text": "潮星坊 星舟联盟",
+    "visibility": "player",
+    "sort_order": 190
+  },
+  {
+    "kind": "location",
+    "key": "abyssal-isle",
+    "name": "沉星岛",
+    "content": {
+      "node_type": "location",
+      "parent_key": "storm-sea",
+      "description": "被渊兽潮包围的沉没古岛，岛心保留星图残碑。",
+      "realm_layer": "golden-core",
+      "danger_rank": 6,
+      "spiritual_energy": 130,
+      "facilities": [
+        "exploration",
+        "foraging"
+      ],
+      "investigation_minutes": 480,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 3
+        }
+      ],
+      "gathering": {
+        "minutes": 540,
+        "risk_chance_bps": 4200,
+        "risk_health_damage": 90,
+        "entries": [
+          {
+            "item_key": "celestial-herb",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 55
+          },
+          {
+            "item_key": "void-crystal",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 45
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "cloud-sail-port",
+          "travel_minutes": 720
+        },
+        {
+          "location_key": "deep-star-trench",
+          "travel_minutes": 480
+        }
+      ]
+    },
+    "tags": [
+      "险地",
+      "星海"
+    ],
+    "search_text": "沉星岛 渊兽 星图",
+    "visibility": "player",
+    "sort_order": 200
+  },
+  {
+    "kind": "location",
+    "key": "deep-star-trench",
+    "name": "坠星海渊",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "abyssal-isle",
+      "description": "古星坠落形成的深海裂谷，元婴渊兽在此筑巢。",
+      "realm_layer": "nascent-soul",
+      "danger_rank": 8,
+      "spiritual_energy": 180,
+      "facilities": [
+        "exploration"
+      ],
+      "investigation_minutes": 600,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 4
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "abyssal-isle",
+          "travel_minutes": 480
+        }
+      ]
+    },
+    "tags": [
+      "秘境",
+      "海渊"
+    ],
+    "search_text": "坠星 海渊 元婴渊兽",
+    "visibility": "player",
+    "sort_order": 210
+  },
+  {
+    "kind": "location",
+    "key": "boundary-ruins",
+    "name": "界墟",
+    "content": {
+      "node_type": "region",
+      "parent_key": "mortal-realm",
+      "connections": [],
+      "initial_state": {
+        "resource_level": 3800,
+        "danger_level": 6800,
+        "stability": 2500,
+        "conflict_stage": 7,
+        "faction_power": {
+          "boundary-watch": 3900,
+          "abyss-court": 4100
+        }
+      }
+    },
+    "tags": [
+      "区域",
+      "界墟"
+    ],
+    "search_text": "界墟 空间裂隙 古遗迹",
+    "visibility": "player",
+    "sort_order": 220
+  },
+  {
+    "kind": "location",
+    "key": "void-crossing-gate",
+    "name": "渡虚关",
+    "content": {
+      "node_type": "location",
+      "parent_key": "boundary-ruins",
+      "description": "边界守望者修建的界墟前哨，结丹修士才可登记入关。",
+      "realm_layer": "golden-core",
+      "danger_rank": 5,
+      "spiritual_energy": 160,
+      "facilities": [
+        "fortress",
+        "artifact"
+      ],
+      "investigation_minutes": 300,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 3
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "tide-star-market",
+          "travel_minutes": 1440
+        },
+        {
+          "location_key": "ancient-star-observatory",
+          "travel_minutes": 420
+        },
+        {
+          "location_key": "rift-heart",
+          "travel_minutes": 600
+        }
+      ]
+    },
+    "tags": [
+      "关隘",
+      "界墟"
+    ],
+    "search_text": "渡虚关 边界守望",
+    "visibility": "player",
+    "sort_order": 230
+  },
+  {
+    "kind": "location",
+    "key": "ancient-star-observatory",
+    "name": "古星台",
+    "content": {
+      "node_type": "location",
+      "parent_key": "boundary-ruins",
+      "description": "记录界域潮汐的古代观测台，残存法则刻痕可供参悟。",
+      "realm_layer": "nascent-soul",
+      "danger_rank": 4,
+      "spiritual_energy": 210,
+      "facilities": [
+        "research",
+        "alchemy"
+      ],
+      "investigation_minutes": 360,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 4
+        }
+      ],
+      "gathering": {
+        "minutes": 720,
+        "risk_chance_bps": 3000,
+        "risk_health_damage": 140,
+        "entries": [
+          {
+            "item_key": "law-fragment",
+            "min_quantity": 1,
+            "max_quantity": 1,
+            "weight": 35
+          },
+          {
+            "item_key": "void-crystal",
+            "min_quantity": 1,
+            "max_quantity": 3,
+            "weight": 65
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "void-crossing-gate",
+          "travel_minutes": 420
+        }
+      ]
+    },
+    "tags": [
+      "遗迹",
+      "法则"
+    ],
+    "search_text": "古星台 法则刻痕",
+    "visibility": "player",
+    "sort_order": 240
+  },
+  {
+    "kind": "location",
+    "key": "rift-heart",
+    "name": "界隙核心",
+    "content": {
+      "node_type": "scene",
+      "parent_key": "void-crossing-gate",
+      "description": "两界法则交错的危险核心，只有元婴修士能承受空间潮汐。",
+      "realm_layer": "nascent-soul",
+      "danger_rank": 9,
+      "spiritual_energy": 260,
+      "facilities": [
+        "exploration",
+        "ascension"
+      ],
+      "investigation_minutes": 720,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 4
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "void-crossing-gate",
+          "travel_minutes": 600
+        },
+        {
+          "location_key": "ascension-platform",
+          "travel_minutes": 2880
+        }
+      ]
+    },
+    "tags": [
+      "界隙",
+      "跨界"
+    ],
+    "search_text": "界隙核心 空间潮汐",
+    "visibility": "player",
+    "sort_order": 250
+  },
+  {
+    "kind": "location",
+    "key": "upper-spirit-realm",
+    "name": "上灵界",
+    "content": {
+      "node_type": "realm",
+      "connections": []
+    },
+    "tags": [
+      "界域",
+      "上界"
+    ],
+    "search_text": "上灵界 法则道统",
+    "visibility": "player",
+    "sort_order": 260
+  },
+  {
+    "kind": "location",
+    "key": "nine-heavens-march",
+    "name": "九关天陆",
+    "content": {
+      "node_type": "region",
+      "parent_key": "upper-spirit-realm",
+      "connections": [],
+      "initial_state": {
+        "resource_level": 7200,
+        "danger_level": 5200,
+        "stability": 4600,
+        "conflict_stage": 6,
+        "faction_power": {
+          "nine-law-court": 5200,
+          "boundary-watch": 2800,
+          "abyss-court": 3300
+        }
+      }
+    },
+    "tags": [
+      "区域",
+      "上界"
+    ],
+    "search_text": "九关天陆 上灵界",
+    "visibility": "player",
+    "sort_order": 270
+  },
+  {
+    "kind": "location",
+    "key": "ascension-platform",
+    "name": "接引台",
+    "content": {
+      "node_type": "location",
+      "parent_key": "nine-heavens-march",
+      "description": "上灵界接引下界化神修士的法则平台。",
+      "realm_layer": "spirit-transformation",
+      "danger_rank": 3,
+      "spiritual_energy": 420,
+      "facilities": [
+        "ascension",
+        "inn"
+      ],
+      "investigation_minutes": 360,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 5
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "rift-heart",
+          "travel_minutes": 2880
+        },
+        {
+          "location_key": "law-market",
+          "travel_minutes": 480
+        },
+        {
+          "location_key": "celestial-frontier",
+          "travel_minutes": 720
+        }
+      ]
+    },
+    "tags": [
+      "上界",
+      "接引"
+    ],
+    "search_text": "接引台 化神 上灵界",
+    "visibility": "player",
+    "sort_order": 280
+  },
+  {
+    "kind": "location",
+    "key": "law-market",
+    "name": "万律城",
+    "content": {
+      "node_type": "location",
+      "parent_key": "nine-heavens-march",
+      "description": "九律道庭主持的上界大城，法则残片与高阶传承均受严格管制。",
+      "realm_layer": "spirit-transformation",
+      "danger_rank": 1,
+      "spiritual_energy": 500,
+      "facilities": [
+        "market",
+        "research",
+        "artifact"
+      ],
+      "investigation_minutes": 300,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 5
+        }
+      ],
+      "connections": [
+        {
+          "location_key": "ascension-platform",
+          "travel_minutes": 480
+        },
+        {
+          "location_key": "dharma-training-hall",
+          "travel_minutes": 360
+        }
+      ]
+    },
+    "tags": [
+      "上界",
+      "坊市"
+    ],
+    "search_text": "万律城 九律道庭",
+    "visibility": "player",
+    "sort_order": 290
+  },
+  {
+    "kind": "location",
+    "key": "celestial-frontier",
+    "name": "天关前线",
+    "content": {
+      "node_type": "location",
+      "parent_key": "nine-heavens-march",
+      "description": "抵御界外潮汐的法则防线，也是两条终局道路的交汇处。",
+      "realm_layer": "void-refining",
+      "danger_rank": 10,
+      "spiritual_energy": 560,
+      "facilities": [
+        "fortress",
+        "exploration"
+      ],
+      "investigation_minutes": 600,
+      "entry_requirements": [
+        {
+          "min_realm_rank": 6
+        }
+      ],
+      "gathering": {
+        "minutes": 900,
+        "risk_chance_bps": 4800,
+        "risk_health_damage": 420,
+        "entries": [
+          {
+            "item_key": "law-fragment",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 60
+          },
+          {
+            "item_key": "celestial-herb",
+            "min_quantity": 1,
+            "max_quantity": 2,
+            "weight": 40
+          }
+        ]
+      },
+      "connections": [
+        {
+          "location_key": "ascension-platform",
+          "travel_minutes": 720
+        },
+        {
+          "location_key": "void-survey-platform",
+          "travel_minutes": 360
+        },
+        {
+          "location_key": "ascension-sanctum",
+          "travel_minutes": 360
+        }
+      ]
+    },
+    "tags": [
+      "终局",
+      "前线"
+    ],
+    "search_text": "天关 前线 界外潮汐",
+    "visibility": "player",
+    "sort_order": 300
+  }
+]

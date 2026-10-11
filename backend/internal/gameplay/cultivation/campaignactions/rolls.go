@@ -1,19 +1,12 @@
 package campaignactions
 
 import (
-	"context"
 	"fmt"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldactions"
 
 	"github.com/ialtone/fatecraft/internal/campaign"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
-
-func resolveCampaignRoll(ctx context.Context, execution campaign.ActionExecution, request campaign.CampaignRollRequest) (*campaign.CampaignRollResult, error) {
-	if execution.Roll == nil {
-		return nil, nil
-	}
-	return execution.Roll(ctx, request)
-}
 
 func campaignRollPlayerState(character *storage.CampaignCharacter, insight int64) map[string]any {
 	if insight < 0 {
@@ -24,7 +17,7 @@ func campaignRollPlayerState(character *storage.CampaignCharacter, insight int64
 	}
 	foundation := int64(50)
 	if character != nil {
-		foundation = clampInt64(int64(character.FoundationQuality), 0, 100)
+		foundation = worldactions.ClampInt64(int64(character.FoundationQuality), 0, 100)
 	}
 	attributes := map[string]any{
 		"根骨": foundation,
@@ -67,22 +60,9 @@ func campaignCharacterInsight(character *storage.CampaignCharacter) int64 {
 	if character == nil || character.MaxSpiritualSense <= 0 {
 		return 50
 	}
-	return clampInt64(character.SpiritualSense*100/character.MaxSpiritualSense, 0, 100)
+	return worldactions.ClampInt64(character.SpiritualSense*100/character.MaxSpiritualSense, 0, 100)
 }
 
 func campaignRollBaseFromBPS(bps int64) int {
-	return int(clampInt64((bps+50)/100, 1, 99))
-}
-
-func attachCampaignRoll(outcome *storage.CampaignActionOutcome, result *campaign.CampaignRollResult) {
-	if outcome == nil || result == nil {
-		return
-	}
-	outcome.Roll = result.Snapshot
-	if outcome.Result == nil {
-		outcome.Result = storage.JSONMap{}
-	}
-	outcome.Result["roll"] = result.Rolled
-	outcome.Result["chance"] = result.SuccessRate
-	outcome.Result["roll_level"] = result.Level
+	return int(worldactions.ClampInt64((bps+50)/100, 1, 99))
 }

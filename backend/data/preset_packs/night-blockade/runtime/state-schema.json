@@ -1,0 +1,114 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "module_state",
+        "type": "object",
+        "default": {},
+        "visibility": "internal",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "narrative",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.location",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.goal",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.alert",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.pursuit",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.observation",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.remaining_minutes",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.lockpicks",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.decoys",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.has_intel",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.has_target",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.locations",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.outcome_key",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      }
+    ]
+  }
+}

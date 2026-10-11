@@ -1,0 +1,11 @@
+{
+  "id": "underground-watchtower-player",
+  "name": "远征者",
+  "description": "你是一名独自探索地下哨塔的远征者，只有有限的行军补给和药物。",
+  "prompt": "你是一名独自探索地下哨塔的远征者，只有有限的行军补给和药物。",
+  "tags": [
+    "地牢远征"
+  ],
+  "created_at": "2026-10-07T00:00:00Z",
+  "updated_at": "2026-10-07T00:00:00Z"
+}

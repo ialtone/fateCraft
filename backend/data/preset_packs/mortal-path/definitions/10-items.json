@@ -1,0 +1,1127 @@
+[
+  {
+    "kind": "item",
+    "key": "low-spirit-stone",
+    "name": "下品灵石",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 20,
+      "max_grant_per_action": 1000,
+      "model_grantable": false
+    },
+    "tags": [
+      "货币",
+      "修炼资源"
+    ],
+    "search_text": "灵石 交易",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "item",
+    "key": "healing-pill",
+    "name": "回春丸",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "starting_quantity": 3,
+      "max_grant_per_action": 20,
+      "effects": {
+        "health": 30
+      }
+    },
+    "tags": [
+      "丹药",
+      "疗伤"
+    ],
+    "search_text": "回春丸 气血 疗伤",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "item",
+    "key": "qi-gathering-pill",
+    "name": "聚气散",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "starting_quantity": 2,
+      "max_grant_per_action": 20,
+      "effects": {
+        "mana": 12,
+        "cultivation_progress": 18
+      }
+    },
+    "tags": [
+      "丹药",
+      "修炼"
+    ],
+    "search_text": "聚气散 法力 修为",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "item",
+    "key": "manual.basic-breathing",
+    "name": "无名吐纳残篇",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "基础吐纳"
+    ],
+    "search_text": "吐纳 残篇 引气",
+    "visibility": "player",
+    "sort_order": 35
+  },
+  {
+    "kind": "item",
+    "key": "manual.greenwood",
+    "name": "青木功残卷",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "功法"
+    ],
+    "search_text": "青木功 玉简 残卷",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "item",
+    "key": "manual.iron-body",
+    "name": "铁衣法抄本",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "炼体"
+    ],
+    "search_text": "铁衣 锻体 抄本",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "item",
+    "key": "manual.light-step",
+    "name": "轻身步图谱",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "身法"
+    ],
+    "search_text": "轻身 步法 图谱",
+    "visibility": "player",
+    "sort_order": 55
+  },
+  {
+    "kind": "item",
+    "key": "manual.basic-alchemy",
+    "name": "小云火炼丹札",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "炼丹"
+    ],
+    "search_text": "云火 炼丹 丹札",
+    "visibility": "player",
+    "sort_order": 56
+  },
+  {
+    "kind": "item",
+    "key": "manual.basic-forging",
+    "name": "百炼锻器谱",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "炼器"
+    ],
+    "search_text": "百炼 锻器 图谱",
+    "visibility": "player",
+    "sort_order": 57
+  },
+  {
+    "kind": "item",
+    "key": "manual.basic-talisman",
+    "name": "引灵画符抄",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "制符"
+    ],
+    "search_text": "引灵 画符 抄本",
+    "visibility": "player",
+    "sort_order": 58
+  },
+  {
+    "kind": "item",
+    "key": "green-river-herb",
+    "name": "青河草",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 4,
+      "max_grant_per_action": 50
+    },
+    "tags": [
+      "药材",
+      "低阶"
+    ],
+    "search_text": "青河草 药材",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "item",
+    "key": "clear-spring-water",
+    "name": "清灵泉水",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 3,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "材料",
+      "炼丹"
+    ],
+    "search_text": "泉水 炼丹 调和",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "item",
+    "key": "green-pattern-ore",
+    "name": "青纹矿",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 2,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "矿材",
+      "炼器"
+    ],
+    "search_text": "青纹矿 矿石 炼器",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "item",
+    "key": "spirit-wood",
+    "name": "养灵木",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 2,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "灵材",
+      "炼器"
+    ],
+    "search_text": "养灵木 木行 灵材",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "item",
+    "key": "blank-talisman-paper",
+    "name": "空白符纸",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 5,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "材料",
+      "制符"
+    ],
+    "search_text": "符纸 制符",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "item",
+    "key": "spirit-cinnabar",
+    "name": "灵砂",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 3,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "材料",
+      "制符"
+    ],
+    "search_text": "灵砂 朱砂 制符",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "item",
+    "key": "ward-talisman",
+    "name": "护身符",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 50,
+      "effects": {
+        "health": 12,
+        "spiritual_sense": 4
+      }
+    },
+    "tags": [
+      "符箓",
+      "防护"
+    ],
+    "search_text": "护身符 防护",
+    "visibility": "player",
+    "sort_order": 120
+  },
+  {
+    "kind": "item",
+    "key": "pill-dregs",
+    "name": "药渣",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "失败产物",
+      "炼丹"
+    ],
+    "search_text": "药渣 炼丹失败",
+    "visibility": "player",
+    "sort_order": 130
+  },
+  {
+    "kind": "item",
+    "key": "refining-slag",
+    "name": "炼器废渣",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "失败产物",
+      "炼器"
+    ],
+    "search_text": "废渣 炼器失败",
+    "visibility": "player",
+    "sort_order": 140
+  },
+  {
+    "kind": "item",
+    "key": "ruined-talisman",
+    "name": "废符",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "失败产物",
+      "制符"
+    ],
+    "search_text": "废符 制符失败",
+    "visibility": "player",
+    "sort_order": 150
+  },
+  {
+    "kind": "item",
+    "key": "recipe-jade.greenwood-token",
+    "name": "灵木护符炼制札记",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "starting_quantity": 1,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "配方",
+      "炼器"
+    ],
+    "search_text": "灵木护符 配方 札记",
+    "visibility": "player",
+    "sort_order": 160
+  },
+  {
+    "kind": "item",
+    "key": "manual.red-sun-breathing",
+    "name": "赤阳吐纳法玉简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "火行"
+    ],
+    "search_text": "赤阳 吐纳 玉简",
+    "visibility": "player",
+    "sort_order": 170
+  },
+  {
+    "kind": "item",
+    "key": "manual.water-mirror",
+    "name": "水镜养神诀玉简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "水行"
+    ],
+    "search_text": "水镜 养神 玉简",
+    "visibility": "player",
+    "sort_order": 180
+  },
+  {
+    "kind": "item",
+    "key": "manual.earth-vein",
+    "name": "厚土载元功石简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "土行"
+    ],
+    "search_text": "厚土 载元 石简",
+    "visibility": "player",
+    "sort_order": 190
+  },
+  {
+    "kind": "item",
+    "key": "manual.green-mist-sword",
+    "name": "青岚十三剑谱",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "剑诀"
+    ],
+    "search_text": "青岚 十三剑 剑谱",
+    "visibility": "player",
+    "sort_order": 200
+  },
+  {
+    "kind": "item",
+    "key": "manual.vine-binding",
+    "name": "缠藤术法简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "木行术法"
+    ],
+    "search_text": "缠藤 术法 法简",
+    "visibility": "player",
+    "sort_order": 210
+  },
+  {
+    "kind": "item",
+    "key": "manual.stone-skin",
+    "name": "磐石炼身图",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "炼体"
+    ],
+    "search_text": "磐石 炼身 图录",
+    "visibility": "player",
+    "sort_order": 220
+  },
+  {
+    "kind": "item",
+    "key": "manual.cloud-shadow-step",
+    "name": "流云匿影步册",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "身法"
+    ],
+    "search_text": "流云 匿影 身法",
+    "visibility": "player",
+    "sort_order": 230
+  },
+  {
+    "kind": "item",
+    "key": "manual.spirit-shield",
+    "name": "小灵盾术法简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "防御术法"
+    ],
+    "search_text": "灵盾 防御 法简",
+    "visibility": "player",
+    "sort_order": 240
+  },
+  {
+    "kind": "item",
+    "key": "manual.blood-burning",
+    "name": "燃血秘术残页",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "秘术"
+    ],
+    "search_text": "燃血 秘术 残页",
+    "visibility": "player",
+    "sort_order": 250
+  },
+  {
+    "kind": "item",
+    "key": "manual.hundred-herbs-sense",
+    "name": "百草辨灵录",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "采药"
+    ],
+    "search_text": "百草 辨灵 采药",
+    "visibility": "player",
+    "sort_order": 260
+  },
+  {
+    "kind": "item",
+    "key": "manual.thunder-finger",
+    "name": "掌心雷引残简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "雷法"
+    ],
+    "search_text": "掌心雷 雷法 残简",
+    "visibility": "player",
+    "sort_order": 270
+  },
+  {
+    "kind": "item",
+    "key": "manual.breath-concealment",
+    "name": "敛息诀薄册",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "隐匿"
+    ],
+    "search_text": "敛息 隐匿 薄册",
+    "visibility": "player",
+    "sort_order": 280
+  },
+  {
+    "kind": "item",
+    "key": "manual.foundation-guide",
+    "name": "小周天筑基篇玉简",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "传承",
+      "筑基"
+    ],
+    "search_text": "小周天 筑基 玉简",
+    "visibility": "player",
+    "sort_order": 290
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.detox-pill",
+    "name": "清瘴丹方",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "丹方"
+    ],
+    "search_text": "清瘴丹 解毒 丹方",
+    "visibility": "player",
+    "sort_order": 300
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.spirit-restoring",
+    "name": "复灵散方",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "丹方"
+    ],
+    "search_text": "复灵散 法力 丹方",
+    "visibility": "player",
+    "sort_order": 310
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.body-tempering",
+    "name": "淬体汤方",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "丹方",
+      "炼体"
+    ],
+    "search_text": "淬体汤 炼体 丹方",
+    "visibility": "player",
+    "sort_order": 320
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.green-mist-sword",
+    "name": "青岚剑炼图",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "炼器图"
+    ],
+    "search_text": "青岚剑 炼器 图谱",
+    "visibility": "player",
+    "sort_order": 330
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.blackwater-cloak",
+    "name": "玄水隐袍炼图",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "炼器图",
+      "黑水盟"
+    ],
+    "search_text": "玄水 隐袍 炼器",
+    "visibility": "player",
+    "sort_order": 340
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.flame-talisman",
+    "name": "烈焰符法",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "符法"
+    ],
+    "search_text": "烈焰符 火行 符法",
+    "visibility": "player",
+    "sort_order": 350
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.thunder-talisman",
+    "name": "惊雷符法",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 1
+    },
+    "tags": [
+      "符法",
+      "雷行"
+    ],
+    "search_text": "惊雷符 雷行 符法",
+    "visibility": "player",
+    "sort_order": 360
+  },
+  {
+    "kind": "item",
+    "key": "red-flame-fruit",
+    "name": "赤焰果",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "药材",
+      "火行"
+    ],
+    "search_text": "赤焰果 火行 药材",
+    "visibility": "player",
+    "sort_order": 370
+  },
+  {
+    "kind": "item",
+    "key": "moon-dew",
+    "name": "月华露",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "药材",
+      "水行"
+    ],
+    "search_text": "月华露 水行 药材",
+    "visibility": "player",
+    "sort_order": 380
+  },
+  {
+    "kind": "item",
+    "key": "swamp-venom-sac",
+    "name": "沼毒囊",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "妖兽材料",
+      "毒物"
+    ],
+    "search_text": "沼毒囊 南沼 妖兽",
+    "visibility": "player",
+    "sort_order": 390
+  },
+  {
+    "kind": "item",
+    "key": "star-iron-sand",
+    "name": "星铁砂",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "矿材",
+      "炼器"
+    ],
+    "search_text": "星铁砂 炼器 矿材",
+    "visibility": "player",
+    "sort_order": 400
+  },
+  {
+    "kind": "item",
+    "key": "spirit-rice",
+    "name": "青穗灵米",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 200
+    },
+    "tags": [
+      "灵植",
+      "食材"
+    ],
+    "search_text": "青穗 灵米 灵田",
+    "visibility": "player",
+    "sort_order": 410
+  },
+  {
+    "kind": "item",
+    "key": "mist-beast-hide",
+    "name": "雾狸皮",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "妖兽材料",
+      "炼器"
+    ],
+    "search_text": "雾狸皮 妖兽 炼器",
+    "visibility": "player",
+    "sort_order": 420
+  },
+  {
+    "kind": "item",
+    "key": "lightning-bamboo",
+    "name": "雷纹竹",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 100
+    },
+    "tags": [
+      "灵材",
+      "雷行"
+    ],
+    "search_text": "雷纹竹 雷行 灵材",
+    "visibility": "player",
+    "sort_order": 430
+  },
+  {
+    "kind": "item",
+    "key": "detox-pill",
+    "name": "清瘴丹",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 30,
+      "effects": {
+        "health": 18,
+        "spiritual_sense": 4
+      }
+    },
+    "tags": [
+      "丹药",
+      "解毒"
+    ],
+    "search_text": "清瘴丹 解毒 南沼",
+    "visibility": "player",
+    "sort_order": 440
+  },
+  {
+    "kind": "item",
+    "key": "spirit-restoring-powder",
+    "name": "复灵散",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 30,
+      "effects": {
+        "mana": 28
+      }
+    },
+    "tags": [
+      "丹药",
+      "法力"
+    ],
+    "search_text": "复灵散 恢复 法力",
+    "visibility": "player",
+    "sort_order": 450
+  },
+  {
+    "kind": "item",
+    "key": "body-tempering-brew",
+    "name": "淬体汤",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 20,
+      "effects": {
+        "health": 20,
+        "cultivation_progress": 12
+      }
+    },
+    "tags": [
+      "丹药",
+      "炼体"
+    ],
+    "search_text": "淬体汤 炼体 气血",
+    "visibility": "player",
+    "sort_order": 460
+  },
+  {
+    "kind": "item",
+    "key": "flame-talisman",
+    "name": "烈焰符",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 50,
+      "effects": {
+        "mana": 8,
+        "spiritual_sense": 5
+      }
+    },
+    "tags": [
+      "符箓",
+      "火行"
+    ],
+    "search_text": "烈焰符 火行 符箓",
+    "visibility": "player",
+    "sort_order": 470
+  },
+  {
+    "kind": "item",
+    "key": "thunder-talisman",
+    "name": "惊雷符",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 50,
+      "effects": {
+        "mana": 10,
+        "spiritual_sense": 8
+      }
+    },
+    "tags": [
+      "符箓",
+      "雷行"
+    ],
+    "search_text": "惊雷符 雷行 符箓",
+    "visibility": "player",
+    "sort_order": 480
+  },
+  {
+    "kind": "item",
+    "key": "manual.star-tide-scripture",
+    "name": "星潮归元经玉册",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 2
+    },
+    "tags": [
+      "传承"
+    ],
+    "search_text": "星潮归元经 玉册",
+    "visibility": "player",
+    "sort_order": 490
+  },
+  {
+    "kind": "item",
+    "key": "manual.void-crossing-step",
+    "name": "折空遁步残卷",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 2
+    },
+    "tags": [
+      "传承"
+    ],
+    "search_text": "折空遁步 残卷",
+    "visibility": "player",
+    "sort_order": 500
+  },
+  {
+    "kind": "item",
+    "key": "manual.nine-law-sword",
+    "name": "九律星锋剑谱",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 2
+    },
+    "tags": [
+      "传承"
+    ],
+    "search_text": "九律星锋 剑谱",
+    "visibility": "player",
+    "sort_order": 510
+  },
+  {
+    "kind": "item",
+    "key": "manual.celestial-body",
+    "name": "天关不坏身金页",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 2
+    },
+    "tags": [
+      "传承"
+    ],
+    "search_text": "天关不坏身 金页",
+    "visibility": "player",
+    "sort_order": 520
+  },
+  {
+    "kind": "item",
+    "key": "abyssal-beast-core",
+    "name": "渊兽星核",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 20
+    },
+    "tags": [
+      "高阶材料",
+      "妖核"
+    ],
+    "search_text": "渊兽 星核 天星海",
+    "visibility": "player",
+    "sort_order": 530
+  },
+  {
+    "kind": "item",
+    "key": "void-crystal",
+    "name": "界隙晶砂",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 50,
+      "model_grantable": false
+    },
+    "tags": [
+      "高阶材料",
+      "虚空"
+    ],
+    "search_text": "界隙 晶砂 虚空",
+    "visibility": "player",
+    "sort_order": 540
+  },
+  {
+    "kind": "item",
+    "key": "law-fragment",
+    "name": "法则残片",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "model_grantable": false,
+      "max_grant_per_action": 20
+    },
+    "tags": [
+      "法则",
+      "终局材料"
+    ],
+    "search_text": "法则 残片 上界",
+    "visibility": "player",
+    "sort_order": 550
+  },
+  {
+    "kind": "item",
+    "key": "celestial-herb",
+    "name": "天关灵芝",
+    "content": {
+      "stackable": true,
+      "consumable": false,
+      "max_grant_per_action": 30,
+      "model_grantable": false
+    },
+    "tags": [
+      "高阶灵药"
+    ],
+    "search_text": "天关 灵芝 上界",
+    "visibility": "player",
+    "sort_order": 560
+  },
+  {
+    "kind": "item",
+    "key": "core-forming-pill",
+    "name": "凝丹星露",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 10,
+      "effects": {
+        "mana": 180,
+        "cultivation_progress": 260
+      }
+    },
+    "tags": [
+      "丹药",
+      "结丹"
+    ],
+    "search_text": "凝丹 星露 结丹",
+    "visibility": "player",
+    "sort_order": 570
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.core-forming-pill",
+    "name": "凝丹星露丹方",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 2
+    },
+    "tags": [
+      "丹方"
+    ],
+    "search_text": "凝丹星露 丹方",
+    "visibility": "player",
+    "sort_order": 580
+  },
+  {
+    "kind": "item",
+    "key": "recipe-slip.void-compass",
+    "name": "定界盘炼图",
+    "content": {
+      "stackable": true,
+      "consumable": true,
+      "max_grant_per_action": 2
+    },
+    "tags": [
+      "炼器图"
+    ],
+    "search_text": "定界盘 炼图",
+    "visibility": "player",
+    "sort_order": 590
+  }
+]

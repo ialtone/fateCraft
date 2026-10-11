@@ -1,6 +1,14 @@
 # 17. 通用 Campaign 动作能力架构
 
+## 纯模块适配与公共组件
+
+经营、关系与宗门的纯 RuntimeModule 通过 `gameplay/campaignruntime` 接入本文相同的 Definition/Capability/Handler 事务链。模块声明完整行动及参数、写入与事件，适配器提供实时预览和三受众投影；平台拥有 Campaign 头、账号收益和终局提交。只缺模块状态行时才按关系表玩法读取，固定内容缺失不能静默降级。
+
+通用世界能力现位于 `gameplay/components/worldactions`、`worldinit`、`worldcontent`、`worldview`，不再导入修仙动作。模块接入统一通过 `gameplay/bootstrap`，分类、预算、检查点和示例见[24](24-gameplay-module-architecture.md)。
+
 > 本文是后续 Agent 开发、审查和扩展长期玩法的通用入口。它只描述当前已经实现的协议与边界，不定义修仙、推理、经营或其他题材规则。具体题材动作见对应模块文档。
+
+领域能力预览必须与执行使用相同的当前时间、资源和保护规则；青河突破按原寿元核验分钟边界，不能借用成功后寿元。阶段资格来自当前分支，已领取账号事实只负责去重，不替代任务/胜利条件。此类规则放在对应模块；平台只保留阶段/终局账号字段及事务，详见 [16](16-cultivation-campaign-agent-reference.md) 和 [21](21-campaign-outcome-rewards.md)。
 
 ## 1. 目标和边界
 
@@ -212,8 +220,8 @@ Handler 返回 rejected/failed 时，内部哨兵回滚该工具事务内的所�
 | 通用能力协议和安全校验 | `backend/internal/campaign/capability.go` |
 | 注册、上下文、动作路由 | `backend/internal/campaign/service.go` |
 | Projection Token 压缩与审计 | `backend/internal/contextbuilder/campaign_projection.go` |
-| Runtime Campaign 契约 | `backend/internal/gameplay/contract.go` |
-| 模块白名单校验 | `backend/internal/gameplay/registry.go` |
+| Runtime Campaign 契约 | `backend/internal/gameplay/contract/contract.go` |
+| 模块白名单校验 | `backend/internal/gameplay/contract/registry.go` |
 | 事务、revision、幂等和事件 | `backend/internal/storage/campaign.go` |
 | 事务内领域快照 | `backend/internal/storage/campaign_domain.go` |
 | 修仙动作定义与能力 | `backend/internal/gameplay/cultivation/campaignactions` |

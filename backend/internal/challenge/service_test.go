@@ -12,7 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	"github.com/ialtone/fatecraft/internal/gameplay/campaigngeneric"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
@@ -153,12 +154,12 @@ func TestPublicGameplayCapabilitiesHidePlatformKeys(t *testing.T) {
 func TestValidateDocumentCampaignDoesNotRequireSingleRunSettlement(t *testing.T) {
 	doc := validVersionDocument(t)
 	contract := gameplay.RuntimeContract{
-		Engine: gameplay.EngineRef{Key: cultivation.CampaignEngineKey, Version: 1},
+		Engine: gameplay.EngineRef{Key: cultivation.CampaignEngineKey, Version: cultivation.CampaignEngineVersion},
 		Mode:   gameplay.RuntimeModeCampaign,
 		Campaign: &gameplay.CampaignConfig{
 			LifecycleHandler:  cultivation.CampaignLifecycleHandler,
 			ProjectionHandler: cultivation.CampaignProjectionHandler,
-			ContextPolicy:     cultivation.CampaignContextPolicy, ActionAllowlist: []string{"cultivation.practice"}, InitialLocationKey: "world.start",
+			ContextPolicy:     cultivation.CampaignContextPolicy, ActionAllowlist: []string{"cultivation.practice", "campaign.abandon"}, InitialLocationKey: "world.start",
 			FieldOwnership: []gameplay.FieldOwnership{{Path: "character", Owner: gameplay.OwnerCampaign, ValueType: "object", Visibility: gameplay.VisibilityPlayer, StorageProjection: "campaign_characters"}},
 			WorldClock:     gameplay.WorldClockConfig{CalendarKey: "world.default", MaxDueEventsPerTurn: 16},
 		},
@@ -169,7 +170,7 @@ func TestValidateDocumentCampaignDoesNotRequireSingleRunSettlement(t *testing.T)
 		Actions:      gameplay.ActionConfig{Model: []string{"update_state", "domain_action"}},
 		Presentation: gameplay.Presentation{StatePanelTitle: "状态"},
 	}
-	runtime, err := gameplay.EncodeRuntime(contract)
+	runtime, err := storage.EncodeGameplayRuntime(contract)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +214,7 @@ func TestValidateDocumentGenericCampaignWithoutRealm(t *testing.T) {
 		Actions:      gameplay.ActionConfig{Model: []string{"update_state", "domain_action"}},
 		Presentation: gameplay.Presentation{StatePanelTitle: "World"},
 	}
-	runtime, err := gameplay.EncodeRuntime(contract)
+	runtime, err := storage.EncodeGameplayRuntime(contract)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,15 +229,7 @@ func TestValidateDocumentGenericCampaignWithoutRealm(t *testing.T) {
 	}
 	doc.Outcomes = nil
 	registry := gameplay.NewCoreRegistry()
-	registry.RegisterModule(gameplay.ModuleDescriptor{
-		Key: "campaign.generic", Version: 1, Modes: []string{gameplay.RuntimeModeCampaign},
-		Actions:                    []string{"update_state", "roll", "domain_action"},
-		Verifiers:                  []string{"core.always", "core.conditions"},
-		CampaignLifecycleHandlers:  []string{"campaign.generic_lifecycle"},
-		CampaignProjectionHandlers: []string{"campaign.generic_projection"},
-		CampaignContextPolicies:    []string{"campaign.generic_context"},
-		CampaignActions:            []string{"travel.move"},
-	})
+	campaigngeneric.Register(registry)
 	if err := ValidateDocument(doc, registry); err != nil {
 		t.Fatalf("realm-free generic campaign rejected: %v", err)
 	}
@@ -507,6 +500,9 @@ func readBundledDefinitionCatalog(t *testing.T, directory string) []storage.Game
 	definitions := make([]storage.GameplayDefinition, 0)
 	for _, file := range files {
 		raw, err := os.ReadFile(file)
+		if os.IsNotExist(err) {
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/llm"
 )
 

@@ -75,6 +75,7 @@ const (
 const (
 	SourceAI     = "ai"
 	SourceSystem = "system"
+	SourceModule = "module"
 )
 
 // ---------------------------------------------------------------------------

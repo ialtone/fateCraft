@@ -10,7 +10,8 @@ const chat = useChatStore()
 const inquiry = useInquiryStore()
 const log = computed(() => context.lastBuild)
 const performance = computed(() => context.runtimeInspector?.performance ?? null)
-const cache = computed(() => context.runtimeInspector?.cache ?? null)
+const memoryJob = computed(() => context.activity.memory_job)
+const memoryArchive = computed(() => context.runtimeInspector?.memory_archive)
 
 function formatDuration(ms: number) {
   if (ms < 0) return '—'
@@ -23,14 +24,19 @@ function formatTPS(value: number) {
   return value < 100 ? value.toFixed(1) : value.toFixed(0)
 }
 
-function formatBytes(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return '0 MiB'
-  return `${(value / 1024 / 1024).toFixed(value < 10 * 1024 * 1024 ? 1 : 0)} MiB`
+function formatTime(value: string) {
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
-function formatPercent(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return '0%'
-  return `${Math.round(value * 100)}%`
+function memoryStatus(status: string) {
+  const labels: Record<string, string> = {
+    pending: '排队中',
+    running: '归档中',
+    succeeded: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+  }
+  return labels[status] || '等待处理'
 }
 
 function performanceStatus(status: string) {
@@ -76,7 +82,13 @@ const activities = computed(() => {
     items.push({ key: 'inquiry', label: '正在回答角色询问', detail: '只读查询，不影响叙事流程' })
   }
   if (context.activity.memory === 'running') {
-    items.push({ key: 'memory', label: '正在执行记忆归档', detail: '后台整理已完成的历史回合' })
+    items.push({
+      key: 'memory',
+      label: '正在执行记忆归档',
+      detail: memoryJob.value
+        ? `整理历史至第 ${memoryJob.value.target_until_turn} 回合 · 第 ${memoryJob.value.execution_count} 次执行`
+        : '正在读取归档任务详情',
+    })
   } else if (context.activity.memory === 'queued') {
     items.push({ key: 'memory', label: '记忆归档等待中', detail: '后台任务已进入处理队列' })
   }
@@ -113,7 +125,7 @@ const usagePct = computed(() => {
       </div>
     </div>
     <template v-if="performance">
-      <div class="section-title">本回合性能</div>
+      <div class="section-title">最近成功回合性能</div>
       <div class="pad performance-panel">
         <div class="performance-head">
           <div>
@@ -159,34 +171,52 @@ const usagePct = computed(() => {
         </div>
       </div>
     </template>
-    <template v-if="cache">
-      <div class="section-title">只读内容缓存</div>
+    <template v-if="memoryJob || memoryArchive">
+      <div class="section-title">记忆归档详情</div>
       <div class="pad">
-        <div class="metric-grid">
-          <div class="metric-cell">
-            <span class="faint">命中率</span>
-            <strong class="mono">{{ formatPercent(cache.hit_rate) }}</strong>
+        <template v-if="memoryJob">
+          <div class="row spread">
+            <span class="faint">任务状态</span><span>{{ memoryStatus(memoryJob.status) }}</span>
           </div>
-          <div class="metric-cell">
-            <span class="faint">版本</span>
-            <strong class="mono">{{ cache.entries }} / {{ cache.max_versions }}</strong>
+          <div class="row spread">
+            <span class="faint">归档目标</span
+            ><span>至第 {{ memoryJob.target_until_turn }} 回合</span>
           </div>
-          <div class="metric-cell">
-            <span class="faint">估算内存</span>
-            <strong class="mono">{{ formatBytes(cache.estimated_bytes) }}</strong>
+          <div class="row spread">
+            <span class="faint">执行次数 / 上限</span
+            ><span>{{ memoryJob.execution_count }} / {{ memoryJob.max_executions }}</span>
           </div>
-          <div class="metric-cell">
-            <span class="faint">淘汰 / 失败</span>
-            <strong class="mono">{{ cache.evictions }} / {{ cache.load_failures }}</strong>
+          <div class="row spread">
+            <span class="faint">排队时间</span><span>{{ formatTime(memoryJob.created_at) }}</span>
           </div>
-        </div>
+          <div v-if="memoryJob.started_at" class="row spread">
+            <span class="faint">开始时间</span><span>{{ formatTime(memoryJob.started_at) }}</span>
+          </div>
+          <div v-if="memoryJob.finished_at" class="row spread">
+            <span class="faint">结束时间</span><span>{{ formatTime(memoryJob.finished_at) }}</span>
+          </div>
+        </template>
+        <template v-if="memoryArchive">
+          <div class="row spread">
+            <span class="faint">已归档范围</span
+            ><span
+              >第 {{ memoryArchive.covered_from_turn }}–{{
+                memoryArchive.covered_until_turn
+              }}
+              回合</span
+            >
+          </div>
+          <div class="row spread">
+            <span class="faint">归档 Token</span><span>{{ memoryArchive.token_count }}</span>
+          </div>
+        </template>
       </div>
     </template>
     <div v-if="!log" class="faint pad empty">
-      尚无上下文记录。<br />发送一条消息后，这里会显示本次请求的上下文占用情况。
+      尚无成功回合记录。<br />生成成功后，这里会显示上下文占用情况。
     </div>
     <template v-else>
-      <div class="section-title">最近一次模型请求</div>
+      <div class="section-title">最近成功回合的模型请求</div>
       <div class="pad">
         <div class="row spread sm">
           <span class="faint">模型</span><span class="mono">{{ log.model }}</span>

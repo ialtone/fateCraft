@@ -1,0 +1,24 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action"
+    ],
+    "player": [],
+    "domain": [
+      "sect.recruit",
+      "sect.build",
+      "sect.upgrade",
+      "sect.train",
+      "sect.teach",
+      "sect.produce",
+      "sect.dispatch",
+      "sect.guard",
+      "sect.recall",
+      "sect.advance",
+      "sect.finish",
+      "sect.dissolve"
+    ],
+    "capabilities": {}
+  }
+}

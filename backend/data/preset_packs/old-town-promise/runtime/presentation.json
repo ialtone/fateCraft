@@ -1,0 +1,122 @@
+{
+  "presentation": {
+    "state_panel_title": "小镇旧约",
+    "completion_view": {
+      "empty_reward_text": "本示例结局暂不发放积分"
+    },
+    "terminology": {},
+    "value_labels": {
+      "story.outcome": {
+        "reunited": "旧约重续",
+        "honest_distance": "各有归处",
+        "broken": "旧约难续",
+        "timeout": "归期已至",
+        "leave": "暂别故乡"
+      }
+    },
+    "campaign_view": {
+      "renderer": "generic",
+      "title": "小镇旧约",
+      "sections": [
+        {
+          "key": "story",
+          "title": "此刻的故事",
+          "order": 0,
+          "fields": [
+            {
+              "path": "gameplay.goal",
+              "label": "目标",
+              "widget": "text",
+              "order": 0
+            },
+            {
+              "path": "gameplay.effort",
+              "label": "可用精力",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.remaining_minutes",
+              "label": "距归期（分钟）",
+              "widget": "number",
+              "order": 20
+            },
+            {
+              "path": "gameplay.outcome_key",
+              "label": "结局",
+              "widget": "text",
+              "order": 30,
+              "value_namespace": "story.outcome"
+            }
+          ]
+        },
+        {
+          "key": "people",
+          "title": "人物与往事",
+          "order": 10,
+          "fields": [
+            {
+              "path": "gameplay.people",
+              "label": "人物",
+              "widget": "item_list",
+              "order": 0,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "姓名"
+                },
+                {
+                  "path": "trust",
+                  "label": "信任"
+                },
+                {
+                  "path": "listened",
+                  "label": "已倾听"
+                }
+              ]
+            },
+            {
+              "path": "gameplay.facts",
+              "label": "已知事实",
+              "widget": "item_list",
+              "order": 10
+            }
+          ]
+        },
+        {
+          "key": "promises",
+          "title": "许下的承诺",
+          "order": 20,
+          "fields": [
+            {
+              "path": "gameplay.promises",
+              "label": "承诺",
+              "widget": "item_list",
+              "order": 0,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "承诺"
+                },
+                {
+                  "path": "status",
+                  "label": "进展"
+                },
+                {
+                  "path": "remaining_minutes",
+                  "label": "剩余分钟"
+                },
+                {
+                  "path": "effort",
+                  "label": "所需精力"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "actions": [],
+      "empty_states": {}
+    }
+  }
+}

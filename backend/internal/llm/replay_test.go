@@ -71,14 +71,13 @@ func TestPrepareToolReplaySynthesizesOnlyMissingCalls(t *testing.T) {
 	}
 }
 
-func TestPrepareToolReplayKeepsResultsAcrossEmptyToolPlaceholders(t *testing.T) {
+func TestPrepareToolReplayKeepsBatchDeclarationAndIndividualResults(t *testing.T) {
 	result, err := PrepareToolReplay([]Message{
 		Message{Role: "assistant", Blocks: []ContentBlock{
 			{Kind: ContentToolCall, ToolCall: &ToolCall{ID: "call-1", Name: "fc_one", Arguments: `{}`}},
 			{Kind: ContentToolCall, ToolCall: &ToolCall{ID: "call-2", Name: "fc_two", Arguments: `{}`}},
 		}},
 		replayToolResult("call-1", `{"ok":true}`),
-		{Role: "assistant"}, // second invocation's storage placeholder
 		replayToolResult("call-2", `{"ok":true}`),
 	})
 	if err != nil {

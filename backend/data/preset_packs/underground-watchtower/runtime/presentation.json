@@ -1,0 +1,138 @@
+{
+  "presentation": {
+    "state_panel_title": "地下哨塔",
+    "state_sections": [
+      {
+        "key": "journey",
+        "title": "远征",
+        "order": 0,
+        "fields": [
+          {
+            "path": "gameplay.goal",
+            "label": "当前目标",
+            "widget": "text",
+            "order": 0
+          },
+          {
+            "path": "gameplay.location",
+            "label": "所在区域",
+            "widget": "text",
+            "order": 10
+          },
+          {
+            "path": "gameplay.health",
+            "label": "生命",
+            "widget": "number",
+            "order": 20
+          },
+          {
+            "path": "gameplay.supplies",
+            "label": "补给",
+            "widget": "number",
+            "order": 30
+          },
+          {
+            "path": "gameplay.remaining_minutes",
+            "label": "剩余时间（分钟）",
+            "widget": "number",
+            "order": 40
+          },
+          {
+            "path": "gameplay.medicine",
+            "label": "治疗药物",
+            "widget": "number",
+            "order": 50
+          },
+          {
+            "path": "gameplay.rest_remaining",
+            "label": "当前营地休整次数",
+            "widget": "number",
+            "order": 60
+          },
+          {
+            "path": "gameplay.outcome_key",
+            "label": "结局",
+            "widget": "text",
+            "order": 70
+          }
+        ]
+      },
+      {
+        "key": "route",
+        "title": "已知区域",
+        "order": 10,
+        "fields": [
+          {
+            "path": "gameplay.nodes",
+            "label": "路线与发现",
+            "widget": "item_list",
+            "order": 0
+          }
+        ]
+      },
+      {
+        "key": "loot",
+        "title": "携带与带出",
+        "order": 20,
+        "fields": [
+          {
+            "path": "gameplay.weight",
+            "label": "当前负重",
+            "widget": "number",
+            "order": 0
+          },
+          {
+            "path": "gameplay.capacity",
+            "label": "负重上限",
+            "widget": "number",
+            "order": 10
+          },
+          {
+            "path": "gameplay.carried",
+            "label": "携带物",
+            "widget": "item_list",
+            "order": 20
+          },
+          {
+            "path": "gameplay.secured",
+            "label": "已带出",
+            "widget": "item_list",
+            "order": 30
+          },
+          {
+            "path": "gameplay.lost",
+            "label": "已遗失",
+            "widget": "item_list",
+            "order": 40
+          }
+        ]
+      },
+      {
+        "key": "encounters",
+        "title": "已遇敌人",
+        "order": 30,
+        "fields": [
+          {
+            "path": "gameplay.enemies",
+            "label": "遭遇状态",
+            "widget": "item_list",
+            "order": 0
+          }
+        ]
+      }
+    ],
+    "completion_view": {
+      "empty_reward_text": "本示例结局暂不发放积分"
+    },
+    "terminology": {},
+    "value_labels": {
+      "state.gameplay.outcome_key": {
+        "cleared": "哨塔肃清",
+        "retreated": "提前撤回",
+        "defeated": "折戟哨塔",
+        "timeout": "超过远征期限",
+        "abandoned": "放弃远征"
+      }
+    }
+  }
+}

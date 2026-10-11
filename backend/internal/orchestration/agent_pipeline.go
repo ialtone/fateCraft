@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ialtone/fatecraft/internal/contextbuilder"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/guidance"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/logging"
@@ -31,7 +31,10 @@ const (
 	maxPublicToolResultBytes = 16 * 1024
 )
 
-var errAgentToolOutcomeRollback = errors.New("rollback rejected or failed agent tool outcome")
+var (
+	errAgentToolOutcomeRollback = errors.New("rollback rejected or failed agent tool outcome")
+	errAgentToolPersistence     = errors.New("工具记录保存失败")
+)
 
 type runtimeEmitter struct {
 	conversationID uuid.UUID
@@ -192,7 +195,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 
 		definitionsJSON, _ := json.Marshal(snapshot.Definitions)
 		toolTokens := g.counter.Count(string(definitionsJSON))
-		in.CampaignProjection = removeCapabilityProjection(in.CampaignProjection)
+		in.RuntimeDirective += "\n" + actionRestrictionNotice(snapshot, in.History) + "\n" + endingNotice(snapshot)
+		in.CampaignProjection = narrativeProjection(in.CampaignProjection)
 		in.ReservedResponseTokens += toolTokens
 		built, err := contextbuilder.Build(in, g.counter)
 		if err != nil {
@@ -360,7 +364,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			}
 			meta := map[string]any{"model": settings.Model, "agent_steps": stepNo, "tool_calls": mutatingCount}
 			if pendingGuidance != nil {
-				proposal := guidance.Snapshot{Proposal: *pendingGuidance, StateFingerprint: guidance.Fingerprint(in.State)}
+				proposal := guidance.Snapshot{Proposal: *pendingGuidance, StateFingerprint: in.StateFingerprint}
 				if snapshot.CampaignRevision != nil {
 					proposal.CampaignRevision = *snapshot.CampaignRevision
 				}
@@ -443,7 +447,9 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			}
 			for index, call := range toolCalls {
 				toolStartedAt := time.Now()
-				blocks := storage.JSONDoc("[]")
+				// One model step is one assistant declaration. Later invocations
+				// append only their result, referencing that same stored batch.
+				var blocks storage.JSONDoc
 				if index == 0 {
 					blocks = contentBlocks
 				}
@@ -463,9 +469,12 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				turnToolMS += time.Since(toolStartedAt).Milliseconds()
 				if outcome.Mutating && outcome.Status == storage.ToolInvocationCommitted {
 					mutatingCount++
+					if revision := outcomeRevision(outcome); revision != nil {
+						snapshot.ObservedRevision = revision
+					}
 					pendingGuidance = nil
 				}
-				if outcome.Status == storage.ToolInvocationCommitted && snapshot.Bindings[call.Name].Kind == agentToolCompletion {
+				if outcome.Status == storage.ToolInvocationCommitted && (snapshot.Bindings[call.Name].Kind == agentToolCompletion || outcome.Code == "module_settled") {
 					settled = true
 				}
 				if call.Name == guidance.ToolName && outcome.Status == storage.ToolInvocationCommitted {
@@ -561,6 +570,7 @@ func (g *Generator) processAgentToolCall(
 	runtimeEvents.send(realtime.TypeAgentToolStarted, step.StepNo, map[string]any{"name": call.Name, "category": agentToolPublicCategory(binding.Kind)})
 
 	var outcome agentToolOutcome
+	var transactionErr error
 	finishedInTx := false
 	switch {
 	case argumentsErr != nil:
@@ -569,10 +579,7 @@ func (g *Generator) processAgentToolCall(
 			Result: storage.JSONMap{"ok": false, "code": "invalid_arguments", "message": argumentsErr.Error(), "data": map[string]any{}},
 		}
 	case !known:
-		outcome = agentToolOutcome{
-			Status: storage.ToolInvocationRejected, Code: "unknown_tool",
-			Result: storage.JSONMap{"ok": false, "code": "unknown_tool", "message": "该工具不在当前步骤的可用快照中", "data": map[string]any{}},
-		}
+		outcome = unavailableToolOutcome(snapshot, call.Name)
 	case binding.Mutating && !mutatingAllowed:
 		outcome = agentToolOutcome{
 			Status: storage.ToolInvocationRejected, Code: "mutating_tool_limit",
@@ -586,8 +593,18 @@ func (g *Generator) processAgentToolCall(
 			return agentToolOutcome{}, errors.New("Agent 工具事务未配置")
 		}
 		var resultText string
+		if binding.Kind == agentToolModule || binding.Kind == agentToolEnding {
+			content, err := g.challenge.ModuleContentForVersion(ctx, conv.ChallengeVersionID, conv.ChallengeHash)
+			if err != nil {
+				return agentToolOutcome{}, err
+			}
+			binding.ModuleContent = &content
+		}
 		err := g.toolTx.Run(ctx, func(tx *agentToolTx) error {
 			outcome = g.executeAgentToolInTx(ctx, conv, contract, platform, binding, arguments, call.ID, tx)
+			if _, err := json.Marshal(outcome.Result); err != nil {
+				return fmt.Errorf("工具结果无法序列化: %w", err)
+			}
 			resultText, outcome.Result = boundedToolResult(outcome.Result)
 			if outcome.Status != storage.ToolInvocationCommitted {
 				return errAgentToolOutcomeRollback
@@ -603,6 +620,8 @@ func (g *Generator) processAgentToolCall(
 			// repositories. The sentinel has rolled those writes back; persist only
 			// the provider-visible call/result pair below.
 		case err != nil:
+			transactionErr = err
+			logging.FromContext(ctx, "orchestration").Error("Agent 工具事务失败", zap.String("tool", call.Name), zap.String("error_code", "tool_transaction_failed"), zap.Error(err))
 			outcome = agentToolOutcome{
 				Status: storage.ToolInvocationFailed, Code: "tool_transaction_failed", Fatal: true,
 				Result: storage.JSONMap{
@@ -634,7 +653,7 @@ func (g *Generator) processAgentToolCall(
 			context.WithoutCancel(ctx), claimed.ID, outcome.Status, outcome.Code, outcome.Result,
 			outcome.Mutating, contentBlocks, resultText,
 		); err != nil {
-			return outcome, err
+			return outcome, fmt.Errorf("%w: %w", errAgentToolPersistence, errors.Join(transactionErr, err))
 		}
 	}
 	if outcome.Result == nil {
@@ -720,7 +739,7 @@ func logAgentToolTiming(
 func toolMayChangeConversationState(kind agentToolKind) bool {
 	switch kind {
 	case agentToolStateText, agentToolStateNumber, agentToolStateBoolean,
-		agentToolStateReplace, agentToolStateAppend, agentToolStateDynamic, agentToolRoll:
+		agentToolStateReplace, agentToolStateAppend, agentToolStateDynamic, agentToolRoll, agentToolModule:
 		return true
 	default:
 		return false
@@ -747,7 +766,7 @@ func agentToolPublicCategory(kind agentToolKind) string {
 		return "roll"
 	case agentToolCompletion:
 		return "settlement"
-	case agentToolCampaign:
+	case agentToolCampaign, agentToolModule:
 		return "action"
 	case agentToolGuidance:
 		return "guidance"
@@ -774,6 +793,29 @@ func boundedToolResult(result storage.JSONMap) (string, storage.JSONMap) {
 		"ok": ok, "code": code, "message": message,
 		"data": map[string]any{"truncated": true},
 	}
+	// Keep the bounded transaction-generated feedback even when events or
+	// other optional result details do not fit. Never discard goal/fact truth.
+	if err == nil {
+		var source struct {
+			Data struct {
+				Completion        json.RawMessage `json:"completion"`
+				Revision          *int64          `json:"revision"`
+				NarrativeFeedback json.RawMessage `json:"narrative_feedback"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(encoded, &source) == nil {
+			data := bounded["data"].(map[string]any)
+			if len(source.Data.Completion) > 0 && len(source.Data.Completion) <= maxPublicToolResultBytes/2 {
+				data["completion"] = source.Data.Completion
+			}
+			if source.Data.Revision != nil {
+				data["revision"] = *source.Data.Revision
+			}
+			if len(source.Data.NarrativeFeedback) > 0 && len(source.Data.NarrativeFeedback) <= gameplay.MaxNarrativeFeedbackBytes {
+				data["narrative_feedback"] = source.Data.NarrativeFeedback
+			}
+		}
+	}
 	encoded, _ = json.Marshal(bounded)
 	return string(encoded), bounded
 }
@@ -785,6 +827,8 @@ func hashAgentArguments(raw string) string {
 
 func agentErrorCode(err error) string {
 	switch {
+	case errors.Is(err, errAgentToolPersistence):
+		return "tool_persistence_failed"
 	case err == nil:
 		return ""
 	case errors.Is(err, context.Canceled), errors.Is(err, storage.ErrGenerationNotActive):
@@ -799,6 +843,8 @@ func agentErrorCode(err error) string {
 		return "output_truncated"
 	case errors.Is(err, llm.ErrToolReplayInvalidHistory):
 		return "tool_replay_invalid_history"
+	case errors.Is(err, llm.ErrToolCallConflict):
+		return "tool_call_conflict"
 	case errors.Is(err, storage.ErrLLMRouteMismatch):
 		return "llm_route_mismatch"
 	default:
@@ -826,13 +872,10 @@ func (g *Generator) finishAgentFailure(
 		g.refundRewriteReservation(ctx, "agent_failure")
 	}
 	kind := realtime.TypeAgentTurnFailed
-	message := "本轮生成未完成，请重试或联系管理员。"
-	if errors.Is(err, llm.ErrTruncated) || errors.Is(err, llm.ErrLLMStreamStalled) || errors.Is(err, llm.ErrRelayUnavailable) || errors.Is(err, llm.ErrRelayLost) || errors.Is(err, storage.ErrLLMRouteMismatch) {
-		message = logging.ErrorText(err)
-	}
+	message := generationErrorMessage(err)
 	if mutated {
 		kind = realtime.TypeAgentTurnPartial
-		message = "动作已执行，但叙事未完成。请使用继续叙事。"
+		message = partialGenerationErrorMessage(err)
 	} else if isCancellation(err) {
 		kind = realtime.TypeAgentTurnCancelled
 		message = "生成已取消"

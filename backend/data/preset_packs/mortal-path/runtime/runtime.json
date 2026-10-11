@@ -3,7 +3,7 @@
   "runtime_contract_version": 2,
   "engine": {
     "key": "cultivation.campaign",
-    "version": 1
+    "version": 2
   },
   "mode": "campaign",
   "includes": {

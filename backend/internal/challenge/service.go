@@ -7,20 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/craftingrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/effectrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/encounterrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/factionrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/gatheringrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/marketrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/worldrules"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
+	"github.com/ialtone/fatecraft/internal/gameplay/kernel"
 	"github.com/ialtone/fatecraft/internal/operation"
 	"github.com/ialtone/fatecraft/internal/platformcapability"
 	"github.com/ialtone/fatecraft/internal/requirement"
@@ -37,9 +32,10 @@ var (
 )
 
 type Service struct {
-	repo         *storage.ChallengeRepository
-	registry     *gameplay.Registry
-	versionCache *versionContentCache
+	campaignModules CampaignModuleExecutor
+	repo            *storage.ChallengeRepository
+	registry        *gameplay.Registry
+	versionCache    *versionContentCache
 }
 
 func NewService(repo *storage.ChallengeRepository, registries ...*gameplay.Registry) *Service {
@@ -95,7 +91,7 @@ func (s *Service) IsCurrentVersion(ctx context.Context, versionID uuid.UUID) (bo
 		return false, err
 	}
 	return version.Status == storage.ChallengeVersionPublished &&
-		pack.Status == storage.ChallengePackActive && pack.CurrentVersionID != nil &&
+		(pack.Status == storage.ChallengePackActive || pack.Status == storage.ChallengePackHidden) && pack.CurrentVersionID != nil &&
 		*pack.CurrentVersionID == versionID, nil
 }
 
@@ -114,6 +110,14 @@ func (s *Service) CreatePack(ctx context.Context, creatorID uuid.UUID, in Create
 		return nil, err
 	}
 	return pack, nil
+}
+
+func (s *Service) SetEnabled(ctx context.Context, packID uuid.UUID, enabled bool) (*storage.ChallengePack, error) {
+	pack, err := s.repo.SetPackEnabled(ctx, packID, enabled)
+	if errors.Is(err, storage.ErrPublishedVersion) {
+		return nil, fmt.Errorf("%w: 请先发布有效版本，再设置是否启用", ErrInvalidChallenge)
+	}
+	return pack, err
 }
 
 func (s *Service) ListPublished(ctx context.Context, playerIDs ...uuid.UUID) ([]PublicChallenge, error) {
@@ -482,8 +486,17 @@ func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVer
 	if err := validateAssetDocuments(in.Assets); err != nil {
 		return nil, err
 	}
-	if err := validateDefinitionDocuments(in.Definitions); err != nil {
-		return nil, err
+	contract, err := storage.DecodeGameplayRuntime(in.Runtime)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidChallenge, err)
+	}
+	for i := range in.Definitions {
+		if in.Definitions[i].Tags == nil {
+			in.Definitions[i].Tags = []string{}
+		}
+	}
+	if err := s.registry.ValidateDefinitions(moduleContent(contract, &VersionDocument{Definitions: in.Definitions})); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidChallenge, err)
 	}
 	in.Runtime.Mode = gameplay.NormalizeRuntimeMode(in.Runtime.Mode)
 	if in.Runtime.Mode == gameplay.RuntimeModeChallenge {
@@ -754,9 +767,19 @@ func (s *Service) evaluateSettlement(
 	if err != nil {
 		return nil, err
 	}
-	contract, err := gameplay.DecodeRuntime(*runtime)
+	contract, err := storage.DecodeGameplayRuntime(*runtime)
 	if err != nil {
 		return nil, err
+	}
+	module, err := s.registry.Module(contract.Engine)
+	if err != nil {
+		return nil, err
+	}
+	if module.Runtime != nil {
+		envelope, err := kernel.ReadEnvelope(gameplay.Content{Runtime: contract}, in.TrustedState)
+		if err != nil || envelope.State.Status == gameplay.RunActive || envelope.State.OutcomeKey != in.OutcomeKey || envelope.State.Revision < 1 {
+			return nil, fmt.Errorf("%w: 尚未达成此模块结局", ErrSettlementDenied)
+		}
 	}
 	successful, err := repo.SuccessfulRollKeys(ctx, conv.ID)
 	if err != nil {
@@ -816,7 +839,7 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 	if manifest.Version != doc.Version.Version {
 		return fmt.Errorf("%w: manifest.version 必须与版本记录一致", ErrInvalidChallenge)
 	}
-	contract, err := gameplay.DecodeRuntime(doc.Runtime)
+	contract, err := storage.DecodeGameplayRuntime(doc.Runtime)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidChallenge, err)
 	}
@@ -840,12 +863,9 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 	if err := validateAssetDocuments(doc.Assets); err != nil {
 		return err
 	}
-	if err := validateDefinitionDocuments(doc.Definitions); err != nil {
-		return err
-	}
-	if gameplay.NormalizeRuntimeMode(contract.Mode) == gameplay.RuntimeModeCampaign {
-		if err := validateCampaignDefinitionReferences(contract, doc.Definitions, registry.CampaignRequiresRealm(contract)); err != nil {
-			return err
+	for i := range doc.Definitions {
+		if doc.Definitions[i].Tags == nil {
+			doc.Definitions[i].Tags = []string{}
 		}
 	}
 	assets := make(map[string]storage.ChallengeAsset, len(doc.Assets))
@@ -917,7 +937,7 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 		return fmt.Errorf("%w: 至少需要一个结局", ErrInvalidChallenge)
 	}
 	outcomeKeys := map[string]bool{}
-	enabledOutcomeKeys := map[string]bool{}
+
 	for _, outcome := range doc.Outcomes {
 		if outcome.RewardPoints < 0 || outcome.RewardPoints > storage.MaxRewardQuantity {
 			return fmt.Errorf("%w: 通关积分无效", ErrInvalidChallenge)
@@ -939,37 +959,23 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 			return fmt.Errorf("%w: Prompt 未引用结局 %s", ErrInvalidChallenge, outcome.OutcomeKey)
 		}
 		outcomeKeys[outcome.OutcomeKey] = true
-		enabledOutcomeKeys[outcome.OutcomeKey] = outcome.Enabled
+
 	}
-	if gameplay.NormalizeRuntimeMode(contract.Mode) == gameplay.RuntimeModeCampaign {
-		campaignOutcomes := map[string]bool{}
-		for _, definition := range doc.Definitions {
-			if definition.Kind != storage.DefinitionQuest {
-				continue
-			}
-			quest, _ := worldrules.ParseQuest(map[string]any(definition.Content))
-			if quest.CampaignOutcomeKey == "" {
-				continue
-			}
-			if !enabledOutcomeKeys[quest.CampaignOutcomeKey] {
-				return fmt.Errorf("%w: quest:%s 引用了未知或未启用的 Campaign 结局 %s", ErrInvalidChallenge, definition.Key, quest.CampaignOutcomeKey)
-			}
-			campaignOutcomes[quest.CampaignOutcomeKey] = true
-		}
-		for _, outcome := range doc.Outcomes {
-			if outcome.Enabled && outcome.RewardPoints > 0 && !campaignOutcomes[outcome.OutcomeKey] {
-				return fmt.Errorf("%w: 积分结局没有终局任务 %s", ErrInvalidChallenge, outcome.OutcomeKey)
+	if err := registry.ValidateContent(moduleContent(contract, doc)); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidChallenge, err)
+	}
+	personas := slices.Clone(manifest.DefaultConfig.AllowedPersonas)
+	if len(personas) == 0 {
+		for _, asset := range doc.Assets {
+			if asset.Kind == storage.ChallengeAssetPersona {
+				personas = append(personas, asset.Slug)
 			}
 		}
+	}
+	if err := validateInitialModule(registry, moduleContent(contract, doc), personas...); err != nil {
+		return fmt.Errorf("%w: 模块开局验证: %v", ErrInvalidChallenge, err)
 	}
 	return nil
-}
-
-func sourceContentValue(definition *storage.GameplayDefinition, key string) any {
-	if definition == nil {
-		return nil
-	}
-	return definition.Content[key]
 }
 
 func validateAssetDocuments(assets []storage.ChallengeAsset) error {
@@ -996,906 +1002,6 @@ func validateAssetDocuments(assets []storage.ChallengeAsset) error {
 		}
 	}
 	return nil
-}
-
-func validateDefinitionDocuments(definitions []storage.GameplayDefinition) error {
-	validKinds := map[string]bool{
-		storage.DefinitionRealm: true, storage.DefinitionTechnique: true,
-		storage.DefinitionItem: true, storage.DefinitionEquipment: true,
-		storage.DefinitionRecipe: true, storage.DefinitionMarket: true,
-		storage.DefinitionLocation: true, storage.DefinitionFaction: true,
-		storage.DefinitionNPCArchetype: true, storage.DefinitionEncounter: true,
-		storage.DefinitionWorldEvent: true, storage.DefinitionQuest: true,
-	}
-	seen := map[string]bool{}
-	for index := range definitions {
-		definition := &definitions[index]
-		if definition.Tags == nil {
-			definition.Tags = make([]string, 0)
-		}
-		identity := definition.Kind + ":" + definition.Key
-		if !validKinds[definition.Kind] || !stableDefinitionKey(definition.Key) ||
-			strings.TrimSpace(definition.Name) == "" || len([]rune(definition.Name)) > 128 ||
-			definition.SortOrder < 0 || definition.Content == nil {
-			return fmt.Errorf("%w: 玩法定义 %s 的 kind、key、name、content 或 sort_order 无效", ErrInvalidChallenge, identity)
-		}
-		if seen[identity] {
-			return fmt.Errorf("%w: 玩法定义重复 %s", ErrInvalidChallenge, identity)
-		}
-		seen[identity] = true
-		switch definition.Visibility {
-		case storage.CampaignVisibilityPlayer, storage.CampaignVisibilityModel, storage.CampaignVisibilityInternal:
-		default:
-			return fmt.Errorf("%w: 玩法定义 %s 的 visibility 无效", ErrInvalidChallenge, identity)
-		}
-		tags := map[string]bool{}
-		for _, tag := range definition.Tags {
-			if strings.TrimSpace(tag) == "" || tag != strings.TrimSpace(tag) || tags[tag] {
-				return fmt.Errorf("%w: 玩法定义 %s 包含空白或重复 tag", ErrInvalidChallenge, identity)
-			}
-			tags[tag] = true
-		}
-		if err := validateDefinitionShape(*definition); err != nil {
-			return fmt.Errorf("%w: 玩法定义 %s 无效: %v", ErrInvalidChallenge, identity, err)
-		}
-	}
-	return nil
-}
-
-func validateDefinitionShape(definition storage.GameplayDefinition) error {
-	content := definition.Content
-	switch definition.Kind {
-	case storage.DefinitionRealm:
-		if _, ok := positiveDefinitionInt(content["cultivation_required"]); !ok {
-			return fmt.Errorf("cultivation_required 必须是正整数")
-		}
-		if rank, ok := nonNegativeDefinitionInt(content["rank"]); !ok || rank > 1000 {
-			return fmt.Errorf("rank 必须是 0 到 1000 的整数")
-		}
-		if raw, exists := content["next_realm_key"]; exists && raw != nil {
-			next, ok := raw.(string)
-			if !ok || !stableDefinitionKey(next) || next == definition.Key {
-				return fmt.Errorf("next_realm_key 必须是其他境界的稳定 key")
-			}
-		}
-		if _, ok := positiveDefinitionInt(content["lifespan_days"]); !ok {
-			return fmt.Errorf("lifespan_days 必须是正整数")
-		}
-		if stages, ok := stringList(content["stages"]); !ok || len(stages) == 0 {
-			return fmt.Errorf("stages 必须是非空稳定 key 数组")
-		}
-		for _, field := range []string{"max_health", "max_mana", "max_spiritual_sense"} {
-			if raw, exists := content[field]; exists {
-				if value, ok := positiveDefinitionInt(raw); !ok || value > 1000000000 {
-					return fmt.Errorf("%s 必须是 1 到 1000000000 的整数", field)
-				}
-			}
-		}
-	case storage.DefinitionTechnique:
-		category, _ := content["category"].(string)
-		if !map[string]bool{"cultivation": true, "body": true, "movement": true, "spell": true, "secret": true, "craft": true}[category] {
-			return fmt.Errorf("category 无效")
-		}
-		layers, layersOK := positiveDefinitionInt(content["max_layer"])
-		if !layersOK || layers > 100 {
-			return fmt.Errorf("max_layer 必须是 1 到 100 的整数")
-		}
-		if _, ok := positiveDefinitionInt(content["practice_minutes"]); !ok {
-			return fmt.Errorf("practice_minutes 必须是正整数")
-		}
-		slots, ok := stringList(content["allowed_slots"])
-		if !ok || len(slots) == 0 {
-			return fmt.Errorf("allowed_slots 必须是非空稳定 key 数组")
-		}
-		if raw, exists := content["mastery_per_layer"]; exists {
-			if value, valid := positiveDefinitionInt(raw); !valid || value > 10000 {
-				return fmt.Errorf("mastery_per_layer 必须是 1 到 10000 的整数")
-			}
-		}
-		starting, _ := content["starting_known"].(bool)
-		pool, hasPool := content["starting_pool"]
-		poolKey, poolOK := pool.(string)
-		if hasPool && (!poolOK || !stableDefinitionKey(poolKey)) {
-			return fmt.Errorf("starting_pool 必须是稳定 key")
-		}
-		if starting && poolKey != "" {
-			return fmt.Errorf("starting_known 与 starting_pool 不能同时声明")
-		}
-		if rawWeight, hasWeight := content["starting_weight"]; hasWeight {
-			weight, valid := positiveDefinitionInt(rawWeight)
-			if poolKey == "" || !valid || weight > 100000 {
-				return fmt.Errorf("starting_weight 只允许用于 starting_pool 且必须是 1 到 100000 的整数")
-			}
-		}
-		if slot, _ := content["starting_slot"].(string); slot != "" {
-			if (!starting && poolKey == "") || !containsString(slots, slot) {
-				return fmt.Errorf("starting_slot 只允许用于固定或候选池开局功法且必须属于 allowed_slots")
-			}
-		}
-		if source, _ := content["source_item_key"].(string); source != "" && !stableDefinitionKey(source) {
-			return fmt.Errorf("source_item_key 必须是稳定 key")
-		}
-		if raw, exists := content["layer_effects"]; exists {
-			layerEffects, ok := raw.([]any)
-			if !ok || len(layerEffects) > effectrules.MaxLayerEffects {
-				return fmt.Errorf("layer_effects 必须是最多 %d 项的数组", effectrules.MaxLayerEffects)
-			}
-			seenLayers := map[int64]bool{}
-			for _, rawLayer := range layerEffects {
-				layer, ok := definitionObject(rawLayer)
-				number, numberOK := positiveDefinitionInt(layer["layer"])
-				_, effectsOK := effectrules.ParseEffects(layer["effects"])
-				if !ok || len(layer) != 2 || !numberOK || number > layers || seenLayers[number] || !effectsOK {
-					return fmt.Errorf("layer_effects 必须使用不重复且不超过 max_layer 的层数和受支持效果")
-				}
-				seenLayers[number] = true
-			}
-		}
-	case storage.DefinitionItem:
-		if _, ok := content["stackable"].(bool); !ok {
-			return fmt.Errorf("stackable 必须是布尔值")
-		}
-		if raw, exists := content["model_grantable"]; exists {
-			if _, ok := raw.(bool); !ok {
-				return fmt.Errorf("model_grantable 必须是布尔值")
-			}
-		}
-		if raw, exists := content["consumable"]; exists {
-			if _, ok := raw.(bool); !ok {
-				return fmt.Errorf("consumable 必须是布尔值")
-			}
-		}
-		if raw, exists := content["effects"]; exists {
-			effects, ok := definitionObject(raw)
-			if !ok || len(effects) > 8 {
-				return fmt.Errorf("effects 必须是最多 8 项的对象")
-			}
-			for key, rawAmount := range effects {
-				amount, valid := signedDefinitionInt(rawAmount)
-				if !map[string]bool{"health": true, "mana": true, "spiritual_sense": true, "cultivation_progress": true}[key] ||
-					!valid || amount < -10000 || amount > 10000 {
-					return fmt.Errorf("effects 包含不受支持或越界的效果")
-				}
-			}
-		}
-	case storage.DefinitionEquipment:
-		if raw, exists := content["model_grantable"]; exists {
-			if _, ok := raw.(bool); !ok {
-				return fmt.Errorf("model_grantable 必须是布尔值")
-			}
-		}
-		if slots, ok := stringList(content["allowed_slots"]); !ok || len(slots) == 0 {
-			return fmt.Errorf("allowed_slots 必须是非空稳定 key 数组")
-		}
-		if _, ok := positiveDefinitionInt(content["durability_max"]); !ok {
-			return fmt.Errorf("durability_max 必须是正整数")
-		}
-		if raw, exists := content["bonuses"]; exists {
-			if _, ok := effectrules.ParseEffects(raw); !ok {
-				return fmt.Errorf("bonuses 包含不受支持或越界的效果")
-			}
-		}
-	case storage.DefinitionRecipe:
-		if _, ok := craftingrules.Parse(map[string]any(content)); !ok {
-			return fmt.Errorf("配方结构、数值边界或品质权重无效")
-		}
-	case storage.DefinitionMarket:
-		market, ok := marketrules.Parse(map[string]any(content))
-		if !ok {
-			return fmt.Errorf("市场结构、库存、补货或价格边界无效")
-		}
-		// 最坏情况（声望 +10000、满库存买入、零库存卖出）下卖价必须不高于买价，
-		// 否则市场可被零时间无限套利。见 marketrules.NoArbitrage。
-		if !marketrules.NoArbitrage(market) {
-			return fmt.Errorf("市场存在套利空间：最坏情况下卖价不低于买价")
-		}
-	case storage.DefinitionEncounter:
-		if _, ok := encounterrules.Parse(map[string]any(content)); !ok {
-			return fmt.Errorf("遭遇地点、对手数值、回合规则或奖励结构无效")
-		}
-	case storage.DefinitionLocation:
-		nodeType, ok := content["node_type"].(string)
-		if !map[string]bool{"world": true, "realm": true, "region": true, "location": true, "scene": true}[nodeType] {
-			return fmt.Errorf("node_type 必须是 world、realm、region、location 或 scene")
-		}
-		if parentKey, _ := content["parent_key"].(string); parentKey != "" {
-			if !stableDefinitionKey(parentKey) || parentKey == definition.Key {
-				return fmt.Errorf("parent_key 必须是不同于自身的稳定 key")
-			}
-		}
-		connections, ok := content["connections"].([]any)
-		if !ok {
-			return fmt.Errorf("connections 必须是数组")
-		}
-		seen := map[string]bool{}
-		for _, raw := range connections {
-			connection, ok := raw.(map[string]any)
-			key, _ := connection["location_key"].(string)
-			if !ok || !stableDefinitionKey(key) || seen[key] {
-				return fmt.Errorf("connections 包含无效或重复 location_key")
-			}
-			if _, ok := positiveDefinitionInt(connection["travel_minutes"]); !ok {
-				return fmt.Errorf("connection.travel_minutes 必须是正整数")
-			}
-			seen[key] = true
-		}
-		if (nodeType == "world" || nodeType == "realm" || nodeType == "region") && len(connections) > 0 {
-			return fmt.Errorf("world、realm 与 region 容器节点不能声明旅行连接")
-		}
-		if raw, exists := content["entry_requirements"]; exists {
-			if _, ok := factionrules.EntryRequirements(map[string]any{"entry_requirements": raw}); !ok {
-				return fmt.Errorf("entry_requirements 必须由不重复的势力权限或 min_realm_rank 组成，且最多 %d 项", factionrules.MaxEntryRequirements)
-			}
-		}
-		if raw, exists := content["initial_state"]; exists {
-			if nodeType != "region" {
-				return fmt.Errorf("initial_state 只允许用于 region 节点")
-			}
-			if _, ok := worldrules.ParseRegionInitialState(raw); !ok {
-				return fmt.Errorf("initial_state 的区域数值或 faction_power 无效")
-			}
-		}
-		if raw, exists := content["gathering"]; exists {
-			if nodeType == "realm" || nodeType == "region" {
-				return fmt.Errorf("gathering 只允许用于可进入的 location 或 scene")
-			}
-			if _, ok := gatheringrules.Parse(raw); !ok {
-				return fmt.Errorf("gathering 的时间、资源条目、权重或数量无效")
-			}
-		}
-	case storage.DefinitionFaction:
-		if raw, exists := content["initial_reputation"]; exists {
-			reputation, ok := signedDefinitionInt(raw)
-			if !ok || reputation < factionrules.MinimumReputation || reputation > factionrules.MaximumReputation {
-				return fmt.Errorf("initial_reputation 必须是 %d 到 %d 的整数", factionrules.MinimumReputation, factionrules.MaximumReputation)
-			}
-		}
-		if raw, exists := content["permission_thresholds"]; exists {
-			thresholds, ok := definitionObject(raw)
-			if !ok || len(thresholds) > 32 {
-				return fmt.Errorf("permission_thresholds 必须是最多 32 项的对象")
-			}
-			for permissionKey, rawThreshold := range thresholds {
-				threshold, valid := signedDefinitionInt(rawThreshold)
-				if !stableDefinitionKey(permissionKey) || !valid ||
-					threshold < factionrules.MinimumReputation || threshold > factionrules.MaximumReputation {
-					return fmt.Errorf("permission_thresholds 的 key 必须稳定，阈值必须在 %d 到 %d 之间", factionrules.MinimumReputation, factionrules.MaximumReputation)
-				}
-			}
-		}
-		if raw, exists := content["position_thresholds"]; exists {
-			thresholds, ok := definitionObject(raw)
-			if !ok || len(thresholds) > 32 {
-				return fmt.Errorf("position_thresholds 必须是最多 32 项的对象")
-			}
-			for positionKey, rawThreshold := range thresholds {
-				threshold, valid := nonNegativeDefinitionInt(rawThreshold)
-				if !stableDefinitionKey(positionKey) || !valid || threshold > factionrules.MaximumContribution {
-					return fmt.Errorf("position_thresholds 的 key 必须稳定，阈值必须在 0 到 %d 之间", factionrules.MaximumContribution)
-				}
-			}
-		}
-	case storage.DefinitionNPCArchetype:
-		initial, _ := content["initial"].(bool)
-		spawnable, _ := content["spawnable"].(bool)
-		if raw, exists := content["initial"]; exists {
-			if _, ok := raw.(bool); !ok {
-				return fmt.Errorf("initial 必须是布尔值")
-			}
-		}
-		if raw, exists := content["spawnable"]; exists {
-			if _, ok := raw.(bool); !ok {
-				return fmt.Errorf("spawnable 必须是布尔值")
-			}
-		}
-		if initial && spawnable {
-			return fmt.Errorf("initial 与 spawnable 不能同时为 true")
-		}
-		if initial {
-			for _, key := range []string{"instance_key", "location_key"} {
-				value, _ := content[key].(string)
-				if !stableDefinitionKey(value) {
-					return fmt.Errorf("初始 NPC 的 %s 必须是稳定 key", key)
-				}
-			}
-		} else if value, _ := content["instance_key"].(string); value != "" && !stableDefinitionKey(value) {
-			return fmt.Errorf("instance_key 必须是稳定 key")
-		}
-		if realmKey, _ := content["realm_key"].(string); realmKey != "" && !stableDefinitionKey(realmKey) {
-			return fmt.Errorf("realm_key 必须为空或稳定 key")
-		}
-		for _, key := range []string{"stage_key", "faction_key"} {
-			if value, _ := content[key].(string); value != "" && !stableDefinitionKey(value) {
-				return fmt.Errorf("%s 必须是稳定 key", key)
-			}
-		}
-		for _, key := range []string{"public_profile", "private_state", "goals"} {
-			if raw, exists := content[key]; exists {
-				if _, ok := raw.(map[string]any); !ok {
-					return fmt.Errorf("%s 必须是对象", key)
-				}
-			}
-		}
-		if spawnable {
-			locations, ok := stringList(content["allowed_locations"])
-			if !ok || len(locations) == 0 {
-				return fmt.Errorf("可实例化 NPC 的 allowed_locations 必须是非空稳定 key 数组")
-			}
-			if maximum, ok := positiveDefinitionInt(content["max_instances"]); !ok || maximum > 100 {
-				return fmt.Errorf("可实例化 NPC 的 max_instances 必须是 1 到 100 的整数")
-			}
-		}
-	case storage.DefinitionWorldEvent:
-		if _, ok := worldrules.ParseWorldEvent(map[string]any(content)); !ok {
-			return fmt.Errorf("世界事件结构、调度、变体权重或效果边界无效")
-		}
-	case storage.DefinitionQuest:
-		if _, ok := worldrules.ParseQuest(map[string]any(content)); !ok {
-			return fmt.Errorf("任务类型、状态、截止时间、目标或奖励结构无效")
-		}
-	}
-	return nil
-}
-
-func validateCampaignDefinitionReferences(
-	contract *gameplay.RuntimeContract,
-	definitions []storage.GameplayDefinition,
-	requireRealmOption ...bool,
-) error {
-	requireRealm := true
-	if len(requireRealmOption) > 0 {
-		requireRealm = requireRealmOption[0]
-	}
-	catalog := map[string]storage.GameplayDefinition{}
-	for _, definition := range definitions {
-		catalog[definition.Kind+":"+definition.Key] = definition
-	}
-	if _, ok := catalog[storage.DefinitionLocation+":"+contract.Campaign.InitialLocationKey]; !ok {
-		return fmt.Errorf("%w: campaign.initial_location_key 未在 location 定义中声明", ErrInvalidChallenge)
-	}
-	if initial := catalog[storage.DefinitionLocation+":"+contract.Campaign.InitialLocationKey]; !travelableLocationType(definitionLocationNodeType(initial.Content)) {
-		return fmt.Errorf("%w: campaign.initial_location_key 必须指向 location 或 scene", ErrInvalidChallenge)
-	}
-	if len(definitions) == 0 {
-		return fmt.Errorf("%w: campaign 模式必须提供玩法定义", ErrInvalidChallenge)
-	}
-	realmCount := 0
-	realmRanks := map[int64]string{}
-	startingTechniqueSlots := map[string]string{}
-	startingTechniquePools := map[string]int{}
-	initialNPCKeys := map[string]string{}
-	initialNPCDefinitions := map[string]storage.GameplayDefinition{}
-	quests := map[string]worldrules.Quest{}
-	questUnlockSources := map[string][]string{}
-	for _, definition := range definitions {
-		if definition.Kind == storage.DefinitionNPCArchetype {
-			if initial, _ := definition.Content["initial"].(bool); initial {
-				if key, _ := definition.Content["instance_key"].(string); key != "" {
-					initialNPCDefinitions[key] = definition
-				}
-			}
-		}
-		if definition.Kind == storage.DefinitionQuest {
-			if parsed, ok := worldrules.ParseQuest(map[string]any(definition.Content)); ok {
-				quests[definition.Key] = parsed
-			}
-		}
-	}
-	for _, definition := range definitions {
-		switch definition.Kind {
-		case storage.DefinitionRealm:
-			realmCount++
-			rank, rankOK := nonNegativeDefinitionInt(definition.Content["rank"])
-			if !rankOK {
-				return fmt.Errorf("%w: realm:%s 的 rank 无效", ErrInvalidChallenge, definition.Key)
-			}
-			if previous, exists := realmRanks[rank]; exists {
-				return fmt.Errorf("%w: realm:%s 与 realm:%s 使用了相同 rank %d", ErrInvalidChallenge, definition.Key, previous, rank)
-			}
-			realmRanks[rank] = definition.Key
-			if next, _ := definition.Content["next_realm_key"].(string); next != "" {
-				nextDefinition, ok := catalog[storage.DefinitionRealm+":"+next]
-				if !ok {
-					return fmt.Errorf("%w: realm:%s 引用了未知 next_realm_key %s", ErrInvalidChallenge, definition.Key, next)
-				}
-				nextRank, nextRankOK := nonNegativeDefinitionInt(nextDefinition.Content["rank"])
-				if !nextRankOK || nextRank <= rank {
-					return fmt.Errorf("%w: realm:%s 的 next_realm_key %s 必须指向更高 rank", ErrInvalidChallenge, definition.Key, next)
-				}
-			}
-		case storage.DefinitionTechnique:
-			if source, _ := definition.Content["source_item_key"].(string); source != "" {
-				if _, ok := catalog[storage.DefinitionItem+":"+source]; !ok {
-					return fmt.Errorf("%w: technique:%s 引用了未知 source_item_key %s", ErrInvalidChallenge, definition.Key, source)
-				}
-			}
-			starting, _ := definition.Content["starting_known"].(bool)
-			pool, _ := definition.Content["starting_pool"].(string)
-			if pool != "" {
-				startingTechniquePools[pool]++
-			}
-			if starting || pool != "" {
-				if slot, _ := definition.Content["starting_slot"].(string); slot != "" {
-					owner := "fixed:" + definition.Key
-					if pool != "" {
-						owner = "pool:" + pool
-					}
-					if previous, exists := startingTechniqueSlots[slot]; exists && previous != owner {
-						return fmt.Errorf("%w: technique:%s 与 %s 可能使用相同初始槽位 %s", ErrInvalidChallenge, definition.Key, previous, slot)
-					}
-					startingTechniqueSlots[slot] = owner
-				}
-			}
-		case storage.DefinitionRecipe:
-			recipe, _ := craftingrules.Parse(map[string]any(definition.Content))
-			if recipe.SourceItemKey != "" {
-				if err := requireStackableDefinition(catalog, recipe.SourceItemKey, "recipe:"+definition.Key+" 的 source_item_key"); err != nil {
-					return err
-				}
-			}
-			for _, ingredient := range recipe.Inputs {
-				for _, option := range ingredient.Options {
-					if err := requireStackableDefinition(catalog, option.ItemKey, "recipe:"+definition.Key+" 的材料"); err != nil {
-						return err
-					}
-				}
-			}
-			for _, equipmentKey := range recipe.RequiredEquipmentKeys {
-				if _, ok := catalog[storage.DefinitionEquipment+":"+equipmentKey]; !ok {
-					return fmt.Errorf("%w: recipe:%s 引用了未知生产器具 %s", ErrInvalidChallenge, definition.Key, equipmentKey)
-				}
-			}
-			if recipe.TechniqueKey != "" {
-				technique, ok := catalog[storage.DefinitionTechnique+":"+recipe.TechniqueKey]
-				category, _ := technique.Content["category"].(string)
-				if !ok || category != "craft" {
-					return fmt.Errorf("%w: recipe:%s 的 technique_key 必须引用 craft 类功法", ErrInvalidChallenge, definition.Key)
-				}
-			}
-			for _, locationKey := range recipe.AllowedLocationKeys {
-				location, ok := catalog[storage.DefinitionLocation+":"+locationKey]
-				if !ok || !travelableLocationType(definitionLocationNodeType(location.Content)) {
-					return fmt.Errorf("%w: recipe:%s 引用了未知或不可使用的地点 %s", ErrInvalidChallenge, definition.Key, locationKey)
-				}
-			}
-			for _, products := range [][]craftingrules.Product{recipe.Outputs, recipe.FailureOutputs} {
-				for _, product := range products {
-					if err := requireProductDefinition(catalog, product.Kind, product.Key, "recipe:"+definition.Key); err != nil {
-						return err
-					}
-				}
-			}
-		case storage.DefinitionMarket:
-			market, _ := marketrules.Parse(map[string]any(definition.Content))
-			location, ok := catalog[storage.DefinitionLocation+":"+market.LocationKey]
-			if !ok || !travelableLocationType(definitionLocationNodeType(location.Content)) {
-				return fmt.Errorf("%w: market:%s 引用了未知或不可进入的 location_key", ErrInvalidChallenge, definition.Key)
-			}
-			if err := requireStackableDefinition(catalog, market.CurrencyItemKey, "market:"+definition.Key+" 的 currency_item_key"); err != nil {
-				return err
-			}
-			if market.FactionKey != "" {
-				if _, ok := catalog[storage.DefinitionFaction+":"+market.FactionKey]; !ok {
-					return fmt.Errorf("%w: market:%s 引用了未知 faction_key", ErrInvalidChallenge, definition.Key)
-				}
-			}
-			for _, entry := range market.Entries {
-				if err := requireProductDefinition(catalog, entry.Kind, entry.Key, "market:"+definition.Key); err != nil {
-					return err
-				}
-			}
-		case storage.DefinitionLocation:
-			if parentKey, _ := definition.Content["parent_key"].(string); parentKey != "" {
-				if _, ok := catalog[storage.DefinitionLocation+":"+parentKey]; !ok {
-					return fmt.Errorf("%w: location:%s 引用了未知 parent_key %s", ErrInvalidChallenge, definition.Key, parentKey)
-				}
-			}
-			connections, _ := definition.Content["connections"].([]any)
-			for _, raw := range connections {
-				connection := raw.(map[string]any)
-				key := connection["location_key"].(string)
-				target, ok := catalog[storage.DefinitionLocation+":"+key]
-				if !ok {
-					return fmt.Errorf("%w: location:%s 引用了未知地点 %s", ErrInvalidChallenge, definition.Key, key)
-				}
-				if !travelableLocationType(definitionLocationNodeType(target.Content)) {
-					return fmt.Errorf("%w: location:%s 的连接指向不可旅行的容器节点 %s", ErrInvalidChallenge, definition.Key, key)
-				}
-			}
-			requirements, _ := definition.Content["entry_requirements"].([]any)
-			for _, raw := range requirements {
-				requirement, _ := definitionObject(raw)
-				if _, realmRequirement := requirement["min_realm_rank"]; realmRequirement {
-					if !requireRealm {
-						return fmt.Errorf("%w: 通用 Campaign 的 location:%s 不能声明 min_realm_rank", ErrInvalidChallenge, definition.Key)
-					}
-					continue
-				}
-				factionKey, _ := requirement["faction_key"].(string)
-				permissionKey, _ := requirement["permission_key"].(string)
-				faction, ok := catalog[storage.DefinitionFaction+":"+factionKey]
-				if !ok {
-					return fmt.Errorf("%w: location:%s 引用了未知 faction_key %s", ErrInvalidChallenge, definition.Key, factionKey)
-				}
-				thresholds, _ := definitionObject(faction.Content["permission_thresholds"])
-				if _, ok := thresholds[permissionKey]; !ok {
-					return fmt.Errorf("%w: location:%s 引用了 faction:%s 未声明的 permission_key %s", ErrInvalidChallenge, definition.Key, factionKey, permissionKey)
-				}
-			}
-			if nodeType := definitionLocationNodeType(definition.Content); nodeType == "region" {
-				initial, _ := worldrules.ParseRegionInitialState(definition.Content["initial_state"])
-				for factionKey := range initial.FactionPower {
-					if _, ok := catalog[storage.DefinitionFaction+":"+factionKey]; !ok {
-						return fmt.Errorf("%w: location:%s 的 initial_state 引用了未知 faction %s", ErrInvalidChallenge, definition.Key, factionKey)
-					}
-				}
-			}
-			if raw, exists := definition.Content["gathering"]; exists {
-				table, _ := gatheringrules.Parse(raw)
-				for _, entry := range table.Entries {
-					if err := requireStackableDefinition(catalog, entry.ItemKey, "location:"+definition.Key+" 的 gathering 资源"); err != nil {
-						return err
-					}
-				}
-			}
-		case storage.DefinitionNPCArchetype:
-			realmKey, _ := definition.Content["realm_key"].(string)
-			if realmKey != "" {
-				if _, ok := catalog[storage.DefinitionRealm+":"+realmKey]; ok {
-					// Valid optional progression reference.
-				} else {
-					return fmt.Errorf("%w: npc_archetype:%s 引用了未知 realm_key", ErrInvalidChallenge, definition.Key)
-				}
-			} else if requireRealm {
-				return fmt.Errorf("%w: npc_archetype:%s 引用了未知 realm_key", ErrInvalidChallenge, definition.Key)
-			}
-			// stage_key 必须属于其 realm 声明的 stages：跨境界的 stage
-			//（例如练气期 archetype 配筑基层的 early/middle/late）一律拒绝。
-			if stageKey, _ := definition.Content["stage_key"].(string); stageKey != "" && realmKey != "" {
-				realm := catalog[storage.DefinitionRealm+":"+realmKey]
-				stages, ok := stringList(realm.Content["stages"])
-				if !ok || !containsString(stages, stageKey) {
-					return fmt.Errorf("%w: npc_archetype:%s 的 stage_key %s 不属于 realm:%s 的 stages", ErrInvalidChallenge, definition.Key, stageKey, realmKey)
-				}
-			}
-			if factionKey, _ := definition.Content["faction_key"].(string); factionKey != "" {
-				if _, ok := catalog[storage.DefinitionFaction+":"+factionKey]; !ok {
-					return fmt.Errorf("%w: npc_archetype:%s 引用了未知 faction_key", ErrInvalidChallenge, definition.Key)
-				}
-			}
-			if initial, _ := definition.Content["initial"].(bool); initial {
-				locationKey, _ := definition.Content["location_key"].(string)
-				if _, ok := catalog[storage.DefinitionLocation+":"+locationKey]; !ok {
-					return fmt.Errorf("%w: npc_archetype:%s 引用了未知 location_key", ErrInvalidChallenge, definition.Key)
-				}
-				instanceKey, _ := definition.Content["instance_key"].(string)
-				if previous, exists := initialNPCKeys[instanceKey]; exists {
-					return fmt.Errorf("%w: npc_archetype:%s 与 npc_archetype:%s 使用了相同 instance_key %s", ErrInvalidChallenge, definition.Key, previous, instanceKey)
-				}
-				initialNPCKeys[instanceKey] = definition.Key
-			}
-			if spawnable, _ := definition.Content["spawnable"].(bool); spawnable {
-				locations, _ := stringList(definition.Content["allowed_locations"])
-				for _, locationKey := range locations {
-					if _, ok := catalog[storage.DefinitionLocation+":"+locationKey]; !ok {
-						return fmt.Errorf("%w: npc_archetype:%s 引用了未知 allowed_location %s", ErrInvalidChallenge, definition.Key, locationKey)
-					}
-				}
-			}
-		case storage.DefinitionEncounter:
-			encounter, _ := encounterrules.Parse(map[string]any(definition.Content))
-			location, ok := catalog[storage.DefinitionLocation+":"+encounter.LocationKey]
-			if !ok || !travelableLocationType(definitionLocationNodeType(location.Content)) {
-				return fmt.Errorf("%w: encounter:%s 引用了未知或不可进入的 location_key", ErrInvalidChallenge, definition.Key)
-			}
-			for _, reward := range encounter.Rewards {
-				if err := requireStackableDefinition(catalog, reward.ItemKey, "encounter:"+definition.Key+" 的奖励"); err != nil {
-					return err
-				}
-			}
-		case storage.DefinitionWorldEvent:
-			event, _ := worldrules.ParseWorldEvent(map[string]any(definition.Content))
-			region, ok := catalog[storage.DefinitionLocation+":"+event.RegionKey]
-			if !ok || definitionLocationNodeType(region.Content) != "region" {
-				return fmt.Errorf("%w: world_event:%s 的 region_key 必须引用 region 节点", ErrInvalidChallenge, definition.Key)
-			}
-			for _, variant := range event.Variants {
-				for factionKey := range variant.Effects.FactionPowerDeltas {
-					if _, ok := catalog[storage.DefinitionFaction+":"+factionKey]; !ok {
-						return fmt.Errorf("%w: world_event:%s 引用了未知 faction %s", ErrInvalidChallenge, definition.Key, factionKey)
-					}
-				}
-				for marketKey := range variant.Effects.MarketPriceModifierDeltasBPS {
-					if _, ok := catalog[storage.DefinitionMarket+":"+marketKey]; !ok {
-						return fmt.Errorf("%w: world_event:%s 引用了未知 market %s", ErrInvalidChallenge, definition.Key, marketKey)
-					}
-				}
-				for npcKey := range variant.Effects.NPCGoalDeltas {
-					if _, ok := initialNPCDefinitions[npcKey]; !ok {
-						return fmt.Errorf("%w: world_event:%s 引用了未知初始 NPC 实例 %s", ErrInvalidChallenge, definition.Key, npcKey)
-					}
-				}
-			}
-		case storage.DefinitionQuest:
-			quest, _ := worldrules.ParseQuest(map[string]any(definition.Content))
-			for _, key := range quest.UnlockQuestKeys {
-				target, ok := quests[key]
-				if !ok {
-					return fmt.Errorf("%w: quest:%s 解锁了未知 quest %s", ErrInvalidChallenge, definition.Key, key)
-				}
-				if key == definition.Key || target.Initial {
-					return fmt.Errorf("%w: quest:%s 只能解锁其他非初始任务，当前为 %s", ErrInvalidChallenge, definition.Key, key)
-				}
-				questUnlockSources[key] = append(questUnlockSources[key], definition.Key)
-			}
-			for _, locationKey := range quest.AcceptLocationKeys {
-				location, ok := catalog[storage.DefinitionLocation+":"+locationKey]
-				if !ok || !travelableLocationType(definitionLocationNodeType(location.Content)) {
-					return fmt.Errorf("%w: quest:%s 引用了未知或不可进入的接受地点 %s", ErrInvalidChallenge, definition.Key, locationKey)
-				}
-			}
-			for _, objective := range quest.Objectives {
-				switch objective.Type {
-				case "item":
-					if err := requireStackableDefinition(catalog, objective.ItemKey, "quest:"+definition.Key+" 的目标"); err != nil {
-						return err
-					}
-				case "encounter_win":
-					if _, ok := catalog[storage.DefinitionEncounter+":"+objective.EncounterKey]; !ok {
-						return fmt.Errorf("%w: quest:%s 引用了未知 encounter %s", ErrInvalidChallenge, definition.Key, objective.EncounterKey)
-					}
-				case "location":
-					if _, ok := catalog[storage.DefinitionLocation+":"+objective.LocationKey]; !ok {
-						return fmt.Errorf("%w: quest:%s 引用了未知 location %s", ErrInvalidChallenge, definition.Key, objective.LocationKey)
-					}
-				case "faction_reputation":
-					if _, ok := catalog[storage.DefinitionFaction+":"+objective.FactionKey]; !ok {
-						return fmt.Errorf("%w: quest:%s 引用了未知 faction %s", ErrInvalidChallenge, definition.Key, objective.FactionKey)
-					}
-				case "npc_relationship":
-					if _, ok := initialNPCDefinitions[objective.NPCKey]; !ok {
-						return fmt.Errorf("%w: quest:%s 引用了未知初始 NPC 实例 %s", ErrInvalidChallenge, definition.Key, objective.NPCKey)
-					}
-				case "region_state":
-					region, ok := catalog[storage.DefinitionLocation+":"+objective.RegionKey]
-					if !ok || definitionLocationNodeType(region.Content) != "region" {
-						return fmt.Errorf("%w: quest:%s 引用了未知 region %s", ErrInvalidChallenge, definition.Key, objective.RegionKey)
-					}
-				}
-			}
-			for _, reward := range quest.Rewards {
-				if reward.Type == "item" {
-					if err := requireStackableDefinition(catalog, reward.ItemKey, "quest:"+definition.Key+" 的奖励"); err != nil {
-						return err
-					}
-				} else if _, ok := catalog[storage.DefinitionFaction+":"+reward.FactionKey]; !ok {
-					return fmt.Errorf("%w: quest:%s 的奖励引用了未知 faction %s", ErrInvalidChallenge, definition.Key, reward.FactionKey)
-				}
-			}
-			for _, key := range quest.Associations.RegionKeys {
-				region, ok := catalog[storage.DefinitionLocation+":"+key]
-				if !ok || definitionLocationNodeType(region.Content) != "region" {
-					return fmt.Errorf("%w: quest:%s 的 associations 引用了未知 region %s", ErrInvalidChallenge, definition.Key, key)
-				}
-			}
-			for _, key := range quest.Associations.FactionKeys {
-				if _, ok := catalog[storage.DefinitionFaction+":"+key]; !ok {
-					return fmt.Errorf("%w: quest:%s 的 associations 引用了未知 faction %s", ErrInvalidChallenge, definition.Key, key)
-				}
-			}
-			for _, key := range quest.Associations.NPCKeys {
-				if _, ok := initialNPCDefinitions[key]; !ok {
-					return fmt.Errorf("%w: quest:%s 的 associations 引用了未知初始 NPC %s", ErrInvalidChallenge, definition.Key, key)
-				}
-			}
-			for _, key := range quest.Associations.WorldEventKeys {
-				if _, ok := catalog[storage.DefinitionWorldEvent+":"+key]; !ok {
-					return fmt.Errorf("%w: quest:%s 的 associations 引用了未知 world_event %s", ErrInvalidChallenge, definition.Key, key)
-				}
-			}
-		}
-	}
-	for pool, count := range startingTechniquePools {
-		if count < 2 {
-			return fmt.Errorf("%w: starting_pool %s 至少需要两个候选功法", ErrInvalidChallenge, pool)
-		}
-	}
-	if requireRealm && realmCount == 0 {
-		return fmt.Errorf("%w: campaign 模式至少需要一个 realm 定义", ErrInvalidChallenge)
-	}
-	for key, quest := range quests {
-		if !quest.Initial && len(questUnlockSources[key]) == 0 {
-			return fmt.Errorf("%w: 非初始 quest:%s 没有任何前置任务可以解锁它", ErrInvalidChallenge, key)
-		}
-	}
-	if err := validateQuestUnlockGraph(quests); err != nil {
-		return err
-	}
-	if err := validateLocationHierarchy(catalog, definitions); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateQuestUnlockGraph(quests map[string]worldrules.Quest) error {
-	const (
-		visiting = iota + 1
-		visited
-	)
-	states := make(map[string]int, len(quests))
-	var visit func(string) error
-	visit = func(key string) error {
-		switch states[key] {
-		case visiting:
-			return fmt.Errorf("%w: 任务解锁关系存在循环，涉及 quest:%s", ErrInvalidChallenge, key)
-		case visited:
-			return nil
-		}
-		states[key] = visiting
-		for _, target := range quests[key].UnlockQuestKeys {
-			if err := visit(target); err != nil {
-				return err
-			}
-		}
-		states[key] = visited
-		return nil
-	}
-	for key := range quests {
-		if err := visit(key); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func requireStackableDefinition(catalog map[string]storage.GameplayDefinition, itemKey, reference string) error {
-	item, ok := catalog[storage.DefinitionItem+":"+itemKey]
-	stackable, _ := item.Content["stackable"].(bool)
-	if !ok || !stackable {
-		return fmt.Errorf("%w: %s 必须引用可堆叠 item，当前为 %s", ErrInvalidChallenge, reference, itemKey)
-	}
-	return nil
-}
-
-func requireProductDefinition(catalog map[string]storage.GameplayDefinition, kind, key, reference string) error {
-	switch kind {
-	case storage.DefinitionItem:
-		return requireStackableDefinition(catalog, key, reference+" 的产物")
-	case storage.DefinitionEquipment:
-		if _, ok := catalog[storage.DefinitionEquipment+":"+key]; !ok {
-			return fmt.Errorf("%w: %s 引用了未知 equipment %s", ErrInvalidChallenge, reference, key)
-		}
-		return nil
-	default:
-		return fmt.Errorf("%w: %s 的产物 kind 无效", ErrInvalidChallenge, reference)
-	}
-}
-
-func validateLocationHierarchy(catalog map[string]storage.GameplayDefinition, definitions []storage.GameplayDefinition) error {
-	ranks := map[string]int{"world": 0, "realm": 0, "region": 1, "location": 2, "scene": 3}
-	for _, definition := range definitions {
-		if definition.Kind != storage.DefinitionLocation {
-			continue
-		}
-		childType := definitionLocationNodeType(definition.Content)
-		parentKey, _ := definition.Content["parent_key"].(string)
-		if (childType == "world" || childType == "realm") && parentKey != "" {
-			return fmt.Errorf("%w: location:%s 的根节点不能声明父节点", ErrInvalidChallenge, definition.Key)
-		}
-		if childType != "world" && childType != "realm" && parentKey == "" {
-			return fmt.Errorf("%w: location:%s 的 %s 节点必须声明父节点", ErrInvalidChallenge, definition.Key, childType)
-		}
-		if parentKey != "" {
-			parent := catalog[storage.DefinitionLocation+":"+parentKey]
-			parentType := definitionLocationNodeType(parent.Content)
-			if ranks[parentType]+1 != ranks[childType] {
-				return fmt.Errorf("%w: location:%s 的 %s 父节点不能是 %s", ErrInvalidChallenge, definition.Key, childType, parentType)
-			}
-		}
-		seen := map[string]bool{}
-		key := definition.Key
-		for depth := 1; key != ""; depth++ {
-			if seen[key] {
-				return fmt.Errorf("%w: location:%s 的 parent_key 形成循环", ErrInvalidChallenge, definition.Key)
-			}
-			if depth > 4 {
-				return fmt.Errorf("%w: location:%s 的层级深度超过 4", ErrInvalidChallenge, definition.Key)
-			}
-			seen[key] = true
-			current, ok := catalog[storage.DefinitionLocation+":"+key]
-			if !ok {
-				break
-			}
-			key, _ = current.Content["parent_key"].(string)
-		}
-	}
-	return nil
-}
-
-func definitionLocationNodeType(content storage.JSONMap) string {
-	if value, ok := content["node_type"].(string); ok && value != "" {
-		return value
-	}
-	return "location"
-}
-
-func travelableLocationType(nodeType string) bool {
-	return nodeType == "location" || nodeType == "scene"
-}
-
-func stableDefinitionKey(value string) bool {
-	if value == "" || strings.TrimSpace(value) != value || len(value) > 128 {
-		return false
-	}
-	for index, char := range value {
-		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') ||
-			index > 0 && (char == '.' || char == '_' || char == '-') {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func stringList(value any) ([]string, bool) {
-	raw, ok := value.([]any)
-	if !ok {
-		return nil, false
-	}
-	out := make([]string, 0, len(raw))
-	seen := map[string]bool{}
-	for _, item := range raw {
-		value, ok := item.(string)
-		if !ok || !stableDefinitionKey(value) || seen[value] {
-			return nil, false
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	return out, true
-}
-
-func definitionObject(value any) (map[string]any, bool) {
-	switch typed := value.(type) {
-	case map[string]any:
-		return typed, true
-	case storage.JSONMap:
-		return map[string]any(typed), true
-	default:
-		return nil, false
-	}
-}
-
-func containsString(values []string, wanted string) bool {
-	for _, value := range values {
-		if value == wanted {
-			return true
-		}
-	}
-	return false
-}
-
-func positiveDefinitionInt(value any) (int64, bool) {
-	number, ok := nonNegativeDefinitionInt(value)
-	return number, ok && number > 0
-}
-
-func nonNegativeDefinitionInt(value any) (int64, bool) {
-	number, ok := signedDefinitionInt(value)
-	return number, ok && number >= 0
-}
-
-func signedDefinitionInt(value any) (int64, bool) {
-	switch number := value.(type) {
-	case int:
-		return int64(number), true
-	case int64:
-		return number, true
-	case float64:
-		return int64(number), number == float64(int64(number))
-	default:
-		return 0, false
-	}
 }
 
 func ContentHashDocument(doc *VersionDocument) (string, error) {
@@ -2044,7 +1150,7 @@ func defaultDraftRuntime(versionID uuid.UUID) (storage.ChallengeRuntimeConfig, e
 			},
 		},
 	}
-	runtime, err := gameplay.EncodeRuntime(contract)
+	runtime, err := storage.EncodeGameplayRuntime(contract)
 	if err != nil {
 		return storage.ChallengeRuntimeConfig{}, err
 	}

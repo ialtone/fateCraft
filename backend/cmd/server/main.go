@@ -23,11 +23,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/chat"
 	"github.com/ialtone/fatecraft/internal/config"
 	"github.com/ialtone/fatecraft/internal/conversation"
-	"github.com/ialtone/fatecraft/internal/gameplay"
-	"github.com/ialtone/fatecraft/internal/gameplay/campaigngeneric"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaignactions"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaignview"
+	gameplaybootstrap "github.com/ialtone/fatecraft/internal/gameplay/bootstrap"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/inquiry"
 	"github.com/ialtone/fatecraft/internal/llm"
@@ -78,9 +74,7 @@ func main() {
 	authRepo := storage.NewAuthRepository(db)
 	challengeRepo := storage.NewChallengeRepository(db)
 	shareRepo := storage.NewShareRepository(db)
-	gameplayRegistry := gameplay.NewCoreRegistry()
-	campaigngeneric.Register(gameplayRegistry)
-	cultivation.Register(gameplayRegistry)
+	gameplayRegistry := gameplaybootstrap.NewRegistry()
 	challengeSvc := challenge.NewServiceWithCache(challengeRepo, challenge.CacheConfig{
 		MaxVersions: cfg.ChallengeCacheMaxVersions,
 		MaxBytes:    cfg.ChallengeCacheMaxBytes,
@@ -93,7 +87,7 @@ func main() {
 		logger.Fatal("初始化内置挑战失败", zap.String("dataDir", cfg.DataDir), zap.Error(err))
 	}
 	if bootstrap.Initialized {
-		logger.Info("空数据库已初始化内置挑战", zap.Int("count", len(bootstrap.Imports)))
+		logger.Info("已补齐缺少的内置挑战", zap.Int("count", len(bootstrap.Imports)))
 	}
 
 	// 生成租约自愈：启动时回收本实例上次进程遗留的租约；周期任务只能回收
@@ -240,10 +234,8 @@ func main() {
 	campaignSvc := campaign.NewService(campaignRepo, challengeSvc, convSvc, requestIdentity, gameplayRegistry)
 	campaignSvc.SetRollServices(rollSvc, systemSettingsRepo)
 	campaignSvc.SetRouteResolver(llmSettingsSvc)
-	campaignactions.Register(campaignSvc)
-	campaignSvc.RegisterProjection(campaigngeneric.ProjectionHandler, campaignview.Provider{})
-	campaignSvc.RegisterProjection(cultivation.CampaignProjectionHandler, campaignview.Provider{})
-	inquirySvc := inquiry.NewService(inquiryRepo, campaignSvc, stateSvc, llmSettingsSvc, requestIdentity, llmClient, counter)
+	gameplaybootstrap.InstallCampaign(campaignSvc)
+	inquirySvc := inquiry.NewService(inquiryRepo, campaignSvc, challengeSvc, llmSettingsSvc, requestIdentity, llmClient, counter)
 	inquirySvc.SetRelayTransport(relayRegistry.For)
 	shareSvc := shareapp.New(shareRepo, cfg.ShareLinkSigningKey)
 

@@ -5,13 +5,20 @@ import { ChatbubbleEllipsesOutline, PersonCircleOutline } from '@vicons/ionicons
 import StatePanel from '@/components/StatePanel.vue'
 import CampaignViewRenderer from '@/components/CampaignViewRenderer.vue'
 import InquiryPanel from '@/components/InquiryPanel.vue'
+import ModuleActionPanel from '@/components/ModuleActionPanel.vue'
 import { useInquiryStore } from '@/stores/inquiry'
 import { useRuntimeStore } from '@/stores/runtime'
 
 const props = defineProps<{ convId: string; campaign: boolean }>()
-const active = ref<'state' | 'inquiry'>('state')
+const active = ref<'state' | 'inquiry' | 'actions'>('state')
 const inquiry = useInquiryStore()
 const runtime = useRuntimeStore()
+watch(
+  () => props.convId,
+  () => {
+    active.value = 'state'
+  },
+)
 
 watch(
   [active, () => props.convId],
@@ -35,6 +42,14 @@ watch(
         <NIcon :component="ChatbubbleEllipsesOutline" />
         <span>询问</span>
       </button>
+      <button
+        v-if="runtime.runtime?.has_trusted_actions"
+        type="button"
+        :class="{ active: active === 'actions' }"
+        @click="active = 'actions'"
+      >
+        <span>行动</span>
+      </button>
     </nav>
     <CampaignViewRenderer
       v-if="
@@ -45,7 +60,13 @@ watch(
       class="sidebar-content"
     />
     <StatePanel v-else-if="active === 'state'" class="sidebar-content" :conv-id="convId" />
-    <InquiryPanel v-else class="sidebar-content" :conv-id="convId" />
+    <InquiryPanel v-else-if="active === 'inquiry'" class="sidebar-content" :conv-id="convId" />
+    <ModuleActionPanel
+      v-if="runtime.runtime?.has_trusted_actions"
+      v-show="active === 'actions'"
+      class="sidebar-content"
+      :conv-id="convId"
+    />
   </aside>
 </template>
 
@@ -64,7 +85,8 @@ watch(
 
 .sidebar-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   min-height: 42px;
   padding: 0 10px;
   border-bottom: 1px solid var(--border);

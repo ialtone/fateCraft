@@ -214,6 +214,9 @@ func (s *Server) Router(r *gin.Engine) {
 	// 状态
 	protected.GET("/conversations/:id/state", s.getState)
 	protected.GET("/conversations/:id/runtime", s.getConversationRuntime)
+	protected.GET("/conversations/:id/endings", s.getEndingState)
+	protected.GET("/conversations/:id/actions", s.getModuleActions)
+	protected.POST("/conversations/:id/actions", s.executeModuleAction)
 	protected.PATCH("/conversations/:id/state", s.requireAdmin, s.patchState)
 	protected.GET("/conversations/:id/state/revisions", s.stateRevisions)
 
@@ -282,6 +285,7 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.GET("/admin/reward-exchange/orders", s.requireAdmin, s.listAdminExchangeOrders)
 	protected.GET("/admin/challenges", s.requireAdmin, s.listAdminChallenges)
 	protected.POST("/admin/challenges", s.requireAdmin, s.createAdminChallenge)
+	protected.PUT("/admin/challenges/:id/enabled", s.requireAdmin, s.setAdminChallengeEnabled)
 	protected.POST("/admin/challenges/:id/versions", s.requireAdmin, s.createAdminChallengeVersion)
 	protected.GET("/admin/challenge-versions/:id", s.requireAdmin, s.getAdminChallengeVersion)
 	protected.PUT("/admin/challenge-versions/:id", s.requireAdmin, s.saveAdminChallengeVersion)
@@ -375,7 +379,7 @@ func fail(c *gin.Context, err error) {
 		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "上游请求超时"})
 	case errors.Is(err, storage.ErrCampaignNotActive), errors.Is(err, storage.ErrCampaignRevisionConflict),
 		errors.Is(err, storage.ErrCampaignIdempotencyConflict), errors.Is(err, storage.ErrCampaignHasConversation),
-		errors.Is(err, storage.ErrCampaignHistoryImmutable),
+		errors.Is(err, storage.ErrCampaignCheckpointMissing),
 		errors.Is(err, campaign.ErrActionRejected):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, conversation.ErrCampaignRequired), errors.Is(err, campaign.ErrCampaignModeRequired),

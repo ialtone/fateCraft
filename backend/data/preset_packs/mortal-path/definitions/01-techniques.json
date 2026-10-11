@@ -1,0 +1,1201 @@
+[
+  {
+    "kind": "technique",
+    "key": "basic-breathing",
+    "name": "引气诀",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 9,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 120,
+      "mana_cost": 1,
+      "cultivation_gain": 12,
+      "mastery_gain": 350,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "primary"
+      ],
+      "starting_pool": "primary-method",
+      "starting_weight": 2,
+      "starting_slot": "primary",
+      "source_item_key": "manual.basic-breathing",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 5
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "cultivation_gain": 3
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "max_mana": 15,
+            "mana_cost_reduction": 1
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "spiritual_attack": 8
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "基础"
+    ],
+    "search_text": "引气 呼吸 吐纳",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "technique",
+    "key": "light-step",
+    "name": "轻身步",
+    "content": {
+      "category": "movement",
+      "max_layer": 6,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 90,
+      "mana_cost": 0,
+      "cultivation_gain": 3,
+      "mastery_gain": 500,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "movement"
+      ],
+      "starting_pool": "secondary-art",
+      "starting_weight": 2,
+      "starting_slot": "movement",
+      "source_item_key": "manual.light-step",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "movement": 2
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "movement": 3
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "movement": 5,
+            "physical_defense": 2
+          }
+        }
+      ]
+    },
+    "tags": [
+      "身法",
+      "基础"
+    ],
+    "search_text": "轻身 身法 赶路",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "technique",
+    "key": "greenwood-nurturing",
+    "name": "青木养元功",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 12,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 180,
+      "mana_cost": 2,
+      "cultivation_gain": 22,
+      "mastery_gain": 300,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "primary",
+        "secondary"
+      ],
+      "starting_pool": "primary-method",
+      "starting_weight": 2,
+      "starting_slot": "primary",
+      "source_item_key": "manual.greenwood",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_health": 5,
+            "healing_power": 3
+          }
+        },
+        {
+          "layer": 4,
+          "effects": {
+            "cultivation_gain": 4,
+            "max_mana": 8
+          }
+        },
+        {
+          "layer": 8,
+          "effects": {
+            "max_health": 15,
+            "healing_power": 7
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "spiritual_defense": 10
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "木行",
+      "疗伤"
+    ],
+    "search_text": "青木 养元 木灵根",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "technique",
+    "key": "iron-body",
+    "name": "铁衣锻体法",
+    "content": {
+      "category": "body",
+      "max_layer": 8,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 150,
+      "mana_cost": 0,
+      "cultivation_gain": 8,
+      "mastery_gain": 400,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "body"
+      ],
+      "starting_pool": "secondary-art",
+      "starting_weight": 2,
+      "starting_slot": "body",
+      "source_item_key": "manual.iron-body",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_health": 8,
+            "physical_defense": 2
+          }
+        },
+        {
+          "layer": 4,
+          "effects": {
+            "physical_defense": 5
+          }
+        },
+        {
+          "layer": 8,
+          "effects": {
+            "max_health": 20,
+            "physical_attack": 5
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼体",
+      "防御"
+    ],
+    "search_text": "铁衣 锻体 防御",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "technique",
+    "key": "basic-alchemy",
+    "name": "小云火炼丹术",
+    "content": {
+      "category": "craft",
+      "max_layer": 6,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 120,
+      "mana_cost": 1,
+      "cultivation_gain": 2,
+      "mastery_gain": 550,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "craft_alchemy"
+      ],
+      "starting_pool": "craft-discipline",
+      "starting_weight": 1,
+      "starting_slot": "craft_alchemy",
+      "source_item_key": "manual.basic-alchemy"
+    },
+    "tags": [
+      "生产",
+      "炼丹"
+    ],
+    "search_text": "炼丹 云火 丹炉",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "technique",
+    "key": "basic-forging",
+    "name": "百炼锻器诀",
+    "content": {
+      "category": "craft",
+      "max_layer": 6,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 150,
+      "mana_cost": 1,
+      "cultivation_gain": 2,
+      "mastery_gain": 450,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "craft_artifact"
+      ],
+      "starting_pool": "craft-discipline",
+      "starting_weight": 1,
+      "starting_slot": "craft_artifact",
+      "source_item_key": "manual.basic-forging"
+    },
+    "tags": [
+      "生产",
+      "炼器"
+    ],
+    "search_text": "炼器 锻造 百炼",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "technique",
+    "key": "basic-talisman",
+    "name": "引灵画符法",
+    "content": {
+      "category": "craft",
+      "max_layer": 6,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 100,
+      "mana_cost": 1,
+      "cultivation_gain": 2,
+      "mastery_gain": 600,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "craft_talisman"
+      ],
+      "starting_pool": "craft-discipline",
+      "starting_weight": 1,
+      "starting_slot": "craft_talisman",
+      "source_item_key": "manual.basic-talisman"
+    },
+    "tags": [
+      "生产",
+      "制符"
+    ],
+    "search_text": "制符 引灵 符笔",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "technique",
+    "key": "red-sun-breathing",
+    "name": "赤阳吐纳法",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 12,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 180,
+      "mana_cost": 3,
+      "cultivation_gain": 25,
+      "mastery_gain": 280,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "primary",
+        "secondary"
+      ],
+      "starting_pool": "primary-method",
+      "starting_weight": 1,
+      "starting_slot": "primary",
+      "source_item_key": "manual.red-sun-breathing",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 6
+          }
+        },
+        {
+          "layer": 4,
+          "effects": {
+            "cultivation_gain": 5,
+            "spiritual_attack": 3
+          }
+        },
+        {
+          "layer": 8,
+          "effects": {
+            "max_mana": 18
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "spiritual_attack": 12
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "火行"
+    ],
+    "search_text": "赤阳 吐纳 火行 修炼",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "technique",
+    "key": "water-mirror-art",
+    "name": "水镜养神诀",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 12,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 210,
+      "mana_cost": 2,
+      "cultivation_gain": 20,
+      "mastery_gain": 300,
+      "insight_gain": 3,
+      "allowed_slots": [
+        "primary",
+        "secondary"
+      ],
+      "starting_pool": "primary-method",
+      "starting_weight": 1,
+      "starting_slot": "primary",
+      "source_item_key": "manual.water-mirror",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_spiritual_sense": 6
+          }
+        },
+        {
+          "layer": 4,
+          "effects": {
+            "spiritual_defense": 4
+          }
+        },
+        {
+          "layer": 8,
+          "effects": {
+            "max_spiritual_sense": 18,
+            "cultivation_gain": 4
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "spiritual_defense": 12
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "水行",
+      "神识"
+    ],
+    "search_text": "水镜 养神 水行 神识",
+    "visibility": "player",
+    "sort_order": 90
+  },
+  {
+    "kind": "technique",
+    "key": "earth-vein-method",
+    "name": "厚土载元功",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 12,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 240,
+      "mana_cost": 2,
+      "cultivation_gain": 19,
+      "mastery_gain": 320,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "primary",
+        "secondary"
+      ],
+      "starting_pool": "primary-method",
+      "starting_weight": 1,
+      "starting_slot": "primary",
+      "source_item_key": "manual.earth-vein",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_health": 10
+          }
+        },
+        {
+          "layer": 4,
+          "effects": {
+            "physical_defense": 4
+          }
+        },
+        {
+          "layer": 8,
+          "effects": {
+            "max_health": 25,
+            "cultivation_gain": 4
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "physical_defense": 12
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "土行",
+      "稳固"
+    ],
+    "search_text": "厚土 载元 土行 防御",
+    "visibility": "player",
+    "sort_order": 100
+  },
+  {
+    "kind": "technique",
+    "key": "green-mist-sword-art",
+    "name": "青岚十三剑",
+    "content": {
+      "category": "spell",
+      "max_layer": 9,
+      "minimum_realm_rank": 1,
+      "practice_minutes": 150,
+      "mana_cost": 5,
+      "cultivation_gain": 5,
+      "mastery_gain": 380,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "combat"
+      ],
+      "source_item_key": "manual.green-mist-sword",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "physical_attack": 4
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "spiritual_attack": 5
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "movement": 3,
+            "physical_attack": 6
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "spiritual_attack": 14
+          }
+        }
+      ]
+    },
+    "tags": [
+      "剑诀",
+      "青岚门"
+    ],
+    "search_text": "青岚 十三剑 剑诀",
+    "visibility": "player",
+    "sort_order": 110
+  },
+  {
+    "kind": "technique",
+    "key": "vine-binding-spell",
+    "name": "缠藤术",
+    "content": {
+      "category": "spell",
+      "max_layer": 6,
+      "minimum_realm_rank": 1,
+      "practice_minutes": 120,
+      "mana_cost": 4,
+      "cultivation_gain": 3,
+      "mastery_gain": 450,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "combat",
+        "utility"
+      ],
+      "source_item_key": "manual.vine-binding",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "spiritual_attack": 3
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "spiritual_attack": 5
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "spiritual_attack": 8,
+            "movement": 2
+          }
+        }
+      ]
+    },
+    "tags": [
+      "术法",
+      "木行",
+      "控制"
+    ],
+    "search_text": "缠藤 木行 术法",
+    "visibility": "player",
+    "sort_order": 120
+  },
+  {
+    "kind": "technique",
+    "key": "stone-skin-method",
+    "name": "磐石炼身法",
+    "content": {
+      "category": "body",
+      "max_layer": 9,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 180,
+      "mana_cost": 1,
+      "cultivation_gain": 7,
+      "mastery_gain": 360,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "body"
+      ],
+      "starting_pool": "secondary-art",
+      "starting_weight": 1,
+      "starting_slot": "body",
+      "source_item_key": "manual.stone-skin",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_health": 12
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "physical_defense": 4
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "max_health": 20,
+            "spiritual_defense": 3
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "physical_defense": 10
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼体",
+      "土行"
+    ],
+    "search_text": "磐石 炼身 防御",
+    "visibility": "player",
+    "sort_order": 130
+  },
+  {
+    "kind": "technique",
+    "key": "cloud-shadow-step",
+    "name": "流云匿影步",
+    "content": {
+      "category": "movement",
+      "max_layer": 9,
+      "minimum_realm_rank": 1,
+      "practice_minutes": 120,
+      "mana_cost": 3,
+      "cultivation_gain": 3,
+      "mastery_gain": 420,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "movement"
+      ],
+      "source_item_key": "manual.cloud-shadow-step",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "movement": 4
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "physical_defense": 2
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "movement": 7
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "movement": 10,
+            "spiritual_defense": 4
+          }
+        }
+      ]
+    },
+    "tags": [
+      "身法",
+      "隐匿"
+    ],
+    "search_text": "流云 匿影 身法",
+    "visibility": "player",
+    "sort_order": 140
+  },
+  {
+    "kind": "technique",
+    "key": "spirit-shield-spell",
+    "name": "小灵盾术",
+    "content": {
+      "category": "spell",
+      "max_layer": 6,
+      "minimum_realm_rank": 1,
+      "practice_minutes": 110,
+      "mana_cost": 4,
+      "cultivation_gain": 2,
+      "mastery_gain": 480,
+      "insight_gain": 1,
+      "allowed_slots": [
+        "combat",
+        "defense"
+      ],
+      "source_item_key": "manual.spirit-shield",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "spiritual_defense": 4
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "physical_defense": 3
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "spiritual_defense": 10,
+            "max_mana": 8
+          }
+        }
+      ]
+    },
+    "tags": [
+      "术法",
+      "防御"
+    ],
+    "search_text": "灵盾 防御 术法",
+    "visibility": "player",
+    "sort_order": 150
+  },
+  {
+    "kind": "technique",
+    "key": "blood-burning-secret",
+    "name": "燃血秘术",
+    "content": {
+      "category": "secret",
+      "max_layer": 3,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 240,
+      "mana_cost": 0,
+      "cultivation_gain": 1,
+      "mastery_gain": 300,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "secret"
+      ],
+      "source_item_key": "manual.blood-burning",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "physical_attack": 5
+          }
+        },
+        {
+          "layer": 2,
+          "effects": {
+            "movement": 3
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "physical_attack": 8,
+            "spiritual_attack": 5
+          }
+        }
+      ]
+    },
+    "tags": [
+      "秘术",
+      "代价"
+    ],
+    "search_text": "燃血 秘术 拼命",
+    "visibility": "player",
+    "sort_order": 160
+  },
+  {
+    "kind": "technique",
+    "key": "hundred-herbs-sense",
+    "name": "百草辨灵术",
+    "content": {
+      "category": "secret",
+      "max_layer": 6,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 100,
+      "mana_cost": 1,
+      "cultivation_gain": 2,
+      "mastery_gain": 550,
+      "insight_gain": 3,
+      "allowed_slots": [
+        "utility"
+      ],
+      "source_item_key": "manual.hundred-herbs-sense",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_spiritual_sense": 3
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "healing_power": 4
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "max_spiritual_sense": 8,
+            "healing_power": 8
+          }
+        }
+      ]
+    },
+    "tags": [
+      "秘术",
+      "采药",
+      "炼丹"
+    ],
+    "search_text": "百草 辨灵 采药",
+    "visibility": "player",
+    "sort_order": 170
+  },
+  {
+    "kind": "technique",
+    "key": "thunder-finger",
+    "name": "掌心雷引",
+    "content": {
+      "category": "spell",
+      "max_layer": 9,
+      "minimum_realm_rank": 1,
+      "practice_minutes": 180,
+      "mana_cost": 7,
+      "cultivation_gain": 4,
+      "mastery_gain": 340,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "combat"
+      ],
+      "source_item_key": "manual.thunder-finger",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "spiritual_attack": 6
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "spiritual_attack": 7
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "max_mana": 10,
+            "spiritual_attack": 8
+          }
+        },
+        {
+          "layer": 9,
+          "effects": {
+            "spiritual_attack": 15
+          }
+        }
+      ]
+    },
+    "tags": [
+      "雷法",
+      "攻击"
+    ],
+    "search_text": "掌心雷 雷法 攻击",
+    "visibility": "player",
+    "sort_order": 180
+  },
+  {
+    "kind": "technique",
+    "key": "breath-concealment",
+    "name": "敛息诀",
+    "content": {
+      "category": "secret",
+      "max_layer": 6,
+      "minimum_realm_rank": 0,
+      "practice_minutes": 90,
+      "mana_cost": 1,
+      "cultivation_gain": 1,
+      "mastery_gain": 580,
+      "insight_gain": 2,
+      "allowed_slots": [
+        "utility",
+        "secret"
+      ],
+      "source_item_key": "manual.breath-concealment",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "spiritual_defense": 2
+          }
+        },
+        {
+          "layer": 3,
+          "effects": {
+            "movement": 2
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "spiritual_defense": 7,
+            "movement": 3
+          }
+        }
+      ]
+    },
+    "tags": [
+      "秘术",
+      "隐匿"
+    ],
+    "search_text": "敛息 隐匿 躲避",
+    "visibility": "player",
+    "sort_order": 190
+  },
+  {
+    "kind": "technique",
+    "key": "foundation-condensing-guide",
+    "name": "小周天筑基篇",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 12,
+      "minimum_realm_rank": 1,
+      "practice_minutes": 360,
+      "mana_cost": 8,
+      "cultivation_gain": 100,
+      "mastery_gain": 220,
+      "insight_gain": 4,
+      "allowed_slots": [
+        "primary",
+        "secondary"
+      ],
+      "source_item_key": "manual.foundation-guide",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 12
+          }
+        },
+        {
+          "layer": 4,
+          "effects": {
+            "cultivation_gain": 8
+          }
+        },
+        {
+          "layer": 8,
+          "effects": {
+            "max_health": 20,
+            "max_spiritual_sense": 15
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "cultivation_gain": 12,
+            "spiritual_defense": 10
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "筑基准备"
+    ],
+    "search_text": "小周天 筑基 凝元",
+    "visibility": "player",
+    "sort_order": 200
+  },
+  {
+    "kind": "technique",
+    "key": "star-tide-scripture",
+    "name": "星潮归元经",
+    "content": {
+      "category": "cultivation",
+      "max_layer": 18,
+      "minimum_realm_rank": 2,
+      "practice_minutes": 720,
+      "mana_cost": 18,
+      "cultivation_gain": 600,
+      "mastery_gain": 180,
+      "insight_gain": 8,
+      "allowed_slots": [
+        "primary",
+        "secondary"
+      ],
+      "source_item_key": "manual.star-tide-scripture",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_mana": 80,
+            "cultivation_gain": 12
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "spiritual_attack": 35,
+            "max_spiritual_sense": 90
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "max_health": 120,
+            "spiritual_defense": 45
+          }
+        },
+        {
+          "layer": 18,
+          "effects": {
+            "cultivation_gain": 60,
+            "spiritual_attack": 80
+          }
+        }
+      ]
+    },
+    "tags": [
+      "主修",
+      "星海"
+    ],
+    "search_text": "星潮 归元 结丹",
+    "visibility": "player",
+    "sort_order": 210
+  },
+  {
+    "kind": "technique",
+    "key": "void-crossing-step",
+    "name": "折空遁步",
+    "content": {
+      "category": "movement",
+      "max_layer": 12,
+      "minimum_realm_rank": 3,
+      "practice_minutes": 540,
+      "mana_cost": 16,
+      "combat_mana_cost": 10,
+      "cultivation_gain": 22,
+      "mastery_gain": 220,
+      "insight_gain": 6,
+      "allowed_slots": [
+        "movement"
+      ],
+      "source_item_key": "manual.void-crossing-step",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "movement": 12
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "movement": 22,
+            "physical_defense": 18
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "movement": 45,
+            "spiritual_defense": 30
+          }
+        }
+      ]
+    },
+    "tags": [
+      "身法",
+      "虚空"
+    ],
+    "search_text": "折空 遁步 界墟",
+    "visibility": "player",
+    "sort_order": 220
+  },
+  {
+    "kind": "technique",
+    "key": "nine-law-sword",
+    "name": "九律星锋",
+    "content": {
+      "category": "spell",
+      "max_layer": 15,
+      "minimum_realm_rank": 4,
+      "practice_minutes": 600,
+      "mana_cost": 24,
+      "combat_mana_cost": 18,
+      "cultivation_gain": 30,
+      "mastery_gain": 200,
+      "insight_gain": 7,
+      "allowed_slots": [
+        "combat"
+      ],
+      "source_item_key": "manual.nine-law-sword",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "spiritual_attack": 55
+          }
+        },
+        {
+          "layer": 5,
+          "effects": {
+            "physical_attack": 35,
+            "spiritual_attack": 70
+          }
+        },
+        {
+          "layer": 10,
+          "effects": {
+            "spiritual_attack": 120,
+            "spiritual_defense": 40
+          }
+        },
+        {
+          "layer": 15,
+          "effects": {
+            "physical_attack": 80,
+            "spiritual_attack": 180
+          }
+        }
+      ]
+    },
+    "tags": [
+      "剑诀",
+      "法则"
+    ],
+    "search_text": "九律 星锋 法则剑",
+    "visibility": "player",
+    "sort_order": 230
+  },
+  {
+    "kind": "technique",
+    "key": "celestial-body",
+    "name": "天关不坏身",
+    "content": {
+      "category": "body",
+      "max_layer": 12,
+      "minimum_realm_rank": 4,
+      "practice_minutes": 720,
+      "mana_cost": 20,
+      "cultivation_gain": 35,
+      "mastery_gain": 180,
+      "insight_gain": 5,
+      "allowed_slots": [
+        "body"
+      ],
+      "source_item_key": "manual.celestial-body",
+      "layer_effects": [
+        {
+          "layer": 1,
+          "effects": {
+            "max_health": 180,
+            "physical_defense": 45
+          }
+        },
+        {
+          "layer": 6,
+          "effects": {
+            "max_health": 360,
+            "physical_defense": 90
+          }
+        },
+        {
+          "layer": 12,
+          "effects": {
+            "max_health": 720,
+            "physical_attack": 100,
+            "spiritual_defense": 75
+          }
+        }
+      ]
+    },
+    "tags": [
+      "炼体",
+      "上界"
+    ],
+    "search_text": "天关 不坏身 炼体",
+    "visibility": "player",
+    "sort_order": 240
+  }
+]

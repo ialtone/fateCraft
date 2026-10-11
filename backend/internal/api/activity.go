@@ -10,14 +10,15 @@ import (
 )
 
 type conversationActivityResponse struct {
-	Narrative              string `json:"narrative"`
-	Memory                 string `json:"memory"`
-	TurnStatus             string `json:"turn_status,omitempty"`
-	CanContinue            bool   `json:"can_continue"`
-	CanRegenerate          bool   `json:"can_regenerate"`
-	RegenerateCostQuantity int64  `json:"regenerate_cost_quantity"`
-	StepNo                 int    `json:"step_no,omitempty"`
-	ToolCategory           string `json:"tool_category,omitempty"`
+	Narrative              string                  `json:"narrative"`
+	Memory                 string                  `json:"memory"`
+	MemoryJob              *playerMemoryJobSummary `json:"memory_job,omitempty"`
+	TurnStatus             string                  `json:"turn_status,omitempty"`
+	CanContinue            bool                    `json:"can_continue"`
+	CanRegenerate          bool                    `json:"can_regenerate"`
+	RegenerateCostQuantity int64                   `json:"regenerate_cost_quantity"`
+	StepNo                 int                     `json:"step_no,omitempty"`
+	ToolCategory           string                  `json:"tool_category,omitempty"`
 }
 
 func (s *Server) getConversationActivity(c *gin.Context) {
@@ -71,6 +72,7 @@ func (s *Server) getConversationActivity(c *gin.Context) {
 		}
 		if len(jobs) > 0 {
 			result.Memory = publicMemoryActivity(jobs[0].Status)
+			result.MemoryJob = summarizePlayerMemoryJob(jobs[0])
 		}
 	}
 	c.JSON(http.StatusOK, result)

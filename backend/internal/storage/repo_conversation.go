@@ -73,10 +73,14 @@ func (r *ConversationRepo) CreateWithState(ctx context.Context, c *Conversation,
 		if err := tx.Create(c).Error; err != nil {
 			return err
 		}
-		return tx.Clauses(clause.OnConflict{
+		if err := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "conversation_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"state", "schema_version", "updated_at"}),
-		}).Create(state).Error
+		}).Create(state).Error; err != nil {
+			return err
+		}
+		// Preserve the actual seeded opening for first-turn branch restoration.
+		return tx.Create(&StateRevision{ID: uuid.New(), ConversationID: c.ID, Source: SourceSystem, Patch: JSONMap{}, BeforeState: state.State, AfterState: state.State, CreatedAt: state.UpdatedAt}).Error
 	})
 }
 
@@ -463,7 +467,7 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 	// 一旦 attempt 已存在，围栏就不能只看 durable run：分支改写可能在旧模型请求
 	// 尚未退出时作废其 turn/attempt，因此要求 attempt 仍在运行且绑定当前分支，
 	// 阻止迟到的旧任务写入事实。
-	// 本 attempt 自己完成挑战结算后，对话会在同一工具事务里变为 ended；此后
+	// 本 attempt 自己完成挑战或 Campaign 结算后，对话会在同一工具事务里变为 ended；此后
 	// 同一 attempt 仍需写入工具结果、收尾叙事和步骤记录，所以放行“由本 attempt
 	// 结算而结束”的对话，其他非 active 状态一律拒绝。
 	if metadata, hasMetadata := operation.FromContext(ctx); hasMetadata {
@@ -474,9 +478,14 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 			JOIN generation_attempts a ON a.conversation_id = c.id
 			JOIN conversation_turns t ON t.conversation_id = c.id AND t.id = a.turn_id
 			WHERE c.id = ? AND r.id = ? AND r.status = ?
-			  AND (c.status = ? OR (c.status = ? AND EXISTS (
+			  AND (c.status = ? OR (c.status = ? AND (EXISTS (
 			        SELECT 1 FROM challenge_runs cr
-			        WHERE cr.conversation_id = c.id AND cr.attempt_id = a.id)))
+			        WHERE cr.conversation_id = c.id AND cr.attempt_id = a.id)
+			      OR EXISTS (
+			        SELECT 1 FROM campaigns cp
+			        JOIN campaign_action_commits cc ON cc.campaign_id = cp.id AND cc.revision = cp.revision
+			        WHERE cp.id = c.campaign_id AND cp.status <> 'active'
+			          AND cc.attempt_id = a.id AND cc.turn_id = t.id))))
 			  AND a.id = ? AND a.status = ? AND a.branch_epoch = c.branch_epoch
 			  AND t.status = ? AND t.invalidated_at IS NULL
 			FOR UPDATE OF c, r, a, t`

@@ -299,22 +299,26 @@ type CampaignEncounter struct {
 func (CampaignEncounter) TableName() string { return "campaign_encounters" }
 
 type CampaignDomainState struct {
-	Character      *CampaignCharacter
-	Techniques     []CampaignTechnique
-	ItemStacks     []CampaignItemStack
-	ItemInstances  []CampaignItemInstance
-	KnownRecipes   []CampaignKnownRecipe
-	Markets        []CampaignMarketState
-	MarketStocks   []CampaignMarketStock
-	Discoveries    []CampaignLocationDiscovery
-	NPCs           []CampaignNPC
-	Relationships  []CampaignRelationship
-	Factions       []CampaignFactionStanding
-	RegionStates   []CampaignRegionState
-	Quests         []CampaignQuest
-	Encounters     []CampaignEncounter
-	OutcomeRewards []CampaignOutcomeReward
-	Definitions    map[string]GameplayDefinition
+	RuntimeState    JSONMap
+	RuntimeDocument ChallengeRuntimeConfig
+	Outcomes        []ChallengeOutcomeRule
+	Character       *CampaignCharacter
+	Techniques      []CampaignTechnique
+	ItemStacks      []CampaignItemStack
+	ItemInstances   []CampaignItemInstance
+	KnownRecipes    []CampaignKnownRecipe
+	Markets         []CampaignMarketState
+	MarketStocks    []CampaignMarketStock
+	Discoveries     []CampaignLocationDiscovery
+	NPCs            []CampaignNPC
+	Relationships   []CampaignRelationship
+	Factions        []CampaignFactionStanding
+	RegionStates    []CampaignRegionState
+	Quests          []CampaignQuest
+	Encounters      []CampaignEncounter
+	OutcomeRewards  []CampaignOutcomeReward
+	StageRewards    []CampaignStageReward
+	Definitions     map[string]GameplayDefinition
 }
 
 type CampaignOutcomeReward struct {
@@ -712,6 +716,9 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 	if outcome.RewardPoints < 0 || outcome.RewardPoints > MaxRewardQuantity {
 		return nil, ErrRewardQuantity
 	}
+	if outcome.Category != "success" {
+		return []CampaignOutcomeReward{}, nil
+	}
 	if outcome.RewardPoints == 0 {
 		return []CampaignOutcomeReward{}, nil
 	}
@@ -735,6 +742,9 @@ func loadCampaignOutcomeRewards(ctx context.Context, db *gorm.DB, campaign Campa
 }
 
 func loadCampaignDomainState(ctx context.Context, db *gorm.DB, campaign Campaign, providers ...GameplayDefinitionProvider) (*CampaignDomainState, error) {
+	if runtime, err := optionalRuntimeDomain(ctx, db, campaign); err != nil || runtime != nil {
+		return runtime, err
+	}
 	state := &CampaignDomainState{
 		Definitions:    map[string]GameplayDefinition{},
 		OutcomeRewards: []CampaignOutcomeReward{},
@@ -790,12 +800,15 @@ func loadCampaignDomainState(ctx context.Context, db *gorm.DB, campaign Campaign
 			state.Definitions[definitionMapKey(definition.Kind, definition.Key)] = definition
 		}
 	}
-	if campaign.Status == CampaignStatusCompleted {
-		var err error
-		state.OutcomeRewards, err = loadCampaignOutcomeRewards(ctx, db, campaign)
-		if err != nil {
-			return nil, err
-		}
+	if err := db.WithContext(ctx).Where("campaign_id = ?", campaign.ID).Order("created_at ASC, stage_key ASC").Find(&state.StageRewards).Error; err != nil {
+		return nil, err
+	}
+	// Paid account rewards survive a story rewind, including when it restores
+	// the Campaign to active. Lifetime totals must still include that payment.
+	var rewardsErr error
+	state.OutcomeRewards, rewardsErr = loadCampaignOutcomeRewards(ctx, db, campaign)
+	if rewardsErr != nil {
+		return nil, rewardsErr
 	}
 	return state, nil
 }

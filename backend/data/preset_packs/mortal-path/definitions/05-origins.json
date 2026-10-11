@@ -1,0 +1,64 @@
+[
+  {
+    "kind": "cultivation.origins",
+    "key": "origins",
+    "name": "青河六种出身",
+    "visibility": "player",
+    "sort_order": 0,
+    "tags": [
+      "origin"
+    ],
+    "content": {
+      "origins": [
+        {
+          "persona_key": "herb-apprentice",
+          "name": "药庐学徒",
+          "items": {
+            "green-river-herb": 6,
+            "healing-pill": 2
+          }
+        },
+        {
+          "persona_key": "qinglan-handyman",
+          "name": "青岚杂役",
+          "items": {
+            "blank-talisman-paper": 8,
+            "spirit-cinnabar": 4
+          }
+        },
+        {
+          "persona_key": "old-ferry-hand",
+          "name": "旧渡船工",
+          "items": {
+            "clear-spring-water": 8,
+            "spirit-wood": 4
+          }
+        },
+        {
+          "persona_key": "lin-clan-sideline",
+          "name": "林氏旁支",
+          "items": {
+            "low-spirit-stone": 12,
+            "green-river-herb": 2
+          }
+        },
+        {
+          "persona_key": "yamen-runner",
+          "name": "县衙走脚",
+          "items": {
+            "healing-pill": 3,
+            "qi-gathering-pill": 3
+          }
+        },
+        {
+          "persona_key": "wandering-cultivator",
+          "name": "行脚散修",
+          "items": {
+            "green-pattern-ore": 6,
+            "low-spirit-stone": 4
+          }
+        }
+      ]
+    }
+  }
+]

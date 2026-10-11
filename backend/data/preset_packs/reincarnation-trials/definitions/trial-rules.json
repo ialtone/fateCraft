@@ -1,0 +1,473 @@
+[
+  {
+    "kind": "cultivation.trial_rules",
+    "key": "life",
+    "name": "百年飞升劫规则",
+    "visibility": "player",
+    "sort_order": 0,
+    "tags": [
+      "cultivation"
+    ],
+    "content": {
+      "difficulty": 0,
+      "realms": [
+        {
+          "key": "mortal",
+          "name": "凡人",
+          "lifespan_years": 80,
+          "practice_days": 30,
+          "practice_cost": 1,
+          "practice_gain": 23,
+          "breakthrough_chance": 90
+        },
+        {
+          "key": "qi-refining",
+          "name": "练气期",
+          "lifespan_years": 120,
+          "practice_days": 90,
+          "practice_cost": 2,
+          "practice_gain": 23,
+          "breakthrough_chance": 85
+        },
+        {
+          "key": "foundation",
+          "name": "筑基期",
+          "lifespan_years": 200,
+          "practice_days": 180,
+          "practice_cost": 3,
+          "practice_gain": 23,
+          "breakthrough_chance": 80
+        },
+        {
+          "key": "golden-core",
+          "name": "结丹期",
+          "lifespan_years": 500,
+          "practice_days": 365,
+          "practice_cost": 4,
+          "practice_gain": 23,
+          "breakthrough_chance": 75
+        },
+        {
+          "key": "nascent-soul",
+          "name": "元婴期",
+          "lifespan_years": 1000,
+          "practice_days": 550,
+          "practice_cost": 6,
+          "practice_gain": 23,
+          "breakthrough_chance": 70
+        },
+        {
+          "key": "spirit-transformation",
+          "name": "化神期",
+          "lifespan_years": 2000,
+          "practice_days": 600,
+          "practice_cost": 8,
+          "practice_gain": 23,
+          "breakthrough_chance": 68
+        },
+        {
+          "key": "void-refining",
+          "name": "炼虚期",
+          "lifespan_years": 5000,
+          "practice_days": 650,
+          "practice_cost": 10,
+          "practice_gain": 23,
+          "breakthrough_chance": 65
+        },
+        {
+          "key": "body-integration",
+          "name": "合体期",
+          "lifespan_years": 10000,
+          "practice_days": 650,
+          "practice_cost": 12,
+          "practice_gain": 23,
+          "breakthrough_chance": 62
+        },
+        {
+          "key": "great-ascension",
+          "name": "大乘期",
+          "lifespan_years": 20000,
+          "practice_days": 650,
+          "practice_cost": 14,
+          "practice_gain": 23,
+          "breakthrough_chance": 60
+        }
+      ],
+      "births": [
+        {
+          "key": "alchemy-master",
+          "name": "药师学徒",
+          "stock": {
+            "stone": 1,
+            "herb": 5
+          },
+          "vigor_bonus": -5,
+          "insight_bonus": 10,
+          "luck_bonus": 0
+        },
+        {
+          "key": "demonic-cultivator",
+          "name": "魔道求索者",
+          "stock": {
+            "stone": 3,
+            "herb": 1
+          },
+          "vigor_bonus": 8,
+          "insight_bonus": 0,
+          "luck_bonus": -5
+        },
+        {
+          "key": "mortal-ascender",
+          "name": "凡尘求道者",
+          "stock": {
+            "stone": 2,
+            "herb": 3
+          },
+          "vigor_bonus": 0,
+          "insight_bonus": 5,
+          "luck_bonus": 5
+        },
+        {
+          "key": "noble-scion",
+          "name": "世家子弟",
+          "stock": {
+            "stone": 8,
+            "herb": 0
+          },
+          "vigor_bonus": -5,
+          "insight_bonus": 0,
+          "luck_bonus": 0
+        },
+        {
+          "key": "rogue-cultivator",
+          "name": "散修",
+          "stock": {
+            "stone": 1,
+            "herb": 2
+          },
+          "vigor_bonus": 3,
+          "insight_bonus": 3,
+          "luck_bonus": 5
+        },
+        {
+          "key": "sect-disciple",
+          "name": "宗门学徒",
+          "stock": {
+            "stone": 3,
+            "herb": 3
+          },
+          "vigor_bonus": 0,
+          "insight_bonus": 5,
+          "luck_bonus": 0
+        },
+        {
+          "key": "sword-cultivator",
+          "name": "剑道学徒",
+          "stock": {
+            "stone": 2,
+            "herb": 1
+          },
+          "vigor_bonus": 10,
+          "insight_bonus": -3,
+          "luck_bonus": 0
+        }
+      ],
+      "methods": [
+        {
+          "key": "herbal-breath",
+          "name": "草木养气法",
+          "growth_bonus": 5,
+          "guard_bonus": 0
+        },
+        {
+          "key": "clear-mind",
+          "name": "澄心玄功",
+          "growth_bonus": 3,
+          "guard_bonus": 2
+        },
+        {
+          "key": "sword-bone",
+          "name": "剑骨炼身诀",
+          "growth_bonus": 0,
+          "guard_bonus": 5
+        }
+      ],
+      "items": [
+        {
+          "key": "stone",
+          "name": "灵石",
+          "price": 0,
+          "min_realm": 0
+        },
+        {
+          "key": "herb",
+          "name": "灵草",
+          "price": 2,
+          "min_realm": 0
+        },
+        {
+          "key": "breakthrough-pill",
+          "name": "破境丹",
+          "price": 5,
+          "min_realm": 0
+        },
+        {
+          "key": "healing-pill",
+          "name": "回春丹",
+          "price": 4,
+          "min_realm": 0
+        },
+        {
+          "key": "life-pill",
+          "name": "延寿丹",
+          "price": 30,
+          "min_realm": 1
+        },
+        {
+          "key": "thunder-talisman",
+          "name": "雷符",
+          "price": 8,
+          "min_realm": 3
+        },
+        {
+          "key": "ward",
+          "name": "护体法宝",
+          "price": 20,
+          "min_realm": 3
+        },
+        {
+          "key": "void-anchor",
+          "name": "定空锚",
+          "price": 15,
+          "min_realm": 4
+        }
+      ],
+      "activities": [
+        {
+          "key": "herbal-commission",
+          "name": "药坊委托",
+          "kind": "work",
+          "min_realm": 0,
+          "days": 7,
+          "chance": 100,
+          "damage": 0,
+          "stones": 3,
+          "herbs": 2,
+          "cost": 0,
+          "karma": 0,
+          "limit": 0,
+          "method_key": ""
+        },
+        {
+          "key": "herbal-apprenticeship",
+          "name": "药庐帮工求法",
+          "kind": "inheritance",
+          "min_realm": 0,
+          "days": 14,
+          "chance": 95,
+          "damage": 0,
+          "stones": 0,
+          "herbs": 1,
+          "cost": 0,
+          "karma": 0,
+          "limit": 1,
+          "method_key": "herbal-breath"
+        },
+        {
+          "key": "sect-petition",
+          "name": "山门试心求法",
+          "kind": "inheritance",
+          "min_realm": 0,
+          "days": 7,
+          "chance": 90,
+          "damage": 0,
+          "stones": 0,
+          "herbs": 0,
+          "cost": 2,
+          "karma": 0,
+          "limit": 1,
+          "method_key": "clear-mind"
+        },
+        {
+          "key": "sword-inscription",
+          "name": "探访剑崖遗刻",
+          "kind": "inheritance",
+          "min_realm": 0,
+          "days": 3,
+          "chance": 80,
+          "damage": 15,
+          "stones": 0,
+          "herbs": 0,
+          "cost": 0,
+          "karma": 0,
+          "limit": 1,
+          "method_key": "sword-bone"
+        },
+        {
+          "key": "mountain-survey",
+          "name": "踏勘山野灵脉",
+          "kind": "explore",
+          "min_realm": 0,
+          "days": 3,
+          "chance": 80,
+          "damage": 10,
+          "stones": 4,
+          "herbs": 3,
+          "cost": 0,
+          "karma": 0,
+          "limit": 0,
+          "method_key": ""
+        },
+        {
+          "key": "monster-hunt",
+          "name": "清剿荒泽妖兽",
+          "kind": "combat",
+          "min_realm": 1,
+          "days": 3,
+          "chance": 75,
+          "damage": 25,
+          "stones": 7,
+          "herbs": 2,
+          "cost": 0,
+          "karma": 0,
+          "limit": 0,
+          "method_key": ""
+        },
+        {
+          "key": "mediate-dispute",
+          "name": "调停坊市争端",
+          "kind": "social",
+          "min_realm": 0,
+          "days": 2,
+          "chance": 85,
+          "damage": 0,
+          "stones": 1,
+          "herbs": 0,
+          "cost": 0,
+          "karma": -2,
+          "limit": 0,
+          "method_key": ""
+        },
+        {
+          "key": "rob-caravan",
+          "name": "劫掠修士商队",
+          "kind": "combat",
+          "min_realm": 2,
+          "days": 2,
+          "chance": 65,
+          "damage": 40,
+          "stones": 10,
+          "herbs": 3,
+          "cost": 0,
+          "karma": 4,
+          "limit": 0,
+          "method_key": ""
+        },
+        {
+          "key": "immortal-courier",
+          "name": "护送仙使残卷",
+          "kind": "affinity",
+          "min_realm": 2,
+          "days": 30,
+          "chance": 85,
+          "damage": 10,
+          "stones": 0,
+          "herbs": 0,
+          "cost": 3,
+          "karma": 0,
+          "limit": 1,
+          "method_key": ""
+        },
+        {
+          "key": "void-herb-expedition",
+          "name": "探索空冥药境",
+          "kind": "explore",
+          "min_realm": 4,
+          "days": 30,
+          "chance": 75,
+          "damage": 25,
+          "stones": 10,
+          "herbs": 8,
+          "cost": 0,
+          "karma": 0,
+          "limit": 0,
+          "method_key": ""
+        },
+        {
+          "key": "law-sanctum-watch",
+          "name": "镇守法则灵台",
+          "kind": "combat",
+          "min_realm": 5,
+          "days": 60,
+          "chance": 80,
+          "damage": 35,
+          "stones": 15,
+          "herbs": 10,
+          "cost": 0,
+          "karma": 0,
+          "limit": 0,
+          "method_key": ""
+        }
+      ],
+      "recipes": [
+        {
+          "key": "prepare-breakthrough",
+          "name": "炼制破境丹",
+          "output": "breakthrough-pill",
+          "inputs": {
+            "herb": 2,
+            "stone": 1
+          },
+          "min_realm": 0,
+          "days": 3,
+          "chance": 85
+        },
+        {
+          "key": "prepare-healing",
+          "name": "炼制回春丹",
+          "output": "healing-pill",
+          "inputs": {
+            "herb": 2
+          },
+          "min_realm": 0,
+          "days": 2,
+          "chance": 90
+        },
+        {
+          "key": "prepare-thunder",
+          "name": "绘制雷符",
+          "output": "thunder-talisman",
+          "inputs": {
+            "herb": 3,
+            "stone": 2
+          },
+          "min_realm": 3,
+          "days": 7,
+          "chance": 80
+        },
+        {
+          "key": "prepare-anchor",
+          "name": "炼制定空锚",
+          "output": "void-anchor",
+          "inputs": {
+            "herb": 4,
+            "stone": 5
+          },
+          "min_realm": 4,
+          "days": 14,
+          "chance": 75
+        }
+      ],
+      "routes": {
+        "affinity_chance": 35,
+        "affinity_attempts": 2,
+        "rift_discovery_chance": 65,
+        "rift_chance": 55,
+        "tribulation_chance": 80,
+        "wave_damage": 30,
+        "wave_cost": 2,
+        "cooldown_days": 90
+      }
+    }
+  }
+]

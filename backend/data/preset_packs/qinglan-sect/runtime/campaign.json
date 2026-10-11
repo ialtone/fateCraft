@@ -1,0 +1,44 @@
+{
+  "campaign": {
+    "lifecycle_handler": "sect.management.lifecycle",
+    "projection_handler": "sect.management.projection",
+    "context_policy": "sect.management.context",
+    "action_allowlist": [
+      "sect.recruit",
+      "sect.build",
+      "sect.upgrade",
+      "sect.train",
+      "sect.teach",
+      "sect.produce",
+      "sect.dispatch",
+      "sect.guard",
+      "sect.recall",
+      "sect.advance",
+      "sect.finish",
+      "sect.dissolve"
+    ],
+    "field_ownership": [
+      {
+        "path": "gameplay",
+        "owner": "campaign",
+        "value_type": "object",
+        "allow_children": true,
+        "visibility": "player",
+        "storage_projection": "campaign_runtime_states",
+        "write_capability": "sect.recruit",
+        "event_types": [
+          "sect.acted",
+          "sect.task_finished",
+          "sect.upkeep",
+          "sect.crisis",
+          "sect.ended"
+        ]
+      }
+    ],
+    "initial_location_key": "qinglan-sect",
+    "world_clock": {
+      "calendar_key": "sect.management.days",
+      "max_due_events_per_turn": 32
+    }
+  }
+}

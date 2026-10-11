@@ -79,6 +79,9 @@ func TestActiveEncounterBlocksUnrelatedDomainActions(t *testing.T) {
 	if err := rejectWhileEncounterActive(execution, ActionEncounterAct); err != nil {
 		t.Fatalf("encounter action should remain available: %v", err)
 	}
+	if err := rejectWhileEncounterActive(execution, ActionAbandon); err != nil {
+		t.Fatalf("active encounter blocks voluntary exit: %v", err)
+	}
 	if err := rejectWhileEncounterActive(execution, ActionEncounterFlee); err != nil {
 		t.Fatalf("flee action should remain available: %v", err)
 	}
@@ -93,8 +96,8 @@ func TestEncounterAttackIsDeterministicAndVictoryRewardsOnce(t *testing.T) {
 	}
 	store.definitions[storage.DefinitionTechnique+":ember-strike"] = &storage.GameplayDefinition{
 		Kind: storage.DefinitionTechnique, Key: "ember-strike", Content: storage.JSONMap{
-			"combat_mana_cost": int64(3),
-			"layer_effects":    []any{map[string]any{"layer": int64(1), "effects": map[string]any{"spiritual_attack": int64(10)}}},
+			"max_layer": int64(12), "combat_mana_cost": int64(3),
+			"layer_effects": []any{map[string]any{"layer": int64(1), "effects": map[string]any{"spiritual_attack": int64(10)}}},
 		},
 	}
 	row := startFixtureEncounter(t, store, execution)

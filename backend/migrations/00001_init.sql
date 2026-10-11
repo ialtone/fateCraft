@@ -190,10 +190,8 @@ CREATE INDEX idx_challenge_assets_version ON challenge_assets(challenge_version_
 CREATE TABLE gameplay_definitions (
     id UUID PRIMARY KEY,
     challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE CASCADE,
-    kind VARCHAR(32) NOT NULL CHECK (kind IN (
-        'realm', 'technique', 'item', 'equipment', 'recipe', 'market', 'location',
-        'faction', 'npc_archetype', 'encounter', 'world_event', 'quest'
-    )),
+    -- Definition kinds and shapes are validated by the pinned trusted module.
+    kind VARCHAR(128) NOT NULL CHECK (kind ~ '^[a-z0-9][a-z0-9._-]*$'),
     key VARCHAR(128) NOT NULL CHECK (key ~ '^[a-z0-9][a-z0-9._-]*$'),
     name VARCHAR(128) NOT NULL,
     content JSONB NOT NULL CHECK (jsonb_typeof(content) = 'object'),
@@ -266,6 +264,11 @@ CREATE TABLE campaigns (
 CREATE INDEX idx_campaigns_player_updated ON campaigns(player_id, updated_at DESC);
 CREATE INDEX idx_campaigns_player_status ON campaigns(player_id, status);
 CREATE INDEX idx_campaigns_challenge_version ON campaigns(challenge_version_id);
+
+CREATE TABLE campaign_runtime_states (
+    campaign_id UUID PRIMARY KEY REFERENCES campaigns(id) ON DELETE RESTRICT,
+    state JSONB NOT NULL CHECK (jsonb_typeof(state) = 'object' AND octet_length(state::text) <= 73728)
+);
 
 CREATE TABLE campaign_characters (
     id UUID PRIMARY KEY,
@@ -634,6 +637,12 @@ CREATE INDEX idx_conversation_turns_completed
     ON conversation_turns(conversation_id, turn_seq)
     WHERE status = 'completed' AND invalidated_at IS NULL;
 
+CREATE TABLE campaign_checkpoints (
+    turn_id UUID PRIMARY KEY REFERENCES conversation_turns(id) ON DELETE RESTRICT,
+    campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
+    snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot) = 'object' AND octet_length(snapshot::text) <= 4718592)
+);
+
 CREATE TABLE generation_attempts (
     id UUID PRIMARY KEY,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -891,7 +900,7 @@ CREATE TABLE conversation_states (
 CREATE TABLE state_revisions (
     id UUID PRIMARY KEY,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    source VARCHAR(16) NOT NULL CHECK (source IN ('ai', 'system')),
+    source VARCHAR(16) NOT NULL CHECK (source IN ('ai', 'system', 'module')),
     related_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
     patch JSONB NOT NULL,
     before_state JSONB NOT NULL,
@@ -907,6 +916,19 @@ CREATE TABLE state_revisions (
 CREATE INDEX idx_state_revisions_cursor
     ON state_revisions(conversation_id, created_at DESC, id DESC)
     WHERE invalidated_at IS NULL;
+
+CREATE TABLE module_action_commits (
+    id UUID PRIMARY KEY,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    branch_epoch BIGINT NOT NULL CHECK (branch_epoch >= 0),
+    request_id UUID NOT NULL,
+    action_key VARCHAR(128) NOT NULL,
+    arguments_hash VARCHAR(64) NOT NULL,
+    turn_id UUID NOT NULL REFERENCES conversation_turns(id) ON DELETE RESTRICT,
+    result JSONB NOT NULL CHECK (jsonb_typeof(result) = 'object'),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (conversation_id, branch_epoch, request_id)
+);
 
 CREATE TABLE conversation_memories (
     id UUID PRIMARY KEY,
@@ -1499,6 +1521,24 @@ COMMENT ON TABLE reward_exchange_orders IS '只追加兑换订单，支付与所
 CREATE TRIGGER reward_exchange_order_immutable BEFORE UPDATE OR DELETE ON reward_exchange_orders FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER reward_exchange_revision_immutable BEFORE UPDATE OR DELETE ON reward_exchange_revisions FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER registration_reward_revision_immutable BEFORE UPDATE OR DELETE ON registration_reward_rules FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
+
+CREATE TABLE campaign_stage_rewards (
+    id UUID PRIMARY KEY,
+    campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
+    stage_key VARCHAR(64) NOT NULL CHECK (stage_key ~ '^[a-z][a-z0-9._-]{0,63}$'),
+    name VARCHAR(128) NOT NULL CHECK (btrim(name) <> ''),
+    configured_points BIGINT NOT NULL CHECK (configured_points BETWEEN 0 AND 9007199254740991),
+    granted_points BIGINT NOT NULL CHECK (granted_points BETWEEN 0 AND 9007199254740991),
+    disabled_reason VARCHAR(64) NOT NULL DEFAULT '',
+    game_time BIGINT NOT NULL CHECK (game_time >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (campaign_id, stage_key),
+    CHECK ((disabled_reason = '' AND granted_points = configured_points AND granted_points > 0)
+        OR (disabled_reason = 'zero_points' AND configured_points = 0 AND granted_points = 0)
+        OR (disabled_reason = 'client_llm_route' AND granted_points = 0))
+);
+COMMENT ON TABLE campaign_stage_rewards IS '账号级只追加阶段领奖事实，含零分和直连；不随剧情检查点回档';
+CREATE TRIGGER campaign_stage_reward_immutable BEFORE UPDATE OR DELETE ON campaign_stage_rewards FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 
 -- +goose Down
 -- Refuse rollback even when this file is run through an external Goose tool.

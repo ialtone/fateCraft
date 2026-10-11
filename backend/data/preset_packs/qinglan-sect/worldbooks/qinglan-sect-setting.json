@@ -1,0 +1,22 @@
+{
+  "id": "qinglan-sect-setting",
+  "name": "青岚宗重建见闻",
+  "description": "叙事背景，数值以可信状态与行动预览为准。",
+  "entries": [
+    {
+      "id": "qinglan-sect-world",
+      "world_book_id": "qinglan-sect-setting",
+      "title": "青岚宗重建",
+      "content": "青岚宗尚有三位各有所长的弟子。掌门要恢复传承、修复大殿和工坊，同时关注粮食与危机。一次派遣失败不会灭宗，但长期断供会使弟子离去，守备不足则可能失守。",
+      "keywords": [
+        "青岚宗重建",
+        "宗门经营"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

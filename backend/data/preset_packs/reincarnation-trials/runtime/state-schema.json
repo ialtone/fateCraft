@@ -1,9 +1,24 @@
 {
   "state_schema": {
-    "schema_version": 1,
+    "schema_version": 2,
     "fields": [
       {
-        "path": "profile",
+        "path": "module_state",
+        "type": "object",
+        "default": {},
+        "visibility": "internal",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "narrative",
         "type": "object",
         "default": {},
         "visibility": "player",
@@ -11,375 +26,221 @@
         "allow_children": true
       },
       {
-        "path": "profile.name",
+        "path": "gameplay.birth",
         "type": "string",
         "default": "",
         "visibility": "player",
-        "update_policy": "model"
+        "update_policy": "module"
       },
       {
-        "path": "profile.gender",
+        "path": "gameplay.realm",
         "type": "string",
         "default": "",
         "visibility": "player",
-        "update_policy": "model"
+        "update_policy": "module"
       },
       {
-        "path": "profile.title",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "profile.appearance",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "profile.attire",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "profile.background",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "profile.talent",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "profile.cultivation_realm_key",
-        "type": "enum",
-        "default": "mortal",
-        "visibility": "player",
-        "update_policy": "system",
-        "constraints": {
-          "values": [
-            "mortal",
-            "qi-refining",
-            "foundation",
-            "golden-core",
-            "nascent-soul",
-            "spirit-transformation",
-            "void-refining",
-            "body-integration",
-            "great-ascension"
-          ]
-        }
-      },
-      {
-        "path": "profile.cultivation_level",
-        "type": "enum",
-        "default": "凡人",
-        "visibility": "player",
-        "update_policy": "system",
-        "constraints": {
-          "values": [
-            "凡人",
-            "练气期",
-            "筑基期",
-            "结丹期",
-            "元婴期",
-            "化神期",
-            "炼虚期",
-            "合体期",
-            "大乘期"
-          ]
-        }
-      },
-      {
-        "path": "profile.cultivation_stage",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "profile.cultivation_progress",
+        "path": "gameplay.age",
         "type": "number",
         "default": 0,
         "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
+        "update_policy": "module"
       },
       {
-        "path": "profile.age",
-        "type": "number",
-        "default": 18,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0
-        }
-      },
-      {
-        "path": "profile.lifespan",
-        "type": "number",
-        "default": 80,
-        "visibility": "player",
-        "update_policy": "system",
-        "constraints": {
-          "min": 0
-        }
-      },
-      {
-        "path": "profile.remaining_lifespan",
-        "type": "number",
-        "default": 80,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0
-        }
-      },
-      {
-        "path": "attributes",
-        "type": "object",
-        "default": {
-          "灵石": 1,
-          "根骨": 50,
-          "悟性": 50,
-          "气运": 50,
-          "慧根": 50,
-          "魅力": 50
-        },
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "attributes.灵石",
-        "type": "integer",
-        "default": 1,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 20000
-        }
-      },
-      {
-        "path": "attributes.根骨",
-        "type": "integer",
-        "default": 50,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
-      },
-      {
-        "path": "attributes.悟性",
-        "type": "integer",
-        "default": 50,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
-      },
-      {
-        "path": "attributes.气运",
-        "type": "integer",
-        "default": 50,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
-      },
-      {
-        "path": "attributes.慧根",
-        "type": "integer",
-        "default": 50,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
-      },
-      {
-        "path": "attributes.魅力",
-        "type": "integer",
-        "default": 50,
-        "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
-      },
-      {
-        "path": "traits",
-        "type": "list",
-        "default": [],
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "inventory",
-        "type": "object",
-        "default": {
-          "items": []
-        },
-        "visibility": "player",
-        "update_policy": "model",
-        "allow_children": true
-      },
-      {
-        "path": "inventory.items",
-        "type": "list",
-        "default": [],
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "relationships",
-        "type": "object",
-        "default": {},
-        "visibility": "player",
-        "update_policy": "model",
-        "allow_children": true
-      },
-      {
-        "path": "location",
-        "type": "object",
-        "default": {},
-        "visibility": "player",
-        "update_policy": "model",
-        "allow_children": true
-      },
-      {
-        "path": "location.current",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "quests",
-        "type": "list",
-        "default": [],
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "risks",
-        "type": "list",
-        "default": [],
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "cultivation",
-        "type": "object",
-        "default": {},
-        "visibility": "player",
-        "update_policy": "model",
-        "allow_children": true
-      },
-      {
-        "path": "cultivation.cultivation_method",
-        "type": "string",
-        "default": "",
-        "visibility": "player",
-        "update_policy": "model"
-      },
-      {
-        "path": "cultivation.breakthrough_attempts",
+        "path": "gameplay.lifespan",
         "type": "integer",
         "default": 0,
         "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0
-        }
+        "update_policy": "module"
       },
       {
-        "path": "cultivation.failed_breakthroughs",
+        "path": "gameplay.remaining_days",
         "type": "integer",
         "default": 0,
         "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0
-        }
+        "update_policy": "module"
       },
       {
-        "path": "cultivation.talent_awakened",
+        "path": "gameplay.elapsed_days",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.vigor",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.insight",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.luck",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.health",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.injury",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.progress",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.method",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.karma",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.inventory",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.goal",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.affinity_qualified",
         "type": "boolean",
         "default": false,
         "visibility": "player",
-        "update_policy": "model"
+        "update_policy": "module"
       },
       {
-        "path": "ascension",
-        "type": "object",
-        "default": {},
+        "path": "gameplay.affinity_remaining",
+        "type": "integer",
+        "default": 0,
         "visibility": "player",
-        "update_policy": "model",
-        "allow_children": true
+        "update_policy": "module"
       },
       {
-        "path": "ascension.void_rift_discovered",
+        "path": "gameplay.affinity_token",
         "type": "boolean",
         "default": false,
         "visibility": "player",
-        "update_policy": "model"
+        "update_policy": "module"
       },
       {
-        "path": "ascension.ascension_token_owned",
+        "path": "gameplay.rift_discovered",
         "type": "boolean",
         "default": false,
         "visibility": "player",
-        "update_policy": "system"
+        "update_policy": "module"
       },
       {
-        "path": "ascension.tribulation_preparation",
-        "type": "number",
+        "path": "gameplay.cooldown_days",
+        "type": "integer",
         "default": 0,
         "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0,
-          "max": 100
-        }
+        "update_policy": "module"
       },
       {
-        "path": "ascension.karma_debt",
-        "type": "number",
+        "path": "gameplay.preparation",
+        "type": "integer",
         "default": 0,
         "visibility": "player",
-        "update_policy": "model",
-        "constraints": {
-          "min": 0
-        }
+        "update_policy": "module"
       },
       {
-        "path": "world_flags",
-        "type": "object",
-        "default": {},
-        "visibility": "model",
-        "update_policy": "model",
-        "allow_children": true
+        "path": "gameplay.tribulation_active",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.tribulation_attempt",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.tribulation_wave",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.outcome_key",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.death_cause",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.realm_key",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "narrative.name",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "narrative.appearance",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      },
+      {
+        "path": "narrative.background",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
       }
     ]
   }

@@ -1,0 +1,23 @@
+{
+  "id": "island-setting",
+  "name": "荒岛见闻",
+  "description": "保留环境设定，具体数值由工具提供。",
+  "entries": [
+    {
+      "id": "island-world",
+      "world_book_id": "island-setting",
+      "title": "求生与救援",
+      "content": "海滩是最容易让远处船只看到信号的地方。树林提供制作材料，山泉可以补充饮水。恶劣天气和饥渴会影响生存。一次失败不应被描写成毫无代价的重新开始。",
+      "keywords": [
+        "荒岛",
+        "求援",
+        "补给"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

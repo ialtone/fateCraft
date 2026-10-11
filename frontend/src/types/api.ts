@@ -26,6 +26,7 @@ export type DisplayMessageTypeEnum =
 
 /** 对话 - 一次完整的对话会话 */
 export interface Conversation {
+  branch_epoch: number
   /** 对话 ID */
   id: string
   /** 玩家 ID */
@@ -393,6 +394,8 @@ export interface CampaignOutcomeReward {
 
 export interface CampaignSnapshot {
   campaign: Campaign
+  outcome_category?: 'success' | 'failure' | 'neutral'
+  outcome_title?: string
   character: CampaignCharacterView | null
   techniques: CampaignTechniqueView[]
   inventory: {
@@ -425,6 +428,16 @@ export interface CampaignSnapshot {
   available_encounters: CampaignAvailableEncounterView[]
   outcome_rewards: CampaignOutcomeReward[]
   reward_points: number
+  stage_rewards: Array<{
+    stage_key: string
+    name: string
+    configured_points: number
+    granted_points: number
+    disabled_reason?: string
+    game_time: number
+  }>
+  stage_reward_points: number
+  total_reward_points: number
   /** 客户端直连终局不发放奖励时后端填写，前端据此展示替代文案。 */
   rewards_disabled_reason?: string
 }
@@ -703,6 +716,15 @@ export type ToolActivityCategory =
 export interface ConversationActivity {
   narrative: NarrativeActivityStatus
   memory: MemoryActivityStatus
+  memory_job?: {
+    status: string
+    target_until_turn: number
+    execution_count: number
+    max_executions: number
+    created_at: string
+    started_at?: string
+    finished_at?: string
+  }
   turn_status?: 'pending' | 'completed' | 'partial' | 'failed' | 'cancelled' | string
   can_continue: boolean
   can_regenerate: boolean
@@ -752,7 +774,12 @@ export interface RuntimeInspector {
   activity: ConversationActivity
   request?: ContextBuildLog | null
   performance?: TurnPerformance | null
-  cache: ChallengeCacheStats
+  memory_archive?: {
+    covered_from_turn: number
+    covered_until_turn: number
+    token_count: number
+    created_at: string
+  }
   memory: MemoryActivityStatus
   diagnostics: Array<{ kind: string; message: string; at: string }>
 }
@@ -1233,6 +1260,7 @@ export interface RuntimePresentation {
 }
 
 export interface PublicRuntime {
+  has_trusted_actions: boolean
   engine_key: string
   mode: 'challenge' | 'campaign'
   presentation: RuntimePresentation
@@ -1332,19 +1360,7 @@ export interface ChallengeAsset {
 export interface GameplayDefinition {
   id: string
   challenge_version_id: string
-  kind:
-    | 'realm'
-    | 'technique'
-    | 'item'
-    | 'equipment'
-    | 'recipe'
-    | 'market'
-    | 'location'
-    | 'faction'
-    | 'npc_archetype'
-    | 'encounter'
-    | 'world_event'
-    | 'quest'
+  kind: string
   key: string
   name: string
   content: Record<string, any>
@@ -1407,6 +1423,8 @@ export interface SaveChallengeVersionInput {
 export type BuiltinChallengeStatus = 'available' | 'imported' | 'update_available'
 
 export interface AdminBuiltinChallenge {
+  pack_id?: string
+  enabled: boolean
   slug: string
   name: string
   description: string
@@ -1427,6 +1445,15 @@ export interface BuiltinImportResult {
 }
 
 export interface GameplayModuleDescriptor {
+  definition_schemas?: Record<string, import('./module-actions').RuleSchema>
+  definition_labels?: Record<string, string>
+  category?: string
+  category_name?: string
+  category_order: number
+  definition_kinds: string[]
+  campaign_actions?: string[]
+  runtime_actions?: Array<{ key: string; label: string; description: string; events: string[] }>
+  abandon_action?: string
   key: string
   version: number
   name: string
@@ -1604,6 +1631,10 @@ export interface GenerationReplayedEvent extends SocketEventBase {
   operation_id?: string
 }
 
+export interface ModuleActionCommittedEvent extends SocketEventBase {
+  type: 'module.action_committed'
+}
+
 /** 玩家状态更新（携带更新后的完整状态） */
 export interface StateUpdateEvent extends SocketEventBase {
   type: 'state_update'
@@ -1649,6 +1680,7 @@ export interface CompletionMetric {
 /** 挑战完成，所有展示与最终余额均来自服务端结算快照。 */
 export interface ChallengeCompletedEvent extends SocketEventBase {
   type: 'challenge_completed'
+  completion?: import('./endings').CompletionView
   run_id?: string
   outcome?: {
     key: string
@@ -1706,10 +1738,12 @@ export type SocketEvent =
   | MessageUpdatedEvent
   | BranchReplacedEvent
   | GenerationReplayedEvent
+  | ModuleActionCommittedEvent
   | StateUpdateEvent
   | CampaignUpdatedEvent
   | ContextBuiltEvent
   | ConversationEndedEvent
+  | (SocketEventBase & { type: 'ending.proposed' })
   | ChallengeCompletedEvent
   | ActivityUpdatedEvent
   | ErrorEvent
@@ -1746,11 +1780,13 @@ const KNOWN_SOCKET_EVENT_TYPES: Record<SocketEvent['type'], true> = {
   message_updated: true,
   'branch.replaced': true,
   'generation.replayed': true,
+  'module.action_committed': true,
   state_update: true,
   campaign_updated: true,
   context_built: true,
   conversation_ended: true,
   challenge_completed: true,
+  'ending.proposed': true,
   activity_updated: true,
   error: true,
   notice: true,

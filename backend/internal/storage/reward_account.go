@@ -1,12 +1,12 @@
 package storage
 
 import (
-	"github.com/ialtone/fatecraft/internal/platformcapability"
+	"github.com/ialtone/fatecraft/internal/accountasset"
 )
 
-const PointsKey = "fatecraft.points"
-const MessageRewriteCreditKey = platformcapability.MessageRewriteRewardKey
-const MaxRewardQuantity int64 = 9007199254740991
+const PointsKey = accountasset.Points
+const MessageRewriteCreditKey = accountasset.RewriteCredits
+const MaxRewardQuantity int64 = accountasset.MaxQuantity
 
 type RewardAsset struct {
 	Key  string `json:"key"`
@@ -15,7 +15,7 @@ type RewardAsset struct {
 	Icon string `json:"icon"`
 }
 
-func ValidRewardKey(key string) bool { return key == PointsKey || key == MessageRewriteCreditKey }
+func ValidRewardKey(key string) bool { return accountasset.ValidKey(key) }
 
 func RewardAssetFor(key string) RewardAsset {
 	switch key {

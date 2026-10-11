@@ -80,6 +80,8 @@ export const useSocketStore = defineStore('socket', () => {
     const streamingIdBefore = chat.streamingId
     const [convRes] = await Promise.allSettled([convStore.load(convId), chat.load(convId)])
 
+    if (currentConvId.value === convId) convStore.loadEndingState(convId).catch(() => {})
+
     // 等待期间用户已切走（disconnect 会清空 currentConvId）：立即中止，
     // 避免对旧对话的流式复位波及新对话
     if (currentConvId.value !== convId) return
@@ -231,12 +233,15 @@ export const useSocketStore = defineStore('socket', () => {
         if (ev.payload?.message_id) chat.resetStreamText(ev.payload.message_id)
         break
       case 'agent.turn.completed':
+        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.endStream(ev.payload.message_id)
+        rewards.load().catch(() => {})
         if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
         finishActiveOperation()
         break
       case 'agent.turn.partial':
+        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         guidance.reset()
         context.setNarrative('idle')
         // partial 回合已经提交了可信事实，重新生成要消耗改写额度；
@@ -254,6 +259,7 @@ export const useSocketStore = defineStore('socket', () => {
         break
       case 'agent.turn.failed':
       case 'agent.turn.cancelled':
+        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         guidance.reset()
         context.setNarrative('idle')
         context.setTurnCapabilities({
@@ -299,6 +305,10 @@ export const useSocketStore = defineStore('socket', () => {
           context.loadRuntimeInspector(currentConvId.value).catch(() => {})
         }
         break
+      case 'module.action_committed':
+        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
+        if (currentConvId.value) resyncConversation(currentConvId.value).catch(() => {})
+        break
       case 'state_update':
         guidance.reset()
         if (currentConvId.value && !chat.isGenerating) guidance.load(currentConvId.value)
@@ -318,10 +328,14 @@ export const useSocketStore = defineStore('socket', () => {
         }
         break
       case 'context_built':
-        if (ev.context_build_id) context.loadById(ev.context_build_id)
+        // Context is constructed before the outcome is known. Only committed
+        // successful attempts should replace the runtime panel statistics.
         break
       case 'activity_updated':
-        if (ev.activity === 'memory' && ev.status) context.setActivity('memory', ev.status)
+        if (ev.activity === 'memory' && ev.status) {
+          context.setActivity('memory', ev.status)
+          if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
+        }
         break
       case 'conversation_ended':
         guidance.reset()
@@ -329,23 +343,13 @@ export const useSocketStore = defineStore('socket', () => {
         chat.stopGenerating()
         context.setNarrative('idle')
         break
+      case 'ending.proposed':
+        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
+        break
       case 'challenge_completed':
         guidance.reset()
-        if (ev.outcome) {
-          conv.setCompletion({
-            key: ev.outcome.key,
-            category: ev.outcome.category,
-            title: ev.outcome.title,
-            summary: ev.outcome.summary,
-            tone: ev.outcome.tone,
-            rewards: ev.reward_grants ?? [],
-            metrics: ev.metrics ?? [],
-            nextActions: ev.next_actions ?? [],
-            rewardsDisabledReason: ev.outcome.rewards_disabled_reason,
-          })
-        }
+        if (ev.completion) conv.consumeCompletion(ev.completion)
         rewards.load().catch(() => {})
-        conv.markEnded()
         chat.stopGenerating()
         context.setNarrative('idle')
         break

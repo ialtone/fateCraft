@@ -3,7 +3,7 @@ package cultivation
 import (
 	"testing"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/campaigncontract"
 )
 
@@ -11,7 +11,7 @@ func TestCampaignModuleOwnsRuntimeActionAllowlist(t *testing.T) {
 	registry := gameplay.NewCoreRegistry()
 	Register(registry)
 	contract := &gameplay.RuntimeContract{
-		Engine: gameplay.EngineRef{Key: CampaignEngineKey, Version: 1}, Mode: gameplay.RuntimeModeCampaign,
+		Engine: gameplay.EngineRef{Key: CampaignEngineKey, Version: CampaignEngineVersion}, Mode: gameplay.RuntimeModeCampaign,
 		Campaign: &gameplay.CampaignConfig{
 			LifecycleHandler: CampaignLifecycleHandler, ProjectionHandler: CampaignProjectionHandler,
 			ContextPolicy: CampaignContextPolicy, ActionAllowlist: campaigncontract.ActionKeys(), InitialLocationKey: "world.start",

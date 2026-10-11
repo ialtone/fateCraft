@@ -1,0 +1,14 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "narrative.current_focus",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "model"
+      }
+    ]
+  }
+}

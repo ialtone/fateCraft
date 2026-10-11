@@ -1,0 +1,123 @@
+{
+  "id": "underground-watchtower",
+  "name": "地下哨塔",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "选择兵营或侧道，消耗有限补给击败守卫与统领，将哨塔令牌带回入口。",
+  "author": "Fatecraft",
+  "icon": "battle",
+  "tags": [
+    "地牢远征",
+    "两条路线",
+    "持续遭遇",
+    "有限休整",
+    "撤离损失"
+  ],
+  "default_config": {
+    "recommended_character": "underground-watchtower-narrator",
+    "recommended_persona": "underground-watchtower-player",
+    "recommended_scenario": "underground-watchtower-opening",
+    "recommended_prompt": "underground-watchtower-guide",
+    "required_worldbooks": [
+      "underground-watchtower-setting"
+    ],
+    "allowed_personas": [
+      "underground-watchtower-player"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "cleared",
+      "category": "success",
+      "title": "哨塔肃清",
+      "tone": "success",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "cleared"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "retreated",
+      "category": "neutral",
+      "title": "提前撤回",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "retreated"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "defeated",
+      "category": "failure",
+      "title": "折戟哨塔",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "defeated"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "超过远征期限",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "timeout"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "放弃远征",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "abandoned"
+          }
+        ]
+      }
+    }
+  ],
+  "quick_start_guide": "每次移动和交锋消耗一份补给。稳健进攻伤害较低但能减轻反击，强攻可更快结束战斗。安全后可用药或在有限营地休整；终点目标必须带回入口。提前撤离与交战脱身都会损失一半携带物，战败则全失。 示例结局积分为 0。",
+  "features": [
+    "两条路线",
+    "持续遭遇",
+    "有限休整",
+    "撤离损失"
+  ],
+  "dependencies": []
+}

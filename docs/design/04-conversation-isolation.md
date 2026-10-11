@@ -1,5 +1,11 @@
 # 04. 对话隔离与生命周期
 
+## 模块行动和检查点
+
+纯玩法模块的玩家行动与模型工具共用对话归属、运行租约、回合和分支保障。请求携带 `request_id`、`branch_epoch`、`expected_revision`，锁定后复核；重复请求重用已提交结果，旧分支/旧修订拒绝。
+
+Campaign 每回合保存完整 `campaign_checkpoints`。改写/重新生成恢复领域表和模块状态，递增 Campaign revision 与对话 branch epoch；缺少检查点拒绝。账号余额、已领取奖励、种子与追加历史不回档，旧事件按来源 turn 有效性过滤。模型失败后的“继续叙事”保持已提交事实，不执行这类显式改写。细节见[24 玩法架构](24-gameplay-module-architecture.md)。
+
 ## 隔离目标
 
 每个对话代表一个玩家在固定挑战版本下的一次独立运行。任何消息、状态、记忆、判定或结算都不能因为 UUID 可猜、前端伪造或仓储漏过滤而跨到其他用户或其他对话。
@@ -136,3 +142,8 @@ WebSocket 握手先经过会话认证。生成器开始工作前再次读取并�
 对话与 Campaign 在创建时按当前有效路由（`platform_managed` 时恒为 `server`，否则为用户设置的 `llm_route`）固化 `llm_route`，不接受请求体传入；`conversations` 与 `campaigns` 各有 `BEFORE UPDATE` 触发器禁止修改，对话路由还必须等于所属 Campaign 路由（复合外键兜底）。
 
 对象路由与当前有效路由不一致时禁止任何模型调用：REST 返回 409（`code=llm_route_mismatch`），WS 返回 `notice`，不创建 run/turn/attempt、不扣额度；生成中途改设置时当前回合按 `llm_route_mismatch` 失败。Memory Worker 遇到不匹配或 `client` 路由无 Relay 连接时把任务放回 pending（不计失败）；角色问答返回 409。
+
+
+## 结局确认隔离（2026-10-11）
+
+结局提议及结果绑定 conversation、branch_epoch 和 revision。玩家确认提交原修订，动作结果不明按原 request_id 重查。切换会话清除作用域和旧弹窗；恢复只读取当前有效分支，历史正文不制造终态。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。

@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -16,7 +15,7 @@ type runtimeInspectorResponse struct {
 	Activity       conversationActivityResponse  `json:"activity"`
 	Request        *playerContextBuildSummary    `json:"request,omitempty"`
 	Performance    *playerTurnPerformanceSummary `json:"performance,omitempty"`
-	Cache          challenge.CacheStats          `json:"cache"`
+	MemoryArchive  *playerMemoryArchiveSummary   `json:"memory_archive,omitempty"`
 	Memory         string                        `json:"memory"`
 	Diagnostics    []runtimeDiagnostic           `json:"diagnostics"`
 }
@@ -83,6 +82,7 @@ func (s *Server) getRuntimeInspector(c *gin.Context) {
 	if s.memory != nil {
 		if jobs, err := s.memory.Jobs(c.Request.Context(), id, 1); err == nil && len(jobs) > 0 {
 			act.Memory = publicMemoryActivity(jobs[0].Status)
+			act.MemoryJob = summarizePlayerMemoryJob(jobs[0])
 		}
 	}
 	var performance *playerTurnPerformanceSummary
@@ -92,11 +92,36 @@ func (s *Server) getRuntimeInspector(c *gin.Context) {
 			performance = &value
 		}
 	}
-	cache := challenge.CacheStats{}
-	if s.challenges != nil {
-		cache = s.challenges.CacheStats()
+	var archive *playerMemoryArchiveSummary
+	if s.memory != nil {
+		if latest, err := s.memory.Latest(c.Request.Context(), id); err == nil && latest != nil {
+			archive = &playerMemoryArchiveSummary{CoveredFromTurn: latest.CoveredFromTurnSeq, CoveredUntilTurn: latest.CoveredUntilTurnSeq, TokenCount: latest.TokenCount, CreatedAt: latest.CreatedAt}
+		}
 	}
-	c.JSON(http.StatusOK, runtimeInspectorResponse{ConversationID: id.String(), UpdatedAt: time.Now(), Activity: act, Request: req, Performance: performance, Cache: cache, Memory: act.Memory, Diagnostics: []runtimeDiagnostic{}})
+	c.JSON(http.StatusOK, runtimeInspectorResponse{ConversationID: id.String(), UpdatedAt: time.Now(), Activity: act, Request: req, Performance: performance, MemoryArchive: archive, Memory: act.Memory, Diagnostics: []runtimeDiagnostic{}})
+}
+
+// Public metadata only: archive bodies, worker identity, leases and provider
+// errors belong to administrator diagnostics, not the player runtime panel.
+type playerMemoryJobSummary struct {
+	Status          string     `json:"status"`
+	TargetUntilTurn int64      `json:"target_until_turn"`
+	ExecutionCount  int        `json:"execution_count"`
+	MaxExecutions   int        `json:"max_executions"`
+	CreatedAt       time.Time  `json:"created_at"`
+	StartedAt       *time.Time `json:"started_at,omitempty"`
+	FinishedAt      *time.Time `json:"finished_at,omitempty"`
+}
+
+type playerMemoryArchiveSummary struct {
+	CoveredFromTurn  int64     `json:"covered_from_turn"`
+	CoveredUntilTurn int64     `json:"covered_until_turn"`
+	TokenCount       int       `json:"token_count"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+func summarizePlayerMemoryJob(job storage.MemoryJob) *playerMemoryJobSummary {
+	return &playerMemoryJobSummary{Status: job.Status, TargetUntilTurn: job.TargetUntilTurnSeq, ExecutionCount: job.ExecutionCount, MaxExecutions: job.MaxExecutions, CreatedAt: job.CreatedAt, StartedAt: job.StartedAt, FinishedAt: job.FinishedAt}
 }
 
 func summarizePlayerTurnPerformance(snapshot *storage.AgentAttemptPerformance, now time.Time) playerTurnPerformanceSummary {

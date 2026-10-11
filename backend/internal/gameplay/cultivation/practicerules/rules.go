@@ -10,9 +10,10 @@ import (
 const MaximumSessions int64 = 24
 
 type Facts struct {
-	Character  *storage.CampaignCharacter
-	Technique  storage.CampaignTechnique
-	Definition storage.GameplayDefinition
+	Character       *storage.CampaignCharacter
+	Technique       storage.CampaignTechnique
+	Definition      storage.GameplayDefinition
+	EquippedEffects map[string]int64
 }
 
 type Result struct {
@@ -37,12 +38,19 @@ func Evaluate(facts Facts, requestedSessions *int64) Result {
 	if facts.Technique.Status != "active" || facts.Technique.EquippedSlot == nil {
 		return reject(result, "technique.not_equipped", "功法未处于已装配的可修炼状态", false)
 	}
-	effects, ok := effectrules.TechniqueEffects(facts.Definition.Content, facts.Technique.LearnedLayer)
+	effects, ok := effectrules.MasteredEffects(facts.Definition.Content, facts.Technique.Mastery, facts.Technique.LearnedLayer)
 	if !ok {
 		return reject(result, "technique.definition_invalid", "功法层级效果无效", true)
 	}
 	result.Effects = effects
+	if facts.EquippedEffects != nil {
+		effects = facts.EquippedEffects
+		result.Effects = effects
+	}
 	result.ManaCostPerSession = maximum(0, integer(facts.Definition.Content["mana_cost"], 0)-effects["mana_cost_reduction"])
+	if integer(facts.Definition.Content["mana_cost"], 0) > 0 {
+		result.ManaCostPerSession = maximum(1, result.ManaCostPerSession)
+	}
 	result.PracticeMinutesPerSession = integer(facts.Definition.Content["practice_minutes"], 60)
 	result.CultivationGainPerSession = integer(facts.Definition.Content["cultivation_gain"], 10) + effects["cultivation_gain"]
 	result.MasteryGainPerSession = integer(facts.Definition.Content["mastery_gain"], 25)

@@ -1,0 +1,92 @@
+{
+  "presentation": {
+    "state_panel_title": "夜入封锁区",
+    "state_sections": [
+      {
+        "key": "operation",
+        "title": "行动态势",
+        "order": 0,
+        "fields": [
+          {
+            "path": "gameplay.location",
+            "label": "当前位置",
+            "widget": "text",
+            "order": 0
+          },
+          {
+            "path": "gameplay.goal",
+            "label": "目标",
+            "widget": "text",
+            "order": 10
+          },
+          {
+            "path": "gameplay.alert",
+            "label": "警戒",
+            "widget": "progress",
+            "order": 20
+          },
+          {
+            "path": "gameplay.pursuit",
+            "label": "追捕状态",
+            "widget": "text",
+            "order": 30
+          },
+          {
+            "path": "gameplay.observation",
+            "label": "最近观察",
+            "widget": "text",
+            "order": 40
+          },
+          {
+            "path": "gameplay.remaining_minutes",
+            "label": "剩余分钟",
+            "widget": "number",
+            "order": 50
+          }
+        ]
+      },
+      {
+        "key": "equipment",
+        "title": "工具与情报",
+        "order": 10,
+        "fields": [
+          {
+            "path": "gameplay.lockpicks",
+            "label": "开锁器",
+            "widget": "number",
+            "order": 0
+          },
+          {
+            "path": "gameplay.decoys",
+            "label": "干扰器",
+            "widget": "number",
+            "order": 10
+          },
+          {
+            "path": "gameplay.has_intel",
+            "label": "已掌握门禁情报",
+            "widget": "boolean",
+            "order": 20
+          },
+          {
+            "path": "gameplay.has_target",
+            "label": "已取得文件",
+            "widget": "boolean",
+            "order": 30
+          },
+          {
+            "path": "gameplay.locations",
+            "label": "已知地点",
+            "widget": "item_list",
+            "order": 40
+          }
+        ]
+      }
+    ],
+    "completion_view": {
+      "empty_reward_text": "本示例结局暂不发放积分"
+    },
+    "terminology": {},
+    "value_labels": {}
+  }
+}

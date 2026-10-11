@@ -14,9 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
-	"github.com/ialtone/fatecraft/internal/gameplay/campaigngeneric"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation"
+	"github.com/ialtone/fatecraft/internal/gameplay/bootstrap"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -45,15 +44,17 @@ type BootstrapResult struct {
 }
 
 type BuiltinInfo struct {
-	Slug           string `json:"slug"`
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Version        string `json:"version"`
-	ContentHash    string `json:"content_hash"`
-	CurrentVersion string `json:"current_version,omitempty"`
-	Status         string `json:"status"`
-	Importable     bool   `json:"importable"`
-	Overwritable   bool   `json:"overwritable"`
+	Slug           string     `json:"slug"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	Version        string     `json:"version"`
+	ContentHash    string     `json:"content_hash"`
+	CurrentVersion string     `json:"current_version,omitempty"`
+	Status         string     `json:"status"`
+	Importable     bool       `json:"importable"`
+	Overwritable   bool       `json:"overwritable"`
+	PackID         *uuid.UUID `json:"pack_id,omitempty"`
+	Enabled        bool       `json:"enabled"`
 }
 
 type Importer struct {
@@ -71,33 +72,41 @@ func New(repo *storage.ChallengeRepository, dataDir string, registries ...*gamep
 }
 
 func defaultRegistry() *gameplay.Registry {
-	registry := gameplay.NewCoreRegistry()
-	campaigngeneric.Register(registry)
-	cultivation.Register(registry)
-	return registry
+	return bootstrap.NewRegistry()
 }
 
-// BootstrapBuiltins is the startup policy: import every bundled challenge in
-// one transaction only when challenge_packs is completely empty.
+// BootstrapBuiltins imports only the explicit startup manifest, in one
+// transaction. Existing packs are never upgraded, overwritten or re-enabled.
 func (i *Importer) BootstrapBuiltins(ctx context.Context) (*BootstrapResult, error) {
 	result := &BootstrapResult{}
 	err := i.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
 		if err := tx.LockBootstrap(ctx); err != nil {
 			return fmt.Errorf("获取内置挑战初始化锁: %w", err)
 		}
-		count, err := tx.CountPacks(ctx)
-		if err != nil {
-			return fmt.Errorf("检查挑战内容: %w", err)
-		}
-		if count > 0 {
-			return nil
-		}
-		imports, err := New(tx, i.dataDir, i.registry).importBuiltins(ctx)
+		directories, err := bootstrapDirectories(i.dataDir)
 		if err != nil {
 			return err
 		}
-		result.Initialized = true
-		result.Imports = imports
+		bound := New(tx, i.dataDir, i.registry)
+		for _, directory := range directories {
+			loaded, err := loadDirectory(directory, time.Now(), i.registry)
+			if err != nil {
+				return err
+			}
+			_, err = tx.GetPackBySlug(ctx, loaded.manifest.ID)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, storage.ErrNotFound) {
+				return err
+			}
+			imported, err := bound.importDirectory(ctx, directory, false)
+			if err != nil {
+				return err
+			}
+			result.Imports = append(result.Imports, *imported)
+		}
+		result.Initialized = len(result.Imports) > 0
 		return nil
 	})
 	if err != nil {
@@ -188,6 +197,10 @@ func (i *Importer) importBuiltins(ctx context.Context) ([]ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	return i.importDirectories(ctx, directories)
+}
+
+func (i *Importer) importDirectories(ctx context.Context, directories []string) ([]ImportResult, error) {
 	results := make([]ImportResult, 0, len(directories))
 	for _, directory := range directories {
 		result, err := i.importDirectory(ctx, directory, false)
@@ -231,6 +244,8 @@ func (i *Importer) builtinInfo(ctx context.Context, loaded *loadedChallenge) (Bu
 	if err != nil {
 		return BuiltinInfo{}, err
 	}
+	info.PackID = &pack.ID
+	info.Enabled = pack.Status == storage.ChallengePackActive
 	var current *storage.ChallengeVersion
 	if pack.CurrentVersionID != nil {
 		current, err = i.repo.GetVersion(ctx, *pack.CurrentVersionID)
@@ -319,6 +334,7 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 			return nil, err
 		}
 	}
+	disabled := pack.CurrentVersionID != nil && pack.Status == storage.ChallengePackHidden
 
 	existing, err := i.repo.VersionByNumber(ctx, pack.ID, manifest.Version)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -391,6 +407,13 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	published, err := challenge.NewService(i.repo, i.registry).Publish(ctx, version.ID, uuid.Nil)
 	if err != nil {
 		return nil, err
+	}
+	// Same-version replacement clears the current pointer while deleting the old
+	// snapshot. Restore the administrator's choice inside this import transaction.
+	if disabled {
+		if _, err := i.repo.SetPackEnabled(ctx, pack.ID, false); err != nil {
+			return nil, err
+		}
 	}
 	return &ImportResult{
 		Slug: pack.Slug, Version: published.Version.Version,

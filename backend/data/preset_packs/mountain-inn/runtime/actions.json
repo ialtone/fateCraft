@@ -1,0 +1,22 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action"
+    ],
+    "player": [],
+    "domain": [
+      "management.build",
+      "management.upgrade",
+      "management.buy",
+      "management.sell",
+      "management.produce",
+      "management.accept",
+      "management.deliver",
+      "management.advance",
+      "management.finish",
+      "management.close"
+    ],
+    "capabilities": {}
+  }
+}

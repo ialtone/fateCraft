@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -119,7 +119,7 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 	if err := registry.ValidateRuntime(runtimeContract); err != nil {
 		return nil, fmt.Errorf("Runtime 源文件无效: %w", err)
 	}
-	runtime, err := gameplay.EncodeRuntime(*runtimeContract)
+	runtime, err := storage.EncodeGameplayRuntime(*runtimeContract)
 	if err != nil {
 		return nil, fmt.Errorf("编译 Runtime 源文件: %w", err)
 	}

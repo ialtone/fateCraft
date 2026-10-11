@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/platformcapability"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/tokenizer"
@@ -60,7 +60,7 @@ func compileVersionContent(doc *VersionDocument) (*compiledVersionContent, int64
 	if err != nil {
 		return nil, 0, err
 	}
-	contract, err := gameplay.DecodeRuntime(doc.Runtime)
+	contract, err := storage.DecodeGameplayRuntime(doc.Runtime)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -187,6 +187,7 @@ func buildPublicVersionProjection(compiled *compiledVersionContent) (publicVersi
 	}
 	projection.runtime = PublicRuntime{
 		EngineKey: compiled.contract.Engine.Key, Mode: gameplay.NormalizeRuntimeMode(compiled.contract.Mode),
+		HasTrustedActions:    len(compiled.contract.Actions.Domain) > 0,
 		Presentation:         compiled.contract.Presentation,
 		Capabilities:         publicGameplayCapabilities(compiled.contract.Actions.Capabilities),
 		PlatformCapabilities: platformcapability.PublicCapabilities(), Outcomes: append([]OutcomeView(nil), projection.outcomes...),

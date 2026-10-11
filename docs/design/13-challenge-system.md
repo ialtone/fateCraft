@@ -116,13 +116,16 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 
 通用挑战核心依赖 `gameplay.Registry`，不导入具体题材包。组合根显式安装：
 
-- `core.generic@1`：状态相等、状态集合、数值条件、成功判定、最少回合、all/any、可信结局验证；内置单局修仙玩法也直接使用该模块；
-- `cultivation.campaign@1`：修仙 Campaign 生命周期、投影、上下文和完整领域动作集合；Runtime 只能从模块声明的 `campaign_actions` 中启用白名单，不允许用自由状态 JSON 冒充领域事实；
-- 后续需要特殊可信规则的模块。
+- `core.generic@1`：状态相等、状态集合、数值条件、成功判定、最少回合、all/any、可信结局验证；百年飞升劫由独立 `cultivation.trial@2` 以受保护模块状态和可信动作维护完整单局；
+- `cultivation.campaign@2`：修仙 Campaign 生命周期、投影、上下文和完整领域动作集合；Runtime 只能从模块声明的 `campaign_actions` 中启用白名单，不允许用自由状态 JSON 冒充领域事实；
+- `campaign.generic@1`：直接使用公共世界组件；
+- 生存、经营、潜入、关系、古墓、地牢、宗门七个纯运行模块，完整目录见[24 玩法架构](24-gameplay-module-architecture.md)。
 
 模块 descriptor 列出允许的 action、Campaign action、verifier 和 settlement handler。管理员界面通过 `/api/admin/gameplay-modules` 读取目录并生成选项，不在前端硬编码修仙能力。Campaign 动作的 Definition、Capability 和事务 Handler 契约见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
 
 纯内容玩法若能使用 `core.generic`，只需新增数据，不需要修改 Go。只有无法由受限通用条件安全表达的规则，才新增后端模块。
+
+定义类型、Schema 和内容校验归当前主模块；不再使用全局修仙类型枚举。发布会检查所有可选 Persona 的初始化、双方行动预览、三类投影和展示路径/控件，拒绝缺失必要行动与未知渲染器。初始空列表、时间和随机可行性仍需流程测试。默认初始化使用 `backend/data/bootstrap.json`；当前清单包含全部八类九个内置包；启动只补齐缺失包，不覆盖已有包或启用状态。
 
 ## 结局规则
 
@@ -152,6 +155,8 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 ## 结局积分
 
 每个 outcome 直接保存 `reward_points`，范围为 0–9007199254740991；省略视为 0。正整数在可信通关后自动进入 `fatecraft.points`，0 正常完成且不创建零金额流水。积分与局内财富、库存无换算关系。
+
+青河还通过版本定义 `cultivation.progress_rewards` 保存阶段规则和总预算，阶段积分随合法动作自动核验；后台明确区分终局积分与“阶段 + 终局”总额。阶段事实不随剧情回档，账号事务和实际收益字段见 [21](21-campaign-outcome-rewards.md)。单局与长期的当前规则及本地证据见 [14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[25](25-core-gameplay-validation.md)。
 
 账号只保留积分与剧情改写次数。玩家用积分兑换改写套餐，后台运营规则见 [22 奖励管理](22-reward-management-and-exchange.md)。Campaign 正积分结局必须由当前版本真实终局任务引用，任务核验、积分和存档完成同事务；详见 [21 终局积分](21-campaign-outcome-rewards.md)。
 
@@ -302,6 +307,12 @@ data/preset_packs/<slug>/
 
 奖励管理从 /admin/rewards 集中定位玩法版本，规则仍通过草稿/发布编辑；积分积累与兑换见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 
+## 终局与主动退出
+
+Challenge 的失败、成功和中立退出都必须由可信 Runtime 状态产生，模型正文不能填写结局或阻止已提交的终局。终局展示读取固定 Outcome 的 `category/title/reward_points`，不能把所有已结束状态渲染成成功。已有玩法的玩家专属退出动作继续复用原动作目录；长期玩法顶部结束入口走 Campaign 的主动中止事务。
+
+青河修仙志固定版本包含 `perished`、`lifespan_exhausted` 和 `abandoned`，分别表示身亡、寿尽和玩家主动中止；后两者不产生终局积分。服务端在保存状态、事件、结局、奖励和对话结束时保持事务一致，重复请求按原 action ID 幂等返回。
+
 ## 内容演进规则
 
 - 已发布版本永不原地修改；管理员覆盖未使用的内置版本时采用删除后重建，而非修改原快照。
@@ -310,3 +321,8 @@ data/preset_packs/<slug>/
 - 删除后端 verifier 前，必须确认没有仍需运行的已发布版本引用。
 - 前端新增可选控件时仍要保留未知控件安全降级。
 - 新题材不得把自身字段塞回通用 challenge、事件或 App 顶栏。
+
+
+## 管理员启用开关
+
+玩法包复用现有 `status`：`active` 为启用，`hidden` 为停用；开关只允许对当前有已发布版本的包操作。`PUT /api/admin/challenges/:id/enabled` 接受必填布尔 `enabled`，仅管理员可调用，在包行锁内更新状态；未发布包不能启用。公开列表、详情与开局选择检查启用状态；已有对话的当前版本校验允许停用包继续，已退役版本仍按原规则只读。开关不修改固定内容哈希、奖励规则或存档，也不需要新迁移。内置目录响应携带 `pack_id`、`enabled`，导入状态与启用状态分别显示。首次发布默认启用，更新已有版本保留停用状态。

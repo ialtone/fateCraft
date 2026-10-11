@@ -8,7 +8,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 2. `03-product-features.md`：普通用户、管理员和系统能力及验收边界。
 3. `15-challenge-authoring-guide.md`：不限题材的玩法包格式、制作流程与后端扩展边界。
 4. `17-generic-campaign-action-capabilities.md`：不限题材的 Campaign 动作能力、事务复核、模块接入和 Agent 维护规范。
-5. `21-campaign-outcome-rewards.md`：不限题材的 Campaign 终局固定积分、事务和幂等规范。
+5. `21-campaign-outcome-rewards.md`：Campaign 阶段与终局固定积分、事务和幂等规范。
 6. `16-cultivation-campaign-agent-reference.md`：已实现的修仙长期 Campaign 权威边界、动作目录和内容扩展参考。
 7. `20-cultivation-shared-setting.md`：两个内置修仙玩法共享的世界设定及独立运行边界。
 8. `14-ascension-trial-gameplay.md`：内置单局挑战“百年飞升劫”的当前完整玩法规格。
@@ -31,6 +31,8 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 
 日志专题：[23-logging-and-diagnostics.md](23-logging-and-diagnostics.md)，覆盖诊断关联、正文预算、队列、配置审计、后台筛选及运行验收边界。
 
+玩法架构专题：[24-gameplay-module-architecture.md](24-gameplay-module-architecture.md)，覆盖中立契约、可信模块、Challenge/Campaign 适配、八种主类型与版本边界；配套[模块制作指南](gameplay-modules/README.md)和[验收记录](gameplay-modules/validation.md)。新增玩法优先从这里选择现有模块。两套修仙核心玩法的当前规则见 14、16，模拟数据、边界和真实环境待验项见[25 核心玩法验证](25-core-gameplay-validation.md)。
+
 ## 权威来源
 
 发生冲突时按以下顺序判断：
@@ -38,8 +40,8 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 1. 数据库关系与约束：按版本顺序执行的 `backend/migrations/*.sql`。
 2. 后端安全和事务行为：`backend/internal`。
 3. 模型协议、工具目录与结构化契约：`backend/internal/llm`、`backend/internal/orchestration/agent_tools.go`、`backend/internal/memory/contract.go` 和 `backend/internal/inquiry`。
-4. 判定算法参数：`backend/data/roll_config.yaml`。
-5. 官方挑战首次初始化材料：`backend/data/preset_packs/*`。
+4. 通用 Roll 与青河 Campaign 的天命判定参数：`backend/data/roll_config.yaml`；纯模块按固定版本定义执行，百年飞升劫的概率、成本与难度修正在 `cultivation.trial_rules:life` 中配置。
+5. 官方内容源：`backend/data/preset_packs/*`；启动默认导入范围由 `backend/data/bootstrap.json` 明确列出。
 6. 本目录设计文档。
 
 文档应解释实现和设计意图，但不能覆盖代码与 schema 的真实行为。发现不一致时，要么修改实现并验证，要么修正文档，不能让两套规则长期并存。
@@ -49,7 +51,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 - PostgreSQL 是运行时挑战内容的唯一权威。
 - 用户角色只有 `owner`、`admin`、`user`；普通注册创建 `user`，OAuth 只允许登录已绑定的本地账号，不会自动创建或提权。
 - 空数据库必须通过网页首次安装向导明确设置唯一 `owner`；初始化完成后安装入口关闭，后端事务保护 owner 转交和失权操作。
-- 空数据库首次启动时，官方 JSON 在事务中自动初始化；数据库已有任意挑战包时完全跳过，绝不自动升级或覆盖。
+- 启动按默认清单在事务中补齐全部九个内置包；已有包不自动升级、覆盖或重新启用。管理员在内容管理切换开放状态；停用禁止新开局，已有存档保留。
 - 发布版本不可原地修改；对话固定版本、选中资产和内容哈希。
 - 已发布/退役版本的进程缓存只保存不可变内容；所有玩家状态、历史、Memory 和 Campaign 事实保持按用户/对话实时隔离。
 - 保存草稿与发布使用同一版本行锁，发布基于锁定后的内容计算哈希。
@@ -74,6 +76,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 
 | 改动 | 至少更新 |
 | --- | --- |
+| 模块契约、内核、类别、示例、恢复或装配 | 24、gameplay-modules，并同步 15、13、17、07、10 |
 | 挑战 Manifest、奖励、玩法包格式或发布流程 | 15、13、07，并同步对应题材玩法文档 |
 | 共享境界、寿元与修仙基础语义 | 20，并同步 14、16 和两个内置玩法包 |
 | 单局飞升路线或 Prompt 规则 | 14、12 |
@@ -87,9 +90,11 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 | 通用 Campaign 动作、能力投影、Runtime 白名单或事务协议 | 17，并同步 06、08、12、13、15 |
 | Runtime 字段所有权、Campaign/会话边界、状态工具或 Snapshot 来源 | 17、19，并同步 05、07、15 |
 | 账号奖励、发放、注册赠送、撤回或兑换 | 22，并同步 03、05、06、07、10、13、15、21 |
-| Campaign 终局积分、账号收益快照或账本语义 | 21，并同步 05、07、10、13、15 和对应玩法文档 |
+| Campaign 阶段/终局积分、账号收益快照或账本语义 | 21，并同步 05、07、10、13、15 和对应玩法文档 |
 | 主叙事 Tool Loop、Provider 传输、工具事务、JSON Schema 或显式诊断 | 19，并同步 06、07、10、12、18 |
 | 生成租约、分页游标、请求/队列边界或连接池参数 | 04、06、07、08、10、19 |
 | 功法、库存、NPC、地图、世界事件、遭遇或长期结局 | 16，并同步 03、05、06、07、08、10、12、13 |
 
 新增“未来能力”时必须明确标为规划，不得写成已经实现。发布新挑战内容前，应同时检查初始化 JSON、发布校验、正式玩法文档和测试。
+
+- [26. 玩法结局、玩家确认与恢复](26-gameplay-ending-lifecycle.md)

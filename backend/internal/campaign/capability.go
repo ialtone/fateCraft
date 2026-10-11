@@ -21,6 +21,7 @@ const (
 // ActionDefinition is the state-independent contract of a trusted action.
 // Dynamic availability and argument bounds belong to ActionCapability.
 type ActionDefinition struct {
+	Ending         bool            `json:"ending,omitempty"`
 	Key            string          `json:"key"`
 	Description    string          `json:"description"`
 	Actors         []string        `json:"actors"`
@@ -107,12 +108,15 @@ type ProjectionContext struct {
 type ProjectionView struct {
 	Data     map[string]any
 	Priority []string
+	// FactPaths is a module-declared core that must survive model compaction.
+	FactPaths []string
 }
 
 // ProjectionProvider owns all topic-specific Campaign read models. The core
 // only selects a provider using the pinned Runtime contract.
 type ProjectionProvider interface {
 	Snapshot(context.Context, ProjectionContext) (map[string]any, error)
+	Inquiry(context.Context, ProjectionContext) (map[string]any, error)
 	Context(context.Context, ProjectionContext) (ProjectionView, error)
 }
 

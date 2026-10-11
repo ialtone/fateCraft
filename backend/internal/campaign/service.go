@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/roll"
 	"github.com/ialtone/fatecraft/internal/storage"
@@ -75,15 +75,10 @@ type ActionHandler interface {
 	Execute(context.Context, ActionExecution, map[string]any) (storage.CampaignActionOutcome, error)
 }
 
+// ActionStore contains the shared world repository surface. Topic-specific
+// capabilities are asserted by the owning compiled module.
 type ActionStore interface {
 	Definition(uuid.UUID, string, string) (*storage.GameplayDefinition, error)
-	Character(uuid.UUID) (*storage.CampaignCharacter, error)
-	SaveCharacter(*storage.CampaignCharacter) error
-	Technique(uuid.UUID, string) (*storage.CampaignTechnique, error)
-	CreateTechnique(*storage.CampaignTechnique) error
-	SaveTechnique(*storage.CampaignTechnique) error
-	Techniques(uuid.UUID) ([]storage.CampaignTechnique, error)
-	ClearTechniqueSlot(uuid.UUID, string, uuid.UUID) error
 	ItemStack(uuid.UUID, string, string) (*storage.CampaignItemStack, error)
 	SaveItemStack(*storage.CampaignItemStack) error
 	ItemInstance(uuid.UUID, uuid.UUID) (*storage.CampaignItemInstance, error)
@@ -115,10 +110,6 @@ type ActionStore interface {
 	SaveRegionState(*storage.CampaignRegionState) error
 	Quest(uuid.UUID, string) (*storage.CampaignQuest, error)
 	SaveQuest(*storage.CampaignQuest) error
-	Encounter(uuid.UUID, uuid.UUID) (*storage.CampaignEncounter, error)
-	ActiveEncounter(uuid.UUID) (*storage.CampaignEncounter, error)
-	CreateEncounter(*storage.CampaignEncounter) error
-	SaveEncounter(*storage.CampaignEncounter) error
 	EncounterWinCount(uuid.UUID, string) (int64, error)
 	GrantCampaignOutcomeRewards(context.Context, storage.Campaign, string) ([]storage.CampaignOutcomeReward, error)
 }
@@ -145,8 +136,9 @@ type Service struct {
 	challenges     challengeProvider
 	openings       openingSeeder
 	identity       identity.Provider
-	actions        map[string]RegisteredAction
+	actions        map[moduleActionKey]RegisteredAction
 	projections    map[string]ProjectionProvider
+	initializers   map[string]storage.CampaignInitializer
 	gameplay       *gameplay.Registry
 	roll           *roll.Service
 	systemSettings systemSettingsProvider
@@ -178,23 +170,39 @@ func NewService(
 ) *Service {
 	service := &Service{
 		repo: repo, challenges: challenges, openings: openings, identity: ident,
-		actions: map[string]RegisteredAction{}, projections: map[string]ProjectionProvider{},
+		actions: map[moduleActionKey]RegisteredAction{}, projections: map[string]ProjectionProvider{},
 	}
 	if len(registries) > 0 {
 		service.gameplay = registries[0]
 	}
+	if provider, ok := challenges.(interface {
+		SetCampaignModuleExecutor(challenge.CampaignModuleExecutor)
+	}); ok {
+		provider.SetCampaignModuleExecutor(service)
+	}
 	return service
 }
 
+type moduleActionKey struct {
+	Engine gameplay.EngineRef
+	Action string
+}
+
+func (s *Service) Registry() *gameplay.Registry { return s.gameplay }
+
 // RegisterAction installs a complete trusted action during application startup.
-func (s *Service) RegisterAction(action RegisteredAction) {
+func (s *Service) RegisterAction(engine gameplay.EngineRef, action RegisteredAction) {
+	if !gameplay.ValidStableKey(engine.Key) || engine.Version < 1 {
+		panic("invalid campaign module reference")
+	}
+	key := moduleActionKey{Engine: engine, Action: action.Definition.Key}
 	if err := validateActionDefinition(action.Definition); err != nil || action.Capability == nil || action.Handler == nil {
 		panic("invalid campaign action registration: " + action.Definition.Key)
 	}
-	if _, exists := s.actions[action.Definition.Key]; exists {
+	if _, exists := s.actions[key]; exists {
 		panic("duplicate campaign action registration: " + action.Definition.Key)
 	}
-	s.actions[action.Definition.Key] = action
+	s.actions[key] = action
 }
 
 func (s *Service) RegisterProjection(key string, provider ProjectionProvider) {
@@ -261,11 +269,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Campaign
 	if selection.Scenario != nil {
 		row.ScenarioAssetID = &selection.Scenario.ID
 	}
-	requireRealm := true
-	if s.gameplay != nil {
-		requireRealm = s.gameplay.CampaignRequiresRealm(&selection.Contract)
+	initialize, ok := s.initializers[selection.Contract.Campaign.LifecycleHandler]
+	if !ok {
+		return nil, fmt.Errorf("Campaign 初始化处理器未注册: %s", selection.Contract.Campaign.LifecycleHandler)
 	}
-	if err := s.repo.Create(ctx, row, storage.CampaignInitialization{RequireRealm: requireRealm}); err != nil {
+	if err := s.repo.Create(ctx, row, storage.CampaignInitialization{Initialize: initialize}); err != nil {
 		return nil, err
 	}
 	return row, nil
@@ -373,6 +381,39 @@ type ActionInput struct {
 }
 
 func (s *Service) ExecutePlayerAction(ctx context.Context, id uuid.UUID, in ActionInput) (*storage.CampaignActionResult, error) {
+	if journal, ok := s.repo.(interface {
+		CommitPlayerCampaignAction(context.Context, storage.CommitCampaignActionInput, string, storage.JSONMap, storage.PlayerCampaignExecutor) (*storage.CampaignActionResult, error)
+	}); ok {
+		if err := validateActionInput(in); err != nil {
+			return nil, err
+		}
+		row, err := s.GetOwned(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		runtime, err := s.challenges.RuntimeForVersion(ctx, row.ChallengeVersionID, row.ChallengeHash)
+		if err != nil {
+			return nil, err
+		}
+		var platform *storage.SystemSettings
+		if s.systemSettings != nil {
+			platform, err = s.systemSettings.Get(ctx)
+			if err != nil {
+				return nil, err
+			}
+		}
+		registered, ok := s.actions[moduleActionKey{Engine: runtime.Engine, Action: in.Key}]
+		if !ok {
+			return nil, ErrUnknownAction
+		}
+		return journal.CommitPlayerCampaignAction(ctx, storage.CommitCampaignActionInput{CampaignID: id, PlayerID: row.PlayerID, ExpectedRevision: in.ExpectedRevision, IdempotencyKey: in.ActionID, ActionKey: in.Key}, registered.Definition.Description, storage.JSONMap(in.Arguments), func(bound context.Context, committer *storage.CampaignRepository, history *storage.RollHistoryRepo) (*storage.CampaignActionResult, error) {
+			trusted := &TrustedActionContext{Contract: runtime, Platform: platform}
+			if s.roll != nil {
+				trusted.Roll = s.roll.WithHistory(history)
+			}
+			return s.executeAction(bound, committer, id, in, "player", nil, trusted)
+		})
+	}
 	return s.executeAction(ctx, s.repo, id, in, "player", nil, nil)
 }
 
@@ -419,16 +460,6 @@ func (s *Service) executeAction(
 	if in.Arguments == nil {
 		in.Arguments = map[string]any{}
 	}
-	registered, ok := s.actions[in.Key]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownAction, in.Key)
-	}
-	if !actionAllowsActor(registered.Definition, actorType) {
-		return nil, fmt.Errorf("%w: 动作 %s 不允许由 %s 执行", ErrActionRejected, in.Key, actorType)
-	}
-	if err := validateActionArguments(registered.Definition.ArgumentSchema, in.Arguments); err != nil {
-		return nil, err
-	}
 	campaignRow, err := committer.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -450,6 +481,16 @@ func (s *Service) executeAction(
 	}
 	if !containsActionKey(contract.Campaign.ActionAllowlist, in.Key) {
 		return nil, fmt.Errorf("%w: 动作未被当前玩法启用: %s", ErrUnknownAction, in.Key)
+	}
+	registered, ok := s.actions[moduleActionKey{Engine: contract.Engine, Action: in.Key}]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrUnknownAction, in.Key)
+	}
+	if !actionAllowsActor(registered.Definition, actorType) {
+		return nil, fmt.Errorf("%w: 动作 %s 不允许由 %s 执行", ErrActionRejected, in.Key, actorType)
+	}
+	if err := validateActionArguments(registered.Definition.ArgumentSchema, in.Arguments); err != nil {
+		return nil, err
 	}
 	maxDueEvents := 16
 	if contract.Campaign.WorldClock.MaxDueEventsPerTurn > 0 {
@@ -479,6 +520,9 @@ func (s *Service) executeAction(
 		IdempotencyKey: in.ActionID, ActionKey: in.Key, ActorType: actorType,
 		ActorID: &actorID, SourceMessageID: sourceMessageID,
 	}, func(store *storage.CampaignActionStore, row storage.Campaign) (storage.CampaignActionOutcome, error) {
+		var beforeView map[string]any
+		var factPaths []string
+		var beforePartial bool
 		if store != nil {
 			lockedDomain, domainErr := store.DomainState(ctx, row)
 			if domainErr != nil {
@@ -503,12 +547,44 @@ func (s *Service) executeAction(
 			if capabilityErr = validateCapabilityArguments(capability, in.Arguments); capabilityErr != nil {
 				return storage.CampaignActionOutcome{}, capabilityErr
 			}
+			beforeView, factPaths, beforePartial, domainErr = s.narrativeActionView(ctx, contract, row, lockedDomain)
+			if domainErr != nil {
+				return storage.CampaignActionOutcome{}, domainErr
+			}
 		}
-		return registered.Handler.Execute(ctx, ActionExecution{
+		outcome, err := registered.Handler.Execute(ctx, ActionExecution{
 			Campaign: row, Store: store, ActorType: actorType, ActionID: in.ActionID,
 			ActionKey: in.Key, SourceMessageID: sourceMessageID, MaxDueEventsPerTurn: maxDueEvents,
 			Roll: s.campaignRollFunc(rollService, platform, conversationID),
 		}, in.Arguments)
+		if err != nil || store == nil {
+			return outcome, err
+		}
+		afterRow := narrativeCampaignAfter(row, outcome)
+		afterDomain, err := store.DomainState(ctx, afterRow)
+		if err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
+		afterView, _, afterPartial, err := s.narrativeActionView(ctx, contract, afterRow, afterDomain)
+		if err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
+		feedback, err := gameplay.NarrativeFeedback(in.Key, row.Revision, afterRow.Revision, beforeView, afterView, factPaths, map[string]any(outcome.Result), beforePartial || afterPartial)
+		if err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
+		if outcome.Result == nil {
+			outcome.Result = storage.JSONMap{}
+		}
+		if afterRow.Status != storage.CampaignStatusActive {
+			receipt, receiptErr := store.CampaignCompletion(ctx, afterRow, in.ActionID)
+			if receiptErr != nil {
+				return storage.CampaignActionOutcome{}, receiptErr
+			}
+			outcome.Result["completion"] = receipt
+		}
+		outcome.Result["narrative_feedback"] = feedback
+		return outcome, nil
 	})
 	if err != nil {
 		return nil, err
@@ -523,30 +599,32 @@ type AbandonInput struct {
 }
 
 func (s *Service) Abandon(ctx context.Context, id uuid.UUID, in AbandonInput) (*storage.CampaignActionResult, error) {
-	playerID, err := s.currentPlayerID(ctx)
-	if err != nil {
+	if _, err := s.currentPlayerID(ctx); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(in.ActionID) == "" || strings.TrimSpace(in.ActionID) != in.ActionID ||
 		len(in.ActionID) > 160 || in.ExpectedRevision < 0 {
 		return nil, ErrInvalidAction
 	}
-	actorID := playerID.String()
-	status := storage.CampaignStatusAbandoned
-	return s.repo.CommitAction(ctx, storage.CommitCampaignActionInput{
-		CampaignID: id, PlayerID: playerID, ExpectedRevision: in.ExpectedRevision,
-		IdempotencyKey: in.ActionID, ActionKey: "campaign.abandon",
-		ActorType: "player", ActorID: &actorID,
-	}, func(*storage.CampaignActionStore, storage.Campaign) (storage.CampaignActionOutcome, error) {
-		return storage.CampaignActionOutcome{
-			Status: &status,
-			Events: []storage.CampaignEventDraft{{
-				EventType: "campaign.abandoned", Visibility: storage.CampaignVisibilityPlayer,
-				Payload: storage.JSONMap{},
-			}},
-			Result: storage.JSONMap{"status": status},
-		}, nil
-	})
+	row, err := s.GetOwned(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	runtime, err := s.challenges.RuntimeForVersion(ctx, row.ChallengeVersionID, row.ChallengeHash)
+	if err != nil {
+		return nil, err
+	}
+	if runtime == nil {
+		return nil, ErrCampaignModeRequired
+	}
+	descriptor, err := s.gameplay.Module(runtime.Engine)
+	if err != nil {
+		return nil, err
+	}
+	if descriptor.AbandonAction == "" {
+		return nil, ErrUnknownAction
+	}
+	return s.ExecutePlayerAction(ctx, id, ActionInput{ActionID: in.ActionID, Key: descriptor.AbandonAction, ExpectedRevision: in.ExpectedRevision, Arguments: map[string]any{}})
 }
 
 // ContextProjection returns a bounded, non-authoritative view for model
@@ -595,11 +673,24 @@ func (s *Service) ContextProjection(ctx context.Context, id uuid.UUID, query ...
 	if err := mergeProjection(projection, domainView.Data); err != nil {
 		return ProjectionView{}, err
 	}
-	capabilities, err := s.actionCapabilities(ctx, *row, domain, contract.Campaign.ActionAllowlist, "model", referenceQuery)
+	if len(domainView.FactPaths) > gameplay.MaxModuleNarrativeFacts {
+		return ProjectionView{}, fmt.Errorf("模块叙事关键事实不能超过 %d 项", gameplay.MaxModuleNarrativeFacts)
+	}
+	facts, err := gameplay.SelectNarrativeFacts(domainView.Data, domainView.FactPaths)
+	if err != nil {
+		return ProjectionView{}, err
+	}
+	projection["narrative_facts"] = facts
+	capabilities, err := s.actionCapabilities(ctx, *row, domain, contract.Engine, contract.Campaign.ActionAllowlist, "model", referenceQuery)
 	if err != nil {
 		return ProjectionView{}, err
 	}
 	projection["action_capabilities"] = capabilities
+	playerView, err := s.playerProjection(ctx, *row, domain, contract)
+	if err != nil {
+		return ProjectionView{}, err
+	}
+	projection["ending_capabilities"] = playerView["ending_capabilities"]
 	priority := make([]string, 0, len(domainView.Priority)+1)
 	priority = append(priority, "recent_events")
 	priority = append(priority, domainView.Priority...)
@@ -616,6 +707,14 @@ func actionAllowsActor(definition ActionDefinition, actorType string) bool {
 }
 
 func (s *Service) Snapshot(ctx context.Context, id uuid.UUID) (map[string]any, error) {
+	return s.snapshot(ctx, id, false)
+}
+
+func (s *Service) InquirySnapshot(ctx context.Context, id uuid.UUID) (map[string]any, error) {
+	return s.snapshot(ctx, id, true)
+}
+
+func (s *Service) snapshot(ctx context.Context, id uuid.UUID, inquiry bool) (map[string]any, error) {
 	row, err := s.GetOwned(ctx, id)
 	if err != nil {
 		return nil, err
@@ -635,7 +734,11 @@ func (s *Service) Snapshot(ctx context.Context, id uuid.UUID) (map[string]any, e
 	if !ok {
 		return nil, fmt.Errorf("Campaign 投影处理器未安装: %s", contract.Campaign.ProjectionHandler)
 	}
-	snapshot, err := provider.Snapshot(ctx, ProjectionContext{
+	project := provider.Snapshot
+	if inquiry {
+		project = provider.Inquiry
+	}
+	snapshot, err := project(ctx, ProjectionContext{
 		Campaign: *row, Domain: domain, ContextPolicy: contract.Campaign.ContextPolicy,
 	})
 	if err != nil {
@@ -644,9 +747,19 @@ func (s *Service) Snapshot(ctx context.Context, id uuid.UUID) (map[string]any, e
 	if snapshot == nil {
 		snapshot = map[string]any{}
 	}
-	for _, key := range []string{"outcome_rewards", "reward_points", "rewards_disabled_reason"} {
+	for _, key := range []string{"campaign", "outcome_rewards", "reward_points", "stage_rewards", "stage_reward_points", "total_reward_points", "rewards_disabled_reason", "outcome_category", "outcome_title"} {
 		if _, exists := snapshot[key]; exists {
 			return nil, fmt.Errorf("Campaign 玩法投影覆盖了平台保留字段: %s", key)
+		}
+	}
+	snapshot["campaign"] = *row
+	if row.OutcomeKey != "" {
+		for _, outcome := range domain.Outcomes {
+			if outcome.OutcomeKey == row.OutcomeKey && outcome.Enabled {
+				snapshot["outcome_category"] = outcome.Category
+				snapshot["outcome_title"] = outcome.Title
+				break
+			}
 		}
 	}
 	rewards := domain.OutcomeRewards
@@ -659,6 +772,17 @@ func (s *Service) Snapshot(ctx context.Context, id uuid.UUID) (map[string]any, e
 		points += reward.Quantity
 	}
 	snapshot["reward_points"] = points
+	stages := domain.StageRewards
+	if stages == nil {
+		stages = []storage.CampaignStageReward{}
+	}
+	var stagePoints int64
+	for _, stage := range stages {
+		stagePoints += stage.GrantedPoints
+	}
+	snapshot["stage_rewards"] = stages
+	snapshot["stage_reward_points"] = stagePoints
+	snapshot["total_reward_points"] = points + stagePoints
 	// client 路由终局不发放奖励，快照常带原因，前端据此展示替代文案。
 	if row.LLMRoute == storage.LLMRouteClient {
 		snapshot["rewards_disabled_reason"] = storage.RewardsDisabledReasonClientRoute
@@ -670,6 +794,7 @@ func (s *Service) actionCapabilities(
 	ctx context.Context,
 	row storage.Campaign,
 	domain *storage.CampaignDomainState,
+	engine gameplay.EngineRef,
 	allowlist []string,
 	actorType string,
 	query string,
@@ -686,7 +811,7 @@ func (s *Service) actionCapabilities(
 			return nil, fmt.Errorf("Campaign 动作白名单包含重复项: %s", key)
 		}
 		seen[key] = true
-		registered, ok := s.actions[key]
+		registered, ok := s.actions[moduleActionKey{Engine: engine, Action: key}]
 		if !ok {
 			return nil, fmt.Errorf("Campaign 动作未安装: %s", key)
 		}
@@ -722,6 +847,7 @@ func mergeProjection(base, extension map[string]any) error {
 		"id": true, "status": true, "current_location_key": true, "game_time": true,
 		"revision": true, "recent_events": true, "action_capabilities": true,
 		"projection_control": true,
+		"narrative_facts":    true,
 	}
 	for key, value := range extension {
 		if reserved[key] {

@@ -59,7 +59,7 @@
         "movement": "身法",
         "cultivation_gain": "修炼收益",
         "mana_cost_reduction": "法力减耗",
-        "healing_power": "疗效"
+        "healing_power": "疗效加成（%）"
       },
       "campaign.technique.category": {
         "cultivation": "功法",
@@ -209,6 +209,32 @@
               "label": "姓名",
               "widget": "title",
               "order": 10
+            },
+            {
+              "path": "ascension.reason",
+              "label": "飞升准备",
+              "widget": "text",
+              "order": 15
+            },
+            {
+              "path": "ascension.materials",
+              "label": "每次引劫材料",
+              "widget": "list",
+              "order": 16,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "材料"
+                },
+                {
+                  "path": "required",
+                  "label": "需要"
+                },
+                {
+                  "path": "owned",
+                  "label": "持有"
+                }
+              ]
             },
             {
               "path": "character.realm_name",
@@ -477,6 +503,21 @@
                 {
                   "path": "currency_name",
                   "label": "货币"
+                },
+                {
+                  "path": "turnover_text",
+                  "label": "市场周转"
+                },
+                {
+                  "path": "items",
+                  "label": "商品与收购",
+                  "item_fields": [
+                    { "path": "name", "label": "商品" },
+                    { "path": "stock", "label": "在售数量" },
+                    { "path": "buyback_capacity", "label": "可收购数量" },
+                    { "path": "buy_price", "label": "买入单价" },
+                    { "path": "sell_price", "label": "卖出单价" }
+                  ]
                 }
               ]
             }
@@ -755,9 +796,100 @@
               ]
             }
           ]
+        },
+        {
+          "key": "training",
+          "title": "闭关与休整",
+          "order": 25,
+          "fields": [
+            {
+              "path": "training",
+              "label": "本境界修行方案",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "方案"
+                },
+                {
+                  "path": "days",
+                  "label": "耗时（天）"
+                },
+                {
+                  "path": "technique_name",
+                  "label": "使用功法"
+                },
+                {
+                  "path": "cost_text",
+                  "label": "消耗"
+                },
+                {
+                  "path": "mana_cost",
+                  "label": "所需法力"
+                },
+                {
+                  "path": "cultivation_gain",
+                  "label": "修为收益"
+                },
+                {
+                  "path": "mastery_gain",
+                  "label": "熟练度收益"
+                },
+                {
+                  "path": "reason",
+                  "label": "未满足条件"
+                },
+                {
+                  "path": "effect_text",
+                  "label": "恢复效果"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "progression",
+          "title": "阶段目标",
+          "order": 15,
+          "fields": [
+            {
+              "path": "progression",
+              "label": "完成条件与阶段积分",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "阶段"
+                },
+                {
+                  "path": "requirements",
+                  "label": "目标"
+                },
+                {
+                  "path": "points",
+                  "label": "本阶段积分"
+                },
+                {
+                  "path": "status",
+                  "label": "领取状态"
+                }
+              ]
+            }
+          ]
         }
       ],
       "actions": [
+        {
+          "key": "cultivation.begin_ascension",
+          "label": "消耗准备材料，引动天劫",
+          "placement": "character",
+          "enabled_when": {
+            "path": "ascension.ready",
+            "equals": true
+          }
+        },
         {
           "key": "cultivation.practice",
           "label": "修炼",
@@ -999,6 +1131,44 @@
           "arguments": {
             "encounter_id": {
               "from": "item.id"
+            }
+          }
+        },
+        {
+          "key": "cultivation.retreat",
+          "label": "开始闭关",
+          "placement": "training",
+          "source_path": "training",
+          "visible_when": {
+            "path": "item.mode",
+            "equals": "retreat"
+          },
+          "enabled_when": {
+            "path": "item.available",
+            "equals": true
+          },
+          "arguments": {
+            "plan_key": {
+              "from": "item.key"
+            }
+          }
+        },
+        {
+          "key": "character.recover",
+          "label": "休整恢复",
+          "placement": "training",
+          "source_path": "training",
+          "visible_when": {
+            "path": "item.mode",
+            "equals": "recovery"
+          },
+          "enabled_when": {
+            "path": "item.available",
+            "equals": true
+          },
+          "arguments": {
+            "plan_key": {
+              "from": "item.key"
             }
           }
         }

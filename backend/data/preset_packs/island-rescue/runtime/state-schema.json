@@ -1,0 +1,114 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "module_state",
+        "type": "object",
+        "default": {},
+        "visibility": "internal",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "narrative",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.health",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.stamina",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.hunger",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.thirst",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.location",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.inventory",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.weather",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.game_time",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.rescue_after_minutes",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.deadline_minutes",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.goal",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.outcome_key",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      }
+    ]
+  }
+}

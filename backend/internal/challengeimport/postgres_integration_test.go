@@ -21,7 +21,7 @@ func TestPostgresBundledMortalPathImportAndOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import mortal-path: %v", err)
 	}
-	if !first.Created || first.Version != "3.6.2" || first.ContentHash == "" {
+	if !first.Created || first.Version != "3.7.0" || first.ContentHash == "" {
 		t.Fatalf("unexpected first import result: %+v", first)
 	}
 	pack, err := repository.GetPackBySlug(ctx, "mortal-path")
@@ -68,7 +68,7 @@ func assertMortalPathPublishedContent(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version.Status != storage.ChallengeVersionPublished || version.Version != "3.6.2" {
+	if version.Status != storage.ChallengeVersionPublished || version.Version != "3.7.0" {
 		t.Fatalf("unexpected mortal-path version: %+v", version)
 	}
 	definitions, err := repository.ListDefinitions(ctx, versionID)
@@ -79,7 +79,7 @@ func assertMortalPathPublishedContent(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(definitions) != 225 || len(outcomes) != 2 || outcomes[0].RewardPoints != 1000 || outcomes[1].RewardPoints != 1000 {
+	if len(definitions) != 270 || len(outcomes) != 2 || outcomes[0].RewardPoints != 700 || outcomes[1].RewardPoints != 700 {
 		t.Fatalf("incomplete fixed point publication: %+v", outcomes)
 	}
 }

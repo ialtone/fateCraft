@@ -48,6 +48,26 @@ func (s *Server) listAdminChallenges(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"challenges": items})
 }
 
+func (s *Server) setAdminChallengeEnabled(c *gin.Context) {
+	id, ok := paramUUID(c, "id")
+	if !ok {
+		return
+	}
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Enabled == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供 enabled 开关值"})
+		return
+	}
+	pack, err := s.challenges.SetEnabled(c.Request.Context(), id, *body.Enabled)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, pack)
+}
+
 func (s *Server) createAdminChallenge(c *gin.Context) {
 	var in challenge.CreatePackInput
 	if err := c.ShouldBindJSON(&in); err != nil {

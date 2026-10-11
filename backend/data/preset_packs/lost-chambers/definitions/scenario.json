@@ -1,0 +1,113 @@
+[
+  {
+    "kind": "tomb.expedition",
+    "key": "lost-chambers",
+    "name": "失落墓室规则",
+    "content": {
+      "world": {
+        "nodes": [
+          {
+            "key": "entry",
+            "name": "墓口",
+            "links": [
+              "mural",
+              "altar"
+            ],
+            "minutes": 5,
+            "rest": 0
+          },
+          {
+            "key": "mural",
+            "name": "壁画室",
+            "links": [
+              "entry",
+              "altar"
+            ],
+            "minutes": 5,
+            "rest": 1
+          },
+          {
+            "key": "altar",
+            "name": "祭台",
+            "links": [
+              "entry",
+              "mural",
+              "vault"
+            ],
+            "minutes": 5,
+            "rest": 0
+          },
+          {
+            "key": "vault",
+            "name": "石门墓室",
+            "links": [
+              "altar"
+            ],
+            "minutes": 5,
+            "rest": 0
+          }
+        ],
+        "loot": [
+          {
+            "key": "seal",
+            "name": "失落古印",
+            "node": "vault",
+            "quantity": 1,
+            "weight": 3
+          },
+          {
+            "key": "beads",
+            "name": "祭台玉珠",
+            "node": "altar",
+            "quantity": 2,
+            "weight": 2
+          }
+        ],
+        "start": "entry",
+        "goal": "seal",
+        "health": 60,
+        "supplies": 12,
+        "capacity": 5,
+        "deadline": 180
+      },
+      "clues": [
+        {
+          "key": "directions",
+          "name": "壁画记载四方与祭器的对应",
+          "node": "mural",
+          "requires": []
+        },
+        {
+          "key": "sequence",
+          "name": "对照壁画可知祭台应按东、南、西、北的顺序操作",
+          "node": "altar",
+          "requires": [
+            "directions"
+          ]
+        }
+      ],
+      "traps": [
+        {
+          "key": "stone-door",
+          "name": "四方石门",
+          "node": "vault",
+          "clues": [
+            "directions",
+            "sequence"
+          ],
+          "tools": 1,
+          "risk": 50,
+          "damage": 25
+        }
+      ],
+      "light": 120,
+      "tools": 1
+    },
+    "tags": [
+      "古墓探险"
+    ],
+    "search_text": "失落墓室",
+    "visibility": "internal",
+    "sort_order": 0
+  }
+]

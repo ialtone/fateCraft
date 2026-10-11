@@ -36,6 +36,7 @@ const platformLabels: Record<string, Record<string, string>> = {
   reward_source: {
     challenge_run: '挑战结算',
     campaign_outcome: '长期世界终局',
+    campaign_stage: '长期世界阶段',
     user_registration: '注册赠送',
     admin_grant: '管理员发放',
     admin_reversal: '管理员冲正',

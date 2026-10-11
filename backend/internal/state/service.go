@@ -3,12 +3,13 @@ package state
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -194,6 +195,16 @@ func (s *Service) Replace(ctx context.Context, convID uuid.UUID, newState map[st
 		before, err := getForUpdateOrInitial(ctx, tx, convID, contract.StateSchema)
 		if err != nil {
 			return err
+		}
+		for _, field := range contract.StateSchema.Fields {
+			if field.UpdatePolicy != gameplay.UpdateModule {
+				continue
+			}
+			previous, _ := gameplay.ValueAtPath(before, field.Path)
+			next, _ := gameplay.ValueAtPath(filtered, field.Path)
+			if !reflect.DeepEqual(previous, next) {
+				return &PatchValidationError{Keys: []string{field.Path}}
+			}
 		}
 		now := time.Now()
 		if err := tx.Upsert(ctx, &storage.ConversationState{

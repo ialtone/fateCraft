@@ -1,7 +1,7 @@
 {
   "id": "reincarnation-trials",
   "name": "百年飞升劫",
-  "version": "1.3.1",
+  "version": "2.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "一世一局的寿元挑战。你将在有限寿元中经历机缘、积累资源、逐级突破，并在正统渡劫、虚空裂缝与仙缘传送之间选择飞升道路。知足与贪婪的抉择，将决定这一世的命运。",
   "author": "ialtone",
@@ -41,66 +41,9 @@
       "verifier_config": {
         "conditions": [
           {
-            "type": "state_in",
-            "path": "profile.cultivation_realm_key",
-            "values": [
-              "spirit-transformation",
-              "void-refining",
-              "body-integration",
-              "great-ascension"
-            ]
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.foundation"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.core"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.nascent"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.deity"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.1"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.2"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.3"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.4"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.5"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.6"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.7"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.8"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.tribulation.9"
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "orthodox_ascension"
           }
         ]
       },
@@ -115,31 +58,9 @@
       "verifier_config": {
         "conditions": [
           {
-            "type": "state_in",
-            "path": "profile.cultivation_realm_key",
-            "values": [
-              "nascent-soul",
-              "spirit-transformation",
-              "void-refining",
-              "body-integration",
-              "great-ascension"
-            ]
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.foundation"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.core"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.nascent"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.void_rift.traverse"
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "void_ascension"
           }
         ]
       },
@@ -154,28 +75,9 @@
       "verifier_config": {
         "conditions": [
           {
-            "type": "state_in",
-            "path": "profile.cultivation_realm_key",
-            "values": [
-              "golden-core",
-              "nascent-soul",
-              "spirit-transformation",
-              "void-refining",
-              "body-integration",
-              "great-ascension"
-            ]
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.foundation"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.breakthrough.core"
-          },
-          {
-            "type": "successful_roll",
-            "key": "cultivation.affinity.acquire"
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "affinity_ascension"
           }
         ]
       },
@@ -184,16 +86,15 @@
     {
       "outcome_key": "peaceful_passing",
       "category": "neutral",
-      "title": "寿终正寝",
+      "title": "从容坐化",
       "tone": "info",
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
           {
-            "type": "state_number",
-            "path": "profile.remaining_lifespan",
-            "operator": "lte",
-            "value": 5
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "peaceful_passing"
           }
         ]
       },
@@ -208,28 +109,61 @@
       "verifier_config": {
         "conditions": [
           {
-            "type": "state_number",
-            "path": "profile.remaining_lifespan",
-            "operator": "lte",
-            "value": 0
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "lifespan_exhausted"
           }
         ]
       },
       "reward_points": 0
+    },
+    {
+      "outcome_key": "perished",
+      "category": "failure",
+      "title": "道消身陨",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "perished"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "提前终止本世",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "abandoned"
+          }
+        ]
+      }
     }
   ],
-  "quick_start_guide": "选择一种修士身份开启新的一世。叙述者会生成完整角色和眼前机缘；你需要在事件、修炼、交易与探索中积累修为和资源，通过真实判定突破境界，并在寿元耗尽前选择正统渡劫、穿越虚空裂缝或寻找仙缘传送。",
+  "quick_start_guide": "从凡人开始，先选择求法线索。药坊委托提供稳妥资源，探索和战斗收益更高也更危险。按行动面板的真实成本修炼、突破、炼制与休整；结丹可寻仙缘，元婴可探裂缝，化神圆满可准备九波天劫。询问和查看不扣寿元，账号积分仅在服务端飞升结算时到账。",
   "features": [
-    "一世一局挑战",
-    "完整角色与修真世界生成",
-    "九阶可信境界突破",
-    "寿元管理与时间压力",
-    "灵石与修炼资源循环",
-    "三种飞升路径选择",
-    "天命判定系统（D20/D100）",
-    "延寿机缘与宝物"
+    "凡人出身与随机天赋",
+    "有成本的传承与闭关",
+    "九阶逐级突破",
+    "真实寿元与伤势",
+    "有限仙缘机会",
+    "裂缝探索与准备",
+    "同次九波雷劫",
+    "可信飞升积分"
   ],
   "dependencies": [],
   "created_at": "2026-06-14T00:00:00Z",
-  "updated_at": "2026-08-15T00:00:00Z"
+  "updated_at": "2026-10-09T00:00:00Z"
 }

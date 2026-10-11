@@ -1,0 +1,22 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action",
+      "complete_challenge"
+    ],
+    "player": [],
+    "domain": [
+      "survival.observe",
+      "survival.travel",
+      "survival.gather",
+      "survival.craft",
+      "survival.consume",
+      "survival.rest",
+      "survival.wait",
+      "survival.rescue",
+      "survival.abandon"
+    ],
+    "capabilities": {}
+  }
+}

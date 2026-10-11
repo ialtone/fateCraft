@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/craftingrules"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/craftingrules"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/gatheringrules"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/marketrules"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldrules"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/encounterrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/gatheringrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/marketrules"
-	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/worldrules"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -26,7 +26,7 @@ func TestBundledMortalPathCampaignLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.manifest.ID != "mortal-path" || loaded.manifest.Version != "3.6.2" || len(loaded.document.Definitions) < 200 {
+	if loaded.manifest.ID != "mortal-path" || loaded.manifest.Version != "3.7.0" || len(loaded.document.Definitions) < 200 {
 		t.Fatalf("campaign pack not fully loaded: id=%s definitions=%d", loaded.manifest.ID, len(loaded.document.Definitions))
 	}
 	counts := map[string]int{}
@@ -78,7 +78,7 @@ func TestBundledMortalPathCampaignLoads(t *testing.T) {
 		!strings.Contains(promptText.String(), "不得调用 fortune.resolve_uncertain") {
 		t.Fatal("mortal-path prompt must exclude ordinary conversation from uncertain action rolls")
 	}
-	contract, err := gameplay.DecodeRuntime(loaded.document.Runtime)
+	contract, err := storage.DecodeGameplayRuntime(loaded.document.Runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,17 @@ func TestBundledMortalPathCampaignLoads(t *testing.T) {
 	if _, ok := contract.Actions.Capabilities["message_rewrite"]; ok {
 		t.Fatalf("mortal-path must not declare platform message rewrite capability: %#v", contract.Actions.Capabilities)
 	}
-	if len(loaded.document.Outcomes) != 2 || loaded.document.Outcomes[0].RewardPoints != 1000 || loaded.document.Outcomes[1].RewardPoints != 1000 {
+	successPoints := 0
+	failurePoints := 0
+	for _, outcome := range loaded.document.Outcomes {
+		if outcome.Category == "success" && outcome.RewardPoints == 700 {
+			successPoints++
+		}
+		if outcome.Category == "failure" || outcome.Category == "neutral" {
+			failurePoints += int(outcome.RewardPoints)
+		}
+	}
+	if successPoints != 2 || failurePoints != 0 {
 		t.Fatal("missing fixed campaign points")
 	}
 }
@@ -434,8 +444,8 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.manifest.Version != "1.3.1" {
-		t.Fatalf("version = %q, want 1.3.1", loaded.manifest.Version)
+	if loaded.manifest.Version != "2.0.0" {
+		t.Fatalf("version = %q, want 2.0.0", loaded.manifest.Version)
 	}
 	if loaded.hash == "" {
 		t.Fatal("content hash is empty")
@@ -443,14 +453,14 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 	if err := challenge.ValidateDocument(&loaded.document, defaultRegistry()); err != nil {
 		t.Fatalf("bundled challenge validation failed: %v", err)
 	}
-	contract, err := gameplay.DecodeRuntime(loaded.document.Runtime)
+	contract, err := storage.DecodeGameplayRuntime(loaded.document.Runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := contract.Actions.Capabilities["message_rewrite"]; ok {
 		t.Fatalf("reincarnation-trials must not declare platform message rewrite capability: %#v", contract.Actions.Capabilities)
 	}
-	if contract.Presentation.ValueLabels["state.profile.cultivation_realm_key"]["great-ascension"] != "大乘期" {
+	if contract.Presentation.ValueLabels["state.gameplay.realm_key"]["great-ascension"] != "大乘期" {
 		t.Fatalf("reincarnation presentation labels were not imported: %#v", contract.Presentation.ValueLabels)
 	}
 
@@ -497,7 +507,7 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 		!strings.Contains(promptText.String(), "推进世界的责任推回给玩家") {
 		t.Fatal("gameplay prompt lost its proactive turn-driving instructions")
 	}
-	if !strings.Contains(promptText.String(), "cultivation.cultivation_method 开局保持空字符串") ||
+	if !strings.Contains(promptText.String(), "功法开局为空") ||
 		!strings.Contains(promptText.String(), "不得把引气诀") {
 		t.Fatal("reincarnation prompt must acquire varied techniques through play instead of granting a fixed starter")
 	}
@@ -521,7 +531,7 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 		}
 	}
 
-	if len(contract.StateSchema.Fields) < 34 {
+	if len(contract.StateSchema.Fields) < 30 {
 		t.Fatalf("state schema fields = %d, want complete ascension state", len(contract.StateSchema.Fields))
 	}
 	visiblePaths := map[string]bool{}
@@ -531,30 +541,24 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 		}
 	}
 	for _, path := range []string{
-		"profile.talent", "profile.background", "profile.lifespan", "attributes", "traits",
-		"inventory", "relationships", "quests", "risks", "cultivation.cultivation_method",
-		"ascension.void_rift_discovered", "ascension.tribulation_preparation",
+		"gameplay.birth", "gameplay.vigor", "gameplay.lifespan", "gameplay.remaining_days",
+		"gameplay.inventory", "gameplay.goal", "gameplay.method", "gameplay.injury",
+		"gameplay.rift_discovered", "gameplay.preparation",
 	} {
 		if !visiblePaths[path] {
 			t.Fatalf("runtime presentation is missing important state path %q", path)
 		}
 	}
-	levelField, ok := gameplay.FieldForPath(contract.StateSchema, "profile.cultivation_level")
-	if !ok {
-		t.Fatal("cultivation level is missing from state schema")
+	for _, path := range []string{"module_state", "gameplay", "gameplay.realm_key", "gameplay.progress", "gameplay.health", "gameplay.outcome_key"} {
+		field, ok := gameplay.FieldForPath(contract.StateSchema, path)
+		if !ok || field.UpdatePolicy != gameplay.UpdateModule {
+			t.Fatalf("trusted field %s is not module-owned", path)
+		}
 	}
-	values, _ := levelField.Constraints["values"].([]any)
-	if !containsValue(values, "练气期") || !containsValue(values, "筑基期") {
-		t.Fatalf("cultivation enum does not accept prompt values: %#v", values)
+	if contract.Engine.Version != 2 || len(contract.Actions.Domain) < 15 || strings.Contains(strings.Join(contract.Actions.Model, ","), "roll") {
+		t.Fatal("trial must use the version 2 trusted action catalogue")
 	}
-	realmKeyField, ok := gameplay.FieldForPath(contract.StateSchema, "profile.cultivation_realm_key")
-	if !ok || realmKeyField.UpdatePolicy != gameplay.UpdateSystem {
-		t.Fatal("stable cultivation realm key must be system-managed")
-	}
-	realmKeys, _ := realmKeyField.Constraints["values"].([]any)
-	if len(realmKeys) < 2 || len(realmKeys) != len(values) {
-		t.Fatalf("realm key/display enums are incomplete: keys=%#v values=%#v", realmKeys, values)
-	}
+
 }
 
 func TestBundledCultivationPacksSharePublicSettingRules(t *testing.T) {
@@ -578,57 +582,25 @@ func TestBundledCultivationPacksSharePublicSettingRules(t *testing.T) {
 	}
 
 	campaignRealms := realmDefinitionsByRank(campaign.document.Definitions)
-	trialContract, err := gameplay.DecodeRuntime(trial.document.Runtime)
-	if err != nil {
-		t.Fatal(err)
+	if len(trial.document.Definitions) != 1 {
+		t.Fatal("trial rule singleton missing")
 	}
-	keyField, keyOK := gameplay.FieldForPath(trialContract.StateSchema, "profile.cultivation_realm_key")
-	levelField, levelOK := gameplay.FieldForPath(trialContract.StateSchema, "profile.cultivation_level")
-	lifespanField, lifespanOK := gameplay.FieldForPath(trialContract.StateSchema, "profile.lifespan")
-	if !keyOK || !levelOK || !lifespanOK {
-		t.Fatal("trial runtime is missing realm identity fields")
+	trialRealms, ok := trial.document.Definitions[0].Content["realms"].([]any)
+	if !ok || len(trialRealms) != len(campaignRealms) {
+		t.Fatal("realm catalogues differ in length")
 	}
-	trialKeys := keyField.Constraints["values"].([]any)
-	trialLevels := levelField.Constraints["values"].([]any)
-	if len(campaignRealms) == 0 || len(campaignRealms) != len(trialKeys) || len(trialKeys) != len(trialLevels) {
-		t.Fatalf("realm snapshots have different lengths: campaign=%d trial_keys=%d trial_levels=%d", len(campaignRealms), len(trialKeys), len(trialLevels))
-	}
-	for index, realm := range campaignRealms {
-		rank, rankOK := testDefinitionInt(realm.Content["rank"])
+	for i, realm := range campaignRealms {
+		r := trialRealms[i].(map[string]any)
 		lifespanDays, daysOK := testDefinitionInt(realm.Content["lifespan_days"])
-		trialKey, keyIsString := trialKeys[index].(string)
-		trialLevel, levelIsString := trialLevels[index].(string)
-		if !rankOK || rank != int64(index) || !daysOK || lifespanDays%365 != 0 ||
-			!keyIsString || trialKey != realm.Key || !levelIsString || trialLevel == "" {
-			t.Fatalf("realm snapshot mismatch at rank %d: campaign=%+v trial_key=%#v trial_level=%#v", index, realm, trialKeys[index], trialLevels[index])
+		years, yearsOK := testDefinitionInt(r["lifespan_years"])
+		if r["key"] != realm.Key || r["name"] == "" || !daysOK || !yearsOK || years*365 != lifespanDays {
+			t.Fatalf("shared realm differs at rank %d: campaign=%+v trial=%+v", i, realm, r)
 		}
-		if index+1 < len(campaignRealms) && realm.Content["next_realm_key"] != campaignRealms[index+1].Key {
-			t.Fatalf("campaign realm %s does not advance to %s", realm.Key, campaignRealms[index+1].Key)
-		}
-		expectedYears := lifespanDays / 365
-		if index == 0 {
-			initialYears, initialOK := testDefinitionInt(lifespanField.Default)
-			if !initialOK || initialYears != expectedYears {
-				t.Fatalf("initial lifespan differs for realm %s: campaign=%d trial=%#v", realm.Key, expectedYears, lifespanField.Default)
-			}
-			continue
-		}
-		previousKey := campaignRealms[index-1].Key
-		matches := 0
-		for _, rule := range trialContract.Actions.Rolls {
-			if rule.Requires["profile.cultivation_realm_key"] != previousKey || rule.Success["profile.cultivation_realm_key"] != realm.Key {
-				continue
-			}
-			matches++
-			lifespanYears, lifespanIsInt := testDefinitionInt(rule.Success["profile.lifespan"])
-			if rule.Success["profile.cultivation_level"] != trialLevel || !lifespanIsInt || lifespanYears != expectedYears {
-				t.Fatalf("trial breakthrough into %s differs from its content snapshots: %#v", realm.Key, rule)
-			}
-		}
-		if matches != 1 {
-			t.Fatalf("trial must define exactly one breakthrough from %s to %s, got %d", previousKey, realm.Key, matches)
+		if i+1 < len(campaignRealms) && realm.Content["next_realm_key"] != campaignRealms[i+1].Key {
+			t.Fatal("campaign realm chain broken")
 		}
 	}
+
 }
 
 func sharedRuleSnapshots(assets []storage.ChallengeAsset) map[string]string {

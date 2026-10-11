@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NProgress, NSelect, NSkeleton, NTag } from 'naive-ui'
+import { NAlert, NButton, NProgress, NSelect, NSkeleton, NTag, useDialog } from 'naive-ui'
+import { usePlayerActionStore } from '@/stores/playerActions'
+import { useConversationStore } from '@/stores/conversations'
 import { useCampaignStore } from '@/stores/campaign'
 import { useRuntimeStore } from '@/stores/runtime'
 import { presentValue } from '@/lib/presentation'
@@ -16,6 +18,9 @@ import type {
 } from '@/types'
 
 const campaign = useCampaignStore()
+const actions = usePlayerActionStore()
+const conversations = useConversationStore()
+const dialog = useDialog()
 const runtime = useRuntimeStore()
 const snapshot = computed<Record<string, unknown> | null>(() => {
   return campaign.snapshot ? (campaign.snapshot as unknown as Record<string, unknown>) : null
@@ -341,7 +346,42 @@ function guidanceGroupsForSection(section: CampaignViewSection): GuidanceGroup[]
 
 function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
   if (item.mode !== 'action' || !item.action_key) return
-  campaign.execute(item.action_key, args).catch(() => {})
+  const conv = conversations.current
+  const row = campaign.snapshot?.campaign
+  if (
+    !conv ||
+    !row ||
+    actions.pending ||
+    actions.acting ||
+    conv.is_processing ||
+    conv.status !== 'active'
+  )
+    return
+  const input = {
+    request_id: crypto.randomUUID(),
+    branch_epoch: conv.branch_epoch,
+    expected_revision: row.revision,
+    key: item.action_key,
+    arguments: args as Record<string, string | number | boolean>,
+  }
+  const run = () => actions.execute(conv.id, input)
+  const ending = conversations.endingState?.ending_capabilities.find(
+    (cap) =>
+      cap.key === item.action_key &&
+      (!cap.plans?.length ||
+        cap.plans.some((plan) =>
+          Object.entries(plan.arguments).every(([name, value]) => args[name] === value),
+        )),
+  )
+  if (ending)
+    dialog.warning({
+      title: `确认${ending.metadata.label || ending.description}`,
+      content: `${ending.description}。确认后按当前方案执行，达到结局后不能继续本局。`,
+      positiveText: '确认执行',
+      negativeText: '取消',
+      onPositiveClick: run,
+    })
+  else void run()
 }
 
 function emptyText(section: CampaignViewSection): string {
@@ -369,17 +409,48 @@ function emptyText(section: CampaignViewSection): string {
       </span>
     </header>
     <div class="body scroll">
-      <NAlert v-if="campaign.error" type="error" :bordered="false">{{ campaign.error }}</NAlert>
+      <NAlert v-if="actions.error" type="error" :bordered="false">{{ actions.error }}</NAlert>
+      <NButton
+        v-if="actions.pending"
+        block
+        :loading="actions.acting"
+        @click="conversations.current && actions.execute(conversations.current.id)"
+      >
+        查询上次操作结果
+      </NButton>
       <NAlert v-if="rewardsDisabledReason" type="warning" :bordered="false">
         客户端直连模式不发放奖励
       </NAlert>
       <NAlert
-        v-else-if="campaign.snapshot?.campaign.status === 'completed'"
-        type="success"
+        v-else-if="campaign.snapshot?.campaign.status !== 'active'"
+        :type="
+          campaign.snapshot?.outcome_category === 'success'
+            ? 'success'
+            : campaign.snapshot?.outcome_category === 'failure'
+              ? 'error'
+              : 'info'
+        "
         :bordered="false"
       >
-        本次获得 {{ snapshot?.reward_points ?? 0 }} 积分
+        {{
+          campaign.snapshot?.outcome_title ||
+          (campaign.snapshot?.outcome_category === 'failure' ? '本局失败' : '本局已结束')
+        }}；本局获得 {{ snapshot?.reward_points ?? 0 }} 积分，本局累计
+        {{ snapshot?.total_reward_points ?? 0 }} 积分
       </NAlert>
+      <div v-if="campaign.snapshot?.stage_rewards?.length" class="stage-rewards">
+        <strong>阶段记录 · 已到账 {{ campaign.snapshot.stage_reward_points }} 积分</strong>
+        <p>本局累计到账 {{ campaign.snapshot.total_reward_points }} 积分</p>
+        <p v-for="stage in campaign.snapshot.stage_rewards" :key="stage.stage_key">
+          {{ stage.name }}：{{ stage.granted_points }} 积分{{
+            stage.disabled_reason === 'client_llm_route'
+              ? '（客户端直连不发积分）'
+              : stage.disabled_reason === 'zero_points'
+                ? '（本版本配置为零分）'
+                : ''
+          }}
+        </p>
+      </div>
       <template v-if="campaign.loading && !snapshot">
         <NSkeleton v-for="index in 5" :key="index" text :repeat="2" />
       </template>
@@ -436,8 +507,8 @@ function emptyText(section: CampaignViewSection): string {
             :groups="guidanceGroupsForSection(section)"
             :snapshot="snapshot"
             placement="campaign_panel"
-            :disabled="campaign.acting || campaign.loading"
-            :loading="campaign.acting"
+            :disabled="actions.acting || campaign.loading || !!actions.pending"
+            :loading="actions.acting"
             @action="runGuidanceAction"
           />
           <div

@@ -1,0 +1,352 @@
+[
+  {
+    "kind": "realm",
+    "key": "mortal",
+    "name": "凡人",
+    "content": {
+      "rank": 0,
+      "stages": [
+        "ordinary",
+        "tempered",
+        "peak"
+      ],
+      "stage_labels": [
+        "凡俗",
+        "淬体",
+        "凡俗巅峰"
+      ],
+      "cultivation_required": 100,
+      "lifespan_days": 29200,
+      "starting_age_days": 5840,
+      "max_health": 100,
+      "max_mana": 30,
+      "max_spiritual_sense": 20,
+      "next_realm_key": "qi-refining",
+      "breakthrough_chance": 80,
+      "breakthrough_minutes": 1440,
+      "failure_progress_loss_percent": 15,
+      "failure_health_damage": 8
+    },
+    "tags": [
+      "境界",
+      "凡俗"
+    ],
+    "search_text": "凡人 锻体 引气",
+    "visibility": "player",
+    "sort_order": 10
+  },
+  {
+    "kind": "realm",
+    "key": "qi-refining",
+    "name": "练气",
+    "content": {
+      "rank": 1,
+      "stages": [
+        "layer-1",
+        "layer-2",
+        "layer-3",
+        "layer-4",
+        "layer-5",
+        "layer-6",
+        "layer-7",
+        "layer-8",
+        "layer-9",
+        "layer-10",
+        "layer-11",
+        "layer-12",
+        "layer-13"
+      ],
+      "stage_labels": [
+        "一层",
+        "二层",
+        "三层",
+        "四层",
+        "五层",
+        "六层",
+        "七层",
+        "八层",
+        "九层",
+        "十层",
+        "十一层",
+        "十二层",
+        "十三层"
+      ],
+      "cultivation_required": 1000,
+      "lifespan_days": 43800,
+      "max_health": 160,
+      "max_mana": 180,
+      "max_spiritual_sense": 100,
+      "next_realm_key": "foundation",
+      "breakthrough_chance": 55,
+      "breakthrough_minutes": 4320,
+      "failure_progress_loss_percent": 25,
+      "failure_health_damage": 24
+    },
+    "tags": [
+      "境界",
+      "练气"
+    ],
+    "search_text": "练气 灵力 神识",
+    "visibility": "player",
+    "sort_order": 20
+  },
+  {
+    "kind": "realm",
+    "key": "foundation",
+    "name": "筑基",
+    "content": {
+      "rank": 2,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 5000,
+      "lifespan_days": 73000,
+      "max_health": 300,
+      "max_mana": 600,
+      "max_spiritual_sense": 320,
+      "next_realm_key": "golden-core",
+      "breakthrough_chance": 42,
+      "breakthrough_minutes": 10080,
+      "failure_progress_loss_percent": 30,
+      "failure_health_damage": 60
+    },
+    "tags": [
+      "境界",
+      "筑基"
+    ],
+    "search_text": "筑基 道基",
+    "visibility": "player",
+    "sort_order": 30
+  },
+  {
+    "kind": "realm",
+    "key": "golden-core",
+    "name": "结丹",
+    "content": {
+      "rank": 3,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 18000,
+      "lifespan_days": 182500,
+      "max_health": 620,
+      "max_mana": 1800,
+      "max_spiritual_sense": 950,
+      "next_realm_key": "nascent-soul",
+      "breakthrough_chance": 34,
+      "breakthrough_minutes": 20160,
+      "failure_progress_loss_percent": 32,
+      "failure_health_damage": 120
+    },
+    "tags": [
+      "境界",
+      "结丹"
+    ],
+    "search_text": "结丹 金丹 天星海",
+    "visibility": "player",
+    "sort_order": 40
+  },
+  {
+    "kind": "realm",
+    "key": "nascent-soul",
+    "name": "元婴",
+    "content": {
+      "rank": 4,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 60000,
+      "lifespan_days": 365000,
+      "max_health": 1400,
+      "max_mana": 5200,
+      "max_spiritual_sense": 3000,
+      "next_realm_key": "spirit-transformation",
+      "breakthrough_chance": 28,
+      "breakthrough_minutes": 43200,
+      "failure_progress_loss_percent": 35,
+      "failure_health_damage": 280
+    },
+    "tags": [
+      "境界",
+      "元婴"
+    ],
+    "search_text": "元婴 神魂 界墟",
+    "visibility": "player",
+    "sort_order": 50
+  },
+  {
+    "kind": "realm",
+    "key": "spirit-transformation",
+    "name": "化神",
+    "content": {
+      "rank": 5,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 180000,
+      "lifespan_days": 730000,
+      "max_health": 3200,
+      "max_mana": 15000,
+      "max_spiritual_sense": 9000,
+      "next_realm_key": "void-refining",
+      "breakthrough_chance": 22,
+      "breakthrough_minutes": 86400,
+      "failure_progress_loss_percent": 38,
+      "failure_health_damage": 650
+    },
+    "tags": [
+      "境界",
+      "化神"
+    ],
+    "search_text": "化神 法则 飞升台",
+    "visibility": "player",
+    "sort_order": 60
+  },
+  {
+    "kind": "realm",
+    "key": "void-refining",
+    "name": "炼虚",
+    "content": {
+      "rank": 6,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 600000,
+      "lifespan_days": 1825000,
+      "max_health": 7200,
+      "max_mana": 42000,
+      "max_spiritual_sense": 26000,
+      "next_realm_key": "body-integration",
+      "breakthrough_chance": 18,
+      "breakthrough_minutes": 129600,
+      "failure_progress_loss_percent": 40,
+      "failure_health_damage": 900
+    },
+    "tags": [
+      "境界",
+      "炼虚"
+    ],
+    "search_text": "炼虚 上界 法则道统",
+    "visibility": "player",
+    "sort_order": 70
+  },
+  {
+    "kind": "realm",
+    "key": "body-integration",
+    "name": "合体",
+    "content": {
+      "rank": 7,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 1800000,
+      "lifespan_days": 3650000,
+      "max_health": 16000,
+      "max_mana": 120000,
+      "max_spiritual_sense": 75000,
+      "next_realm_key": "great-ascension",
+      "breakthrough_chance": 16,
+      "breakthrough_minutes": 172800,
+      "failure_progress_loss_percent": 42,
+      "failure_health_damage": 1400
+    },
+    "tags": [
+      "境界",
+      "合体"
+    ],
+    "search_text": "合体 上灵界 法身",
+    "visibility": "player",
+    "sort_order": 80
+  },
+  {
+    "kind": "realm",
+    "key": "great-ascension",
+    "name": "大乘",
+    "content": {
+      "rank": 8,
+      "stages": [
+        "early",
+        "middle",
+        "late",
+        "perfected"
+      ],
+      "stage_labels": [
+        "初期",
+        "中期",
+        "后期",
+        "大圆满"
+      ],
+      "cultivation_required": 5400000,
+      "lifespan_days": 7300000,
+      "max_health": 36000,
+      "max_mana": 300000,
+      "max_spiritual_sense": 180000,
+      "breakthrough_chance": 12,
+      "breakthrough_minutes": 345600,
+      "failure_progress_loss_percent": 45,
+      "failure_health_damage": 3000,
+      "post_realm_transition": "tribulation_ascension"
+    },
+    "tags": [
+      "境界",
+      "大乘"
+    ],
+    "search_text": "大乘 渡劫 飞升 天关",
+    "visibility": "player",
+    "sort_order": 90
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "id": "underground-watchtower-setting",
+  "name": "地下哨塔见闻",
+  "description": "叙事背景，数值以可信状态与行动预览为准。",
+  "entries": [
+    {
+      "id": "underground-watchtower-world",
+      "world_book_id": "underground-watchtower-setting",
+      "title": "地下哨塔",
+      "content": "旧哨塔的兵营和水道都通向指挥所。每名守卫仅对应一次遭遇和固定战利品，休整机会不会刷新；补给耗尽后只能承担后果或放弃。",
+      "keywords": [
+        "地下哨塔",
+        "地牢远征"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

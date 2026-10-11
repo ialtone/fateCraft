@@ -1,0 +1,97 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import axios from 'axios'
+import { moduleActionsApi } from '@/api'
+import { createActionScope, clearMatchingAction } from '@/lib/action-scope'
+import { useConversationStore } from './conversations'
+import { useStateStore } from './state'
+import { useChatStore } from './chat'
+import { useRewardStore } from './rewards'
+import { useCampaignStore } from './campaign'
+import type { ModuleActionInput } from '@/types/module-actions'
+
+// One request journal serves ordinary module actions, confirmed endings and top-bar exit.
+export const usePlayerActionStore = defineStore('playerActions', () => {
+  const pending = ref<ModuleActionInput | null>(null)
+  const acting = ref(false)
+  const error = ref('')
+  const scope = createActionScope()
+  let currentID = ''
+
+  function enter(id: string) {
+    currentID = id
+    scope.enter(id)
+    acting.value = false
+    error.value = ''
+    pending.value = null
+    try {
+      pending.value = JSON.parse(sessionStorage.getItem(`fatecraft:action:${id}`) || 'null')
+    } catch {
+      /* unavailable storage */
+    }
+    if (pending.value) error.value = '上次操作结果尚未确认，请查询原请求；不会重复消耗。'
+  }
+
+  function reset() {
+    enter('')
+  }
+
+  async function execute(id: string, input?: ModuleActionInput) {
+    const conversations = useConversationStore()
+    if (acting.value || currentID !== id || conversations.current?.id !== id) return null
+    if (pending.value && input && input.request_id !== pending.value.request_id) return null
+    const request = pending.value ?? input
+    if (!request) return null
+    if (!pending.value) {
+      pending.value = JSON.parse(JSON.stringify(request))
+      try {
+        sessionStorage.setItem(`fatecraft:action:${id}`, JSON.stringify(request))
+      } catch {
+        /* in-memory retry */
+      }
+    }
+    const token = scope.capture()
+    acting.value = true
+    error.value = ''
+    const clear = () => {
+      try {
+        clearMatchingAction(sessionStorage, id, request.request_id)
+      } catch {
+        /* unavailable storage */
+      }
+      if (scope.isCurrent(token) && pending.value?.request_id === request.request_id)
+        pending.value = null
+    }
+    try {
+      const result = await moduleActionsApi.execute(id, request)
+      clear()
+      if (!scope.isCurrent(token)) return result
+      if (result.completion) conversations.consumeCompletion(result.completion)
+      if (result.campaign) useCampaignStore().applyCampaign(result.campaign)
+      const refreshed = await Promise.allSettled([
+        useStateStore().load(id),
+        useChatStore().load(id),
+        conversations.load(id),
+        conversations.loadEndingState(id),
+        useRewardStore().load(),
+        ...(result.campaign ? [useCampaignStore().load(result.campaign.id)] : []),
+      ])
+      if (scope.isCurrent(token) && refreshed.some((r) => r.status === 'rejected'))
+        error.value = '操作已完成，部分展示未刷新，请刷新查看。'
+      return result
+    } catch (cause) {
+      const status = axios.isAxiosError(cause) ? cause.response?.status : undefined
+      if (status && status >= 400 && status < 500 && status !== 408) clear()
+      if (scope.isCurrent(token))
+        error.value = pending.value
+          ? '连接中断，尚不能确认操作结果。请查询原请求；不会重复消耗。'
+          : axios.isAxiosError(cause)
+            ? cause.response?.data?.error || '操作未完成，请刷新后重新确认。'
+            : '操作未完成，请重试。'
+      return null
+    } finally {
+      if (scope.isCurrent(token)) acting.value = false
+    }
+  }
+  return { pending, acting, error, enter, reset, execute }
+})

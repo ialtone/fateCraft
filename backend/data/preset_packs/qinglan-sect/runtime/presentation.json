@@ -1,0 +1,225 @@
+{
+  "presentation": {
+    "state_panel_title": "青岚宗重建",
+    "completion_view": {
+      "empty_reward_text": "本示例结局暂不发放积分"
+    },
+    "terminology": {},
+    "value_labels": {
+      "sect.outcome": {
+        "rebuilt": "青岚重立",
+        "fallen": "山门失守",
+        "dispersed": "弟子离散",
+        "timeout": "重建未成",
+        "dissolved": "解散宗门"
+      }
+    },
+    "campaign_view": {
+      "renderer": "generic",
+      "title": "青岚宗重建",
+      "sections": [
+        {
+          "key": "summary",
+          "title": "重建目标",
+          "order": 0,
+          "fields": [
+            {
+              "path": "gameplay.goal",
+              "label": "当前目标",
+              "widget": "text",
+              "order": 0
+            },
+            {
+              "path": "gameplay.disciple_count",
+              "label": "在宗弟子",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.goal_disciples",
+              "label": "人数目标",
+              "widget": "number",
+              "order": 20
+            },
+            {
+              "path": "gameplay.successful_missions",
+              "label": "成功派遣",
+              "widget": "number",
+              "order": 30
+            },
+            {
+              "path": "gameplay.failed_missions",
+              "label": "派遣失败",
+              "widget": "number",
+              "order": 40
+            },
+            {
+              "path": "gameplay.remaining_minutes",
+              "label": "重建剩余分钟",
+              "widget": "number",
+              "order": 50
+            },
+            {
+              "path": "gameplay.outcome_key",
+              "label": "结局",
+              "widget": "text",
+              "order": 60,
+              "value_namespace": "sect.outcome"
+            }
+          ]
+        },
+        {
+          "key": "disciples",
+          "title": "弟子与分工",
+          "order": 10,
+          "fields": [
+            {
+              "path": "gameplay.disciples",
+              "label": "弟子",
+              "widget": "item_list",
+              "order": 0,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "姓名"
+                },
+                {
+                  "path": "specialty",
+                  "label": "特长"
+                },
+                {
+                  "path": "level",
+                  "label": "修为等级"
+                },
+                {
+                  "path": "progress",
+                  "label": "成长"
+                },
+                {
+                  "path": "loyalty",
+                  "label": "忠诚"
+                },
+                {
+                  "path": "inheritance",
+                  "label": "传承"
+                },
+                {
+                  "path": "status",
+                  "label": "当前安排"
+                }
+              ]
+            },
+            {
+              "path": "gameplay.tasks",
+              "label": "任务",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "弟子"
+                },
+                {
+                  "path": "task",
+                  "label": "任务"
+                },
+                {
+                  "path": "remaining_minutes",
+                  "label": "剩余分钟"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "assets",
+          "title": "库藏与设施",
+          "order": 20,
+          "fields": [
+            {
+              "path": "gameplay.stock",
+              "label": "库藏",
+              "widget": "item_list",
+              "order": 0,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "物资"
+                },
+                {
+                  "path": "quantity",
+                  "label": "数量"
+                }
+              ]
+            },
+            {
+              "path": "gameplay.facilities",
+              "label": "设施",
+              "widget": "item_list",
+              "order": 10,
+              "item_fields": [
+                {
+                  "path": "name",
+                  "label": "设施"
+                },
+                {
+                  "path": "level",
+                  "label": "等级"
+                },
+                {
+                  "path": "goal",
+                  "label": "目标"
+                }
+              ]
+            },
+            {
+              "path": "gameplay.upkeep",
+              "label": "每日供养",
+              "widget": "number",
+              "order": 20
+            },
+            {
+              "path": "gameplay.upkeep_resource",
+              "label": "供养物资",
+              "widget": "text",
+              "order": 30
+            }
+          ]
+        },
+        {
+          "key": "defense",
+          "title": "守宗危机",
+          "order": 30,
+          "fields": [
+            {
+              "path": "gameplay.crisis",
+              "label": "危机进展",
+              "widget": "text",
+              "order": 0
+            },
+            {
+              "path": "gameplay.crisis_minutes",
+              "label": "距危机（分钟）",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.defense",
+              "label": "当前守宗力量",
+              "widget": "number",
+              "order": 20
+            },
+            {
+              "path": "gameplay.threat",
+              "label": "所需防御",
+              "widget": "number",
+              "order": 30
+            }
+          ]
+        }
+      ],
+      "actions": [],
+      "empty_states": {}
+    }
+  }
+}

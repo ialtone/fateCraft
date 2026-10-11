@@ -1,5 +1,11 @@
 # 18. 异步长期记忆与只读角色问答
 
+## 模块快照
+
+Inquiry 对 Campaign 调用独立 `InquirySnapshot`；纯模块使用 inquiry 受众，通用/修仙关系表玩法显式复用其公开投影。Challenge 由 `ProjectInquiry` 投影本次已经固定的可信状态，避免二次读取实时状态产生混合修订；不调用行动预览或执行。
+
+玩家行动纳入有效 turn 和消息日志。Campaign 改写通过完整检查点恢复当前事实，历史事件保持追加但按有效分支过滤；Memory、问答和工具均不能把失效分支当作当前证据。详见[24](24-gameplay-module-architecture.md)。
+
 ## 定位
 
 Fatecraft 是可导入任意题材玩法的通用平台。长期记忆与角色问答属于平台基础设施，不能识别修仙、库存、功法或其他玩法专属字段。
@@ -18,7 +24,7 @@ Fatecraft 是可导入任意题材玩法的通用平台。长期记忆与角色�
 3. 每个 `generation_attempt` 开始时固定一个已提交 `memory_id`；同一 Agent Tool Loop 的全部模型步骤不会切换记忆。
 4. 历史按完整回合进入或离开上下文，不能只保留一次判定或半段回复。
 5. 记忆候选只有通过租约 fencing、分支纪元、链头、固定来源和 evidence 校验后才能提交。
-6. Campaign 事件和动作提交保持只追加。含领域副作用的回合不能通过普通 regenerate 或 rewrite 伪造回滚。
+6. Campaign 事件和动作提交保持只追加。regenerate/rewrite 必须恢复目标完整检查点，并失效旧分支；缺少检查点时拒绝，不能仅删除消息伪造事实回滚。
 7. Character Inquiry 不获取生成锁，不把未完成的流式候选暴露给客户端，不进入主消息、Context Builder 或 Memory 来源。
 8. 问答之外唯一允许的写入是专用 inquiry thread/message 和可选详细 LLM 请求日志。
 

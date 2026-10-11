@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/storage"
@@ -164,7 +165,8 @@ func testIdentityContext(playerID uuid.UUID) (identity.Context, context.Context)
 
 func campaignContract() *gameplay.RuntimeContract {
 	return &gameplay.RuntimeContract{
-		Mode: gameplay.RuntimeModeCampaign,
+		Engine: gameplay.EngineRef{Key: "test.campaign", Version: 1},
+		Mode:   gameplay.RuntimeModeCampaign,
 		Campaign: &gameplay.CampaignConfig{
 			LifecycleHandler:  "cultivation.campaign_lifecycle",
 			ProjectionHandler: "cultivation.campaign_projection",
@@ -190,6 +192,7 @@ func TestCreatePinsCampaignSelectionAndRejectsChallengeMode(t *testing.T) {
 		Version:       storage.ChallengeVersion{ID: versionID, ContentHash: "hash"}, Contract: *contract,
 	}
 	service := NewService(repo, challengeStub{selection: selection, contract: contract}, nil, provider)
+	service.RegisterInitializer(contract.Campaign.LifecycleHandler, func(*gorm.DB, *storage.Campaign) error { return nil })
 	created, err := service.Create(ctx, CreateInput{Title: "问道", ChallengeSlug: "campaign"})
 	if err != nil {
 		t.Fatal(err)
@@ -352,7 +355,7 @@ func TestExecuteActionRejectsUndeclaredActor(t *testing.T) {
 }
 
 func registerTestAction(service *Service, key string, actors []string, handler ActionHandler) {
-	service.RegisterAction(RegisteredAction{
+	service.RegisterAction(campaignContract().Engine, RegisteredAction{
 		Definition: ActionDefinition{
 			Key: key, Description: "test action", Actors: actors,
 			ArgumentSchema: storage.JSONMap{
@@ -392,6 +395,7 @@ func TestCreateSolidifiesEffectiveRoute(t *testing.T) {
 		Version:       storage.ChallengeVersion{ID: versionID, ContentHash: "hash"}, Contract: *contract,
 	}
 	service := NewService(&campaignRepoStub{}, challengeStub{selection: selection, contract: contract}, nil, provider)
+	service.RegisterInitializer(contract.Campaign.LifecycleHandler, func(*gorm.DB, *storage.Campaign) error { return nil })
 	service.SetRouteResolver(routeStub{route: storage.LLMRouteClient})
 	created, err := service.Create(ctx, CreateInput{Title: "问道", ChallengeSlug: "campaign"})
 	if err != nil {
@@ -402,6 +406,7 @@ func TestCreateSolidifiesEffectiveRoute(t *testing.T) {
 	}
 	// 未注入解析器时默认 server，保持旧行为。
 	legacy := NewService(&campaignRepoStub{}, challengeStub{selection: selection, contract: contract}, nil, provider)
+	legacy.RegisterInitializer(contract.Campaign.LifecycleHandler, func(*gorm.DB, *storage.Campaign) error { return nil })
 	createdServer, err := legacy.Create(ctx, CreateInput{Title: "问道", ChallengeSlug: "campaign"})
 	if err != nil {
 		t.Fatal(err)
@@ -421,6 +426,7 @@ func TestMissingModelConfigurationDoesNotCreateCampaignOrConversation(t *testing
 		ChallengeVersionID: selection.Version.ID, ChallengeHash: "hash", LLMRoute: storage.LLMRouteServer,
 	}}
 	service := NewService(repo, challengeStub{selection: selection, contract: contract}, nil, provider)
+	service.RegisterInitializer(contract.Campaign.LifecycleHandler, func(*gorm.DB, *storage.Campaign) error { return nil })
 	service.SetRouteResolver(routeStub{err: llmsettings.ErrConfigurationIncomplete})
 	if _, err := service.Create(ctx, CreateInput{ChallengeSlug: "campaign"}); !errors.Is(err, llmsettings.ErrConfigurationIncomplete) {
 		t.Fatalf("Create error = %v", err)

@@ -1,0 +1,125 @@
+[
+  {
+    "kind": "dungeon.expedition",
+    "key": "underground-watchtower",
+    "name": "地下哨塔规则",
+    "content": {
+      "world": {
+        "nodes": [
+          {
+            "key": "entry",
+            "name": "哨塔入口",
+            "links": [
+              "barracks",
+              "waterway"
+            ],
+            "minutes": 5,
+            "rest": 0
+          },
+          {
+            "key": "barracks",
+            "name": "旧兵营",
+            "links": [
+              "entry",
+              "camp"
+            ],
+            "minutes": 5,
+            "rest": 0
+          },
+          {
+            "key": "waterway",
+            "name": "水道",
+            "links": [
+              "entry",
+              "camp"
+            ],
+            "minutes": 5,
+            "rest": 0
+          },
+          {
+            "key": "camp",
+            "name": "废弃营地",
+            "links": [
+              "barracks",
+              "waterway",
+              "command"
+            ],
+            "minutes": 5,
+            "rest": 1
+          },
+          {
+            "key": "command",
+            "name": "指挥所",
+            "links": [
+              "camp"
+            ],
+            "minutes": 5,
+            "rest": 0
+          }
+        ],
+        "loot": [
+          {
+            "key": "token",
+            "name": "哨塔令牌",
+            "node": "command",
+            "quantity": 1,
+            "weight": 2
+          },
+          {
+            "key": "supplies-cache",
+            "name": "守卫藏品",
+            "node": "barracks",
+            "quantity": 4,
+            "weight": 1
+          },
+          {
+            "key": "old-coins",
+            "name": "旧币",
+            "node": "waterway",
+            "quantity": 4,
+            "weight": 1
+          }
+        ],
+        "start": "entry",
+        "goal": "token",
+        "health": 80,
+        "supplies": 24,
+        "capacity": 8,
+        "deadline": 240
+      },
+      "enemies": [
+        {
+          "key": "guard",
+          "name": "兵营卫兵",
+          "node": "barracks",
+          "health": 24,
+          "attack": 10
+        },
+        {
+          "key": "scout",
+          "name": "水道斥候",
+          "node": "waterway",
+          "health": 18,
+          "attack": 12
+        },
+        {
+          "key": "commander",
+          "name": "哨塔统领",
+          "node": "command",
+          "health": 45,
+          "attack": 15
+        }
+      ],
+      "boss": "commander",
+      "power": 8,
+      "defense": 3,
+      "medicine": 2
+    },
+    "tags": [
+      "地牢远征"
+    ],
+    "search_text": "地下哨塔",
+    "visibility": "internal",
+    "sort_order": 0
+  }
+]

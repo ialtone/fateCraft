@@ -11,6 +11,7 @@ import (
 
 var campaignCoreKeys = []string{
 	"id", "status", "current_location_key", "game_time", "revision",
+	"narrative_facts",
 }
 
 type fittedCampaignProjection struct {
@@ -110,6 +111,15 @@ func fitCampaignProjection(
 		}
 		delete(out, key)
 		control["omitted_sections"] = omittedSections
+		// Module snapshots often group their entire read model under one object.
+		// Keep the facts that fit instead of dropping the whole gameplay section
+		// when one inventory or task list is large. Every omission stays explicit.
+		if object, ok := normalized[key].(map[string]any); ok && fitProjectionObject(out, key, object, control, maxTokens, counter) {
+			omittedSections = candidateOmissions
+			control["omitted_sections"] = omittedSections
+			omittedKeys = append(omittedKeys, key+".*")
+			continue
+		}
 		omittedKeys = append(omittedKeys, key)
 	}
 
@@ -163,6 +173,58 @@ func fitCampaignProjection(
 	return fittedCampaignProjection{
 		Content: content, OriginalTokens: originalTokens, Compacted: true, OmittedKeys: omittedKeys,
 	}, nil
+}
+
+func fitProjectionObject(out map[string]any, key string, object map[string]any, control map[string]any, budget int, counter tokenizer.Counter) bool {
+	keys := make([]string, 0, len(object))
+	for field := range object {
+		keys = append(keys, field)
+	}
+	isCollection := func(value any) bool {
+		switch value.(type) {
+		case []any, map[string]any:
+			return true
+		}
+		return false
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		left, right := isCollection(object[keys[i]]), isCollection(object[keys[j]])
+		if left != right {
+			return !left
+		}
+		return keys[i] < keys[j]
+	})
+	previous, hadPrevious := control["omitted_fields"]
+	omitted := []string{}
+	if values, ok := previous.([]string); ok {
+		omitted = append(omitted, values...)
+	}
+	for _, field := range keys {
+		omitted = append(omitted, key+"."+field)
+	}
+	partial := map[string]any{}
+	out[key], control["omitted_fields"] = partial, omitted
+	for _, field := range keys {
+		partial[field] = object[field]
+		next := withoutString(omitted, key+"."+field)
+		control["omitted_fields"] = next
+		if tokensForCampaignProjection(out, counter) <= budget {
+			omitted = next
+		} else {
+			delete(partial, field)
+			control["omitted_fields"] = omitted
+		}
+	}
+	if len(partial) > 0 && tokensForCampaignProjection(out, counter) <= budget {
+		return true
+	}
+	delete(out, key)
+	if hadPrevious {
+		control["omitted_fields"] = previous
+	} else {
+		delete(control, "omitted_fields")
+	}
+	return false
 }
 
 func normalizeCampaignProjection(projection map[string]any) (map[string]any, error) {

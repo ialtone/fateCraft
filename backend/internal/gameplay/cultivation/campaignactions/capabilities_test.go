@@ -44,7 +44,7 @@ func TestPracticeCapabilityUsesCurrentManaBoundary(t *testing.T) {
 		Definitions: map[string]storage.GameplayDefinition{
 			storage.DefinitionTechnique + ":breathing": {
 				Kind: storage.DefinitionTechnique, Key: "breathing", Name: "引气诀", Content: storage.JSONMap{
-					"mana_cost": int64(1), "practice_minutes": int64(60), "cultivation_gain": int64(10), "mastery_gain": int64(25),
+					"max_layer": int64(12), "mana_cost": int64(1), "practice_minutes": int64(60), "cultivation_gain": int64(10), "mastery_gain": int64(25),
 					"layer_effects": []any{map[string]any{"layer": int64(1), "effects": map[string]any{}}},
 				},
 			},
@@ -151,5 +151,20 @@ func TestTradeSellCapabilityUsesConcreteEquipmentInstances(t *testing.T) {
 	}
 	if !seen[firstID.String()] || !seen[secondID.String()] {
 		t.Fatalf("equipment instance options = %#v", capability.Options)
+	}
+}
+
+func TestPlayerExitPreviewRemainsAvailableDuringEncounter(t *testing.T) {
+	state := &storage.CampaignDomainState{Encounters: []storage.CampaignEncounter{{Status: "active", EncounterKey: "danger"}}}
+	definition := campaign.ActionDefinition{Key: ActionAbandon, Ending: true, Actors: []string{"player"}, ArgumentSchema: actionArgumentSchema(ActionAbandon)}
+	provider := cultivationCapabilityProvider{}
+	for _, actor := range []string{"player", "model"} {
+		preview, err := provider.Project(context.Background(), campaign.CapabilityContext{Domain: state, ActorType: actor}, definition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if preview.Available != (actor == "player") {
+			t.Fatalf("unexpected %s permission: %+v", actor, preview)
+		}
 	}
 }

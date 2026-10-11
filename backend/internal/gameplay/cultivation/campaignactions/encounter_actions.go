@@ -3,6 +3,7 @@ package campaignactions
 import (
 	"context"
 	"errors"
+	"github.com/ialtone/fatecraft/internal/gameplay/components/worldactions"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,35 +15,46 @@ import (
 )
 
 func startEncounter(_ context.Context, execution campaign.ActionExecution, arguments map[string]any) (storage.CampaignActionOutcome, error) {
-	if err := allowArguments(arguments, "encounter_key"); err != nil {
+	if err := worldactions.AllowArguments(arguments, "encounter_key"); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	key, err := requiredKey(arguments, "encounter_key")
+	key, err := worldactions.RequiredKey(arguments, "encounter_key")
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	if active, activeErr := execution.Store.ActiveEncounter(execution.Campaign.ID); activeErr == nil && active != nil {
-		return storage.CampaignActionOutcome{}, rejected("已有活动遭遇 %s", active.EncounterKey)
+	c, err := ascensionConfig(execution)
+	if err != nil {
+		return storage.CampaignActionOutcome{}, err
+	}
+	if c != nil && key == c.EncounterKey {
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("最终天劫必须通过玩家引劫行动开始")
+	}
+	return startEncounterCore(execution, key)
+}
+
+func startEncounterCore(execution campaign.ActionExecution, key string) (storage.CampaignActionOutcome, error) {
+	if active, activeErr := cultivationStore(execution).ActiveEncounter(execution.Campaign.ID); activeErr == nil && active != nil {
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("已有活动遭遇 %s", active.EncounterKey)
 	} else if activeErr != nil && !errors.Is(activeErr, storage.ErrNotFound) {
 		return storage.CampaignActionOutcome{}, activeErr
 	}
 	definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionEncounter, key)
 	if err != nil {
-		return storage.CampaignActionOutcome{}, rejected("未知遭遇 %s", key)
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("未知遭遇 %s", key)
 	}
 	rules, ok := encounterrules.Parse(map[string]any(definition.Content))
 	if !ok {
-		return storage.CampaignActionOutcome{}, invalid("遭遇定义无效: %s", key)
+		return storage.CampaignActionOutcome{}, worldactions.Invalid("遭遇定义无效: %s", key)
 	}
 	if rules.LocationKey != execution.Campaign.CurrentLocationKey {
-		return storage.CampaignActionOutcome{}, rejected("遭遇 %s 不在当前位置", key)
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("遭遇 %s 不在当前位置", key)
 	}
-	character, err := execution.Store.Character(execution.Campaign.ID)
+	character, err := cultivationStore(execution).Character(execution.Campaign.ID)
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	if character.Health <= 0 {
-		return storage.CampaignActionOutcome{}, rejected("角色已无法开始遭遇")
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("角色已无法开始遭遇")
 	}
 	now := time.Now()
 	row := &storage.CampaignEncounter{
@@ -54,7 +66,7 @@ func startEncounter(_ context.Context, execution campaign.ActionExecution, argum
 		PlayerDamageScaleBPS: rules.PlayerDamageScaleBPS, Round: 1, MaxRounds: int(rules.MaxEncounterRounds),
 		Status: "active", StartedAtGameTime: execution.Campaign.GameTime, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := execution.Store.CreateEncounter(row); err != nil {
+	if err := cultivationStore(execution).CreateEncounter(row); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	payload := storage.JSONMap{
@@ -69,10 +81,10 @@ func startEncounter(_ context.Context, execution campaign.ActionExecution, argum
 }
 
 func actEncounter(ctx context.Context, execution campaign.ActionExecution, arguments map[string]any) (storage.CampaignActionOutcome, error) {
-	if err := allowArguments(arguments, "encounter_id", "move", "technique_key"); err != nil {
+	if err := worldactions.AllowArguments(arguments, "encounter_id", "move", "technique_key"); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	id, err := requiredUUID(arguments, "encounter_id")
+	id, err := worldactions.RequiredUUID(arguments, "encounter_id")
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
@@ -80,7 +92,7 @@ func actEncounter(ctx context.Context, execution campaign.ActionExecution, argum
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	techniqueKey, err := optionalKey(arguments, "technique_key", "")
+	techniqueKey, err := worldactions.OptionalKey(arguments, "technique_key", "")
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
@@ -88,10 +100,10 @@ func actEncounter(ctx context.Context, execution campaign.ActionExecution, argum
 }
 
 func fleeEncounter(ctx context.Context, execution campaign.ActionExecution, arguments map[string]any) (storage.CampaignActionOutcome, error) {
-	if err := allowArguments(arguments, "encounter_id"); err != nil {
+	if err := worldactions.AllowArguments(arguments, "encounter_id"); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	id, err := requiredUUID(arguments, "encounter_id")
+	id, err := worldactions.RequiredUUID(arguments, "encounter_id")
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
@@ -101,36 +113,36 @@ func fleeEncounter(ctx context.Context, execution campaign.ActionExecution, argu
 func requiredMove(arguments map[string]any) (string, error) {
 	move, ok := arguments["move"].(string)
 	if !ok || (move != "attack" && move != "defend") {
-		return "", invalid("move 必须是 attack 或 defend")
+		return "", worldactions.Invalid("move 必须是 attack 或 defend")
 	}
 	return move, nil
 }
 
 func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecution, id uuid.UUID, move, techniqueKey string) (storage.CampaignActionOutcome, error) {
-	encounter, err := execution.Store.Encounter(execution.Campaign.ID, id)
+	encounter, err := cultivationStore(execution).Encounter(execution.Campaign.ID, id)
 	if err != nil {
-		return storage.CampaignActionOutcome{}, rejected("遭遇不存在")
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("遭遇不存在")
 	}
 	if encounter.Status != "active" {
-		return storage.CampaignActionOutcome{}, rejected("遭遇已经结束: %s", encounter.Status)
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("遭遇已经结束: %s", encounter.Status)
 	}
 	if encounter.LocationKey != execution.Campaign.CurrentLocationKey {
-		return storage.CampaignActionOutcome{}, rejected("角色已不在遭遇地点")
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("角色已不在遭遇地点")
 	}
-	character, err := execution.Store.Character(execution.Campaign.ID)
+	character, err := cultivationStore(execution).Character(execution.Campaign.ID)
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	if character.Health <= 0 {
-		return storage.CampaignActionOutcome{}, rejected("角色已无法继续遭遇")
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("角色已无法继续遭遇")
 	}
 	definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionEncounter, encounter.EncounterKey)
 	if err != nil {
-		return storage.CampaignActionOutcome{}, invalid("遭遇定义不存在: %s", encounter.EncounterKey)
+		return storage.CampaignActionOutcome{}, worldactions.Invalid("遭遇定义不存在: %s", encounter.EncounterKey)
 	}
 	rules, ok := encounterrules.Parse(map[string]any(definition.Content))
 	if !ok {
-		return storage.CampaignActionOutcome{}, invalid("遭遇定义无效: %s", encounter.EncounterKey)
+		return storage.CampaignActionOutcome{}, worldactions.Invalid("遭遇定义无效: %s", encounter.EncounterKey)
 	}
 	if move == "flee" {
 		return resolveFleeTurn(ctx, execution, encounter, character, rules)
@@ -145,11 +157,11 @@ func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecutio
 			return storage.CampaignActionOutcome{}, damageErr
 		}
 		if character.Mana < manaCost {
-			return storage.CampaignActionOutcome{}, rejected("法力不足，需要 %d", manaCost)
+			return storage.CampaignActionOutcome{}, worldactions.Rejected("法力不足，需要 %d", manaCost)
 		}
 		rollContext := campaignRollContext(character)
 		rollContext.Opponent = &campaign.CampaignRollOpponent{RealmGap: encounter.OpponentRealmRank - character.RealmRank}
-		rollResult, rollErr := resolveCampaignRoll(ctx, execution, campaign.CampaignRollRequest{
+		rollResult, rollErr := worldactions.ResolveCampaignRoll(ctx, execution, campaign.CampaignRollRequest{
 			Key: "encounter.attack." + encounter.EncounterKey, Title: "遭遇攻击",
 			Description: "攻击" + encounter.OpponentName, Category: "combat", BaseSuccessRate: 65, Sides: 100,
 			RelevantAttributes: []string{"根骨", "气运"}, AttributeWeights: map[string]float64{"根骨": 0.7, "气运": 0.3},
@@ -166,7 +178,7 @@ func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecutio
 			case "failure", "critical_failure":
 				damage = 0
 			}
-			attachCampaignRoll(&outcome, rollResult)
+			worldactions.AttachCampaignRoll(&outcome, rollResult)
 		}
 		encounter.OpponentHealth = maxInt64(0, encounter.OpponentHealth-damage)
 		outcome.Result["player_damage"] = damage
@@ -175,7 +187,7 @@ func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecutio
 			Payload: storage.JSONMap{"encounter_id": encounter.ID.String(), "damage": damage, "opponent_health": encounter.OpponentHealth, "technique_key": techniqueKey},
 		})
 	} else if techniqueKey != "" {
-		return storage.CampaignActionOutcome{}, invalid("defend 行动不能指定 technique_key")
+		return storage.CampaignActionOutcome{}, worldactions.Invalid("defend 行动不能指定 technique_key")
 	}
 	exhausted := advanceCharacterAge(character, execution.Campaign.GameTime, outcome.GameTimeDelta)
 	if encounter.OpponentHealth == 0 {
@@ -185,7 +197,10 @@ func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecutio
 		}
 		return finishEncounter(execution, encounter, character, "won", &outcome, &rules)
 	}
-	defense := encounterPlayerDefense(execution, character)
+	defense, err := encounterPlayerDefense(execution, character)
+	if err != nil {
+		return storage.CampaignActionOutcome{}, err
+	}
 	opponentDamage := maxInt64(1, encounter.OpponentAttack-defense)
 	if move == "defend" {
 		opponentDamage = maxInt64(1, opponentDamage/2)
@@ -214,10 +229,10 @@ func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecutio
 	encounter.LastMove = move
 	encounter.UpdatedAt = time.Now()
 	character.UpdatedAt = time.Now()
-	if err := execution.Store.SaveCharacter(character); err != nil {
+	if err := cultivationStore(execution).SaveCharacter(character); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	if err := execution.Store.SaveEncounter(encounter); err != nil {
+	if err := cultivationStore(execution).SaveEncounter(encounter); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
@@ -228,7 +243,11 @@ func resolveEncounterTurn(ctx context.Context, execution campaign.ActionExecutio
 }
 
 func resolveFleeTurn(ctx context.Context, execution campaign.ActionExecution, encounter *storage.CampaignEncounter, character *storage.CampaignCharacter, rules encounterrules.Encounter) (storage.CampaignActionOutcome, error) {
-	chance := rules.FleeChanceBPS + encounterPlayerMovement(execution, character)*100
+	movement, err := encounterPlayerMovement(execution, character)
+	if err != nil {
+		return storage.CampaignActionOutcome{}, err
+	}
+	chance := rules.FleeChanceBPS + movement*100
 	if chance > 10_000 {
 		chance = 10_000
 	}
@@ -239,7 +258,7 @@ func resolveFleeTurn(ctx context.Context, execution campaign.ActionExecution, en
 	exhausted := advanceCharacterAge(character, execution.Campaign.GameTime, outcome.GameTimeDelta)
 	rollContext := campaignRollContext(character)
 	rollContext.Opponent = &campaign.CampaignRollOpponent{RealmGap: encounter.OpponentRealmRank - character.RealmRank}
-	rollResult, err := resolveCampaignRoll(ctx, execution, campaign.CampaignRollRequest{
+	rollResult, err := worldactions.ResolveCampaignRoll(ctx, execution, campaign.CampaignRollRequest{
 		Key: "encounter.flee." + encounter.EncounterKey, Title: "脱离遭遇", Description: "尝试摆脱" + encounter.OpponentName,
 		Category: "combat", BaseSuccessRate: campaignRollBaseFromBPS(chance), Sides: 100, RelevantAttributes: []string{"气运"},
 		AttributeWeights: map[string]float64{"气运": 1}, PlayerState: campaignRollPlayerState(character, 50), Context: rollContext,
@@ -247,12 +266,12 @@ func resolveFleeTurn(ctx context.Context, execution campaign.ActionExecution, en
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	success := int64(deterministicUint64(execution, "encounter.flee")%10_000) < chance
+	success := int64(worldactions.DeterministicUint64(execution, "encounter.flee")%10_000) < chance
 	if rollResult != nil {
 		success = rollResult.Success
 		chance = int64(rollResult.SuccessRate) * 100
 		outcome.Result["flee_chance_bps"] = chance
-		attachCampaignRoll(&outcome, rollResult)
+		worldactions.AttachCampaignRoll(&outcome, rollResult)
 	}
 	if success {
 		if exhausted {
@@ -261,7 +280,11 @@ func resolveFleeTurn(ctx context.Context, execution campaign.ActionExecution, en
 		}
 		return finishEncounter(execution, encounter, character, "fled", &outcome, nil)
 	}
-	damage := maxInt64(1, encounter.OpponentAttack-encounterPlayerDefense(execution, character))
+	defense, err := encounterPlayerDefense(execution, character)
+	if err != nil {
+		return storage.CampaignActionOutcome{}, err
+	}
+	damage := maxInt64(1, encounter.OpponentAttack-defense)
 	if rollResult != nil && rollResult.Level == "critical_failure" {
 		damage = maxInt64(1, damage*3/2)
 	}
@@ -287,10 +310,10 @@ func resolveFleeTurn(ctx context.Context, execution campaign.ActionExecution, en
 	encounter.LastMove = "flee"
 	encounter.UpdatedAt = time.Now()
 	character.UpdatedAt = time.Now()
-	if err := execution.Store.SaveCharacter(character); err != nil {
+	if err := cultivationStore(execution).SaveCharacter(character); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	if err := execution.Store.SaveEncounter(encounter); err != nil {
+	if err := cultivationStore(execution).SaveEncounter(encounter); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
@@ -306,11 +329,11 @@ func finishEncounter(execution campaign.ActionExecution, encounter *storage.Camp
 	encounter.ResolvedAtGameTime = &resolvedAt
 	encounter.LastMove = status
 	encounter.UpdatedAt = time.Now()
-	if err := execution.Store.SaveEncounter(encounter); err != nil {
+	if err := cultivationStore(execution).SaveEncounter(encounter); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	character.UpdatedAt = time.Now()
-	if err := execution.Store.SaveCharacter(character); err != nil {
+	if err := cultivationStore(execution).SaveCharacter(character); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
 	if status == "won" && rules != nil {
@@ -339,11 +362,11 @@ func grantEncounterRewards(execution campaign.ActionExecution, rewards []encount
 	for _, reward := range rewards {
 		definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionItem, reward.ItemKey)
 		if err != nil {
-			return invalid("遭遇奖励物品不存在: %s", reward.ItemKey)
+			return worldactions.Invalid("遭遇奖励物品不存在: %s", reward.ItemKey)
 		}
 		stackable, _ := definition.Content["stackable"].(bool)
 		if !stackable {
-			return invalid("遭遇奖励必须是可堆叠物品: %s", reward.ItemKey)
+			return worldactions.Invalid("遭遇奖励必须是可堆叠物品: %s", reward.ItemKey)
 		}
 		quality := reward.QualityKey
 		stack, err := execution.Store.ItemStack(execution.Campaign.ID, reward.ItemKey, quality)
@@ -372,29 +395,36 @@ func encounterPlayerDamage(execution campaign.ActionExecution, character *storag
 	}
 	manaCost := baseManaCost
 	if techniqueKey != "" {
-		technique, err := execution.Store.Technique(execution.Campaign.ID, techniqueKey)
+		technique, err := cultivationStore(execution).Technique(execution.Campaign.ID, techniqueKey)
 		if err != nil || technique.Status != "active" || technique.EquippedSlot == nil {
-			return 0, 0, rejected("功法未处于已装配状态: %s", techniqueKey)
+			return 0, 0, worldactions.Rejected("功法未处于已装配状态: %s", techniqueKey)
 		}
 		definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionTechnique, techniqueKey)
 		if err != nil {
-			return 0, 0, invalid("功法定义不存在: %s", techniqueKey)
+			return 0, 0, worldactions.Invalid("功法定义不存在: %s", techniqueKey)
 		}
-		effects, ok := effectrules.TechniqueEffects(definition.Content, technique.LearnedLayer)
+		effects, ok := effectrules.MasteredEffects(definition.Content, technique.Mastery, technique.LearnedLayer)
 		if !ok {
-			return 0, 0, invalid("功法效果无效: %s", techniqueKey)
+			return 0, 0, worldactions.Invalid("功法效果无效: %s", techniqueKey)
 		}
 		attack += maxInt64(0, effects["physical_attack"]) + maxInt64(0, effects["spiritual_attack"])
-		manaCost += definitionIntDefault(definition.Content["combat_mana_cost"], definitionIntDefault(definition.Content["mana_cost"], 0))
+		manaCost += worldactions.DefinitionIntDefault(definition.Content["combat_mana_cost"], worldactions.DefinitionIntDefault(definition.Content["mana_cost"], 0))
 	}
 	damage := encounter.PlayerDamageBase + attack*encounter.PlayerDamageScaleBPS/10_000 - encounter.OpponentDefense
 	if damage < 1 {
 		damage = 1
 	}
-	variation := int64(deterministicUint64(execution, "encounter.damage")%41) + 80
+	variation := int64(worldactions.DeterministicUint64(execution, "encounter.damage")%41) + 80
 	damage = damage * variation / 100
 	if damage < 1 {
 		damage = 1
+	}
+	effects, err := equippedEffects(execution)
+	if err != nil {
+		return 0, 0, err
+	}
+	if manaCost > 0 {
+		manaCost = max(int64(1), manaCost-effects["mana_cost_reduction"])
 	}
 	return damage, manaCost, nil
 }
@@ -415,75 +445,25 @@ func encounterCharacterAttack(execution campaign.ActionExecution, character *sto
 		}
 		bonuses, ok := effectrules.EquipmentBonuses(definition.Content)
 		if !ok {
-			return 0, invalid("装备效果无效: %s", item.DefinitionKey)
+			return 0, worldactions.Invalid("装备效果无效: %s", item.DefinitionKey)
 		}
 		attack += maxInt64(0, bonuses["physical_attack"]) + maxInt64(0, bonuses["spiritual_attack"])
 	}
 	return attack, nil
 }
 
-func encounterPlayerDefense(execution campaign.ActionExecution, character *storage.CampaignCharacter) int64 {
-	defense := int64(character.FoundationQuality) / 10
-	techniques, _ := execution.Store.Techniques(execution.Campaign.ID)
-	for _, technique := range techniques {
-		if technique.Status != "active" || technique.EquippedSlot == nil {
-			continue
-		}
-		definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionTechnique, technique.TechniqueKey)
-		if err != nil {
-			continue
-		}
-		effects, ok := effectrules.TechniqueEffects(definition.Content, technique.LearnedLayer)
-		if ok {
-			defense += maxInt64(0, effects["physical_defense"]) + maxInt64(0, effects["spiritual_defense"])
-		}
+func encounterPlayerDefense(execution campaign.ActionExecution, character *storage.CampaignCharacter) (int64, error) {
+	effects, err := equippedEffects(execution)
+	if err != nil {
+		return 0, err
 	}
-	items, _ := execution.Store.ItemInstances(execution.Campaign.ID)
-	for _, item := range items {
-		if item.State != "equipped" || item.EquippedSlot == nil || item.Durability <= 0 {
-			continue
-		}
-		definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionEquipment, item.DefinitionKey)
-		if err != nil {
-			continue
-		}
-		bonuses, ok := effectrules.EquipmentBonuses(definition.Content)
-		if ok {
-			defense += maxInt64(0, bonuses["physical_defense"]) + maxInt64(0, bonuses["spiritual_defense"])
-		}
-	}
-	return defense
+	return max(int64(0), int64(character.FoundationQuality)/10+effects["physical_defense"]+effects["spiritual_defense"]), nil
 }
 
-func encounterPlayerMovement(execution campaign.ActionExecution, character *storage.CampaignCharacter) int64 {
-	bonus := int64(0)
-	techniques, _ := execution.Store.Techniques(execution.Campaign.ID)
-	for _, technique := range techniques {
-		if technique.Status != "active" || technique.EquippedSlot == nil {
-			continue
-		}
-		definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionTechnique, technique.TechniqueKey)
-		if err != nil {
-			continue
-		}
-		effects, ok := effectrules.TechniqueEffects(definition.Content, technique.LearnedLayer)
-		if ok {
-			bonus += maxInt64(0, effects["movement"])
-		}
+func encounterPlayerMovement(execution campaign.ActionExecution, character *storage.CampaignCharacter) (int64, error) {
+	effects, err := equippedEffects(execution)
+	if err != nil {
+		return 0, err
 	}
-	items, _ := execution.Store.ItemInstances(execution.Campaign.ID)
-	for _, item := range items {
-		if item.State != "equipped" || item.EquippedSlot == nil || item.Durability <= 0 {
-			continue
-		}
-		definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionEquipment, item.DefinitionKey)
-		if err != nil {
-			continue
-		}
-		bonuses, ok := effectrules.EquipmentBonuses(definition.Content)
-		if ok {
-			bonus += maxInt64(0, bonuses["movement"])
-		}
-	}
-	return bonus
+	return max(int64(0), effects["movement"]), nil
 }

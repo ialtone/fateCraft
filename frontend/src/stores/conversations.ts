@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { conversationsApi } from '@/api'
+import type { CompletionView, EndingSnapshot } from '@/types/endings'
+import { conversationsApi, moduleActionsApi } from '@/api'
 import type {
-  ChallengeRunReward,
   CompletionMetric,
   Conversation,
   CreateConversationInput,
@@ -11,12 +11,13 @@ import type {
 
 // 挑战完成事件的业务结果，供通用完成弹窗消费。
 export interface CompletionInfo {
+  id: string
   key: string
   category: 'success' | 'failure' | 'neutral'
   title: string
   summary: string
   tone: string
-  rewards: ChallengeRunReward[]
+  rewards: CompletionView['rewards']
   metrics: CompletionMetric[]
   nextActions: Array<'replay' | 'back_to_challenges'>
   /** 非空表示未发放奖励的原因（客户端直连为 client_llm_route）。 */
@@ -30,6 +31,12 @@ export const useConversationStore = defineStore('conversation', () => {
   // 结局信息放在对话 store 而非 socket store：它是业务事件的结果，不是连接状态；
   // 且跟随 clearCurrent 一起清理，切换对话不会带上旧结局。
   const completion = ref<CompletionInfo | null>(null)
+  const lastCompletion = ref<CompletionInfo | null>(null)
+  const endingState = ref<EndingSnapshot | null>(null)
+  const seen = new Set<string>()
+  const dismissed = new Set<string>()
+  let endingGeneration = 0
+  let loadGeneration = 0
 
   async function loadList(params?: { status?: string; search?: string }) {
     loading.value = true
@@ -41,8 +48,9 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   async function load(id: string) {
+    const generation = ++loadGeneration
     const data = await conversationsApi.get(id)
-    current.value = data.conversation
+    if (generation === loadGeneration) current.value = data.conversation
     return data.conversation
   }
 
@@ -87,18 +95,87 @@ export const useConversationStore = defineStore('conversation', () => {
     if (current.value) current.value.status = 'ended'
   }
 
-  // 记录结局信息，交由 UI 弹窗展示。
-  function setCompletion(info: CompletionInfo) {
-    completion.value = info
+  function consumeCompletion(view: CompletionView) {
+    if (
+      current.value?.id !== view.conversation_id ||
+      current.value.branch_epoch !== view.branch_epoch
+    )
+      return
+    const info: CompletionInfo = {
+      ...view,
+      nextActions: view.next_actions,
+      rewardsDisabledReason: view.rewards_disabled_reason,
+    }
+    markEnded()
+    endingState.value = null
+    lastCompletion.value = info
+    if (completion.value?.id === info.id) return
+    let shown = seen.has(info.id)
+    try {
+      shown = shown || sessionStorage.getItem(`fatecraft:completion:${info.id}`) === 'seen'
+    } catch {
+      /* session disabled */
+    }
+    if (!shown) completion.value = info
+  }
+
+  async function loadEndingState(id: string) {
+    const generation = ++endingGeneration
+    const snapshot = await moduleActionsApi.endings(id)
+    if (
+      generation !== endingGeneration ||
+      current.value?.id !== id ||
+      current.value.branch_epoch !== snapshot.branch_epoch
+    )
+      return
+    if (snapshot.proposal) {
+      let hidden = dismissed.has(snapshot.proposal.id)
+      try {
+        hidden =
+          hidden ||
+          sessionStorage.getItem(`fatecraft:ending-proposal:${snapshot.proposal.id}`) ===
+            'dismissed'
+      } catch {}
+      if (hidden) snapshot.proposal = null
+    }
+    endingState.value = snapshot
+    if (snapshot.completion) consumeCompletion(snapshot.completion)
+    return snapshot
+  }
+
+  function showLastCompletion() {
+    if (lastCompletion.value) completion.value = lastCompletion.value
+  }
+
+  function dismissProposal(id: string) {
+    dismissed.add(id)
+    try {
+      sessionStorage.setItem(`fatecraft:ending-proposal:${id}`, 'dismissed')
+    } catch {
+      /* session disabled */
+    }
+    if (endingState.value?.proposal?.id === id) endingState.value.proposal = null
   }
 
   // 结局弹窗关闭后清除结局信息。
   function clearEnding() {
+    if (completion.value) {
+      seen.add(completion.value.id)
+      try {
+        sessionStorage.setItem(`fatecraft:completion:${completion.value.id}`, 'seen')
+      } catch {
+        /* session disabled */
+      }
+    }
     completion.value = null
   }
 
   // 切换对话时清空当前缓存。
   function clearCurrent() {
+    loadGeneration++
+    endingGeneration++
+    endingState.value = null
+    lastCompletion.value = null
     current.value = null
     // 同步清掉旧结局，避免切到新对话时弹出上一局的结局弹窗
     completion.value = null
@@ -119,7 +196,12 @@ export const useConversationStore = defineStore('conversation', () => {
     restore,
     remove,
     markEnded,
-    setCompletion,
+    consumeCompletion,
+    endingState,
+    lastCompletion,
+    loadEndingState,
+    showLastCompletion,
+    dismissProposal,
     clearEnding,
     clearCurrent,
   }

@@ -28,13 +28,12 @@ func TestNormalizeChatMessageFillsRequiredContentBlocks(t *testing.T) {
 	}
 }
 
-func TestNormalizeChatMessageKeepsToolCallWithoutSyntheticText(t *testing.T) {
-	message := &ChatMessage{Kind: "tool_call", Content: "provider payload"}
-	if err := normalizeChatMessage(message); err != nil {
-		t.Fatalf("normalizeChatMessage returned error: %v", err)
-	}
-	if string(message.ContentBlocks) != "[]" {
-		t.Fatalf("content_blocks = %s, want []", message.ContentBlocks)
+func TestNormalizeChatMessageRejectsEmptyToolDeclaration(t *testing.T) {
+	for _, raw := range []JSONDoc{nil, JSONDoc("null"), JSONDoc("[]"), JSONDoc("[ ]")} {
+		message := &ChatMessage{Kind: "tool_call", Content: "diagnostic text is not a tool declaration", ContentBlocks: raw}
+		if err := normalizeChatMessage(message); err == nil {
+			t.Fatalf("accepted empty tool declaration: %s", raw)
+		}
 	}
 }
 

@@ -1,10 +1,18 @@
 # 06. Go 后端设计
 
+## 玩法内核与模块
+
+服务端与导入器共用 `gameplay/bootstrap` 装配目录和处理器，启动检查声明与实现一致。`gameplay/contract` 是中立契约，`kernel` 执行纯模块，`components` 承载世界/生产/远征等共性；修仙等具体规则由对应模块拥有。通用 API、服务和仓储不导入具体玩法。
+
+Challenge 的模块信封和 Campaign 的模块状态表分别接入现有事务；Campaign 平台头与收益投影由服务拥有。具体接口、预算、注册方法和代码位置见[24 玩法模块架构](24-gameplay-module-architecture.md)。
+
+`cultivation.trial@2` 是纯模块，版本定义决定概率与成本，保护成长/经济/死亡状态；`cultivation.campaign@2` 保留关系领域表，专属成长、出身、进度和飞升规则位于 cultivation 模块。公共市场支持按目标库存周转，公共世界时钟先核验到期事件预算再写入。阶段积分资格由模块判断，领取事实、账号余额和幂等由存储事务保存；规则及验证见 [14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[21](21-campaign-outcome-rewards.md)、[25](25-core-gameplay-validation.md)。
+
 ## 技术与入口
 
 后端使用 Go、Gin、GORM、PostgreSQL、WebSocket 和 zap。应用入口是 `cmd/server`，负责首次内容初始化、HTTP、WebSocket、LLM 和游戏运行时。
 
-`cmd/server` 不运行 AutoMigrate，也不隐式修改数据库结构。部署阶段先运行 `cmd/migrate up`；连接数据库后，server 在事务级 advisory lock 内检查 `challenge_packs`：为空时读取 `preset_packs` 并通过正常发布流程初始化内置挑战；非空时直接跳过，不读取或修改内置内容。
+`cmd/server` 不运行 AutoMigrate，也不隐式修改数据库结构。部署阶段先运行 `cmd/migrate up`；连接数据库后，server 在事务级 advisory lock 内按 `data/bootstrap.json` 补齐缺少的内置包（当前八类九包），通过正常发布流程初始化并默认启用；已存在的包直接跳过，不升级、覆盖或重新启用。管理员在内容管理控制是否开放新开局。
 
 ## 模块划分
 
@@ -23,7 +31,7 @@ internal/contextbuilder  token 预算和消息装配
 internal/worldbook       纯世界书关键词扫描算法
 internal/memory          异步长期记忆契约、调度、租约、Worker 与版本链
 internal/inquiry         玩家可见快照与角色栏只读问答
-internal/operation       不可回滚副作用检查
+internal/operation       生成与回合事务上下文
 internal/roll            判定计算、掷骰和历史调整
 internal/orchestration   主叙事 Agent 协调器、工具目录、执行与事务
 internal/realtime        WebSocket 连接与事件广播
@@ -159,7 +167,7 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 
 `roll_history`、展示消息、system 状态效果、`state_revisions`、invocation 与 tool call/result 消息在同一工具事务提交。门禁拒绝会回滚所有领域写入，只保存公开拒绝结果；下一模型步骤依据已提交工具结果继续叙事。模型可以在后续步骤再次请求当前快照允许的判定，但总步骤数与写工具数仍受统一上限约束。
 
-管理员难度来自 `system_settings`，不接受用户或模型覆盖。
+通用 Roll 与关系表 Campaign 的管理员难度来自 `system_settings`，不接受用户或模型覆盖。百年飞升劫纯模块按固定版本 `cultivation.trial_rules` 的难度修正与概率执行，不读取全局 roll_config 或管理员天命难度。
 
 `system_settings` 是单例热读数据，仓储提供 5 秒进程内缓存；当前实例保存后立即刷新，多实例最多在 TTL 内收敛。缓存返回值始终复制，调用方不能修改共享对象，从而避免每次模型调用为了日志开关和接入模式重复查询 PostgreSQL。
 
@@ -193,7 +201,7 @@ Campaign 生产与经济动作使用同一可信入口。`craft.learn_recipe`、
 
 结算工具在事务内锁定对话并重建证据，执行固定版本的 outcome verifier 并读取固定 reward_points。`challenge_runs`、`challenge_run_rewards`、`player_reward_balances`、只增不改的 `reward_ledger`、对话状态、invocation 与 tool 消息原子更新；动作 Handler 不直接写余额。条件不满足是可观察的业务拒绝，数据库、事务或持久化失败才是系统错误。
 
-消息改写与重新生成共享平台级能力，公开描述通过 Runtime API 的 `platform_capabilities` 返回，但授权策略不由 Runtime Contract 决定。其奖励扣除、新分支创建、旧 turn/message/Memory 失效和新用户消息必须在一个仓储事务中完成；存在已提交 Campaign 动作或事件的回合不能通过普通 regenerate/rewrite 回滚。
+消息改写与重新生成共享平台级能力，公开描述通过 Runtime API 的 `platform_capabilities` 返回，但授权策略不由 Runtime Contract 决定。其奖励扣除、新分支创建、旧 turn/message/Memory 失效和新用户消息必须在一个仓储事务中完成；Campaign 通过目标回合完整检查点恢复领域事实，并过滤失效分支事件；缺少检查点则拒绝。
 
 ## 统一奖励业务
 
@@ -281,3 +289,8 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 - 有效路由的唯一计算点是 `llmsettings.resolveRoute`（平台开关 × 用户保存值），与接入模式无关：开关关闭恒为 `server`，否则为用户保存值。`EffectiveRoute`/`Get`/`Personal` 都经它计算；`UpdateUser` 以 `client` 保存而开关关闭时返回 `ErrClientRouteDisabled`（用户设置接口映射 403 + `llm_client_route_disabled`）。`Get` 先算有效路由再分派：`client`（任意接入模式）返回用户个人配置且不检查平台完整性；`platform_managed` 的 `server` 返回平台配置；`user_managed` 的 `server` 返回用户个人配置并解密 Key。`Personal` 返回用户保存的个人配置行（不解密，供设置页展示与保存合并基准，`LLMRoute` 为有效路由）；`UserView` 基于 `Personal`，普通用户看不到平台 base_url 与模型，平台不完整时设置页仍可打开；`PlatformRuntime` 直接返回平台配置，供管理员公共配置诊断。管理接口的开关字段只有 owner 可改；关闭开关时调用 `relays.CloseAll()` 立刻断开全部 Relay 连接，切换公共 LLM 不断开（不改变任何用户的有效路由）；在途回合按连接断开收尾。开关不参与 `public_llm_settings_revision` 判断。
 
 配置保存与管理员审计在同一事务内锁行、计算脱敏差异；并发旧版本返回 `409/settings_conflict`。缓存更新和 Relay 关闭发生在提交后。关闭服务先停止生产者，再在有界时间内排空诊断队列；超时记录未排空数量。具体字段和运维边界见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
+
+
+## 结局生命周期（2026-10-11）
+
+Campaign 终态、关联对话关闭和完整结局结果在原动作事务提交；所有入口广播统一 completion。绑定可信玩法禁止普通关闭绕过结算，模型玩家权限保持分离。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。

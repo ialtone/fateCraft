@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -188,7 +190,7 @@ func (r *AgentRepo) FinishStep(ctx context.Context, stepID uuid.UUID, status, la
 	return update(r.db)
 }
 
-// LatestAttemptPerformance returns the newest non-invalidated turn attempt and
+// LatestAttemptPerformance returns the newest completed, non-invalidated turn attempt and
 // its durable model/tool measurements for the player runtime panel.
 func (r *AgentRepo) LatestAttemptPerformance(ctx context.Context, conversationID uuid.UUID) (*AgentAttemptPerformance, error) {
 	type attemptProjection struct {
@@ -200,9 +202,9 @@ func (r *AgentRepo) LatestAttemptPerformance(ctx context.Context, conversationID
 	}
 	var latest attemptProjection
 	result := r.db.WithContext(ctx).Table("generation_attempts").
-		Select("generation_attempts.id", "generation_attempts.status", "generation_attempts.started_at", "generation_attempts.finished_at", "(SELECT COUNT(*) FROM agent_tool_invocations WHERE agent_tool_invocations.attempt_id = generation_attempts.id) AS tool_calls").
+		Select("generation_attempts.id", "generation_attempts.status", "generation_attempts.started_at", "generation_attempts.finished_at", "(SELECT COUNT(*) FROM agent_tool_invocations WHERE agent_tool_invocations.attempt_id = generation_attempts.id AND agent_tool_invocations.status = 'committed') AS tool_calls").
 		Joins("JOIN conversation_turns ON conversation_turns.id = generation_attempts.turn_id").
-		Where("generation_attempts.conversation_id = ? AND conversation_turns.invalidated_at IS NULL", conversationID).
+		Where("generation_attempts.conversation_id = ? AND conversation_turns.invalidated_at IS NULL AND generation_attempts.status = ? AND conversation_turns.status = ?", conversationID, AttemptStatusCompleted, TurnStatusCompleted).
 		Order("generation_attempts.started_at DESC").Limit(1).Scan(&latest)
 	if result.Error != nil {
 		return nil, result.Error
@@ -213,7 +215,7 @@ func (r *AgentRepo) LatestAttemptPerformance(ctx context.Context, conversationID
 	var steps []AgentStep
 	if err := r.db.WithContext(ctx).Model(&AgentStep{}).
 		Select("model", "prompt_tokens", "completion_tokens", "token_usage_source", "first_event_ms", "model_duration_ms", "generation_ms", "finished_at").
-		Where("attempt_id = ?", latest.ID).Order("step_no ASC").Find(&steps).Error; err != nil {
+		Where("attempt_id = ? AND status = ?", latest.ID, AgentStepCompleted).Order("step_no ASC").Find(&steps).Error; err != nil {
 		return nil, err
 	}
 	attempt := GenerationAttempt{
@@ -295,9 +297,10 @@ func (r *AgentRepo) FinishInvocation(
 	return r.FinishInvocationWithBlocks(ctx, invocationID, status, resultCode, result, isMutating, invocationBlocks(toolCalls), toolResultText)
 }
 
-// FinishInvocationWithBlocks is the canonical terminal transition. The
-// provider-neutral ordered blocks are persisted once and replayed by the
-// selected protocol adapter on the next Agent step.
+// FinishInvocationWithBlocks is the canonical terminal transition. The first
+// invocation supplies the complete model step; subsequent invocations pass nil
+// and append only their output to that same declaration. Each invocation still
+// owns an independent audit/result record and domain transaction.
 func (r *AgentRepo) FinishInvocationWithBlocks(
 	ctx context.Context,
 	invocationID uuid.UUID,
@@ -401,15 +404,10 @@ func finishInvocationInTx(
 	if err := tx.Model(&AgentToolInvocation{}).Where("id = ?", invocation.ID).Updates(updates).Error; err != nil {
 		return err
 	}
-	messages := NewMessageRepo(tx)
-	call := &ChatMessage{
-		ID: uuid.New(), ConversationID: invocation.ConversationID, Role: RoleAssistant, Kind: "tool_call",
-		Content: "", ContentBlocks: contentBlocks, ToolCallID: invocation.CallID, ToolName: invocation.ToolName,
-		StepID: &invocation.StepID, ToolInvocationID: &invocation.ID, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := messages.CreateChat(ctx, call); err != nil {
+	if err := persistToolDeclaration(ctx, tx, invocation, contentBlocks, now); err != nil {
 		return err
 	}
+	messages := NewMessageRepo(tx)
 	toolResult := &ChatMessage{
 		ID: uuid.New(), ConversationID: invocation.ConversationID, Role: RoleTool, Kind: "tool_result",
 		Content: toolResultText, ContentBlocks: textContentBlocks(toolResultText), ToolCallID: invocation.CallID, ToolName: invocation.ToolName,
@@ -428,6 +426,70 @@ func finishInvocationInTx(
 		if update.RowsAffected != 1 {
 			return ErrNotFound
 		}
+	}
+	return nil
+}
+
+func persistToolDeclaration(ctx context.Context, tx *gorm.DB, invocation AgentToolInvocation, blocks JSONDoc, now time.Time) error {
+	var declarations []ChatMessage
+	if err := tx.WithContext(ctx).Select("id", "content_blocks").
+		Where("conversation_id = ? AND attempt_id = ? AND step_id = ? AND kind = ?", invocation.ConversationID, invocation.AttemptID, invocation.StepID, "tool_call").
+		Limit(2).Find(&declarations).Error; err != nil {
+		return err
+	}
+	if len(blocks) == 0 {
+		if len(declarations) != 1 {
+			return errors.New("后续工具缺少唯一的本步骤调用声明")
+		}
+		return validateInvocationDeclaration(declarations[0].ContentBlocks, invocation)
+	}
+	if len(declarations) != 0 {
+		return errors.New("同一步骤不能重复写入工具调用声明")
+	}
+	if err := validateInvocationDeclaration(blocks, invocation); err != nil {
+		return err
+	}
+	return NewMessageRepo(tx).CreateChat(ctx, &ChatMessage{
+		ID: uuid.New(), ConversationID: invocation.ConversationID, Role: RoleAssistant, Kind: "tool_call",
+		Content: "", ContentBlocks: blocks, ToolCallID: invocation.CallID, ToolName: invocation.ToolName,
+		StepID: &invocation.StepID, ToolInvocationID: &invocation.ID, CreatedAt: now, UpdatedAt: now,
+	})
+}
+
+// A result can only refer to a call from the same immutable model step. Verify
+// the raw argument hash as well, including malformed arguments that were rejected.
+func validateInvocationDeclaration(raw JSONDoc, invocation AgentToolInvocation) error {
+	var blocks []struct {
+		Kind string `json:"kind"`
+		Call *struct {
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"tool_call"`
+	}
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return errors.New("工具调用声明不是有效内容数组")
+	}
+	seen := map[string]bool{}
+	matched := false
+	for _, block := range blocks {
+		if block.Kind != "tool_call" {
+			continue
+		}
+		if block.Call == nil || block.Call.ID == "" || seen[block.Call.ID] {
+			return errors.New("工具调用声明缺少或重复 call_id")
+		}
+		seen[block.Call.ID] = true
+		if block.Call.ID == invocation.CallID {
+			hash := sha256.Sum256([]byte(block.Call.Arguments))
+			if block.Call.Name != invocation.ToolName || hex.EncodeToString(hash[:]) != invocation.ArgumentsHash {
+				return errors.New("工具执行与本步骤声明的名称或参数不一致")
+			}
+			matched = true
+		}
+	}
+	if !matched {
+		return errors.New("工具未包含在本步骤调用声明中")
 	}
 	return nil
 }

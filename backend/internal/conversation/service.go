@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
-	"github.com/ialtone/fatecraft/internal/gameplay"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/operation"
@@ -140,9 +140,13 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversa
 	if selection.Scenario != nil {
 		conv.ScenarioAssetID = &selection.Scenario.ID
 	}
+	initialValues, err := s.challenge.InitialConversationState(ctx, selection)
+	if err != nil {
+		return nil, err
+	}
 	initialState := &storage.ConversationState{
 		ConversationID: conv.ID,
-		State:          storage.JSONMap(gameplay.InitialState(selection.Contract.StateSchema)),
+		State:          storage.JSONMap(initialValues),
 		SchemaVersion:  selection.Contract.StateSchema.SchemaVersion,
 		UpdatedAt:      now,
 	}
@@ -362,6 +366,15 @@ func (s *Service) End(ctx context.Context, id uuid.UUID) (*storage.Conversation,
 	}
 	if conv.Status != storage.StatusActive {
 		return nil, ErrNotActive
+	}
+	if s.challenge != nil {
+		runtime, runtimeErr := s.challenge.RuntimeForVersion(ctx, conv.ChallengeVersionID, conv.ChallengeHash)
+		if runtimeErr != nil {
+			return nil, runtimeErr
+		}
+		if runtime != nil && (conv.CampaignID != nil || len(runtime.Actions.Domain) > 0) {
+			return nil, errors.New("此玩法必须通过可信结束动作结算，请使用玩法结束确认")
+		}
 	}
 	now := time.Now()
 	if err := s.repo.TransitionLifecycle(ctx, id, storage.StatusEnded, map[string]any{

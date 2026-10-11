@@ -1,5 +1,11 @@
 # 08. 上下文管理设计
 
+## 模块受众与投影预算
+
+纯模块分别生成 player/model/inquiry 投影。Challenge 模型上下文不重复塞入缓存的玩家 `gameplay`；使用实时 model 投影参与单独预算与世界书扫描。大对象优先保留可容纳的标量，再尝试完整集合，省略路径写入 `projection_control.omitted_fields`。未展示的库存或列表不能被解释为事实为空；内部种子与随机证据不参与投影。
+
+问答使用 inquiry 投影，来自固定请求快照，不能预览或执行行动。模块自身输出上限与内容要求见[24](24-gameplay-module-architecture.md)。
+
 ## 目标
 
 Context Builder 在模型窗口内保留平台契约、当前权威状态、当前回合、已提交长期记忆和尽可能多的近期完整历史。它只读取当前 conversation 与固定 ChallengeVersion，不把 Memory 当作状态或权限来源。
@@ -52,10 +58,10 @@ Prompt 发布必须保证 `system_master`、`settlement_security` 和 `agent_too
 
 1. 统计平台规则、Runtime 规则、State、runtime directive、Agent 契约、工具定义、Memory policy/body 等固定 required 内容。
 2. 把当前 pending turn 的全部有效内部消息作为 required 历史预留。
-3. Campaign 模式先把内部动作能力转换为工具快照并从 Projection 正文移除，再按剩余预算构建有界 Projection：平台核心必选，玩法主题按优先级压缩。
+3. Challenge 模块与 Campaign 将内部动作能力转换为工具快照，提取有界只读限制说明后移除执行目录；关键事实作为独立 required 段预留，再按剩余预算构建有界 Projection。
 4. 从新到旧尝试加入封口历史；一个 turn 的所有消息必须同时加入或同时省略。
 5. 用剩余预算加入 Character/Persona/Scenario、世界书、style 和其他可选 Prompt 段。
-6. 按语义顺序组装 system 段、时间正序历史，最后附加输出契约和（如命中）安全提示。
+6. 按语义顺序组装 system 段、时间正序历史，再附加最新关键事实、输出契约和（如命中）安全提示。
 
 当前回合不能因普通预算不足被裁掉。任何一组 required 内容放不下都属于配置错误，不能静默生成。旧历史遇到第一组放不下的完整 turn 后停止向前填充，确保保留的是连续近期窗口。
 
@@ -76,7 +82,11 @@ Context Builder 还会在构建日志的 `segments` 中追加 `history_compactio
 
 ## State 与 Campaign Projection
 
-`<current_state>` 和 `<campaign_projection>` 是 required 段，但 Campaign Projection 不是不可拆的大 JSON。`id`、`status`、`current_location_key`、`game_time` 和 `revision` 是平台最小核心；玩法模块返回的顶层主题在此核心上分层装入。内部 `action_capabilities` 只用于生成 `fc_action_*` 工具，不进入该正文。
+`<current_state>` 和 `<campaign_projection>` 是 required 段，但 Campaign Projection 不是不可拆的大 JSON。`id`、`status`、`current_location_key`、`game_time` 和 `revision` 是平台最小核心；玩法模块返回的顶层主题在此核心上分层装入。内部 `action_capabilities` 构建原生工具和只读限制说明，不作为执行目录进入该正文。
+
+模块声明的 `narrative_facts` 单独提取为 required `<narrative_facts>` 消息，放在历史之后并携带当前 revision/status 等头部；从较大的 Projection 删除同名核心，避免重复传输。每个模块最多声明 20 条投影路径，事实对象最多 4 KiB，动作反馈另可补充运行头部。值为零、false 与缺失严格区分，缺失表示 `unavailable`。最小事实放不下返回 `ErrRequiredOverflow`，不能为了保留长背包或旧正文而裁掉当前境界等核心。
+
+`<action_restrictions>` 使用现有 required runtime directive，正文最多 4 KiB；近期工具尝试优先保留，其他说明按稳定顺序装入，省略数量明确标记。它只解释限制，不重复工具参数、不扩大目录，也不增加模型请求。工具定义、限制说明、关键事实和当前回合工具链都计入真实 token 预算。
 
 `ProjectionProvider.Context` 返回 `ProjectionView.Data + ProjectionView.Priority`。Priority 只列顶层主题 key，由具体玩法模块按当前决策价值排序；平台不理解修仙、推理、经营等题材字段。未声明的主题按稳定 key 顺序作为低优先级候选。
 
@@ -117,3 +127,8 @@ Worker 不扫描世界书。世界书只在正常 Context Build 时按固定挑�
 - 可选段超预算：整段跳过并记录 `skip_reason=budget`。
 - Context 日志写入失败：记录应用日志，不改变已构造请求。
 - Memory Worker 失败：保持最后成功链头，不中断当前叙事。
+
+
+## 终局事实与目录（2026-10-11）
+
+有界 `ending_capabilities` 只提供玩家终局预览，不授予模型执行权。终局提示作为必选 RuntimeDirective 放到历史之后，和当前事实一起约束旧正文；预算不足不调用模型。提议、拒绝、真实提交必须区分，正文不被用作结局检测器。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
