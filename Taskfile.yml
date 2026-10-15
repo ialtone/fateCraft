@@ -38,7 +38,7 @@ tasks:
       - go test -count=1 -timeout=10m ./...
 
   backend:build:
-    desc: 交叉编译 Linux amd64 后端服务，供 Docker 镜像使用
+    desc: 交叉编译 Linux amd64 后端本地产物（Docker 镜像构建不依赖此任务）
     dir: backend
     env:
       CGO_ENABLED: '0'
@@ -62,7 +62,7 @@ tasks:
       - npx vue-tsc --noEmit
 
   frontend:build:
-    desc: 构建前端产物到 docker/frontend/dist，供 nginx 镜像使用
+    desc: 构建前端本地产物到 docker/frontend/dist（Docker 镜像构建不依赖此任务）
     dir: frontend
     cmds:
       - npm run build -- --outDir ../docker/frontend/dist --emptyOutDir

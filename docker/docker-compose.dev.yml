@@ -30,8 +30,8 @@ services:
     logging: *log-options
     image: fatecraft-backend:dev
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/backend/Dockerfile
     restart: "no"
     depends_on:
       postgresql:
@@ -42,9 +42,10 @@ services:
 
   postgres-backup:
     logging: *log-options
+    image: fatecraft-postgres-backup:dev
     build:
-      context: .
-      dockerfile: ./postgres-backup/Dockerfile
+      context: ..
+      dockerfile: docker/postgres-backup/Dockerfile
     restart: unless-stopped
     depends_on:
       postgresql:
@@ -65,8 +66,8 @@ services:
     logging: *log-options
     image: fatecraft-backend:dev
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/backend/Dockerfile
     restart: unless-stopped
     depends_on:
       migrate:

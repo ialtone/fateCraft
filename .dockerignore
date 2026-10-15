@@ -1,0 +1,15 @@
+.git
+.github
+.vscode
+.idea
+**/.env
+**/.env.*
+!**/.env.example
+**/*.env.local
+**/node_modules
+**/dist
+**/bin
+docker/backups
+backend/.gocache
+backend/*.test
+*.log

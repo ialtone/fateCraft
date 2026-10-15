@@ -145,30 +145,29 @@ Memory Agent 和角色问答 Agent 使用结构化输出，由后端验证结果
 ### 环境要求
 
 - Docker Engine 与 Docker Compose 插件
-- Git
-- 若从源码构建：Go 1.25、Node.js 20+、npm 与 [Go Task](https://taskfile.dev/)
-- 一个可访问的 PostgreSQL 数据库；Docker Compose 配置也可以运行独立 PostgreSQL 容器
+- 若从源码构建：Git、Go 1.25、Node.js 22、npm 与 [Go Task](https://taskfile.dev/)
 
 ### Docker 部署
 
-从源码构建所需产物：
+正式部署直接拉取 GitHub Container Registry 上的多架构镜像，不需要在服务器安装 Go、Node.js，也不需要本地编译。先准备环境配置：
 
 ```bash
-task backend:build
-task frontend:build
+cp docker/.env.example docker/.env
+cp docker/backend.production.env docker/backend.production.env.local
 ```
 
-生产配置模板位于 `docker/backend.production.env`。部署前至少要设置数据库密码，并同步更新 `DATABASE_URL`；还要设置稳定且独立的 `AUTH_DATA_ENCRYPTION_KEY` 和 `SHARE_LINK_SIGNING_KEY`，各自至少 32 个字符。敏感值应放入 Git 忽略的本地覆盖文件，并按 [Docker 部署指南](docker/README.md)加入 Compose 环境配置。生产部署应通过 HTTPS 反向代理对外提供服务，切勿提交密钥或密码。
+编辑 `docker/.env` 选择要部署的版本，并编辑 `docker/backend.production.env.local` 设置数据库密码、`DATABASE_URL` 以及独立且稳定的 `AUTH_DATA_ENCRYPTION_KEY`、`SHARE_LINK_SIGNING_KEY`（各至少 32 个字符）。镜像版本应使用明确的版本号，例如 `1.0.0`。生产部署应通过 HTTPS 反向代理对外提供服务，切勿提交密钥或密码。
 
 在仓库根目录启动：
 
 ```bash
-docker compose -f docker/docker-compose.prod.yml up --build -d
+docker compose --env-file docker/.env -f docker/docker-compose.prod.yml pull
+docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d
 ```
 
 默认站点入口为 `http://<服务器地址>:8088`。首次打开会进入安装向导，用于创建唯一的站点所有者账号。生产环境请先配置 HTTPS，再开放站点给其他用户使用。
 
-服务启动前会运行数据库迁移。空数据库会导入内置玩法；已有玩法内容不会被自动覆盖。生产 Compose 包含 PostgreSQL 备份服务，默认每天备份并保留 7 天。升级、外置数据库、密钥配置及恢复步骤见 [Docker 部署指南](docker/README.md)。
+服务启动前会运行数据库迁移。空数据库会导入随镜像发布的内置玩法；已有玩法内容不会被自动覆盖。生产 Compose 包含 PostgreSQL 备份服务，默认每天备份并保留 7 天。升级、外置数据库、密钥配置及恢复步骤见 [Docker 部署指南](docker/README.md)。
 
 ### 本机开发运行
 

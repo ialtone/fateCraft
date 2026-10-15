@@ -12,7 +12,7 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     env_file:
-      - ./backend.production.env
+      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
     environment:
       TZ: Asia/Shanghai
     ports:
@@ -28,29 +28,24 @@ services:
 
   migrate:
     logging: *log-options
-    image: fatecraft-backend:prod
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-backend:${FATECRAFT_VERSION:-latest}
     restart: "no"
     depends_on:
       postgresql:
         condition: service_healthy
     env_file:
-      - ./backend.production.env
+      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
     command: ["./fatecraft-migrate", "up"]
 
   postgres-backup:
     logging: *log-options
-    build:
-      context: .
-      dockerfile: ./postgres-backup/Dockerfile
+    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-postgres-backup:${FATECRAFT_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgresql:
         condition: service_healthy
     env_file:
-      - ./backend.production.env
+      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
     environment:
       TZ: Asia/Shanghai
       BACKUP_DIR: /backups
@@ -63,23 +58,17 @@ services:
 
   backend:
     logging: *log-options
-    image: fatecraft-backend:prod
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-backend:${FATECRAFT_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
     env_file:
-      - ./backend.production.env
+      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
     ports:
       # 只绑定本机回环地址：公网流量必须经过 nginx（8088），后端端口不能被直接访问，
       # 否则客户端可以伪造 X-Forwarded-For，并绕过 nginx 添加的安全响应头。
       - "127.0.0.1:8081:8081"
-    volumes:
-      # 判定配置、输出 Schema 与空库首次初始化材料；运行时挑战内容从 PostgreSQL 读取
-      - ../backend/data:/app/backend/data
     healthcheck:
       test:
         [
@@ -93,9 +82,7 @@ services:
 
   frontend:
     logging: *log-options
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-frontend:${FATECRAFT_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       backend:
@@ -103,11 +90,7 @@ services:
     ports:
       - "8088:80"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:80/ >/dev/null || exit 1",
-        ]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
