@@ -39,6 +39,8 @@ export interface Conversation {
   is_processing: boolean
   /** 创建时固定的挑战版本与内容哈希 */
   challenge_version_id: string
+  /** 列表展示用的挑战版本号投影 */
+  challenge_version?: string
   challenge_hash: string
   campaign_id?: string
   /** 创建时固化的 LLM 请求路由，之后不可修改 */
@@ -1300,6 +1302,20 @@ export interface PlayerReward {
 }
 
 export interface RewardLedgerEntry {
+  gameplay_source?: {
+    pack_id: string
+    pack_slug: string
+    pack_name: string
+    version_id: string
+    version: string
+    content_hash: string
+    conversation_id?: string
+    campaign_id?: string
+    stage_key?: string
+    stage_name?: string
+    outcome_key?: string
+    outcome_title?: string
+  }
   id: string
   reward_key: 'fatecraft.points' | 'fatecraft.message-rewrite-credit'
   operation: 'grant' | 'consume' | 'refund' | 'reverse'
@@ -1319,6 +1335,8 @@ export interface RewardLedgerEntry {
 }
 
 export interface ChallengePack {
+  source: 'builtin' | 'upload' | 'editor'
+  management_revision: number
   id: string
   slug: string
   name: string
@@ -1332,6 +1350,10 @@ export interface ChallengePack {
 }
 
 export interface ChallengeVersion {
+  revision: number
+  run_policy: 'allowed' | 'blocked'
+  run_policy_reason: string
+  policy_revision: number
   id: string
   challenge_pack_id: string
   version: string
@@ -1413,6 +1435,7 @@ export interface ChallengeVersionDocument {
 }
 
 export interface SaveChallengeVersionInput {
+  expected_revision: number
   manifest: Record<string, any>
   runtime: ChallengeRuntimeConfig
   assets: ChallengeAsset[]
@@ -1434,14 +1457,6 @@ export interface AdminBuiltinChallenge {
   status: BuiltinChallengeStatus
   importable: boolean
   overwritable: boolean
-}
-
-export interface BuiltinImportResult {
-  slug: string
-  version: string
-  content_hash: string
-  created: boolean
-  overwritten: boolean
 }
 
 export interface GameplayModuleDescriptor {

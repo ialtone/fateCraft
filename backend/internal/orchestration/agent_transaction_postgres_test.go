@@ -97,6 +97,7 @@ func seedAgentTransactionTest(t *testing.T, db *gorm.DB) (context.Context, agent
 		{`INSERT INTO users (id, username, display_name) VALUES (?, 'agent-test', 'Agent Test')`, []any{playerID}},
 		{`INSERT INTO challenge_packs (id, slug, name) VALUES (?, 'agent-test', 'Agent Test')`, []any{packID}},
 		{`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, []any{versionID, packID, hash}},
+		{`UPDATE challenge_packs SET current_version_id = ?, status = 'active' WHERE id = ?`, []any{versionID, packID}},
 		{`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash, llm_route) VALUES (?, ?, 'Agent Test', ?, ?, 'server')`, []any{ids.conversationID, playerID, versionID, hash}},
 		{`INSERT INTO conversation_turns (id, conversation_id, turn_seq, trigger_type, status) VALUES (?, ?, 1, 'user_input', 'pending')`, []any{ids.turnID, ids.conversationID}},
 		{`INSERT INTO generation_attempts (id, conversation_id, turn_id, attempt_no, branch_epoch, status) VALUES (?, ?, ?, 1, 0, 'running')`, []any{ids.attemptID, ids.conversationID, ids.turnID}},

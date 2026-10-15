@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -15,6 +16,8 @@ var (
 	ErrPublishedVersion = errors.New("已发布的挑战版本不可修改")
 	ErrVersionInUse     = errors.New("挑战版本已被存档或对话使用，无法覆盖")
 	ErrAlreadySettled   = errors.New("该挑战已经结算")
+	ErrRevisionConflict = errors.New("内容或管理状态已变化，请刷新后重试")
+	ErrVersionBlocked   = errors.New("该玩法版本已暂停运行")
 )
 
 type ChallengeRepository struct{ db *gorm.DB }
@@ -126,6 +129,7 @@ func (r *ChallengeRepository) SetPackEnabled(ctx context.Context, id uuid.UUID, 
 			pack.Status = ChallengePackActive
 		}
 		pack.UpdatedAt = time.Now()
+		pack.ManagementRevision++
 		return tx.SavePack(ctx, pack)
 	})
 	return pack, err
@@ -172,11 +176,20 @@ func (r *ChallengeRepository) CreateVersion(ctx context.Context, row *ChallengeV
 	return r.db.WithContext(ctx).Create(row).Error
 }
 
-// DeleteVersionIfUnused removes a version so repository-maintained built-in
-// content can recreate the same version number. Existing conversations keep
-// published snapshots immutable and therefore block this operation.
+// DeleteVersionIfUnused protects all saved games, reward and import/audit references.
 func (r *ChallengeRepository) DeleteVersionIfUnused(ctx context.Context, versionID uuid.UUID) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
+		version, err := tx.GetVersion(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		pack, err := tx.LockPack(ctx, version.ChallengePackID)
+		if err != nil {
+			return err
+		}
+		if pack.CurrentVersionID != nil && *pack.CurrentVersionID == versionID {
+			return ErrVersionInUse
+		}
 		if _, err := tx.LockVersion(ctx, versionID); err != nil {
 			return err
 		}
@@ -195,57 +208,25 @@ func (r *ChallengeRepository) DeleteVersionIfUnused(ctx context.Context, version
 		if references > 0 {
 			return ErrVersionInUse
 		}
-		now := time.Now()
-		if err := tx.db.WithContext(ctx).Model(&ChallengePack{}).
-			Where("current_version_id = ?", versionID).
-			Updates(map[string]any{
-				"current_version_id": nil,
-				"status":             ChallengePackHidden,
-				"updated_at":         now,
-			}).Error; err != nil {
+		if err := tx.db.WithContext(ctx).Model(&RewardLedgerEntry{}).Where("metadata->>'challenge_version_id' = ?", versionID.String()).Count(&references).Error; err != nil {
 			return err
+		}
+		if references > 0 {
+			return ErrVersionInUse
+		}
+		if err := tx.db.WithContext(ctx).Model(&GameplayImport{}).Where("result_version_id=?", versionID).Count(&references).Error; err != nil {
+			return err
+		}
+		if references > 0 {
+			return ErrVersionInUse
+		}
+		if err := tx.db.WithContext(ctx).Model(&AdminAuditLog{}).Where("metadata->>'version_id'=?", versionID.String()).Count(&references).Error; err != nil {
+			return err
+		}
+		if references > 0 {
+			return ErrVersionInUse
 		}
 		return tx.db.WithContext(ctx).Delete(&ChallengeVersion{}, "id = ?", versionID).Error
-	})
-}
-
-// ActivatePublishedVersion switches the pack entry to an already published
-// snapshot. It is used when an explicit built-in overwrite selects repository
-// content that is already present but is not the current version.
-func (r *ChallengeRepository) ActivatePublishedVersion(ctx context.Context, packID, versionID uuid.UUID) error {
-	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
-		version, err := tx.LockVersion(ctx, versionID)
-		if err != nil {
-			return err
-		}
-		if version.ChallengePackID != packID {
-			return ErrNotFound
-		}
-		if version.Status != ChallengeVersionPublished {
-			return ErrPublishedVersion
-		}
-		pack, err := tx.LockPack(ctx, packID)
-		if err != nil {
-			return err
-		}
-		status := ChallengePackActive
-		if pack.CurrentVersionID != nil && pack.Status == ChallengePackHidden {
-			status = ChallengePackHidden
-		}
-		result := tx.db.WithContext(ctx).Model(&ChallengePack{}).
-			Where("id = ?", packID).
-			Updates(map[string]any{
-				"current_version_id": versionID,
-				"status":             status,
-				"updated_at":         time.Now(),
-			})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return ErrNotFound
-		}
-		return nil
 	})
 }
 
@@ -342,7 +323,7 @@ func (r *ChallengeRepository) replaceDraft(
 	}
 	now := time.Now()
 	if err := r.db.WithContext(ctx).Model(&ChallengeVersion{}).Where("id = ?", versionID).
-		Updates(map[string]any{"manifest": manifest, "content_hash": "", "updated_at": now}).Error; err != nil {
+		Updates(map[string]any{"manifest": manifest, "content_hash": "", "revision": version.Revision + 1, "updated_at": now}).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).Where("challenge_version_id = ?", versionID).Delete(&ChallengeOutcomeRule{}).Error; err != nil {
@@ -426,8 +407,20 @@ func (r *ChallengeRepository) CreateDraftWithContent(
 }
 
 func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherID uuid.UUID, validate PublicationValidator) error {
+	return r.PublishOptions(ctx, versionID, publisherID, 0, true, validate)
+}
+
+func (r *ChallengeRepository) PublishOptions(ctx context.Context, versionID, publisherID uuid.UUID, expected int64, selectCurrent bool, validate PublicationValidator) error {
 	return r.WithTx(ctx, func(tx *ChallengeRepository) error {
 		if err := tx.Rewards().LockConfiguration(ctx); err != nil {
+			return err
+		}
+		peek, err := tx.GetVersion(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		pack, err := tx.LockPack(ctx, peek.ChallengePackID)
+		if err != nil {
 			return err
 		}
 		version, err := tx.LockVersion(ctx, versionID)
@@ -437,9 +430,8 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		if version.Status != ChallengeVersionDraft {
 			return ErrPublishedVersion
 		}
-		pack, err := tx.LockPack(ctx, version.ChallengePackID)
-		if err != nil {
-			return err
+		if expected > 0 && version.Revision != expected {
+			return ErrRevisionConflict
 		}
 		runtime, err := tx.GetRuntime(ctx, versionID)
 		if err != nil {
@@ -478,46 +470,48 @@ func (r *ChallengeRepository) Publish(ctx context.Context, versionID, publisherI
 		if result.RowsAffected != 1 {
 			return ErrPublishedVersion
 		}
-		// 发布同一玩法的新版本后，旧版本必须退役。普通对话不再允许
-		// 继续生成，但保留全部消息和状态用于浏览；长期 Campaign 存档
-		// 仍由其自身生命周期管理，不在这里强制中断领域动作。
+		if err := tx.AuditGameplay(ctx, publisherID, "gameplay_publish", map[string]any{"pack_id": pack.ID, "version_id": versionID, "content_hash": contentHash, "select_current": selectCurrent}); err != nil {
+			return err
+		}
+		if !selectCurrent {
+			pack.ManagementRevision++
+			return tx.SavePack(ctx, pack)
+		}
 		if pack.CurrentVersionID != nil && *pack.CurrentVersionID != version.ID {
-			if err := tx.retireVersionAndArchiveConversations(ctx, *pack.CurrentVersionID, now); err != nil {
+			if err := tx.retireVersion(ctx, *pack.CurrentVersionID, now); err != nil {
 				return err
 			}
 		}
-		status := ChallengePackActive
-		if pack.CurrentVersionID != nil && pack.Status == ChallengePackHidden {
-			status = ChallengePackHidden
+		status := pack.Status
+		if pack.Source == "builtin" && pack.CurrentVersionID == nil {
+			status = ChallengePackActive
+		}
+		var manifest struct {
+			Name        string
+			Description string
+		}
+		if err := json.Unmarshal(version.Manifest, &manifest); err != nil {
+			return err
+		}
+		if manifest.Name == "" {
+			manifest.Name = pack.Name
+			manifest.Description = pack.Description
 		}
 		return tx.db.WithContext(ctx).Model(&ChallengePack{}).
 			Where("id = ?", version.ChallengePackID).
 			Updates(map[string]any{
-				"current_version_id": version.ID, "status": status, "updated_at": now,
+				"current_version_id": version.ID, "name": manifest.Name, "description": manifest.Description, "status": status, "management_revision": pack.ManagementRevision + 1, "updated_at": now,
 			}).Error
 	})
 }
 
-// retireVersionAndArchiveConversations freezes a superseded version without
-// deleting it. The foreign keys intentionally keep old snapshots addressable
-// for read-only replay and audit. Only ordinary conversations are archived;
-// Campaigns are independent long-lived saves and remain pinned to their
-// original version until their own lifecycle ends.
-func (r *ChallengeRepository) retireVersionAndArchiveConversations(ctx context.Context, versionID uuid.UUID, archivedAt time.Time) error {
-	if err := r.db.WithContext(ctx).Model(&ChallengeVersion{}).
+// retireVersion changes the new-game lifecycle only; existing games stay pinned.
+func (r *ChallengeRepository) retireVersion(ctx context.Context, versionID uuid.UUID, archivedAt time.Time) error {
+	return r.db.WithContext(ctx).Model(&ChallengeVersion{}).
 		Where("id = ? AND status = ?", versionID, ChallengeVersionPublished).
 		Updates(map[string]any{
 			"status":     ChallengeVersionRetired,
 			"updated_at": archivedAt,
-		}).Error; err != nil {
-		return err
-	}
-	return r.db.WithContext(ctx).Model(&Conversation{}).
-		Where("challenge_version_id = ? AND campaign_id IS NULL AND status = ?", versionID, StatusActive).
-		Updates(map[string]any{
-			"status":      StatusArchived,
-			"archived_at": archivedAt,
-			"updated_at":  archivedAt,
 		}).Error
 }
 

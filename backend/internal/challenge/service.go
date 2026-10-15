@@ -16,6 +16,7 @@ import (
 
 	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/gameplay/kernel"
+	"github.com/ialtone/fatecraft/internal/jsonstrict"
 	"github.com/ialtone/fatecraft/internal/operation"
 	"github.com/ialtone/fatecraft/internal/platformcapability"
 	"github.com/ialtone/fatecraft/internal/requirement"
@@ -78,9 +79,7 @@ func (s *Service) Asset(ctx context.Context, id uuid.UUID) (*storage.ChallengeAs
 	return s.repo.GetAsset(ctx, id)
 }
 
-// IsCurrentVersion reports whether a version is the pack's currently
-// published version. Retired versions remain readable for historical
-// conversations but cannot accept new narrative turns.
+// IsCurrentVersion is an entry query only, never an existing-save permission.
 func (s *Service) IsCurrentVersion(ctx context.Context, versionID uuid.UUID) (bool, error) {
 	version, err := s.repo.GetVersion(ctx, versionID)
 	if err != nil {
@@ -94,6 +93,26 @@ func (s *Service) IsCurrentVersion(ctx context.Context, versionID uuid.UUID) (bo
 		(pack.Status == storage.ChallengePackActive || pack.Status == storage.ChallengePackHidden) && pack.CurrentVersionID != nil &&
 		*pack.CurrentVersionID == versionID, nil
 }
+
+func (s *Service) CheckSavedVersion(ctx context.Context, id uuid.UUID, hash string) error {
+	if err := s.repo.CheckVersionRun(ctx, id, hash); err != nil {
+		return err
+	}
+	runtime, err := s.repo.GetRuntime(ctx, id)
+	if err != nil {
+		return err
+	}
+	contract, err := storage.DecodeGameplayRuntime(*runtime)
+	if err != nil {
+		return err
+	}
+	if err := s.registry.ValidateRuntime(contract); err != nil {
+		return fmt.Errorf("%w: %v", storage.ErrGameplayModuleUnavailable, err)
+	}
+	return nil
+}
+
+func (s *Service) Repository() *storage.ChallengeRepository { return s.repo }
 
 func (s *Service) CreatePack(ctx context.Context, creatorID uuid.UUID, in CreatePackInput) (*storage.ChallengePack, error) {
 	in.Slug = strings.TrimSpace(in.Slug)
@@ -162,6 +181,10 @@ func (s *Service) publicChallenge(ctx context.Context, pack *storage.ChallengePa
 	projection := compiled.public
 	available := true
 	unavailableReason := ""
+	if err := s.CheckSavedVersion(ctx, *pack.CurrentVersionID, compiled.contentHash); err != nil {
+		available = false
+		unavailableReason = err.Error()
+	}
 	if len(manifest.EntryRequirement) > 0 && len(playerIDs) > 0 {
 		if err := s.checkEntryRequirement(ctx, playerIDs[0], manifest.EntryRequirement); err != nil {
 			available = false
@@ -191,6 +214,9 @@ func (s *Service) ResolveSelection(ctx context.Context, challengeSlug, personaSl
 		return nil, err
 	}
 	doc := compiled.document
+	if err := s.CheckSavedVersion(ctx, *pack.CurrentVersionID, compiled.contentHash); err != nil {
+		return nil, err
+	}
 	if doc.Version.Status != storage.ChallengeVersionPublished || doc.Version.ContentHash == "" {
 		return nil, ErrNotPublished
 	}
@@ -395,11 +421,30 @@ func (s *Service) ListAdmin(ctx context.Context) ([]AdminPack, error) {
 }
 
 func (s *Service) VersionDocument(ctx context.Context, versionID uuid.UUID) (*VersionDocument, error) {
-	entry, err := s.versionContent(ctx, versionID)
-	if err != nil {
-		return nil, err
-	}
-	return cloneVersionDocument(entry.document)
+	var doc VersionDocument
+	err := s.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
+		v, err := tx.LockVersion(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		doc.Version = *v
+		r, err := tx.GetRuntime(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		doc.Runtime = *r
+		doc.Assets, err = tx.ListAssets(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		doc.Definitions, err = tx.ListDefinitions(ctx, versionID)
+		if err != nil {
+			return err
+		}
+		doc.Outcomes, err = tx.ListOutcomeRules(ctx, versionID)
+		return err
+	})
+	return &doc, err
 }
 
 func (s *Service) versionContent(ctx context.Context, versionID uuid.UUID) (*versionCacheEntry, error) {
@@ -475,7 +520,7 @@ func (s *Service) CacheStats() CacheStats {
 
 func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVersionInput) (*VersionDocument, error) {
 	var manifest Manifest
-	if err := json.Unmarshal(in.Manifest, &manifest); err != nil {
+	if err := jsonstrict.Decode(in.Manifest, &manifest); err != nil {
 		return nil, fmt.Errorf("%w: manifest 无效: %v", ErrInvalidChallenge, err)
 	}
 	for _, outcome := range in.Outcomes {
@@ -503,8 +548,16 @@ func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVer
 		in.Runtime.CampaignConfig = nil
 	}
 	in.Runtime.ChallengeVersionID = versionID
-	if err := s.repo.ReplaceDraft(
-		ctx, versionID, storage.JSONDoc(in.Manifest), in.Runtime, in.Assets, in.Definitions, in.Outcomes,
+	version, err := s.repo.GetVersion(ctx, versionID)
+	if err != nil {
+		return nil, err
+	}
+	version.Manifest = storage.JSONDoc(in.Manifest)
+	if err := s.ValidateDocument(ctx, &VersionDocument{Version: *version, Runtime: in.Runtime, Assets: in.Assets, Definitions: in.Definitions, Outcomes: in.Outcomes}); err != nil {
+		return nil, err
+	}
+	if err := s.repo.ReplaceDraftChecked(
+		ctx, versionID, in.ExpectedRevision, storage.JSONDoc(in.Manifest), in.Runtime, in.Assets, in.Definitions, in.Outcomes,
 	); err != nil {
 		return nil, err
 	}
@@ -512,7 +565,11 @@ func (s *Service) SaveDraft(ctx context.Context, versionID uuid.UUID, in SaveVer
 }
 
 func (s *Service) Publish(ctx context.Context, versionID, publisherID uuid.UUID) (*VersionDocument, error) {
-	err := s.repo.Publish(ctx, versionID, publisherID, func(
+	return s.PublishOptions(ctx, versionID, publisherID, 0, true)
+}
+
+func (s *Service) PublishOptions(ctx context.Context, versionID, publisherID uuid.UUID, expected int64, selectCurrent bool) (*VersionDocument, error) {
+	err := s.repo.PublishOptions(ctx, versionID, publisherID, expected, selectCurrent, func(
 		pack storage.ChallengePack,
 		version storage.ChallengeVersion,
 		runtime storage.ChallengeRuntimeConfig,
@@ -531,8 +588,18 @@ func (s *Service) Publish(ctx context.Context, versionID, publisherID uuid.UUID)
 		if err != nil {
 			return "", err
 		}
-		if manifest.ID != pack.Slug || manifest.Name != pack.Name || manifest.Description != pack.Description {
-			return "", fmt.Errorf("%w: manifest 的 id、name、description 必须与挑战包一致", ErrInvalidChallenge)
+		if manifest.ID != pack.Slug {
+			return "", fmt.Errorf("%w: manifest.id 必须与玩法包一致", ErrInvalidChallenge)
+		}
+		if selectCurrent && pack.CurrentVersionID != nil {
+			current, err := s.repo.GetVersion(ctx, *pack.CurrentVersionID)
+			if err != nil {
+				return "", err
+			}
+			comparison, err := CompareStableVersions(version.Version, current.Version)
+			if err != nil || comparison <= 0 {
+				return "", fmt.Errorf("%w: 普通发布切换入口必须提高版本号，旧版发布后请使用显式回退", ErrInvalidChallenge)
+			}
 		}
 		return ContentHashDocument(doc)
 	})
@@ -550,8 +617,8 @@ func (s *Service) DeleteVersion(ctx context.Context, versionID uuid.UUID) error 
 
 func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, versionName string) (*VersionDocument, error) {
 	versionName = strings.TrimSpace(versionName)
-	if versionName == "" {
-		return nil, fmt.Errorf("%w: version 不能为空", ErrInvalidChallenge)
+	if _, err := ParseStableVersion(versionName); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidChallenge, err)
 	}
 	pack, err := s.repo.GetPack(ctx, packID)
 	if err != nil {
@@ -586,6 +653,7 @@ func (s *Service) CreateDraft(ctx context.Context, packID, creatorID uuid.UUID, 
 			return nil, err
 		}
 		version.Manifest = storage.JSONDoc(manifestJSON)
+		version.Provenance = source.Version.Provenance
 		runtime = source.Runtime
 		runtime.ChallengeVersionID = version.ID
 		runtime.CreatedAt, runtime.UpdatedAt = now, now
@@ -835,6 +903,12 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 		manifest.DefaultConfig.RecommendedScenario == "" ||
 		manifest.DefaultConfig.RecommendedPrompt == "" {
 		return fmt.Errorf("%w: manifest 缺少默认 Character、Persona、Scenario 或 Prompt", ErrInvalidChallenge)
+	}
+	if _, err := ParseStableVersion(manifest.Version); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidChallenge, err)
+	}
+	if len(manifest.Dependencies) > 0 {
+		return fmt.Errorf("%w: 首期不支持跨玩法包 dependencies", ErrInvalidChallenge)
 	}
 	if manifest.Version != doc.Version.Version {
 		return fmt.Errorf("%w: manifest.version 必须与版本记录一致", ErrInvalidChallenge)

@@ -2,6 +2,7 @@ package challengeimport
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,7 +22,7 @@ func TestPostgresBundledMortalPathImportAndOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import mortal-path: %v", err)
 	}
-	if !first.Created || first.Version != "3.7.0" || first.ContentHash == "" {
+	if !first.Created || first.Version != "1.0.0" || first.ContentHash == "" {
 		t.Fatalf("unexpected first import result: %+v", first)
 	}
 	pack, err := repository.GetPackBySlug(ctx, "mortal-path")
@@ -34,27 +35,22 @@ func TestPostgresBundledMortalPathImportAndOverwrite(t *testing.T) {
 	firstVersionID := *pack.CurrentVersionID
 	assertMortalPathPublishedContent(t, ctx, repository, firstVersionID)
 
-	// Force the stored snapshot hash to differ so the explicit overwrite path
-	// must remove the unused published version and republish repository content.
+	// A changed published identity must never be replaced, even if unused.
 	if err := db.Model(&storage.ChallengeVersion{}).Where("id = ?", firstVersionID).
 		Update("content_hash", strings.Repeat("0", 64)).Error; err != nil {
 		t.Fatal(err)
 	}
-	overwritten, err := importer.OverwriteBuiltin(ctx, "mortal-path")
-	if err != nil {
-		t.Fatalf("overwrite mortal-path: %v", err)
-	}
-	if !overwritten.Created || !overwritten.Overwritten || overwritten.ContentHash != first.ContentHash {
-		t.Fatalf("unexpected overwrite result: %+v", overwritten)
+	_, err = importer.OverwriteBuiltin(ctx, "mortal-path")
+	if !errors.Is(err, storage.ErrPublishedVersion) {
+		t.Fatalf("published replacement accepted: %v", err)
 	}
 	pack, err = repository.GetPackBySlug(ctx, "mortal-path")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pack.CurrentVersionID == nil || *pack.CurrentVersionID == firstVersionID {
+	if pack.CurrentVersionID == nil || *pack.CurrentVersionID != firstVersionID {
 		t.Fatalf("overwrite did not replace the published snapshot: %+v", pack)
 	}
-	assertMortalPathPublishedContent(t, ctx, repository, *pack.CurrentVersionID)
 }
 
 func assertMortalPathPublishedContent(
@@ -68,7 +64,7 @@ func assertMortalPathPublishedContent(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version.Status != storage.ChallengeVersionPublished || version.Version != "3.7.0" {
+	if version.Status != storage.ChallengeVersionPublished || version.Version != "1.0.0" {
 		t.Fatalf("unexpected mortal-path version: %+v", version)
 	}
 	definitions, err := repository.ListDefinitions(ctx, versionID)

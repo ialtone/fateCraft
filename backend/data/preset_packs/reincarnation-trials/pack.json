@@ -1,7 +1,7 @@
 {
   "id": "reincarnation-trials",
   "name": "百年飞升劫",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "一世一局的寿元挑战。你将在有限寿元中经历机缘、积累资源、逐级突破，并在正统渡劫、虚空裂缝与仙缘传送之间选择飞升道路。知足与贪婪的抉择，将决定这一世的命运。",
   "author": "ialtone",

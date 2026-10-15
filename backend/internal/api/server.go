@@ -31,8 +31,7 @@ import (
 
 type builtinChallengeImporter interface {
 	ListBuiltins(context.Context) ([]challengeimport.BuiltinInfo, error)
-	PreviewBuiltin(context.Context, string) (*challengeimport.BuiltinPreview, error)
-	ConfirmBuiltin(context.Context, string, bool, string, uuid.UUID) (*challengeimport.ImportResult, error)
+	PreviewBuiltin(context.Context, string, uuid.UUID) (*storage.GameplayImport, error)
 }
 
 // Server 聚合全部服务，承载 HTTP 与 WebSocket 处理。
@@ -185,6 +184,7 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.POST("/conversations", s.createConversation)
 	protected.GET("/conversations", s.listConversations)
 	protected.GET("/conversations/:id", s.getConversation)
+	protected.GET("/conversations/:id/gameplay-version", s.savedGameplayVersion)
 	protected.POST("/conversations/:id/fork", s.forkConversation)
 	protected.PATCH("/conversations/:id", s.updateConversation)
 	protected.DELETE("/conversations/:id", s.deleteConversation)
@@ -273,7 +273,6 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.PATCH("/admin/users/:id/status", s.requireOwner, s.updateAdminUserStatus)
 	protected.GET("/admin/audit-logs", s.requireAdmin, s.listAdminAuditLogs)
 	protected.GET("/admin/builtin-challenges", s.requireAdmin, s.listAdminBuiltins)
-	protected.POST("/admin/builtin-challenges/:slug/import", s.requireAdmin, s.importAdminBuiltin)
 	protected.GET("/admin/builtin-challenges/:slug/preview", s.requireAdmin, s.previewAdminBuiltin)
 	protected.GET("/admin/gameplay-modules", s.requireAdmin, s.listAdminGameplayModules)
 	protected.GET("/admin/rewards/rules", s.requireAdmin, s.rewardRuleCatalog)
@@ -291,6 +290,16 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.PUT("/admin/challenge-versions/:id", s.requireAdmin, s.saveAdminChallengeVersion)
 	protected.POST("/admin/challenge-versions/:id/publish", s.requireAdmin, s.publishAdminChallengeVersion)
 	protected.DELETE("/admin/challenge-versions/:id", s.requireAdmin, s.deleteAdminChallengeVersion)
+	protected.GET("/admin/challenge-versions/:id/export", s.requireAdmin, s.exportGameplayVersion)
+	protected.GET("/admin/challenge-versions/:id/references", s.requireAdmin, s.gameplayVersionReferences)
+	protected.PUT("/admin/challenge-versions/:id/run-policy", s.requireAdmin, s.gameplayRunPolicy)
+	protected.POST("/admin/challenge-versions/:id/retire", s.requireAdmin, s.retireGameplayVersion)
+	protected.PUT("/admin/challenges/:id/current-version", s.requireAdmin, s.selectGameplayVersion)
+	protected.POST("/admin/gameplay-imports/preview", s.requireAdmin, s.previewGameplayUpload)
+	protected.POST("/admin/gameplay-imports/:id/confirm", s.requireAdmin, s.confirmGameplayUpload)
+	protected.GET("/admin/gameplay-imports", s.requireAdmin, s.listGameplayImports)
+	protected.GET("/admin/gameplay-imports/:id", s.requireAdmin, s.getGameplayImport)
+	protected.DELETE("/admin/gameplay-imports/:id", s.requireAdmin, s.cancelGameplayImport)
 
 	// WebSocket
 	r.GET("/ws/conversations/:id", s.requireAuth, s.serveWS)
@@ -330,7 +339,23 @@ func paramUUIDFromString(c *gin.Context, raw string) (uuid.UUID, bool) {
 
 // fail 按错误类型返回合适的 HTTP 状态码。
 func fail(c *gin.Context, err error) {
+	err = storage.GameplayPolicyError(err)
+	var packageErr *challengeimport.PackageError
 	switch {
+	case errors.As(err, &packageErr):
+		status := http.StatusBadRequest
+		if packageErr.Code == "package_too_large" {
+			status = http.StatusRequestEntityTooLarge
+		}
+		c.JSON(status, gin.H{"error": packageErr.Error(), "code": packageErr.Code})
+	case errors.Is(err, storage.ErrGameplayModuleUnavailable):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error(), "code": "gameplay_module_unavailable"})
+	case errors.Is(err, storage.ErrVersionBlocked):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "gameplay_version_blocked"})
+	case errors.Is(err, challengeimport.ErrPreviewChanged):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "preview_changed"})
+	case errors.Is(err, storage.ErrRevisionConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "gameplay_revision_conflict"})
 	case errors.Is(err, storage.ErrSettingsConflict):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "settings_conflict"})
 	case errors.Is(err, storage.ErrLogQuery), errors.Is(err, storage.ErrDetailedLLMLoggingScope), errors.Is(err, storage.ErrDetailedLLMLoggingTarget):

@@ -89,6 +89,11 @@ func main() {
 	if bootstrap.Initialized {
 		logger.Info("已补齐缺少的内置挑战", zap.Int("count", len(bootstrap.Imports)))
 	}
+	if problems, err := challengeSvc.CheckDeployment(context.Background()); err != nil {
+		logger.Fatal("玩法运行依赖检查失败", zap.Error(err))
+	} else if len(problems) > 0 {
+		logger.Error("存在不兼容玩法存档，仅允许查看，请补齐精确模块版本", zap.Strings("problems", problems))
+	}
 
 	// 生成租约自愈：启动时回收本实例上次进程遗留的租约；周期任务只能回收
 	// 真正过期的租约，不能按 owner 回收，否则会取消本进程仍在运行的生成。

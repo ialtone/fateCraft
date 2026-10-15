@@ -193,7 +193,18 @@ const fmt = (value: string) => new Date(value).toLocaleString('zh-CN')
             @click="router.push(`/conversations/${conversation.id}`)"
           >
             <div class="item-head">
-              <strong>{{ conversation.title }}</strong>
+              <div class="item-title">
+                <strong>{{ conversation.title }}</strong>
+                <NTag
+                  v-if="conversation.challenge_version"
+                  size="small"
+                  :bordered="false"
+                  type="info"
+                  class="conversation-version"
+                >
+                  v{{ conversation.challenge_version }}
+                </NTag>
+              </div>
               <ConversationStatusBadge :status="conversation.status" />
               <LlmRouteTag :route="conversation.llm_route" />
             </div>
@@ -401,6 +412,25 @@ const fmt = (value: string) => new Date(value).toLocaleString('zh-CN')
 .item-head {
   justify-content: space-between;
   gap: 12px;
+}
+
+.item-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.item-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-version {
+  flex: 0 0 auto;
+  font-size: 11px;
 }
 
 .meta {

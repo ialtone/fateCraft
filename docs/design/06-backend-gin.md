@@ -138,7 +138,7 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 
 长期玩法先由 Campaign Service 创建权威存档，再从固定 Campaign 创建唯一的持续 Conversation。对话与初始状态在 Campaign 行锁事务中写入，数据库和仓储共同保证一个 Campaign 最多绑定一个 Conversation；该对话不会跟随挑战包后来切换的 current version。
 
-所有会改变叙事的操作先调用 `EnsureActive`，同时检查归属、状态和当前玩法版本。旧版本普通对话即使因旧数据未及时标记，也会在写入边界被封存并拒绝生成。只读操作使用 `GetOwned`，允许查看 ended 或 archived 内容。
+所有新叙事操作检查归属、active 状态、固定玩法版本的运行策略与精确模块。原已登记请求允许只读回放；数据库最终写栅栏阻止暂停版本的新事实。旧版不会因不是当前入口而自动归档；只读使用 GetOwned。
 
 ## 生成管线
 
@@ -294,3 +294,9 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 ## 结局生命周期（2026-10-11）
 
 Campaign 终态、关联对话关闭和完整结局结果在原动作事务提交；所有入口广播统一 completion。绑定可信玩法禁止普通关闭绕过结算，模型玩家权限保持分离。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
+
+## 玩法包交换与版本管理
+
+内置/JSON/ZIP 经过同一 Portable 编译器；确认、草稿和审计原子提交。部署前 gameplay-check 只读检查精确模块依赖，服务器保留不兼容存档只读访问。
+
+完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。

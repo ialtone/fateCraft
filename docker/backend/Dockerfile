@@ -12,9 +12,10 @@ ENV TZ=Asia/Shanghai
 
 COPY ./bin/fatecraft ./fatecraft
 COPY ./bin/fatecraft-migrate ./fatecraft-migrate
+COPY ./bin/fatecraft-gameplay-check ./fatecraft-gameplay-check
 
 # 判定配置、响应 Schema 和首次启动材料由 compose 挂载到 /app/backend/data（DATA_DIR=data）。
-RUN chmod +x ./fatecraft ./fatecraft-migrate && mkdir -p data
+RUN chmod +x ./fatecraft ./fatecraft-migrate ./fatecraft-gameplay-check && mkdir -p data
 
 EXPOSE 8081
 

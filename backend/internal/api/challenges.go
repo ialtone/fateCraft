@@ -131,7 +131,7 @@ func (s *Server) saveAdminChallengeVersion(c *gin.Context) {
 		return
 	}
 	var in challenge.SaveVersionInput
-	if err := c.ShouldBindJSON(&in); err != nil {
+	if err := bindGameplayJSON(c, &in); err != nil || in.ExpectedRevision < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
 		return
 	}
@@ -153,7 +153,15 @@ func (s *Server) publishAdminChallengeVersion(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	doc, err := s.challenges.Publish(c.Request.Context(), id, publisher)
+	var body struct {
+		ExpectedRevision int64 `json:"expected_revision"`
+		SelectCurrent    *bool `json:"select_current"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.ExpectedRevision < 1 || body.SelectCurrent == nil {
+		c.JSON(400, gin.H{"error": "请提供草稿修订并明确是否切换新开局版本"})
+		return
+	}
+	doc, err := s.challenges.PublishOptions(c.Request.Context(), id, publisher, body.ExpectedRevision, *body.SelectCurrent)
 	if err != nil {
 		fail(c, err)
 		return

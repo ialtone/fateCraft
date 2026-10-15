@@ -1,7 +1,7 @@
 {
   "id": "mortal-path",
   "name": "青河修仙志",
-  "version": "3.7.0",
+  "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "从青河村起步，跨越天星海、界墟与上灵界的长期修仙世界。成长、生产、经济、遭遇、任务、NPC 与世界演化均由后端可信规则持续维护。",
   "author": "ialtone",

@@ -45,7 +45,7 @@ func TestPostgresModuleActionReplayRewindAndAtomicFailure(t *testing.T) {
 			if _, _, err := store.GrantCampaignStageReward(ctx, row, "early", "阶段", 5); err != nil {
 				return CampaignActionOutcome{}, err
 			}
-			_, err := NewRewardRepository(bound.db).GrantInCurrentTx(ctx, RewardMutation{PlayerID: playerID, RewardKey: PointsKey, Quantity: 12, SourceType: "campaign_outcome", SourceID: campaignID.String(), IdempotencyKey: "checkpoint-earned", Metadata: JSONMap{}})
+			_, err := NewRewardRepository(bound.db).GrantInCurrentTx(ctx, RewardMutation{PlayerID: playerID, RewardKey: PointsKey, Quantity: 12, SourceType: "admin_grant", SourceID: campaignID.String(), IdempotencyKey: "checkpoint-earned", Metadata: JSONMap{}})
 			return CampaignActionOutcome{GameTimeDelta: 60, Events: []CampaignEventDraft{{EventType: "test.spent", Visibility: CampaignVisibilityPlayer}}, Result: JSONMap{"stock": 2}}, err
 		})
 		if err != nil {

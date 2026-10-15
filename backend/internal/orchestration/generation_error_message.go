@@ -13,6 +13,9 @@ import (
 )
 
 func partialGenerationErrorMessage(err error) string {
+	if errors.Is(storage.GameplayPolicyError(err), storage.ErrVersionBlocked) {
+		return "已提交的动作保留，但管理员已暂停此玩法版本，后续叙事暂时无法生成。解除暂停后可继续叙事，不会重复执行动作。"
+	}
 	// A committed action must be continued, rather than repeated. Keep the
 	// diagnosis but replace recovery advice intended for uncommitted attempts.
 	reason, _, _ := strings.Cut(generationErrorMessage(err), "请")
@@ -21,7 +24,10 @@ func partialGenerationErrorMessage(err error) string {
 
 // Explain known failures without exposing provider bodies, URLs or credentials.
 func generationErrorMessage(err error) string {
+	err = storage.GameplayPolicyError(err)
 	switch {
+	case errors.Is(err, storage.ErrVersionBlocked):
+		return "管理员已暂停此玩法版本，暂时无法继续生成。已有游戏内容、结局和积分保留，解除暂停后可继续。"
 	case errors.Is(err, llm.ErrToolCallConflict):
 		return "模型服务返回的工具调用标识、名称或参数不一致，本次调用已拒绝执行。请重试或切换兼容的模型接口。"
 	case errors.Is(err, context.DeadlineExceeded):

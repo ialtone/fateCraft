@@ -1,6 +1,6 @@
 # 25. 两套核心玩法的验证与平衡记录
 
-记录日期：2026-10-09。本轮实现基线为 `reincarnation-trials 2.0.0 / cultivation.trial@2` 和 `mortal-path 3.7.0 / cultivation.campaign@2`。本文保留可复现的本地证据、样本限制和维护者待验项，不代表生产环境验收或 release 批准。
+记录日期：2026-10-09。本轮实现基线为 `reincarnation-trials 1.0.0 / cultivation.trial@2` 和 `mortal-path 1.0.0 / cultivation.campaign@2`。本文保留可复现的本地证据、样本限制和维护者待验项，不代表生产环境验收或 release 批准。
 
 ## 实现范围
 

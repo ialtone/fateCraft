@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,41 +29,28 @@ func (s *builtinImporterStub) ListBuiltins(context.Context) ([]challengeimport.B
 	return s.items, s.listErr
 }
 
-func (s *builtinImporterStub) PreviewBuiltin(context.Context, string) (*challengeimport.BuiltinPreview, error) {
-	return &challengeimport.BuiltinPreview{Token: "preview"}, nil
-}
-func (s *builtinImporterStub) ConfirmBuiltin(ctx context.Context, slug string, overwrite bool, token string, actor uuid.UUID) (*challengeimport.ImportResult, error) {
-	if token != "preview" {
-		return nil, challengeimport.ErrPreviewChanged
-	}
-	if overwrite {
-		return s.OverwriteBuiltin(ctx, slug)
-	}
-	return s.ImportBuiltin(ctx, slug)
-}
-
-func (s *builtinImporterStub) ImportBuiltin(_ context.Context, slug string) (*challengeimport.ImportResult, error) {
+func (s *builtinImporterStub) PreviewBuiltin(_ context.Context, slug string, actor uuid.UUID) (*storage.GameplayImport, error) {
 	s.importedSlug = slug
-	return s.importResult, s.importErr
+	return &storage.GameplayImport{ID: uuid.New(), ActorID: actor, Status: "preview"}, s.importErr
 }
 
-func (s *builtinImporterStub) OverwriteBuiltin(_ context.Context, slug string) (*challengeimport.ImportResult, error) {
-	s.overwrittenSlug = slug
-	return s.importResult, s.overwriteErr
-}
-
-func TestImportAdminBuiltinRequiresExplicitOverwrite(t *testing.T) {
+func TestPreviewAdminBuiltinUsesAuthenticatedActor(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	stub := &builtinImporterStub{importErr: challengeimport.ErrOverwriteRequired}
+	stub := &builtinImporterStub{}
 	server := &Server{builtins: stub}
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/admin/builtin-challenges/trial/import", nil)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/admin/builtin-challenges/trial/preview", nil)
 	ctx.Params = gin.Params{{Key: "slug", Value: "trial"}}
-
-	server.importAdminBuiltin(ctx)
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", recorder.Code)
+	actor := uuid.New()
+	ctx.Set(authUserKey, &storage.User{ID: actor})
+	server.previewAdminBuiltin(ctx)
+	var body storage.GameplayImport
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil || body.ActorID != actor {
+		t.Fatalf("actor binding lost: %+v %v", body, err)
+	}
+	if recorder.Code != http.StatusOK || stub.importedSlug != "trial" {
+		t.Fatalf("preview failed: %d %s", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -145,49 +131,5 @@ func TestListAdminBuiltins(t *testing.T) {
 	}
 	if len(body.Builtins) != 1 || body.Builtins[0].Slug != "trial" {
 		t.Fatalf("body = %#v", body)
-	}
-}
-
-func TestImportAdminBuiltinUsesSlugOnly(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	stub := &builtinImporterStub{importResult: &challengeimport.ImportResult{Slug: "trial", Version: "1.0.0", Created: true}}
-	server := &Server{builtins: stub}
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/admin/builtin-challenges/trial/import", strings.NewReader(`{"preview_token":"preview"}`))
-	ctx.Request.Header.Set("Content-Type", "application/json")
-	ctx.Params = gin.Params{{Key: "slug", Value: "trial"}}
-
-	server.importAdminBuiltin(ctx)
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201", recorder.Code)
-	}
-	if stub.importedSlug != "trial" {
-		t.Fatalf("imported slug = %q", stub.importedSlug)
-	}
-}
-
-func TestImportAdminBuiltinPassesExplicitOverwrite(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	stub := &builtinImporterStub{importResult: &challengeimport.ImportResult{
-		Slug: "trial", Version: "1.0.0", Overwritten: true,
-	}}
-	server := &Server{builtins: stub}
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(
-		http.MethodPost,
-		"/api/admin/builtin-challenges/trial/import",
-		strings.NewReader(`{"overwrite":true,"preview_token":"preview"}`),
-	)
-	ctx.Request.Header.Set("Content-Type", "application/json")
-	ctx.Params = gin.Params{{Key: "slug", Value: "trial"}}
-
-	server.importAdminBuiltin(ctx)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", recorder.Code)
-	}
-	if stub.overwrittenSlug != "trial" || stub.importedSlug != "" {
-		t.Fatalf("overwrite slug = %q, import slug = %q", stub.overwrittenSlug, stub.importedSlug)
 	}
 }

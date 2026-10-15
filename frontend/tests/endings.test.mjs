@@ -3,6 +3,61 @@ import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { fileURLToPath } from 'node:url'
 import { createPinia, setActivePinia } from 'pinia'
+import { readFileSync } from 'node:fs'
+import ts from 'typescript'
+
+test('abandon confirmation accepts null metadata and executes only after confirmation', async () => {
+  const source = readFileSync(new URL('../src/views/ConversationView.vue', import.meta.url), 'utf8')
+  const start = source.indexOf('function showEndingDialog(')
+  const end = source.indexOf('async function endConversation()', start)
+  const compiled = ts.transpile(source.slice(start, end), { target: ts.ScriptTarget.ESNext })
+  let popup
+  const calls = []
+  const actions = { pending: null, acting: false, execute: (...args) => calls.push(args) }
+  const snapshot = {
+    branch_epoch: 0,
+    revision: 3,
+    is_processing: false,
+    abandon_action: 'campaign.abandon',
+    ending_capabilities: [{ key: 'campaign.abandon', available: true, metadata: null }],
+  }
+  const confirm = new Function(
+    'playerActions',
+    'convId',
+    'convStore',
+    'chat',
+    'message',
+    'dialog',
+    `${compiled}; return confirmEnding`,
+  )(
+    actions,
+    { value: 'a' },
+    { endingState: snapshot },
+    { isGenerating: false },
+    { warning: () => {} },
+    {
+      error: (options) => {
+        popup = options
+      },
+    },
+  )
+
+  assert.equal(confirm('campaign.abandon', {}, '中止本局', 'p'), true)
+  assert.equal(popup.title, '确认放弃本局')
+  assert.equal(popup.positiveText, '确认放弃')
+  assert.equal(popup.negativeText, '继续游玩')
+  assert.equal(popup.style.maxWidth, '520px')
+  assert.match(popup.content, /阶段积分会保留/)
+  assert.doesNotMatch(popup.content, /后端|校验/)
+  assert.equal(calls.length, 0)
+  await popup.onPositiveClick()
+  assert.equal(calls[0][0], 'a')
+  assert.equal(calls[0][1].key, 'campaign.abandon')
+  assert.equal(calls[0][1].expected_revision, 3)
+  actions.pending = { request_id: 'pending' }
+  assert.equal(confirm('campaign.abandon', {}, '中止本局', 'p'), false)
+})
+
 let server, api, useConversationStore, usePlayerActionStore
 before(async () => {
   server = await createServer({

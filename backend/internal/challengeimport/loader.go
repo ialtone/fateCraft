@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/challenge"
 	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
+	"github.com/ialtone/fatecraft/internal/jsonstrict"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
 
@@ -96,7 +96,7 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 		return nil, fmt.Errorf("读取 pack.json: %w", err)
 	}
 	var manifest challenge.Manifest
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+	if err := jsonstrict.Decode(manifestBytes, &manifest); err != nil {
 		return nil, fmt.Errorf("解析 pack.json: %w", err)
 	}
 	if _, err := parseStableVersion(manifest.Version); err != nil {
@@ -109,10 +109,25 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 		return nil, err
 	}
 
-	if strings.TrimSpace(manifest.RuntimeEntry) == "" {
+	entryReference := manifest.RuntimeEntry
+	var meta exchangeMetadata
+	if raw, err := os.ReadFile(filepath.Join(directory, "fatecraft-package.json")); err == nil {
+		if err := jsonstrict.Decode(raw, &meta); err != nil {
+			return nil, err
+		}
+		if meta.RuntimeEntry != "" {
+			if entryReference != "" && meta.RuntimeEntry != entryReference {
+				return nil, fmt.Errorf("交换布局与 manifest.runtime_entry 不一致")
+			}
+			entryReference = meta.RuntimeEntry
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if strings.TrimSpace(entryReference) == "" {
 		return nil, fmt.Errorf("pack.json 缺少 runtime_entry")
 	}
-	runtimeContract, err := loadRuntimeSource(directory, manifest.RuntimeEntry)
+	runtimeContract, err := loadRuntimeSource(directory, entryReference)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +163,7 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 				return nil, fmt.Errorf("读取 %s: %w", file, err)
 			}
 			var value map[string]any
-			if err := json.Unmarshal(raw, &value); err != nil {
+			if err := jsonstrict.Decode(raw, &value); err != nil {
 				return nil, fmt.Errorf("解析 %s: %w", file, err)
 			}
 			slug, _ := value["id"].(string)
@@ -184,14 +199,16 @@ func loadDirectory(directory string, now time.Time, registries ...*gameplay.Regi
 		Runtime: runtime, Assets: assets, Definitions: gameplayDefinitions,
 		Outcomes: outcomes,
 	}
-	if err := challenge.ValidateDocument(&document, registry); err != nil {
-		return nil, err
-	}
-	hash, err := challenge.ContentHashDocument(&document)
+	expectedHash, err := applyExchangeMetadata(directory, &document)
 	if err != nil {
 		return nil, err
 	}
-	return &loadedChallenge{manifest: manifest, document: document, hash: hash}, nil
+	p, err := portableFromDocument(&document)
+	if err != nil {
+		return nil, err
+	}
+	p.ContentHash = expectedHash
+	return compilePortable(p, registry)
 }
 
 func loadRuntimeSource(packDirectory, entryReference string) (*gameplay.RuntimeContract, error) {
@@ -332,19 +349,14 @@ func decodeJSONFileStrict(path string, target any) error {
 		return err
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 2<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
+	raw, err := io.ReadAll(io.LimitReader(file, (2<<20)+1))
+	if err != nil {
 		return err
 	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return fmt.Errorf("只能包含一个 JSON 值")
-		}
-		return err
+	if len(raw) > 2<<20 {
+		return fmt.Errorf("JSON 文件超过 2 MiB")
 	}
-	return nil
+	return jsonstrict.Decode(raw, target)
 }
 
 func loadGameplayDefinitionCatalog(directory string, now time.Time) ([]storage.GameplayDefinition, error) {
@@ -375,7 +387,7 @@ func loadGameplayDefinitions(path string, now time.Time) ([]storage.GameplayDefi
 		return nil, fmt.Errorf("读取 %s: %w", path, err)
 	}
 	var values []gameplayDefinitionFile
-	if err := json.Unmarshal(raw, &values); err != nil {
+	if err := jsonstrict.Decode(raw, &values); err != nil {
 		return nil, fmt.Errorf("解析 %s: %w", path, err)
 	}
 	out := make([]storage.GameplayDefinition, 0, len(values))
@@ -394,41 +406,7 @@ func loadGameplayDefinitions(path string, now time.Time) ([]storage.GameplayDefi
 	return out, nil
 }
 
-func parseStableVersion(version string) ([3]int, error) {
-	var parsed [3]int
-	parts := strings.Split(version, ".")
-	if len(parts) != len(parsed) {
-		return parsed, fmt.Errorf("%q 必须使用 major.minor.patch", version)
-	}
-	for index, part := range parts {
-		if part == "" || (len(part) > 1 && part[0] == '0') {
-			return parsed, fmt.Errorf("%q 不是稳定版本号", version)
-		}
-		value, err := strconv.Atoi(part)
-		if err != nil || value < 0 {
-			return parsed, fmt.Errorf("%q 不是稳定版本号", version)
-		}
-		parsed[index] = value
-	}
-	return parsed, nil
-}
-
+func parseStableVersion(version string) ([3]int, error) { return challenge.ParseStableVersion(version) }
 func compareStableVersions(left, right string) (int, error) {
-	a, err := parseStableVersion(left)
-	if err != nil {
-		return 0, err
-	}
-	b, err := parseStableVersion(right)
-	if err != nil {
-		return 0, err
-	}
-	for index := range a {
-		if a[index] < b[index] {
-			return -1, nil
-		}
-		if a[index] > b[index] {
-			return 1, nil
-		}
-	}
-	return 0, nil
+	return challenge.CompareStableVersions(left, right)
 }

@@ -70,6 +70,8 @@ export interface RewardUserBalance {
   rewards: PlayerReward[]
 }
 export interface RewardFilters {
+  pack_id?: string
+  version_id?: string
   created_from?: string
   created_to?: string
   cursor?: string
@@ -77,11 +79,4 @@ export interface RewardFilters {
   source_type?: string
   user_id?: string
   reward_key?: RewardKey
-}
-export interface BuiltinRewardPreview {
-  preview_token: string
-  info: { name: string; version: string; content_hash: string }
-  current_version?: { version: string; content_hash: string }
-  current_rules: ChallengeOutcomeRule[]
-  proposed_rules: { outcome: string; title: string; points: number; enabled: boolean }[]
 }

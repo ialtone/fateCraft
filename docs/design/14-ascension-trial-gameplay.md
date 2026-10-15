@@ -1,6 +1,6 @@
 # 14. 百年飞升劫玩法规格
 
-内容基线：`reincarnation-trials 2.0.0`，可信模块 `cultivation.trial@2`。2026-10-09 完成本轮成长、时间、路线、准备与死亡规则更新。本地结果和真实环境待验项见 [25 核心玩法验证](25-core-gameplay-validation.md)；这不是 release 验收结论。
+内容基线：`reincarnation-trials 1.0.0`，可信模块 `cultivation.trial@2`。2026-10-09 完成本轮成长、时间、路线、准备与死亡规则更新。本地结果和真实环境待验项见 [25 核心玩法验证](25-core-gameplay-validation.md)；这不是 release 验收结论。
 
 ## 权威与模块边界
 

@@ -244,6 +244,18 @@ func (r *ConversationRepo) StartGeneration(ctx context.Context, id uuid.UUID, re
 // HeartbeatGeneration 续期仍然活动的生成租约。返回 ErrGenerationNotActive
 // 表示租约已被回收或抢占，持有方必须立即停止写入。
 func (r *ConversationRepo) HeartbeatGeneration(ctx context.Context, runID uuid.UUID) error {
+	var binding struct {
+		ChallengeVersionID uuid.UUID
+		ChallengeHash      string
+	}
+	if err := r.db.WithContext(ctx).Raw("SELECT c.challenge_version_id,c.challenge_hash FROM conversations c JOIN conversation_generation_runs g ON g.conversation_id=c.id WHERE g.id=?", runID).Scan(&binding).Error; err != nil {
+		return err
+	}
+	if binding.ChallengeVersionID != uuid.Nil {
+		if err := NewChallengeRepository(r.db).CheckVersionRun(ctx, binding.ChallengeVersionID, binding.ChallengeHash); err != nil {
+			return err
+		}
+	}
 	now := time.Now()
 	result := r.db.WithContext(ctx).Model(&ConversationGenerationRun{}).
 		Where("id = ? AND status IN ?", runID, activeGenerationRunStatuses()).

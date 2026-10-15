@@ -44,6 +44,9 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
         VALUES (?, ?, 'world_warden', 'success', 'World Warden', 'success', 'core.always', '{}'::jsonb, 1000)`, outcomeID, versionID).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := db.Exec(`UPDATE challenge_packs SET current_version_id=?,status='active' WHERE id=?`, versionID, packID).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Exec(`INSERT INTO campaigns
         (id, player_id, title, challenge_version_id, challenge_hash, current_location_key, random_seed, llm_route)
         VALUES (?, ?, 'Integration', ?, ?, 'world.start', 1, 'server')`, campaignID, playerID, versionID, hash).Error; err != nil {

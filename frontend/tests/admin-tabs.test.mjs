@@ -71,7 +71,7 @@ test('sub-tabs belong to their management area and retain mounted drafts', () =>
   for (const [owner, names] of Object.entries({
     settings: ['gameplay', 'llm', 'logs'],
     auth: ['login', 'smtp', 'verification', 'invitations'],
-    challenges: ['catalog', 'editor'],
+    challenges: ['catalog', 'versions', 'upload', 'imports', 'editor'],
     sharing: ['shares', 'reports'],
   })) {
     const group = groups.find((g) => g.owners.at(-1) === owner)

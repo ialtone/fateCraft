@@ -98,3 +98,5 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 新增“未来能力”时必须明确标为规划，不得写成已经实现。发布新挑战内容前，应同时检查初始化 JSON、发布校验、正式玩法文档和测试。
 
 - [26. 玩法结局、玩家确认与恢复](26-gameplay-ending-lifecycle.md)
+
+玩法包交换、管理员版本控制、旧局继续、运行暂停和奖励实际来源：[27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。该专题包含 JSON/ZIP 完整示例、结构 Schema、资源上限与部署检查。

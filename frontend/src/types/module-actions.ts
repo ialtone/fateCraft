@@ -42,7 +42,7 @@ export interface ModuleActionCapability {
   parameters?: ModuleParameter[]
   plans?: ModuleActionPlan[]
   cost_labels?: Record<string, string>
-  metadata: { label: string; minutes: number; costs?: Record<string, number>; risk?: string }
+  metadata: { label: string; minutes: number; costs?: Record<string, number>; risk?: string } | null
   violations?: Array<{ code: string; message: string }>
 }
 

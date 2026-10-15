@@ -212,6 +212,9 @@ func (r *RewardRepository) mutateCurrentTx(ctx context.Context, in RewardMutatio
 	if in.Metadata == nil {
 		in.Metadata = JSONMap{}
 	}
+	if err := r.gameplayRewardSource(ctx, &in); err != nil {
+		return nil, err
+	}
 	entry := RewardLedgerEntry{ID: uuid.New(), PlayerID: in.PlayerID, RewardKey: in.RewardKey, Operation: operation, QuantityDelta: delta, BalanceAfter: balance.Balance, SourceType: in.SourceType, SourceID: in.SourceID, ChallengeRunID: in.ChallengeRunID, IdempotencyKey: in.IdempotencyKey, RelatedEntryID: in.RelatedEntryID, Metadata: in.Metadata, ActorID: in.ActorID, RequestID: in.RequestID, RequestHash: in.RequestHash, Reason: in.Reason, PublicNote: in.PublicNote, CreatedAt: time.Now()}
 	if err := r.db.Create(&entry).Error; err != nil {
 		return nil, err
@@ -237,6 +240,8 @@ func (r *RewardRepository) LockBalances(ctx context.Context, player uuid.UUID, k
 }
 
 type RewardPageCursor struct {
+	PackID      string
+	VersionID   string
 	Time        time.Time
 	ID          uuid.UUID
 	RewardKey   string
@@ -254,6 +259,7 @@ type AdminRewardLedgerView struct {
 }
 
 func (e RewardLedgerEntry) AdminView() AdminRewardLedgerView {
+	e.GameplaySource = rewardGameplayProjection(e)
 	return AdminRewardLedgerView{e, e.PlayerID, e.ActorID, e.RequestID, e.Reason, e.SourceID}
 }
 func (r *RewardRepository) ledgerQuery(ctx context.Context) *gorm.DB {
@@ -276,6 +282,12 @@ func (r *RewardRepository) ListLedger(ctx context.Context, player *uuid.UUID, li
 	if cursor.SourceType != "" {
 		q = q.Where("reward_ledger.source_type = ?", cursor.SourceType)
 	}
+	if cursor.PackID != "" {
+		q = q.Where("reward_ledger.metadata->'gameplay_source'->>'pack_id' = ?", cursor.PackID)
+	}
+	if cursor.VersionID != "" {
+		q = q.Where("reward_ledger.metadata->>'challenge_version_id' = ?", cursor.VersionID)
+	}
 	if cursor.CreatedFrom != nil {
 		q = q.Where("reward_ledger.created_at >= ?", *cursor.CreatedFrom)
 	}
@@ -287,10 +299,14 @@ func (r *RewardRepository) ListLedger(ctx context.Context, player *uuid.UUID, li
 	}
 	rows := []RewardLedgerEntry{}
 	err := q.Order("reward_ledger.created_at DESC,reward_ledger.id DESC").Limit(limit).Find(&rows).Error
+	for i := range rows {
+		rows[i].GameplaySource = rewardGameplayProjection(rows[i])
+	}
 	return rows, err
 }
 func (r *RewardRepository) LedgerEntry(ctx context.Context, id uuid.UUID) (*RewardLedgerEntry, error) {
 	var row RewardLedgerEntry
 	err := r.ledgerQuery(ctx).Where("reward_ledger.id = ?", id).First(&row).Error
+	row.GameplaySource = rewardGameplayProjection(row)
 	return &row, asNotFound(err)
 }

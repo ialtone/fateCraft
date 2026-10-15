@@ -157,8 +157,11 @@ func summarizePlayerTurnPerformance(snapshot *storage.AgentAttemptPerformance, n
 	if firstResponseCount > 0 {
 		result.AverageFirstResponseMS = firstResponseTotal / firstResponseCount
 	}
-	if result.GenerationMS > 0 {
-		result.TokensPerSecond = float64(result.CompletionTokens) * 1000 / float64(result.GenerationMS)
+	// Provider output usage can include hidden reasoning generated before the
+	// first visible event. Use the full request duration for both streaming and
+	// non-streaming calls so those tokens never lose their corresponding time.
+	if result.ModelDurationMS > 0 {
+		result.TokensPerSecond = float64(result.CompletionTokens) * 1000 / float64(result.ModelDurationMS)
 	}
 	return result
 }

@@ -137,11 +137,12 @@ type VersionDocument struct {
 }
 
 type SaveVersionInput struct {
-	Manifest    json.RawMessage                `json:"manifest"`
-	Runtime     storage.ChallengeRuntimeConfig `json:"runtime"`
-	Assets      []storage.ChallengeAsset       `json:"assets"`
-	Definitions []storage.GameplayDefinition   `json:"definitions"`
-	Outcomes    []storage.ChallengeOutcomeRule `json:"outcomes"`
+	ExpectedRevision int64                          `json:"expected_revision"`
+	Manifest         json.RawMessage                `json:"manifest"`
+	Runtime          storage.ChallengeRuntimeConfig `json:"runtime"`
+	Assets           []storage.ChallengeAsset       `json:"assets"`
+	Definitions      []storage.GameplayDefinition   `json:"definitions"`
+	Outcomes         []storage.ChallengeOutcomeRule `json:"outcomes"`
 }
 
 type CreatePackInput struct {

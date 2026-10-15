@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { outcomeRewardBudgets } from '@/lib/reward-budget'
 import AdminDiagnostics from '@/components/AdminDiagnostics.vue'
 import DetailedLogScope from '@/components/DetailedLogScope.vue'
 import {
@@ -36,6 +37,10 @@ import {
 import { adminApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import ChallengeVersionEditor from '@/components/ChallengeVersionEditor.vue'
+import GameplayVersionManager from '@/components/GameplayVersionManager.vue'
+import GameplayPackageImport from '@/components/GameplayPackageImport.vue'
+import { gameplayAdminApi } from '@/api/gameplay'
+import { gameplayError } from '@/api/gameplay'
 import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
@@ -77,6 +82,11 @@ const settingsTab = ref<SystemSettingsTab>('gameplay')
 const authTab = ref<AuthSettingsTab | 'invitations'>('login')
 const sharingTab = ref('shares')
 const challengesTab = ref('catalog')
+const managedPackId = ref('')
+function managePack(id: string) {
+  managedPackId.value = id
+  challengesTab.value = 'versions'
+}
 const settingsTabLabels = { gameplay: '判定规则', llm: '模型服务', logs: '日志策略' }
 const authTabLabels = { login: '登录与注册', smtp: '发信邮箱', verification: '验证码邮件' }
 const route = useRoute(),
@@ -693,11 +703,13 @@ const builtinPreview = ref<Awaited<ReturnType<typeof adminApi.previewBuiltin>>>(
 const builtinSelection = ref<AdminBuiltinChallenge>()
 const showBuiltinPreview = ref(false)
 const builtinPreviewError = ref('')
+const builtinRequest = ref('')
 async function importBuiltin(item: AdminBuiltinChallenge) {
   importingBuiltin.value = item.slug
   builtinPreviewError.value = ''
   try {
     builtinPreview.value = await adminApi.previewBuiltin(item.slug)
+    builtinRequest.value = builtinPreview.value.id
     builtinSelection.value = item
     showBuiltinPreview.value = true
   } catch (err: any) {
@@ -712,14 +724,11 @@ async function confirmBuiltinImport() {
   importingBuiltin.value = item.slug
   builtinPreviewError.value = ''
   try {
-    await adminApi.importBuiltin(
-      item.slug,
-      item.status === 'update_available' && item.overwritable,
-      builtinPreview.value.preview_token,
-    )
+    const result = await gameplayAdminApi.confirm(builtinPreview.value.id, builtinRequest.value)
     showBuiltinPreview.value = false
     await Promise.all([loadBuiltins(), loadChallenges(), loadGameplayCatalog()])
-    message.success('已按确认的差异导入内容')
+    message.success('导入已完成；新内容为草稿，请检查后发布并选择新开局版本')
+    if (result.result_version_id) await openVersion(result.result_version_id)
   } catch (err: any) {
     builtinPreviewError.value = err.message || '导入失败，请重新预览差异'
   } finally {
@@ -763,12 +772,18 @@ async function publishVersion() {
   publishingVersion.value = true
   try {
     // 发布按钮同时保存当前表单，避免管理员误发布数据库中的旧草稿。
-    await adminApi.saveChallengeVersion(versionDoc.value.version.id, versionPayload.value)
-    setVersionDocument(await adminApi.publishChallengeVersion(versionDoc.value.version.id))
+    const saved = await adminApi.saveChallengeVersion(
+      versionDoc.value.version.id,
+      versionPayload.value,
+    )
+    setVersionDocument(saved)
+    setVersionDocument(
+      await adminApi.publishChallengeVersion(saved.version.id, saved.version.revision, false),
+    )
     await loadChallenges()
-    message.success('版本已发布，新对话将使用它')
+    message.success('版本已发布；请在版本管理中选择是否设为新开局版本')
   } catch (err: any) {
-    message.error(`发布失败：${err.message || '未知错误'}`)
+    message.error(`发布失败：${gameplayError(err)}`)
   } finally {
     publishingVersion.value = false
   }
@@ -852,6 +867,7 @@ function setVersionDocument(doc: ChallengeVersionDocument) {
   }
 
   versionPayload.value = {
+    expected_revision: doc.version.revision,
     manifest,
     runtime,
     assets: structuredClone(doc.assets || []),
@@ -1660,7 +1676,7 @@ watch(
               <h3>仓库内置挑战</h3>
               <p class="section-sub">
                 全部内置玩法默认导入。启用后对玩家开放；停用后隐藏入口并禁止新开局，已有存档仍可继续。
-                导入和覆盖都会经过完整发布校验；已使用内容请提升版本号。发布新版本后，旧普通对话会自动封存并可只读浏览。
+                导入创建草稿，校验发布后再选择新开局版本。已发布内容必须提升版本号；旧对话继续使用原玩法和奖励规则。
               </p>
             </div>
             <NButton secondary :loading="loadingBuiltins" @click="loadBuiltins">刷新状态</NButton>
@@ -1709,8 +1725,8 @@ watch(
                   item.status === 'imported'
                     ? '已发布'
                     : item.status === 'update_available'
-                      ? '覆盖现有内容'
-                      : '导入并发布'
+                      ? '替换现有草稿'
+                      : '预览并导入草稿'
                 }}
               </NButton>
             </div>
@@ -1720,11 +1736,11 @@ watch(
 
       <NTabPane v-if="sectionVisible('challenges')" name="challenges" tab="挑战内容">
         <NTabs v-model:value="challengesTab" type="line" animated
-          ><NTabPane name="catalog" tab="挑战包与版本" display-directive="show:lazy"
+          ><NTabPane name="catalog" tab="玩法包" display-directive="show:lazy"
             ><section class="admin-section challenge-admin">
               <div class="section-toolbar">
                 <div>
-                  <h3>挑战包与版本</h3>
+                  <h3>玩法包</h3>
                   <p class="section-sub">先保存草稿，再通过发布校验。新版本不会影响已有对话。</p>
                 </div>
                 <NButton type="primary" @click="showPackModal = true">新建挑战包</NButton>
@@ -1756,26 +1772,36 @@ watch(
                       >复制新版本</NButton
                     >
                   </div>
-                  <div class="version-list">
-                    <button
-                      v-for="version in item.versions"
-                      :key="version.id"
-                      class="version-button"
-                      :class="{ selected: selectedVersionId === version.id }"
-                      type="button"
-                      @click="openVersion(version.id)"
-                    >
-                      <span>v{{ version.version }}</span>
-                      <NTag
-                        size="small"
-                        :type="version.status === 'published' ? 'success' : 'warning'"
-                        >{{ version.status }}</NTag
-                      >
-                    </button>
-                  </div>
+                  <p class="section-sub">
+                    来源：{{ item.pack.source }} · {{ item.versions.length }} 个版本 ·
+                    当前新开局：{{
+                      item.versions.find((v) => v.id === item.pack.current_version_id)?.version ||
+                      '未选择'
+                    }}
+                  </p>
+                  <NButton size="small" @click="managePack(item.pack.id)">管理该包版本</NButton>
                 </div>
               </NSpin>
             </section>
+          </NTabPane>
+          <NTabPane name="versions" tab="版本管理" display-directive="show:lazy">
+            <GameplayVersionManager
+              :packs="packs"
+              :pack-id="managedPackId"
+              @changed="loadChallenges"
+              @edit="openVersion"
+              @create="createVersion"
+            />
+          </NTabPane>
+          <NTabPane name="upload" tab="导入玩法包" display-directive="show:lazy">
+            <GameplayPackageImport
+              mode="upload"
+              @imported="loadChallenges"
+              @open-version="openVersion"
+            />
+          </NTabPane>
+          <NTabPane name="imports" tab="导入记录" display-directive="show:lazy">
+            <GameplayPackageImport mode="records" @open-version="openVersion" />
           </NTabPane>
           <NTabPane
             name="editor"
@@ -1787,7 +1813,8 @@ watch(
                 <div>
                   <h3>{{ versionDoc.version.version }} · 版本内容</h3>
                   <p class="section-sub">
-                    结构化维护入口、运行契约、状态展示、结局与奖励；高级 JSON 仅用于导入导出。
+                    草稿可编辑，已发布快照只读；高级 JSON
+                    用于表单调试，完整包交换请使用导入/导出功能。
                   </p>
                 </div>
                 <div class="editor-actions">
@@ -2238,21 +2265,36 @@ watch(
   >
     <template v-if="builtinPreview">
       <h3>
-        {{ builtinPreview.info.name }} · {{ builtinPreview.current_version?.version || '未导入' }} →
-        {{ builtinPreview.info.version }}
+        {{ builtinPreview.preview.manifest.name }} ·
+        {{ builtinPreview.preview.current?.version || '未导入' }} →
+        {{ builtinPreview.preview.manifest.version }}
       </h3>
-      <p>确认将发布所选玩法内容，结局积分如下。已有存档和收支记录保留原版本结果。</p>
+      <p>
+        确认只导入草稿，请检查后发布并选择新开局版本，结局积分如下。已有存档和收支记录保留原版本结果。
+      </p>
       <NAlert v-if="builtinPreviewError" type="error">{{ builtinPreviewError }}</NAlert>
-      <h4>当前结局积分</h4>
-      <p v-if="!builtinPreview.current_rules.length">尚无结局规则。</p>
-      <p v-for="rule in builtinPreview.current_rules" :key="rule.outcome_key">
-        {{ rule.title }}：{{ rule.reward_points }} 积分{{ rule.enabled ? '' : '（已停用）' }}
-      </p>
+      <p>预览有效至 {{ new Date(builtinPreview.expires_at).toLocaleString() }}</p>
+      <h4>内容差异（包含当前积分和新积分）</h4>
+      <details v-for="diff in builtinPreview.preview.differences" :key="diff.path">
+        <summary>{{ diff.path }}</summary>
+        <pre>{{ JSON.stringify(diff, null, 2) }}</pre>
+      </details>
       <h4>导入后的结局积分</h4>
-      <p v-if="!builtinPreview.proposed_rules.length">没有结局规则。</p>
-      <p v-for="rule in builtinPreview.proposed_rules" :key="rule.outcome">
-        {{ rule.title }}：{{ rule.points }} 积分{{ rule.enabled ? '' : '（已停用）' }}
-      </p>
+      <p v-if="!builtinPreview.preview.outcomes.length">没有结局规则。</p>
+      <div v-for="rule in builtinPreview.preview.outcomes" :key="rule.outcome_key">
+        <p>{{ rule.title }}：{{ rule.reward_points }} 积分</p>
+        <p
+          v-for="(budget, index) in outcomeRewardBudgets(
+            builtinPreview.preview.definitions,
+            builtinPreview.preview.definition_schemas,
+            rule.outcome_key,
+            rule.reward_points,
+          )"
+          :key="index"
+        >
+          {{ budget.text }}
+        </p>
+      </div>
     </template>
     <template #footer
       ><NButton

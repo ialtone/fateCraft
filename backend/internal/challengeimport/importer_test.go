@@ -26,7 +26,7 @@ func TestBundledMortalPathCampaignLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.manifest.ID != "mortal-path" || loaded.manifest.Version != "3.7.0" || len(loaded.document.Definitions) < 200 {
+	if loaded.manifest.ID != "mortal-path" || loaded.manifest.Version != "1.0.0" || len(loaded.document.Definitions) < 200 {
 		t.Fatalf("campaign pack not fully loaded: id=%s definitions=%d", loaded.manifest.ID, len(loaded.document.Definitions))
 	}
 	counts := map[string]int{}
@@ -444,8 +444,8 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.manifest.Version != "2.0.0" {
-		t.Fatalf("version = %q, want 2.0.0", loaded.manifest.Version)
+	if loaded.manifest.Version != "1.0.0" {
+		t.Fatalf("version = %q, want 1.0.0", loaded.manifest.Version)
 	}
 	if loaded.hash == "" {
 		t.Fatal("content hash is empty")
@@ -729,7 +729,7 @@ func TestClassifyBuiltin(t *testing.T) {
 			name: "same version changed", sourceVersion: "1.0.0", sourceHash: "source",
 			current:  builtinVersion("1.0.0", storage.ChallengeVersionPublished, "database"),
 			existing: builtinVersion("1.0.0", storage.ChallengeVersionPublished, "database"),
-			status:   StatusUpdateAvailable, overwritable: true,
+			status:   StatusUpdateAvailable,
 		},
 		{
 			name: "higher version can import", sourceVersion: "1.1.0", sourceHash: "source",
@@ -737,15 +737,15 @@ func TestClassifyBuiltin(t *testing.T) {
 			status:  StatusAvailable, importable: true,
 		},
 		{
-			name: "lower version needs explicit overwrite", sourceVersion: "1.0.0", sourceHash: "source",
+			name: "lower version can import as draft", sourceVersion: "1.0.0", sourceHash: "source",
 			current: builtinVersion("1.1.0", storage.ChallengeVersionPublished, "database"),
-			status:  StatusUpdateAvailable, overwritable: true,
+			status:  StatusAvailable, importable: true,
 		},
 		{
 			name: "matching source exists but is not current", sourceVersion: "1.0.0", sourceHash: "source",
 			current:  builtinVersion("1.1.0", storage.ChallengeVersionPublished, "database"),
 			existing: builtinVersion("1.0.0", storage.ChallengeVersionPublished, "source"),
-			status:   StatusUpdateAvailable, overwritable: true,
+			status:   StatusUpdateAvailable,
 		},
 	}
 	for _, test := range tests {

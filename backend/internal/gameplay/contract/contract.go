@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ialtone/fatecraft/internal/accountasset"
+	"github.com/ialtone/fatecraft/internal/jsonstrict"
 )
 
 const (
@@ -271,21 +272,21 @@ func DecodeRuntime(row RuntimeDocument) (*RuntimeContract, error) {
 	contract.Mode = NormalizeRuntimeMode(row.Mode)
 	if row.CampaignConfig != nil && len(*row.CampaignConfig) > 0 && string(*row.CampaignConfig) != "null" {
 		var campaign CampaignConfig
-		if err := json.Unmarshal(*row.CampaignConfig, &campaign); err != nil {
+		if err := jsonstrict.Decode(*row.CampaignConfig, &campaign); err != nil {
 			return nil, fmt.Errorf("解析 campaign_config: %w", err)
 		}
 		contract.Campaign = &campaign
 	}
-	if err := json.Unmarshal(row.StateSchema, &contract.StateSchema); err != nil {
+	if err := jsonstrict.Decode(row.StateSchema, &contract.StateSchema); err != nil {
 		return nil, fmt.Errorf("解析 state_schema: %w", err)
 	}
-	if err := json.Unmarshal(row.ActionConfig, &contract.Actions); err != nil {
+	if err := jsonstrict.Decode(row.ActionConfig, &contract.Actions); err != nil {
 		return nil, fmt.Errorf("解析 action_config: %w", err)
 	}
-	if err := json.Unmarshal(row.SettlementConfig, &contract.Settlement); err != nil {
+	if err := jsonstrict.Decode(row.SettlementConfig, &contract.Settlement); err != nil {
 		return nil, fmt.Errorf("解析 settlement_config: %w", err)
 	}
-	if err := json.Unmarshal(row.Presentation, &contract.Presentation); err != nil {
+	if err := jsonstrict.Decode(row.Presentation, &contract.Presentation); err != nil {
 		return nil, fmt.Errorf("解析 presentation: %w", err)
 	}
 	return &contract, nil

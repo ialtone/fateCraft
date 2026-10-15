@@ -4,7 +4,6 @@ import type {
   ModuleActionResult,
   ModuleActionSnapshot,
 } from '@/types/module-actions'
-import type { BuiltinRewardPreview } from '@/types/rewards'
 import type {
   AdminAuthSettings,
   InvitationCode,
@@ -37,7 +36,6 @@ import type {
   CharacterInquiryHistory,
   PublicChallenge,
   SaveChallengeVersionInput,
-  BuiltinImportResult,
   StateRevision,
   UpdateConversationInput,
   PlayerReward,
@@ -428,14 +426,9 @@ export const adminApi = {
       .then((r) => r.data.builtins),
   previewBuiltin: (slug: string) =>
     http
-      .get<BuiltinRewardPreview>(`/admin/builtin-challenges/${encodeURIComponent(slug)}/preview`)
-      .then((r) => r.data),
-  importBuiltin: (slug: string, overwrite: boolean, previewToken: string) =>
-    http
-      .post<BuiltinImportResult>(`/admin/builtin-challenges/${encodeURIComponent(slug)}/import`, {
-        overwrite,
-        preview_token: previewToken,
-      })
+      .get<import('./gameplay').GameplayImportRecord>(
+        `/admin/builtin-challenges/${encodeURIComponent(slug)}/preview`,
+      )
       .then((r) => r.data),
   listChallenges: () =>
     http
@@ -453,9 +446,12 @@ export const adminApi = {
       .then((r) => r.data),
   saveChallengeVersion: (id: string, body: SaveChallengeVersionInput) =>
     http.put<ChallengeVersionDocument>(`/admin/challenge-versions/${id}`, body).then((r) => r.data),
-  publishChallengeVersion: (id: string) =>
+  publishChallengeVersion: (id: string, expected_revision: number, select_current = false) =>
     http
-      .post<ChallengeVersionDocument>(`/admin/challenge-versions/${id}/publish`)
+      .post<ChallengeVersionDocument>(`/admin/challenge-versions/${id}/publish`, {
+        expected_revision,
+        select_current,
+      })
       .then((r) => r.data),
   deleteChallengeVersion: (id: string) =>
     http.delete(`/admin/challenge-versions/${id}`).then(() => undefined),

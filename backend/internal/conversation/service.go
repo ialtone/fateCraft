@@ -304,7 +304,18 @@ func (s *Service) List(ctx context.Context, statuses []string, search string, li
 	if len(limits) > 0 {
 		limit = limits[0]
 	}
-	return s.repo.ListPage(ctx, s.identity.CurrentPlayerID(ctx), statuses, search, limit)
+	rows, err := s.repo.ListPage(ctx, s.identity.CurrentPlayerID(ctx), statuses, search, limit)
+	if err != nil || s.challenge == nil {
+		return rows, err
+	}
+	for index := range rows {
+		version, versionErr := s.challenge.Repository().GetVersion(ctx, rows[index].ChallengeVersionID)
+		if versionErr != nil {
+			return nil, versionErr
+		}
+		rows[index].ChallengeVersion = version.Version
+	}
+	return rows, nil
 }
 
 // EnsureActive 返回对话并校验其归属当前玩家且处于 active 状态。
@@ -320,19 +331,9 @@ func (s *Service) EnsureActive(ctx context.Context, id uuid.UUID) (*storage.Conv
 	if conv.Status != storage.StatusActive {
 		return nil, ErrNotActive
 	}
-	// Enforce the version freeze at the write boundary as well. This also
-	// repairs rows created before automatic archiving was introduced.
-	if conv.CampaignID == nil && s.challenge != nil {
-		current, versionErr := s.challenge.IsCurrentVersion(ctx, conv.ChallengeVersionID)
-		if versionErr != nil {
-			return nil, versionErr
-		}
-		if !current {
-			now := time.Now()
-			_ = s.repo.UpdateFields(ctx, id, map[string]any{
-				"status": storage.StatusArchived, "archived_at": now, "updated_at": now,
-			})
-			return nil, ErrNotActive
+	if s.challenge != nil {
+		if err := s.challenge.CheckSavedVersion(ctx, conv.ChallengeVersionID, conv.ChallengeHash); err != nil {
+			return nil, err
 		}
 	}
 	return conv, nil
@@ -412,13 +413,9 @@ func (s *Service) Restore(ctx context.Context, id uuid.UUID) (*storage.Conversat
 	if conv.Status != storage.StatusArchived {
 		return nil, ErrNotActive
 	}
-	if conv.CampaignID == nil && s.challenge != nil {
-		current, versionErr := s.challenge.IsCurrentVersion(ctx, conv.ChallengeVersionID)
-		if versionErr != nil {
-			return nil, versionErr
-		}
-		if !current {
-			return nil, ErrNotActive
+	if s.challenge != nil {
+		if err := s.challenge.CheckSavedVersion(ctx, conv.ChallengeVersionID, conv.ChallengeHash); err != nil {
+			return nil, err
 		}
 	}
 	now := time.Now()
@@ -448,8 +445,17 @@ func (s *Service) StartGeneration(ctx context.Context, id uuid.UUID, request sto
 	// Do the normal version/status check first. If it reports an inactive
 	// conversation, still call the repository: it can safely replay a durable
 	// operation identified by the same request_id without starting new work.
-	if _, err := s.EnsureActive(ctx, id); err != nil && !errors.Is(err, ErrNotActive) {
+	if _, err := s.GetOwned(ctx, id); err != nil {
 		return nil, nil, false, err
+	}
+	exists, err := s.repo.GenerationRequestExists(ctx, id, request.RequestID)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if !exists {
+		if _, err := s.EnsureActive(ctx, id); err != nil {
+			return nil, nil, false, err
+		}
 	}
 	conv, run, replayed, err := s.repo.StartGeneration(ctx, id, request)
 	if errors.Is(err, storage.ErrConversationNotActive) {

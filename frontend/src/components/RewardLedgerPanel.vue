@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { adminApi } from '@/api'
+import type { AdminChallengePack } from '@/types'
 import { NAlert, NButton, NDatePicker, NEmpty, NInput, NModal, NSelect, NSpin } from 'naive-ui'
 import { rewardManagementApi as api } from '@/api/rewards'
 import { rewardError, rewardName, rewardOptions, rewardSource } from '@/lib/rewards'
@@ -7,6 +10,41 @@ import type { RewardLedgerEntry } from '@/types'
 import type { RewardKey, RewardFilters } from '@/types/rewards'
 const props = defineProps<{ admin?: boolean; userId?: string; refreshKey?: number }>()
 const emit = defineEmits<{ changed: [] }>()
+const route = useRoute(),
+  router = useRouter()
+const packs = ref<AdminChallengePack[]>([]),
+  packId = ref<string | null>(null),
+  versionId = ref<string | null>(null)
+const packOptions = computed(() =>
+  packs.value.map((p) => ({ label: p.pack.name, value: p.pack.id })),
+)
+const versionOptions = computed(() =>
+  packs.value
+    .filter((p) => !packId.value || p.pack.id === packId.value)
+    .flatMap((p) =>
+      p.versions.map((v) => ({
+        label: `${p.pack.name} · ${v.version} · ${v.status}`,
+        value: v.id,
+      })),
+    ),
+)
+watch(packId, () => {
+  if (packs.value.length && !versionOptions.value.some((v) => v.value === versionId.value))
+    versionId.value = null
+})
+watch(
+  () => props.admin,
+  async (admin) => {
+    if (admin) {
+      try {
+        packs.value = await adminApi.listChallenges()
+      } catch (err) {
+        error.value = rewardError(err)
+      }
+    }
+  },
+  { immediate: true },
+)
 const rows = ref<RewardLedgerEntry[]>([]),
   cursor = ref(''),
   error = ref(''),
@@ -46,6 +84,8 @@ async function load(more = false) {
           user_id: props.userId || user.value.trim() || undefined,
           reward_key: key.value || undefined,
           source_type: source.value || undefined,
+          pack_id: packId.value || undefined,
+          version_id: versionId.value || undefined,
           created_from: dates.value ? new Date(dates.value[0]).toISOString() : undefined,
           created_to: dates.value ? new Date(dates.value[1]).toISOString() : undefined,
         }
@@ -101,6 +141,16 @@ watch(
   () => load(),
   { immediate: true },
 )
+watch(
+  () => [route.query.pack, route.query.version],
+  ([pack, version]) => {
+    if (!props.admin) return
+    if (typeof pack === 'string') packId.value = pack
+    if (typeof version === 'string') versionId.value = version
+    if (pack || version) void load()
+  },
+  { immediate: true },
+)
 </script>
 <template>
   <section class="ledger">
@@ -109,6 +159,20 @@ watch(
       <NButton :loading="loading" @click="load()">刷新</NButton>
     </div>
     <form class="filters" @submit.prevent="load()">
+      <NSelect
+        v-if="admin"
+        v-model:value="packId"
+        :options="packOptions"
+        clearable
+        placeholder="全部玩法包"
+      />
+      <NSelect
+        v-if="admin"
+        v-model:value="versionId"
+        :options="versionOptions"
+        clearable
+        placeholder="全部实际版本（含旧版）"
+      />
       <NSelect
         v-model:value="key"
         :options="rewardOptions"
@@ -138,6 +202,17 @@ watch(
             变动后 {{ row.balance_after.toLocaleString() }}
           </p>
           <small>{{ new Date(row.created_at).toLocaleString() }}</small>
+          <p v-if="row.gameplay_source">
+            {{ row.gameplay_source.pack_name }} · {{ row.gameplay_source.version }} ·
+            {{ row.gameplay_source.stage_name || row.gameplay_source.outcome_title }}
+          </p>
+          <p
+            v-else-if="
+              ['challenge_run', 'campaign_stage', 'campaign_outcome'].includes(row.source_type)
+            "
+          >
+            玩法来源信息不完整
+          </p>
           <p v-if="row.public_note">{{ row.public_note }}</p>
         </div>
         <NButton v-if="admin || userId" @click="show(row)">详情</NButton>
@@ -161,6 +236,42 @@ watch(
           }}
         </p>
         <p>来源：{{ rewardSource(detail.source_type) }}</p>
+        <template v-if="detail.gameplay_source">
+          <p>
+            玩法：{{ detail.gameplay_source.pack_name }}（{{ detail.gameplay_source.pack_slug }}）·
+            {{ detail.gameplay_source.version }}
+          </p>
+          <p v-if="detail.gameplay_source.stage_key">
+            阶段：{{ detail.gameplay_source.stage_name }}（{{ detail.gameplay_source.stage_key }}）
+          </p>
+          <p v-if="detail.gameplay_source.outcome_key">
+            结局：{{ detail.gameplay_source.outcome_title }}（{{
+              detail.gameplay_source.outcome_key
+            }}）
+          </p>
+          <p class="id">
+            版本：{{ detail.gameplay_source.version_id }}；内容哈希：{{
+              detail.gameplay_source.content_hash
+            }}
+          </p>
+          <p v-if="detail.gameplay_source.conversation_id" class="id">
+            关联对话：{{ detail.gameplay_source.conversation_id }}
+          </p>
+          <p v-if="detail.gameplay_source.campaign_id" class="id">
+            关联长期存档：{{ detail.gameplay_source.campaign_id }}
+          </p>
+          <NButton
+            v-if="admin"
+            @click="
+              router.push({
+                path: '/admin/challenges',
+                query: { version: detail.gameplay_source.version_id },
+              })
+            "
+            >查看实际版本快照</NButton
+          >
+          <p>游戏正文仅按原有访问权限开放，管理员奖励查询不公开玩家私人对话。</p>
+        </template>
         <p v-if="detail.operator_id">操作者：{{ detail.operator_id }}</p>
         <p v-if="detail.reason">内部原因：{{ detail.reason }}</p>
         <p class="id">流水：{{ detail.id }}</p>

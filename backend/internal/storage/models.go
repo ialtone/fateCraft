@@ -215,21 +215,30 @@ const (
 )
 
 type ChallengePack struct {
-	ID               uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
-	Slug             string     `gorm:"column:slug;uniqueIndex;not null" json:"slug"`
-	Name             string     `gorm:"column:name;not null" json:"name"`
-	Description      string     `gorm:"column:description" json:"description"`
-	CoverURL         *string    `gorm:"column:cover_url" json:"cover_url,omitempty"`
-	Status           string     `gorm:"column:status;not null" json:"status"`
-	CurrentVersionID *uuid.UUID `gorm:"column:current_version_id;type:uuid" json:"current_version_id,omitempty"`
-	CreatedBy        *uuid.UUID `gorm:"column:created_by;type:uuid" json:"created_by,omitempty"`
-	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	Source             string     `gorm:"column:source;not null;default:editor" json:"source"`
+	ManagementRevision int64      `gorm:"column:management_revision;not null;default:1" json:"management_revision"`
+	ID                 uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
+	Slug               string     `gorm:"column:slug;uniqueIndex;not null" json:"slug"`
+	Name               string     `gorm:"column:name;not null" json:"name"`
+	Description        string     `gorm:"column:description" json:"description"`
+	CoverURL           *string    `gorm:"column:cover_url" json:"cover_url,omitempty"`
+	Status             string     `gorm:"column:status;not null" json:"status"`
+	CurrentVersionID   *uuid.UUID `gorm:"column:current_version_id;type:uuid" json:"current_version_id,omitempty"`
+	CreatedBy          *uuid.UUID `gorm:"column:created_by;type:uuid" json:"created_by,omitempty"`
+	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt          time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (ChallengePack) TableName() string { return "challenge_packs" }
 
 type ChallengeVersion struct {
+	Provenance      JSONMap    `gorm:"column:provenance;type:jsonb;not null" json:"provenance"`
+	Revision        int64      `gorm:"column:revision;not null;default:1" json:"revision"`
+	RunPolicy       string     `gorm:"column:run_policy;not null;default:allowed" json:"run_policy"`
+	RunPolicyReason string     `gorm:"column:run_policy_reason" json:"run_policy_reason"`
+	PolicyRevision  int64      `gorm:"column:policy_revision;not null;default:1" json:"policy_revision"`
+	PolicyActor     *uuid.UUID `gorm:"column:policy_actor;type:uuid" json:"policy_actor,omitempty"`
+	PolicyChangedAt *time.Time `gorm:"column:policy_changed_at" json:"policy_changed_at,omitempty"`
 	ID              uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
 	ChallengePackID uuid.UUID  `gorm:"column:challenge_pack_id;type:uuid;not null;index" json:"challenge_pack_id"`
 	Version         string     `gorm:"column:version;not null" json:"version"`
@@ -324,25 +333,26 @@ type PlayerRewardBalance struct {
 func (PlayerRewardBalance) TableName() string { return "player_reward_balances" }
 
 type RewardLedgerEntry struct {
-	BalanceAfter   int64      `json:"balance_after"`
-	ActorID        *uuid.UUID `gorm:"type:uuid" json:"-"`
-	RequestID      *uuid.UUID `gorm:"type:uuid" json:"-"`
-	RequestHash    string     `json:"-"`
-	Reason         string     `json:"-"`
-	PublicNote     string     `json:"public_note"`
-	ReversalID     *uuid.UUID `gorm:"column:reversal_id;->" json:"reversal_id,omitempty"`
-	RelatedEntryID *uuid.UUID `gorm:"type:uuid" json:"related_entry_id,omitempty"`
-	ID             uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`
-	PlayerID       uuid.UUID  `gorm:"column:player_id;type:uuid;not null;index" json:"-"`
-	RewardKey      string     `json:"reward_key"`
-	Operation      string     `gorm:"column:operation;not null" json:"operation"`
-	QuantityDelta  int64      `gorm:"column:quantity_delta;not null" json:"quantity_delta"`
-	SourceType     string     `gorm:"column:source_type;not null" json:"source_type"`
-	SourceID       string     `gorm:"column:source_id;not null" json:"-"`
-	ChallengeRunID *uuid.UUID `gorm:"column:challenge_run_id;type:uuid" json:"challenge_run_id,omitempty"`
-	IdempotencyKey string     `gorm:"column:idempotency_key;uniqueIndex;not null" json:"-"`
-	Metadata       JSONMap    `gorm:"column:metadata;type:jsonb;not null" json:"-"`
-	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at"`
+	GameplaySource *GameplayRewardSource `gorm:"-" json:"gameplay_source,omitempty"`
+	BalanceAfter   int64                 `json:"balance_after"`
+	ActorID        *uuid.UUID            `gorm:"type:uuid" json:"-"`
+	RequestID      *uuid.UUID            `gorm:"type:uuid" json:"-"`
+	RequestHash    string                `json:"-"`
+	Reason         string                `json:"-"`
+	PublicNote     string                `json:"public_note"`
+	ReversalID     *uuid.UUID            `gorm:"column:reversal_id;->" json:"reversal_id,omitempty"`
+	RelatedEntryID *uuid.UUID            `gorm:"type:uuid" json:"related_entry_id,omitempty"`
+	ID             uuid.UUID             `gorm:"column:id;primaryKey;type:uuid" json:"id"`
+	PlayerID       uuid.UUID             `gorm:"column:player_id;type:uuid;not null;index" json:"-"`
+	RewardKey      string                `json:"reward_key"`
+	Operation      string                `gorm:"column:operation;not null" json:"operation"`
+	QuantityDelta  int64                 `gorm:"column:quantity_delta;not null" json:"quantity_delta"`
+	SourceType     string                `gorm:"column:source_type;not null" json:"source_type"`
+	SourceID       string                `gorm:"column:source_id;not null" json:"-"`
+	ChallengeRunID *uuid.UUID            `gorm:"column:challenge_run_id;type:uuid" json:"challenge_run_id,omitempty"`
+	IdempotencyKey string                `gorm:"column:idempotency_key;uniqueIndex;not null" json:"-"`
+	Metadata       JSONMap               `gorm:"column:metadata;type:jsonb;not null" json:"-"`
+	CreatedAt      time.Time             `gorm:"column:created_at" json:"created_at"`
 }
 
 func (RewardLedgerEntry) TableName() string { return "reward_ledger" }
@@ -476,21 +486,24 @@ type CampaignActionCommit struct {
 func (CampaignActionCommit) TableName() string { return "campaign_action_commits" }
 
 type Conversation struct {
-	ID                 uuid.UUID  `gorm:"column:id;primaryKey" json:"id"`
-	PlayerID           string     `gorm:"column:player_id;type:uuid" json:"player_id"`
-	Title              string     `gorm:"column:title" json:"title"`
-	Status             string     `gorm:"column:status" json:"status"`
-	IsProcessing       bool       `gorm:"column:is_processing" json:"is_processing"`
-	ChallengeVersionID uuid.UUID  `gorm:"column:challenge_version_id;type:uuid;not null" json:"challenge_version_id"`
-	ChallengeHash      string     `gorm:"column:challenge_hash;not null" json:"challenge_hash"`
-	CampaignID         *uuid.UUID `gorm:"column:campaign_id;type:uuid" json:"campaign_id,omitempty"`
-	CharacterAssetID   *uuid.UUID `gorm:"column:character_asset_id;type:uuid" json:"character_asset_id,omitempty"`
-	PersonaAssetID     *uuid.UUID `gorm:"column:persona_asset_id;type:uuid" json:"persona_asset_id,omitempty"`
-	ScenarioAssetID    *uuid.UUID `gorm:"column:scenario_asset_id;type:uuid" json:"scenario_asset_id,omitempty"`
-	BranchEpoch        int64      `gorm:"column:branch_epoch;not null" json:"branch_epoch"`
-	NextTurnSeq        int64      `gorm:"column:next_turn_seq;not null;default:1" json:"-"`
-	NextMessageSeq     int64      `gorm:"column:next_message_seq;not null;default:1" json:"-"`
-	CurrentMemoryID    *uuid.UUID `gorm:"column:current_memory_id;type:uuid" json:"current_memory_id,omitempty"`
+	ID                 uuid.UUID `gorm:"column:id;primaryKey" json:"id"`
+	PlayerID           string    `gorm:"column:player_id;type:uuid" json:"player_id"`
+	Title              string    `gorm:"column:title" json:"title"`
+	Status             string    `gorm:"column:status" json:"status"`
+	IsProcessing       bool      `gorm:"column:is_processing" json:"is_processing"`
+	ChallengeVersionID uuid.UUID `gorm:"column:challenge_version_id;type:uuid;not null" json:"challenge_version_id"`
+	ChallengeHash      string    `gorm:"column:challenge_hash;not null" json:"challenge_hash"`
+	// ChallengeVersion is a read-only projection used by conversation lists.
+	// The immutable binding remains ChallengeVersionID + ChallengeHash.
+	ChallengeVersion string     `gorm:"-" json:"challenge_version,omitempty"`
+	CampaignID       *uuid.UUID `gorm:"column:campaign_id;type:uuid" json:"campaign_id,omitempty"`
+	CharacterAssetID *uuid.UUID `gorm:"column:character_asset_id;type:uuid" json:"character_asset_id,omitempty"`
+	PersonaAssetID   *uuid.UUID `gorm:"column:persona_asset_id;type:uuid" json:"persona_asset_id,omitempty"`
+	ScenarioAssetID  *uuid.UUID `gorm:"column:scenario_asset_id;type:uuid" json:"scenario_asset_id,omitempty"`
+	BranchEpoch      int64      `gorm:"column:branch_epoch;not null" json:"branch_epoch"`
+	NextTurnSeq      int64      `gorm:"column:next_turn_seq;not null;default:1" json:"-"`
+	NextMessageSeq   int64      `gorm:"column:next_message_seq;not null;default:1" json:"-"`
+	CurrentMemoryID  *uuid.UUID `gorm:"column:current_memory_id;type:uuid" json:"current_memory_id,omitempty"`
 	// LLMRoute 创建时固化，不可修改；必须等于所属 Campaign 路由（复合外键兜底）。
 	LLMRoute   string     `gorm:"column:llm_route;not null" json:"llm_route"`
 	CreatedAt  time.Time  `gorm:"column:created_at" json:"created_at"`

@@ -6,7 +6,7 @@
 
 通用 Campaign 终局使用 `pack.json.outcomes[].reward_points`，缺省或 0 不发积分。经营、关系和宗门模块只提交合法完成事实，平台在原事务读取当前固定版本金额；七个新增示例默认仍为 0 分。
 
-青河 `mortal-path 3.7.0` 另有 `cultivation.progress_rewards:progress-rewards`：
+青河 `mortal-path 1.0.0` 另有 `cultivation.progress_rewards:progress-rewards`：
 
 | 阶段 | 必需的当前分支事实 | 积分 |
 | --- | --- | ---: |
@@ -70,3 +70,9 @@ PostgreSQL 用例当前已编写且编译通过，本机未执行。维护者需
 ## 主动退出与完成窗口（2026-10-11）
 
 玩家提前退出不领取终局积分，已到账阶段积分保留，不以修为、时间或资源兑换离场积分。实际终局收益与保留的阶段积分在统一 CompletionView 中分别展示，读取结果不会重新发分。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
+
+## 玩法包交换与版本管理
+
+阶段与终局都按 Campaign 原固定版本发奖，账本同事务记录玩法包、实际版本/哈希、游戏、阶段/结局展示快照。新版入口不改变原预算；暂停后已到账奖励和原结果保留。
+
+完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。

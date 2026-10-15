@@ -19,7 +19,7 @@ func insertDeletableVersion(t *testing.T, db *gorm.DB, packID, versionID uuid.UU
 	if err := db.Exec(`INSERT INTO challenge_versions
 		(id, challenge_pack_id, version, status, manifest, content_hash, published_at)
 		VALUES (?, ?, ?, ?, '{}'::jsonb,
-			CASE WHEN ? = 'draft' THEN '' ELSE '` + strings.Repeat("c", 64) + `' END,
+			CASE WHEN ? = 'draft' THEN '' ELSE '`+strings.Repeat("c", 64)+`' END,
 			CASE WHEN ? = 'draft' THEN NULL ELSE CURRENT_TIMESTAMP END)`,
 		versionID, packID, version, status, status, status).Error; err != nil {
 		t.Fatal(err)
@@ -54,10 +54,13 @@ func TestPostgresDeleteVersionIfUnused(t *testing.T) {
 			playerID).Error; err != nil {
 			t.Fatal(err)
 		}
+		if err := db.Exec(`UPDATE challenge_packs SET current_version_id=?,status='active' WHERE id=?`, versionID, packID).Error; err != nil {
+			t.Fatal(err)
+		}
 		if err := db.Exec(`INSERT INTO conversations
 			(id, player_id, title, status, challenge_version_id, challenge_hash, llm_route)
 			VALUES (?, ?, 'delete-guard', 'active', ?, ?, 'server')`,
-			uuid.New(), playerID, versionID, strings.Repeat("b", 64)).Error; err != nil {
+			uuid.New(), playerID, versionID, strings.Repeat("c", 64)).Error; err != nil {
 			t.Fatal(err)
 		}
 		if err := repository.DeleteVersionIfUnused(ctx, versionID); !errors.Is(err, ErrVersionInUse) {
@@ -72,24 +75,24 @@ func TestPostgresDeleteVersionIfUnused(t *testing.T) {
 		}
 	})
 
-	t.Run("deleting current version detaches pack", func(t *testing.T) {
+	t.Run("current entry cannot be deleted", func(t *testing.T) {
 		packID, versionID := uuid.New(), uuid.New()
 		insertDeletableVersion(t, db, packID, versionID, "9.9.7", ChallengeVersionPublished)
 		if err := db.Exec(`UPDATE challenge_packs SET current_version_id = ?, status = ?
 			WHERE id = ?`, versionID, ChallengePackActive, packID).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := repository.DeleteVersionIfUnused(ctx, versionID); err != nil {
-			t.Fatal(err)
+		if err := repository.DeleteVersionIfUnused(ctx, versionID); !errors.Is(err, ErrVersionInUse) {
+			t.Fatalf("current entry deleted: %v", err)
 		}
 		pack, err := repository.GetPack(ctx, packID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if pack.CurrentVersionID != nil {
+		if pack.CurrentVersionID == nil || *pack.CurrentVersionID != versionID {
 			t.Fatal("pack current version should be detached")
 		}
-		if pack.Status != ChallengePackHidden {
+		if pack.Status != ChallengePackActive {
 			t.Fatalf("pack status = %q, want %q", pack.Status, ChallengePackHidden)
 		}
 	})

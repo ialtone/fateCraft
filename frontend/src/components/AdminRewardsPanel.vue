@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   NAlert,
   NButton,
@@ -44,6 +45,17 @@ const tab = ref('rules'),
   error = ref(''),
   busy = ref(false),
   saved = ref(false)
+const route = useRoute()
+watch(
+  () => [route.query.pack, route.query.version],
+  ([pack, version]) => {
+    if (pack || version) {
+      tab.value = 'records'
+      recordsTab.value = 'ledger'
+    }
+  },
+  { immediate: true },
+)
 const valid = computed(
   () =>
     !!registration.value &&

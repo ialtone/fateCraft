@@ -479,9 +479,9 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 2. 编写包内规格或在 `docs/design` 更新对应正式专题。
 3. 完成 pack/runtime 和资产 JSON。
 4. 运行后端 importer 测试，确认内容哈希稳定。
-5. 启动按 `data/bootstrap.json` 自动导入全部九个内置包，并为已有库补齐缺失包；已有包不自动升级或覆盖，停用状态也不会被重启重置。管理员在“内置内容”控制启用，内容不一致时仍需显式确认覆盖。
+5. 启动按 data/bootstrap.json 补齐八类九个默认包，已有包和停用状态保持。管理员内置更新与上传都先预览并导入草稿，再发布、选择入口和启用。
 
-不需要管理员手工创建奖励表记录或执行额外 SQL。导入器在一个事务内处理版本、结局积分和发布。同版本覆盖只适用于未被对话引用的内置快照；投入使用后应提升版本号。
+不需要手工创建奖励表或执行发奖 SQL。草稿导入和完整内容同事务；已发布同号不同内容一律不可覆盖，必须提升版本号。
 
 ## 发布前检查表
 
@@ -519,3 +519,9 @@ Campaign View 的字段路径只能落在已注册的 Campaign 投影上。不�
 - 发布与结算：`backend/internal/challenge`。
 - 状态验证与玩家投影：`backend/internal/state`、`backend/internal/gameplay/contract/contract.go`。
 - 结构化管理员编辑器：`frontend/src/components/ChallengeVersionEditor.vue`。
+
+## 玩法包交换与版本管理
+
+完整 JSON 示例和结构 Schema 已提供。导出读取数据库固定版本，保留身份/排序/哈希，剔除本地数据库身份和存档。JSON/ZIP 统一编译；首期不接受脚本或跨包依赖。作者修改任何发布内容须提升版本。
+
+完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。

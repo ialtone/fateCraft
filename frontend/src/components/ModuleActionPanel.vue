@@ -43,11 +43,11 @@ const plan = computed(() =>
   planIndex.value === null ? undefined : active.value?.plans?.[planIndex.value],
 )
 const costs = computed(() =>
-  Object.entries(plan.value?.costs ?? active.value?.metadata.costs ?? {}).map(
+  Object.entries(plan.value?.costs ?? active.value?.metadata?.costs ?? {}).map(
     ([key, quantity]) => `${active.value?.cost_labels?.[key] ?? '资源'} × ${quantity}`,
   ),
 )
-const minutes = computed(() => plan.value?.minutes ?? active.value?.metadata.minutes ?? 0)
+const minutes = computed(() => plan.value?.minutes ?? active.value?.metadata?.minutes ?? 0)
 const blocked = computed(
   () =>
     loading.value ||
@@ -142,12 +142,12 @@ async function execute() {
   }
   if (active.value?.ending && !pending.value) {
     dialog.warning({
-      title: `确认${active.value.metadata.label}`,
+      title: `确认${active.value.metadata?.label || active.value.description}`,
       content: [
         active.value.description,
         costs.value.join('，'),
         minutes.value ? `耗时 ${minutes.value} 分钟` : '',
-        plan.value?.risk || active.value.metadata.risk,
+        plan.value?.risk || active.value.metadata?.risk,
         '确认后按当前方案执行；达到结局后无法继续本局。主动终止保留已到账阶段积分，不额外发放通关积分。',
       ]
         .filter(Boolean)
@@ -178,7 +178,10 @@ async function execute() {
           v-model:value="selectedKey"
           :disabled="submitting || !!pending"
           :options="
-            snapshot.action_capabilities.map((a) => ({ label: a.metadata.label, value: a.key }))
+            snapshot.action_capabilities.map((a) => ({
+              label: a.metadata?.label || a.description,
+              value: a.key,
+            }))
           "
         />
         <template v-if="active">
@@ -236,8 +239,8 @@ async function execute() {
             <dt>消耗</dt>
             <dd>{{ costs.join('、') || '无额外消耗' }}</dd>
           </dl>
-          <p v-if="plan?.risk || active.metadata.risk" class="hint">
-            {{ plan?.risk || active.metadata.risk }}
+          <p v-if="plan?.risk || active.metadata?.risk" class="hint">
+            {{ plan?.risk || active.metadata?.risk }}
           </p>
           <NAlert v-if="!active.available" type="info" :show-icon="false">{{
             active.violations?.map((v) => v.message).join('；') || '当前不可执行'
@@ -248,7 +251,7 @@ async function execute() {
             :loading="submitting"
             :disabled="blocked || !active.available || !!pending"
             @click="execute"
-            >执行{{ active.metadata.label }}</NButton
+            >执行{{ active.metadata?.label || active.description }}</NButton
           >
           <p v-if="chat.isGenerating" class="hint">请等待当前叙事完成。</p>
         </template>

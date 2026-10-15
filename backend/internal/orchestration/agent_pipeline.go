@@ -294,10 +294,7 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 		modelDurationMS := time.Since(modelStartedAt).Milliseconds()
 		toolCalls := result.ToolCallBlocks()
 		contentBlocks := agentContentBlocksDoc(result.CanonicalBlocks())
-		completionTokens := g.counter.Count(string(contentBlocks))
-		if len(contentBlocks) == 0 || string(contentBlocks) == "[]" {
-			completionTokens = g.counter.Count(result.TextProjection())
-		}
+		completionTokens := estimateAgentOutputTokens(g.counter, result)
 		promptTokens := built.UsedPromptTokens
 		usageSource := "estimated"
 		if result.Usage.OutputTokens > 0 {
@@ -826,7 +823,10 @@ func hashAgentArguments(raw string) string {
 }
 
 func agentErrorCode(err error) string {
+	err = storage.GameplayPolicyError(err)
 	switch {
+	case errors.Is(err, storage.ErrVersionBlocked):
+		return "gameplay_version_blocked"
 	case errors.Is(err, errAgentToolPersistence):
 		return "tool_persistence_failed"
 	case err == nil:

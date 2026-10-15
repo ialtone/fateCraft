@@ -51,11 +51,36 @@ func TestSummarizePlayerTurnPerformanceUsesWeightedTPS(t *testing.T) {
 	if got.AverageFirstResponseMS != 500 || got.ModelDurationMS != 4000 || got.AttemptDurationMS != 8000 {
 		t.Fatalf("durations = %#v", got)
 	}
-	if math.Abs(got.TokensPerSecond-13.333333) > 0.0001 {
+	if math.Abs(got.TokensPerSecond-10) > 0.0001 {
 		t.Fatalf("tokens_per_second = %f", got.TokensPerSecond)
 	}
 	if !got.UsageEstimated {
 		t.Fatal("mixed provider/local token counts must be marked estimated")
+	}
+}
+
+func TestPlayerTPSIncludesHiddenReasoningWait(t *testing.T) {
+	finished := time.Now()
+	for _, generationMS := range []int64{100, 10000} {
+		got := summarizePlayerTurnPerformance(&storage.AgentAttemptPerformance{
+			Steps: []storage.AgentStep{{
+				CompletionTokens: 1000, TokenUsageSource: "provider",
+				FirstEventMS: 9900, ModelDurationMS: 10000, GenerationMS: generationMS,
+				FinishedAt: &finished,
+			}},
+		}, finished)
+		if got.TokensPerSecond != 100 {
+			t.Fatalf("generation_ms=%d: TPS=%f, want 100 including initial wait", generationMS, got.TokensPerSecond)
+		}
+	}
+}
+
+func TestPlayerTPSMissingRequestDurationDoesNotUseShortStreamTail(t *testing.T) {
+	got := summarizePlayerTurnPerformance(&storage.AgentAttemptPerformance{
+		Steps: []storage.AgentStep{{CompletionTokens: 1000, GenerationMS: 1}},
+	}, time.Now())
+	if got.TokensPerSecond != 0 {
+		t.Fatalf("TPS=%f without request duration", got.TokensPerSecond)
 	}
 }
 

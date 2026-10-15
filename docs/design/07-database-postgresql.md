@@ -357,3 +357,9 @@ go test -count=1 -timeout=10m ./...
 - `llm_request_logs.settings_source` 扩展为 `('user', 'platform', 'client')`，`client` 表示原始响应由浏览器回传。
 
 本次日志字段与索引仅修改 00001 基线，不新增实际 00002；已初始化的旧库不会自动同步。完整预算、配置并发冲突及隔离测试方法见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
+
+## 玩法包交换与版本管理
+
+00001 新增 gameplay_imports、Pack 来源/管理修订、Version 内容修订/运行策略/来源摘要及账本索引。写栅栏持有版本共享锁，策略变更按包→版本锁顺序持有排他锁。开局在事务内检查当前入口，版本绑定不可改。新项目只更新 00001，不新增 00002、不自动迁移或清库。
+
+完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。

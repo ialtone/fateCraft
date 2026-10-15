@@ -62,6 +62,15 @@ func rewardCursor(c *gin.Context) (storage.RewardPageCursor, bool) {
 	}
 	result.RewardKey = c.Query("reward_key")
 	result.SourceType = c.Query("source_type")
+	for key, dest := range map[string]*string{"pack_id": &result.PackID, "version_id": &result.VersionID} {
+		if raw := c.Query(key); raw != "" {
+			if _, err := uuid.Parse(raw); err != nil {
+				c.JSON(400, gin.H{"error": "玩法包或版本 ID 无效"})
+				return result, false
+			}
+			*dest = raw
+		}
+	}
 	if result.RewardKey != "" && !storage.ValidRewardKey(result.RewardKey) {
 		c.JSON(400, gin.H{"error": "余额项目无效"})
 		return result, false

@@ -137,7 +137,7 @@ const usagePct = computed(() => {
           </div>
           <span class="performance-status">{{ performanceStatus(performance.status) }}</span>
         </div>
-        <div class="performance-label faint">TPS · 模型输出速度</div>
+        <div class="performance-label faint">TPS · 平均输出速度</div>
         <div class="metric-grid">
           <div class="metric-cell">
             <span class="faint">平均首响应</span>
@@ -168,6 +168,9 @@ const usagePct = computed(() => {
         </div>
         <div v-if="performance.usage_estimated" class="estimate-note faint">
           Token 数由服务端估算
+        </div>
+        <div class="estimate-note faint">
+          输出 Token ÷ 模型请求总耗时（含首响应等待）；包含推理及工具输出。
         </div>
       </div>
     </template>

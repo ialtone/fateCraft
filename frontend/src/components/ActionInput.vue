@@ -214,7 +214,7 @@ function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown
   )
   if (ending)
     dialog.warning({
-      title: `确认${ending.metadata.label || ending.description}`,
+      title: `确认${ending.metadata?.label || ending.description}`,
       content: `${ending.description}。确认后由后端重新校验并执行；达到结局后不能继续本局。`,
       positiveText: '确认执行',
       negativeText: '取消',

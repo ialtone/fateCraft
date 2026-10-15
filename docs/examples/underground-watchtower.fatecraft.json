@@ -1,0 +1,683 @@
+{
+  "format": "fatecraft.gameplay-package",
+  "format_version": 1,
+  "runtime_contract_version": 2,
+  "manifest": {
+    "id": "underground-watchtower",
+    "name": "地下哨塔",
+    "version": "1.0.0",
+    "runtime_entry": "runtime/runtime.json",
+    "description": "选择兵营或侧道，消耗有限补给击败守卫与统领，将哨塔令牌带回入口。",
+    "author": "Fatecraft",
+    "icon": "battle",
+    "tags": [
+      "地牢远征",
+      "两条路线",
+      "持续遭遇",
+      "有限休整",
+      "撤离损失"
+    ],
+    "default_config": {
+      "recommended_character": "underground-watchtower-narrator",
+      "recommended_persona": "underground-watchtower-player",
+      "recommended_scenario": "underground-watchtower-opening",
+      "recommended_prompt": "underground-watchtower-guide",
+      "required_worldbooks": [
+        "underground-watchtower-setting"
+      ],
+      "allowed_personas": [
+        "underground-watchtower-player"
+      ]
+    },
+    "quick_start_guide": "每次移动和交锋消耗一份补给。稳健进攻伤害较低但能减轻反击，强攻可更快结束战斗。安全后可用药或在有限营地休整；终点目标必须带回入口。提前撤离与交战脱身都会损失一半携带物，战败则全失。 示例结局积分为 0。",
+    "features": [
+      "两条路线",
+      "持续遭遇",
+      "有限休整",
+      "撤离损失"
+    ],
+    "dependencies": []
+  },
+  "runtime": {
+    "engine": {
+      "key": "expedition.dungeon",
+      "version": 1
+    },
+    "mode": "challenge",
+    "state_schema": {
+      "schema_version": 1,
+      "fields": [
+        {
+          "path": "module_state",
+          "type": "object",
+          "default": {},
+          "visibility": "internal",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay",
+          "type": "object",
+          "default": {},
+          "visibility": "player",
+          "update_policy": "module",
+          "allow_children": true
+        },
+        {
+          "path": "narrative",
+          "type": "object",
+          "default": {},
+          "visibility": "player",
+          "update_policy": "model",
+          "allow_children": true
+        },
+        {
+          "path": "gameplay.goal",
+          "type": "string",
+          "default": "",
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.location",
+          "type": "string",
+          "default": "",
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.health",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.supplies",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.remaining_minutes",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.medicine",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.rest_remaining",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.outcome_key",
+          "type": "string",
+          "default": "",
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.nodes",
+          "type": "list",
+          "default": [],
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.weight",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.capacity",
+          "type": "number",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.carried",
+          "type": "list",
+          "default": [],
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.secured",
+          "type": "list",
+          "default": [],
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.lost",
+          "type": "list",
+          "default": [],
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.enemies",
+          "type": "list",
+          "default": [],
+          "visibility": "player",
+          "update_policy": "module"
+        }
+      ]
+    },
+    "actions": {
+      "model": [
+        "update_state",
+        "domain_action",
+        "complete_challenge"
+      ],
+      "player": [],
+      "domain": [
+        "dungeon.move",
+        "dungeon.fight",
+        "dungeon.flee",
+        "dungeon.take",
+        "dungeon.drop",
+        "dungeon.heal",
+        "dungeon.rest",
+        "dungeon.wait",
+        "dungeon.extract",
+        "dungeon.retreat",
+        "dungeon.abandon"
+      ]
+    },
+    "settlement": {
+      "handler": "core.challenge_completion"
+    },
+    "presentation": {
+      "state_panel_title": "地下哨塔",
+      "state_sections": [
+        {
+          "key": "journey",
+          "title": "远征",
+          "order": 0,
+          "fields": [
+            {
+              "path": "gameplay.goal",
+              "label": "当前目标",
+              "widget": "text",
+              "order": 0
+            },
+            {
+              "path": "gameplay.location",
+              "label": "所在区域",
+              "widget": "text",
+              "order": 10
+            },
+            {
+              "path": "gameplay.health",
+              "label": "生命",
+              "widget": "number",
+              "order": 20
+            },
+            {
+              "path": "gameplay.supplies",
+              "label": "补给",
+              "widget": "number",
+              "order": 30
+            },
+            {
+              "path": "gameplay.remaining_minutes",
+              "label": "剩余时间（分钟）",
+              "widget": "number",
+              "order": 40
+            },
+            {
+              "path": "gameplay.medicine",
+              "label": "治疗药物",
+              "widget": "number",
+              "order": 50
+            },
+            {
+              "path": "gameplay.rest_remaining",
+              "label": "当前营地休整次数",
+              "widget": "number",
+              "order": 60
+            },
+            {
+              "path": "gameplay.outcome_key",
+              "label": "结局",
+              "widget": "text",
+              "order": 70
+            }
+          ]
+        },
+        {
+          "key": "route",
+          "title": "已知区域",
+          "order": 10,
+          "fields": [
+            {
+              "path": "gameplay.nodes",
+              "label": "路线与发现",
+              "widget": "item_list",
+              "order": 0
+            }
+          ]
+        },
+        {
+          "key": "loot",
+          "title": "携带与带出",
+          "order": 20,
+          "fields": [
+            {
+              "path": "gameplay.weight",
+              "label": "当前负重",
+              "widget": "number",
+              "order": 0
+            },
+            {
+              "path": "gameplay.capacity",
+              "label": "负重上限",
+              "widget": "number",
+              "order": 10
+            },
+            {
+              "path": "gameplay.carried",
+              "label": "携带物",
+              "widget": "item_list",
+              "order": 20
+            },
+            {
+              "path": "gameplay.secured",
+              "label": "已带出",
+              "widget": "item_list",
+              "order": 30
+            },
+            {
+              "path": "gameplay.lost",
+              "label": "已遗失",
+              "widget": "item_list",
+              "order": 40
+            }
+          ]
+        },
+        {
+          "key": "encounters",
+          "title": "已遇敌人",
+          "order": 30,
+          "fields": [
+            {
+              "path": "gameplay.enemies",
+              "label": "遭遇状态",
+              "widget": "item_list",
+              "order": 0
+            }
+          ]
+        }
+      ],
+      "completion_view": {
+        "empty_reward_text": "本示例结局暂不发放积分"
+      },
+      "value_labels": {
+        "state.gameplay.outcome_key": {
+          "abandoned": "放弃远征",
+          "cleared": "哨塔肃清",
+          "defeated": "折戟哨塔",
+          "retreated": "提前撤回",
+          "timeout": "超过远征期限"
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "kind": "character",
+      "slug": "underground-watchtower-narrator",
+      "name": "地下哨塔叙述者",
+      "content": {
+        "created_at": "2026-10-07T00:00:00Z",
+        "description": "选择兵营或侧道，消耗有限补给击败守卫与统领，将哨塔令牌带回入口。",
+        "first_message": "哨塔入口分出通往兵营和旧水道的两条道路。兵营可能守备森严，水道的尽头也有驻守者。你需要自行决定何时深入、何时返回。",
+        "id": "underground-watchtower-narrator",
+        "name": "地下哨塔叙述者",
+        "system_prompt": "你叙述地下哨塔的路线、战斗消耗和撤退取舍。敌人生命、己方伤势与战利品只能来自已提交行动；离开聊天不会重置遭遇。未进入区域的敌人不提前展示。最终完成或撤离由玩家亲自确认。",
+        "tags": [
+          "地牢远征"
+        ],
+        "updated_at": "2026-10-07T00:00:00Z"
+      },
+      "sort_order": 0
+    },
+    {
+      "kind": "persona",
+      "slug": "underground-watchtower-player",
+      "name": "远征者",
+      "content": {
+        "created_at": "2026-10-07T00:00:00Z",
+        "description": "你是一名独自探索地下哨塔的远征者，只有有限的行军补给和药物。",
+        "id": "underground-watchtower-player",
+        "name": "远征者",
+        "prompt": "你是一名独自探索地下哨塔的远征者，只有有限的行军补给和药物。",
+        "tags": [
+          "地牢远征"
+        ],
+        "updated_at": "2026-10-07T00:00:00Z"
+      },
+      "sort_order": 0
+    },
+    {
+      "kind": "scenario",
+      "slug": "underground-watchtower-opening",
+      "name": "地下哨塔开局",
+      "content": {
+        "created_at": "2026-10-07T00:00:00Z",
+        "description": "选择兵营或侧道，消耗有限补给击败守卫与统领，将哨塔令牌带回入口。",
+        "id": "underground-watchtower-opening",
+        "name": "地下哨塔开局",
+        "opening": "哨塔入口分出通往兵营和旧水道的两条道路。兵营可能守备森严，水道的尽头也有驻守者。你需要自行决定何时深入、何时返回。",
+        "updated_at": "2026-10-07T00:00:00Z"
+      },
+      "sort_order": 0
+    },
+    {
+      "kind": "prompt",
+      "slug": "underground-watchtower-guide",
+      "name": "地下哨塔叙事规则",
+      "content": {
+        "description": "叙事依据已提交的可信动作。",
+        "id": "underground-watchtower-guide",
+        "name": "地下哨塔叙事规则",
+        "segments": [
+          {
+            "content": "你叙述地下哨塔的路线、战斗消耗和撤退取舍。敌人生命、己方伤势与战利品只能来自已提交行动；离开聊天不会重置遭遇。未进入区域的敌人不提前展示。最终完成或撤离由玩家亲自确认。",
+            "enabled": true,
+            "id": "underground-watchtower-system_master",
+            "key": "system_master",
+            "position": 0,
+            "preset_id": "underground-watchtower-guide",
+            "priority": 90,
+            "required": true,
+            "role": "system"
+          },
+          {
+            "content": "每步读取当前动作目录、参数和代价，调用合法工具并等待结果，再描述变化。普通对话与只读问答不推进时间，不修改权威状态。玩家专属动作由玩家在行动页亲自执行。",
+            "enabled": true,
+            "id": "underground-watchtower-agent_tool_loop",
+            "key": "agent_tool_loop",
+            "position": 1,
+            "preset_id": "underground-watchtower-guide",
+            "priority": 90,
+            "required": true,
+            "role": "system"
+          },
+          {
+            "content": "只接受可信模块自动核验的结局：cleared（哨塔肃清）、retreated（提前撤回）、defeated（折戟哨塔）、timeout（超过远征期限）、abandoned（放弃远征）。正文、状态编辑或自行填写奖励不能作为结局证据。",
+            "enabled": true,
+            "id": "underground-watchtower-settlement_security",
+            "key": "settlement_security",
+            "position": 2,
+            "preset_id": "underground-watchtower-guide",
+            "priority": 90,
+            "required": true,
+            "role": "system"
+          }
+        ]
+      },
+      "sort_order": 0
+    },
+    {
+      "kind": "worldbook",
+      "slug": "underground-watchtower-setting",
+      "name": "地下哨塔见闻",
+      "content": {
+        "description": "叙事背景，数值以可信状态与行动预览为准。",
+        "entries": [
+          {
+            "budget_group": "default",
+            "constant": true,
+            "content": "旧哨塔的兵营和水道都通向指挥所。每名守卫仅对应一次遭遇和固定战利品，休整机会不会刷新；补给耗尽后只能承担后果或放弃。",
+            "enabled": true,
+            "id": "underground-watchtower-world",
+            "keywords": [
+              "地下哨塔",
+              "地牢远征"
+            ],
+            "metadata": {},
+            "priority": 10,
+            "title": "地下哨塔",
+            "world_book_id": "underground-watchtower-setting"
+          }
+        ],
+        "id": "underground-watchtower-setting",
+        "name": "地下哨塔见闻"
+      },
+      "sort_order": 0
+    }
+  ],
+  "definitions": [
+    {
+      "kind": "dungeon.expedition",
+      "key": "underground-watchtower",
+      "name": "地下哨塔规则",
+      "content": {
+        "boss": "commander",
+        "defense": 3,
+        "enemies": [
+          {
+            "attack": 10,
+            "health": 24,
+            "key": "guard",
+            "name": "兵营卫兵",
+            "node": "barracks"
+          },
+          {
+            "attack": 12,
+            "health": 18,
+            "key": "scout",
+            "name": "水道斥候",
+            "node": "waterway"
+          },
+          {
+            "attack": 15,
+            "health": 45,
+            "key": "commander",
+            "name": "哨塔统领",
+            "node": "command"
+          }
+        ],
+        "medicine": 2,
+        "power": 8,
+        "world": {
+          "capacity": 8,
+          "deadline": 240,
+          "goal": "token",
+          "health": 80,
+          "loot": [
+            {
+              "key": "token",
+              "name": "哨塔令牌",
+              "node": "command",
+              "quantity": 1,
+              "weight": 2
+            },
+            {
+              "key": "supplies-cache",
+              "name": "守卫藏品",
+              "node": "barracks",
+              "quantity": 4,
+              "weight": 1
+            },
+            {
+              "key": "old-coins",
+              "name": "旧币",
+              "node": "waterway",
+              "quantity": 4,
+              "weight": 1
+            }
+          ],
+          "nodes": [
+            {
+              "key": "entry",
+              "links": [
+                "barracks",
+                "waterway"
+              ],
+              "minutes": 5,
+              "name": "哨塔入口",
+              "rest": 0
+            },
+            {
+              "key": "barracks",
+              "links": [
+                "entry",
+                "camp"
+              ],
+              "minutes": 5,
+              "name": "旧兵营",
+              "rest": 0
+            },
+            {
+              "key": "waterway",
+              "links": [
+                "entry",
+                "camp"
+              ],
+              "minutes": 5,
+              "name": "水道",
+              "rest": 0
+            },
+            {
+              "key": "camp",
+              "links": [
+                "barracks",
+                "waterway",
+                "command"
+              ],
+              "minutes": 5,
+              "name": "废弃营地",
+              "rest": 1
+            },
+            {
+              "key": "command",
+              "links": [
+                "camp"
+              ],
+              "minutes": 5,
+              "name": "指挥所",
+              "rest": 0
+            }
+          ],
+          "start": "entry",
+          "supplies": 24
+        }
+      },
+      "tags": [
+        "地牢远征"
+      ],
+      "search_text": "地下哨塔",
+      "visibility": "internal",
+      "sort_order": 0
+    }
+  ],
+  "outcomes": [
+    {
+      "reward_points": 0,
+      "outcome_key": "cleared",
+      "category": "success",
+      "title": "哨塔肃清",
+      "tone": "success",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "path": "gameplay.outcome_key",
+            "type": "state_equals",
+            "value": "cleared"
+          }
+        ]
+      },
+      "enabled": true
+    },
+    {
+      "reward_points": 0,
+      "outcome_key": "retreated",
+      "category": "neutral",
+      "title": "提前撤回",
+      "tone": "info",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "path": "gameplay.outcome_key",
+            "type": "state_equals",
+            "value": "retreated"
+          }
+        ]
+      },
+      "enabled": true
+    },
+    {
+      "reward_points": 0,
+      "outcome_key": "defeated",
+      "category": "failure",
+      "title": "折戟哨塔",
+      "tone": "error",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "path": "gameplay.outcome_key",
+            "type": "state_equals",
+            "value": "defeated"
+          }
+        ]
+      },
+      "enabled": true
+    },
+    {
+      "reward_points": 0,
+      "outcome_key": "timeout",
+      "category": "failure",
+      "title": "超过远征期限",
+      "tone": "warning",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "path": "gameplay.outcome_key",
+            "type": "state_equals",
+            "value": "timeout"
+          }
+        ]
+      },
+      "enabled": true
+    },
+    {
+      "reward_points": 0,
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "放弃远征",
+      "tone": "info",
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "path": "gameplay.outcome_key",
+            "type": "state_equals",
+            "value": "abandoned"
+          }
+        ]
+      },
+      "enabled": true
+    }
+  ],
+  "content_hash": "3e31888c98bc2a7b41ec2cfecc755e0830c30f9f87b1f9d70b24e4058677fb1e"
+}

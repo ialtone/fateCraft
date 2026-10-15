@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NIcon, NTooltip, useDialog, useMessage } from 'naive-ui'
+import type { DialogOptions } from 'naive-ui'
 import {
   ChatbubblesOutline,
   ChevronBackOutline,
@@ -10,6 +11,7 @@ import {
   ShareSocialOutline,
 } from '@vicons/ionicons5'
 import CharacterSidebar from '@/components/CharacterSidebar.vue'
+import SavedGameplayVersion from '@/components/SavedGameplayVersion.vue'
 import MessageTimeline from '@/components/MessageTimeline.vue'
 import ContextInspector from '@/components/ContextInspector.vue'
 import ActionInput from '@/components/ActionInput.vue'
@@ -59,7 +61,8 @@ const showShare = ref(false)
 const showInspector = ref(true)
 const mobilePane = ref<'state' | 'chat' | 'context'>('chat')
 const convId = computed(() => route.params.id as string)
-const editable = computed(() => convStore.current?.status === 'active')
+const gameplayAllowed = ref(false)
+const editable = computed(() => convStore.current?.status === 'active' && gameplayAllowed.value)
 // 路由不匹配：对话固化路由 ≠ 当前有效路由时禁用全部生成入口。
 // 设置未加载完成前不误判，后端闸门兜底。
 const routeMismatch = computed(() => {
@@ -110,6 +113,38 @@ watch(
   { immediate: true },
 )
 
+// 模型提出的中止/失败结局必须先经过明确的确认弹窗，不能以内联横幅
+// 伪装成普通状态。确认后由后端执行并通过 completion 统一弹出最终结局。
+let shownEndingProposalId: string | null = null
+watch(
+  () =>
+    [
+      convStore.endingState?.proposal,
+      convStore.endingState?.is_processing,
+      editable.value,
+      chat.isGenerating,
+      playerActions.acting,
+      !!playerActions.pending,
+    ] as const,
+  ([proposal, isProcessing, canEdit, isGenerating, isActing, hasPending]) => {
+    if (
+      !proposal ||
+      !proposal.available ||
+      isProcessing ||
+      !canEdit ||
+      isGenerating ||
+      isActing ||
+      hasPending ||
+      proposal.id === shownEndingProposalId
+    )
+      return
+    if (confirmEnding(proposal.key, proposal.arguments, proposal.label, proposal.id)) {
+      shownEndingProposalId = proposal.id
+    }
+  },
+  { immediate: true },
+)
+
 function showCompletion(completion: CompletionInfo) {
   const presentation = runtime.presentation?.completion_view
   const rewardLines = completion.rewards.map(
@@ -139,7 +174,6 @@ function showCompletion(completion: CompletionInfo) {
         ? presentation?.back_label || '返回列表'
         : '关闭',
     negativeText: replay && back ? presentation?.back_label || '返回列表' : undefined,
-    style: { maxWidth: '520px' },
     onPositiveClick: () => {
       convStore.clearEnding()
       if (replay) router.push('/?action=new')
@@ -152,9 +186,7 @@ function showCompletion(completion: CompletionInfo) {
     onClose: () => convStore.clearEnding(),
     onMaskClick: () => convStore.clearEnding(),
   }
-  if (completion.category === 'success') return dialog.success(options)
-  else if (completion.category === 'failure') return dialog.error(options)
-  else return dialog.info(options)
+  return showEndingDialog(completion.category, options)
 }
 
 // 组件是否已卸载：卸载后进行中的 open() 不得再触碰 store / socket
@@ -263,25 +295,33 @@ onBeforeUnmount(() => {
   inquiry.reset()
 })
 
-async function confirmEnding(
+function showEndingDialog(category: CompletionInfo['category'], options: DialogOptions) {
+  const sharedOptions = { ...options, style: { maxWidth: '520px', whiteSpace: 'pre-line' } }
+  if (category === 'success') return dialog.success(sharedOptions)
+  if (category === 'failure') return dialog.error(sharedOptions)
+  return dialog.info(sharedOptions)
+}
+
+function confirmEnding(
   key: string,
   arguments_: Record<string, string | number | boolean>,
   label: string,
-) {
-  if (playerActions.pending) return
+  proposalId?: string,
+): boolean {
+  if (playerActions.pending || playerActions.acting) return false
   const id = convId.value
   const snapshot = convStore.endingState
-  if (!snapshot || snapshot.is_processing || chat.isGenerating) return
+  if (!snapshot || snapshot.is_processing || chat.isGenerating) return false
   const capability = snapshot.ending_capabilities.find((item) => item.key === key)
   if (!capability?.available) {
     message.warning(capability?.violations?.[0]?.message || '当前条件不满足，请刷新状态。')
-    return
+    return false
   }
   const plan = capability.plans?.find(
     (item) => JSON.stringify(item.arguments) === JSON.stringify(arguments_),
   )
   const metadata = plan || capability.metadata
-  const costs = Object.entries(metadata.costs || {})
+  const costs = Object.entries(metadata?.costs || {})
     .map(([name, value]) => `${capability.cost_labels?.[name] || name}：${value}`)
     .join('，')
   const request = {
@@ -291,21 +331,30 @@ async function confirmEnding(
     key,
     arguments: arguments_,
   }
-  dialog.warning({
-    title: label,
+  const abandoning = key === snapshot.abandon_action
+  showEndingDialog('failure', {
+    title: abandoning ? '确认放弃本局' : label,
     content: [
-      capability.description,
+      abandoning
+        ? '这段旅程将在此结束。确认放弃后，将显示本局结局，无法继续游玩。'
+        : capability.description,
       costs,
-      metadata.minutes ? `耗时 ${metadata.minutes} 分钟` : '',
-      metadata.risk,
-      '确认后由后端重新校验条件并执行；结束后无法继续本局。主动终止保留已到账阶段积分，不额外发放通关积分。',
+      metadata?.minutes ? `耗时 ${metadata.minutes} 分钟` : '',
+      metadata?.risk,
+      abandoning
+        ? '已获得的阶段积分会保留，本次放弃不额外获得通关积分。'
+        : '确认后将结束本局，无法继续游玩。结局与积分以最终结算为准。',
     ]
       .filter(Boolean)
       .join('\n\n'),
-    positiveText: '确认执行',
-    negativeText: '取消',
+    positiveText: abandoning ? '确认放弃' : '确认结局',
+    negativeText: '继续游玩',
     onPositiveClick: () => playerActions.execute(id, request),
+    onNegativeClick: () => {
+      if (proposalId) convStore.dismissProposal(proposalId)
+    },
   })
+  return true
 }
 
 async function endConversation() {
@@ -318,7 +367,7 @@ async function endConversation() {
     const snapshot = await convStore.loadEndingState(id)
     if (stale(id)) return
     if (snapshot?.abandon_action) {
-      await confirmEnding(snapshot.abandon_action, {}, '中止本局')
+      confirmEnding(snapshot.abandon_action, {}, '中止本局')
       return
     }
     if (!snapshot || snapshot.has_trusted_actions) {
@@ -381,6 +430,12 @@ async function forkConversation() {
           <span class="back-label">列表</span>
         </NButton>
         <span class="title">{{ convStore.current?.title || '加载中…' }}</span>
+        <SavedGameplayVersion
+          v-if="convStore.current"
+          :key="convId"
+          :conversation-id="convId"
+          @allowed="gameplayAllowed = $event"
+        />
         <ConversationStatusBadge
           v-if="convStore.current"
           class="conversation-status"
@@ -448,7 +503,6 @@ async function forkConversation() {
         <ThemeToggle />
       </div>
     </header>
-
     <ConversationShareDialog
       v-if="showShare && convStore.current"
       v-model:show="showShare"
@@ -474,10 +528,10 @@ async function forkConversation() {
       <span>客户端直连未就绪，请保持页面打开并检查网络后重新生成。</span>
     </div>
 
-    <div v-if="!editable && convStore.current" class="ended-banner">
+    <div v-if="convStore.current && convStore.current.status !== 'active'" class="ended-banner">
       {{
         convStore.current.status === 'archived'
-          ? '此版本已封存，只能浏览；可基于新版本继续。'
+          ? '此对话已归档，恢复后可继续原版玩法。'
           : '此挑战已结束'
       }}
     </div>
@@ -492,37 +546,6 @@ async function forkConversation() {
         >查询原请求</NButton
       >
     </div>
-    <div v-if="editable && convStore.endingState?.proposal" class="route-banner">
-      <span
-        >{{ convStore.endingState.proposal.label }}：{{
-          convStore.endingState.proposal.reason || '模型建议此结局，由您决定是否执行。'
-        }}</span
-      >
-      <NButton
-        size="small"
-        :disabled="
-          !convStore.endingState.proposal.available ||
-          chat.isGenerating ||
-          playerActions.acting ||
-          !!playerActions.pending
-        "
-        @click="
-          confirmEnding(
-            convStore.endingState.proposal.key,
-            convStore.endingState.proposal.arguments,
-            convStore.endingState.proposal.label,
-          )
-        "
-        >查看并确认</NButton
-      >
-      <NButton
-        size="small"
-        quaternary
-        @click="convStore.dismissProposal(convStore.endingState.proposal.id)"
-        >暂不执行</NButton
-      >
-    </div>
-
     <!-- 错误提示统一由输入区（ActionInput）的可关闭警示条展示，页头不再重复挂一份 -->
 
     <nav class="mobile-pane-tabs" aria-label="对话视图">

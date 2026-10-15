@@ -101,3 +101,5 @@ Preview/Capability 的拒绝解释应描述真实、公开的前置，不泄露�
 ## 内容作者的退出声明（2026-10-11）
 
 共用运行时必须声明 `AbandonAction` 对应 player-only、零参数 `Ending` 动作，内容保留完整动作目录和启用的 neutral 零积分退出 Outcome。平台发布时运行初始退出探针。其他玩家终局使用 Ending 元数据及公开参数方案；不得以 Prompt 绕过领域门槛。 完整协议见 [26 玩法结局生命周期](../26-gameplay-ending-lifecycle.md)。
+
+玩法包交换、管理员版本控制、旧局继续、运行暂停和奖励实际来源：[27 玩法包交换与版本生命周期](../27-gameplay-package-exchange-and-versions.md)。该专题包含 JSON/ZIP 完整示例、结构 Schema、资源上限与部署检查。

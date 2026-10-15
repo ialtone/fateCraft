@@ -1,0 +1,1298 @@
+{
+  "$defs": {
+    "ActionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Capability"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "domain": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "model": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "player": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rolls": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RollRule"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "model",
+        "player"
+      ],
+      "type": "object"
+    },
+    "CampaignConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "action_allowlist": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "context_policy": {
+          "type": "string"
+        },
+        "field_ownership": {
+          "items": {
+            "$ref": "#/$defs/FieldOwnership"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "initial_location_key": {
+          "type": "string"
+        },
+        "lifecycle_handler": {
+          "type": "string"
+        },
+        "projection_handler": {
+          "type": "string"
+        },
+        "world_clock": {
+          "$ref": "#/$defs/WorldClockConfig"
+        }
+      },
+      "required": [
+        "lifecycle_handler",
+        "projection_handler",
+        "context_policy",
+        "action_allowlist",
+        "initial_location_key",
+        "world_clock"
+      ],
+      "type": "object"
+    },
+    "CampaignView": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/CampaignViewAction"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "empty_states": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "header": {
+          "$ref": "#/$defs/CampaignViewHeader"
+        },
+        "renderer": {
+          "type": "string"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/CampaignViewSection"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "renderer"
+      ],
+      "type": "object"
+    },
+    "CampaignViewAction": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CampaignViewBinding"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "enabled_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignViewCondition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "icon": {
+          "type": "string"
+        },
+        "item_path": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "placement": {
+          "type": "string"
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignViewCondition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "type": "object"
+    },
+    "CampaignViewBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [],
+      "type": "object"
+    },
+    "CampaignViewCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "equals": {},
+        "exists": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "not_equals": {},
+        "operator": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "CampaignViewField": {
+      "additionalProperties": false,
+      "properties": {
+        "item_fields": {
+          "items": {
+            "$ref": "#/$defs/CampaignViewItemField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "limit": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "order": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value_namespace": {
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignViewCondition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "widget": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "label",
+        "widget",
+        "order"
+      ],
+      "type": "object"
+    },
+    "CampaignViewHeader": {
+      "additionalProperties": false,
+      "properties": {
+        "time_format": {
+          "type": "string"
+        },
+        "time_path": {
+          "type": "string"
+        },
+        "title_path": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "CampaignViewItemField": {
+      "additionalProperties": false,
+      "properties": {
+        "item_fields": {
+          "items": {
+            "$ref": "#/$defs/CampaignViewItemField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value_namespace": {
+          "type": "string"
+        },
+        "widget": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "label"
+      ],
+      "type": "object"
+    },
+    "CampaignViewSection": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/CampaignViewField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "order": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignViewCondition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "order"
+      ],
+      "type": "object"
+    },
+    "Capability": {
+      "additionalProperties": false,
+      "properties": {
+        "cost_quantity": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "cost_reward_key": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "label"
+      ],
+      "type": "object"
+    },
+    "CompletionPresentation": {
+      "additionalProperties": false,
+      "properties": {
+        "back_label": {
+          "type": "string"
+        },
+        "empty_reward_text": {
+          "type": "string"
+        },
+        "replay_label": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "DefaultConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_personas": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "recommended_character": {
+          "type": "string"
+        },
+        "recommended_persona": {
+          "type": "string"
+        },
+        "recommended_prompt": {
+          "type": "string"
+        },
+        "recommended_scenario": {
+          "type": "string"
+        },
+        "required_worldbooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "recommended_character",
+        "recommended_persona",
+        "recommended_scenario",
+        "recommended_prompt",
+        "required_worldbooks"
+      ],
+      "type": "object"
+    },
+    "EngineRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "version"
+      ],
+      "type": "object"
+    },
+    "FieldOwnership": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_children": {
+          "type": "boolean"
+        },
+        "event_types": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "storage_projection": {
+          "type": "string"
+        },
+        "value_type": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "write_capability": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "owner"
+      ],
+      "type": "object"
+    },
+    "Guidance": {
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/GuidanceGroup"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "GuidanceGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/GuidanceItem"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "max_items": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "placement": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "items"
+      ],
+      "type": "object"
+    },
+    "GuidanceItem": {
+      "additionalProperties": false,
+      "properties": {
+        "action_key": {
+          "type": "string"
+        },
+        "arguments": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CampaignViewBinding"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignViewCondition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "visible_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignViewCondition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "mode"
+      ],
+      "type": "object"
+    },
+    "Manifest": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "default_config": {
+          "$ref": "#/$defs/DefaultConfig"
+        },
+        "dependencies": {
+          "maxItems": 0,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "entry_requirement": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "features": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outcomes": {
+          "maxItems": 0,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "quick_start_guide": {
+          "type": "string"
+        },
+        "runtime_entry": {
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "description",
+        "author",
+        "tags",
+        "default_config",
+        "quick_start_guide",
+        "features",
+        "dependencies"
+      ],
+      "type": "object"
+    },
+    "OutcomeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome_key": {
+          "type": "string"
+        },
+        "reward_points": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        },
+        "verifier_config": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "verifier_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reward_points",
+        "outcome_key",
+        "category",
+        "title",
+        "tone",
+        "verifier_key",
+        "verifier_config"
+      ],
+      "type": "object"
+    },
+    "PortableAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {},
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "sort_order": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "slug",
+        "name",
+        "content",
+        "sort_order"
+      ],
+      "type": "object"
+    },
+    "PortablePackage": {
+      "additionalProperties": false,
+      "properties": {
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/PortableAsset"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "definitions": {
+          "items": {
+            "$ref": "#/$defs/gameplayDefinitionFile"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "format": {
+          "const": "fatecraft.gameplay-package"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "manifest": {
+          "$ref": "#/$defs/Manifest"
+        },
+        "outcomes": {
+          "items": {
+            "$ref": "#/$defs/OutcomeSpec"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Provenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runtime": {
+          "$ref": "#/$defs/RuntimeContract"
+        },
+        "runtime_contract_version": {
+          "const": 2
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "runtime_contract_version",
+        "manifest",
+        "runtime",
+        "assets",
+        "definitions",
+        "outcomes"
+      ],
+      "type": "object"
+    },
+    "Presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "campaign_view": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completion_view": {
+          "$ref": "#/$defs/CompletionPresentation"
+        },
+        "guidance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Guidance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state_panel_title": {
+          "type": "string"
+        },
+        "state_sections": {
+          "items": {
+            "$ref": "#/$defs/StateSection"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "terminology": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "value_labels": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "state_panel_title",
+        "state_sections",
+        "completion_view"
+      ],
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "upstream_hash": {
+          "type": "string"
+        },
+        "upstream_id": {
+          "type": "string"
+        },
+        "upstream_version": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "RollRule": {
+      "additionalProperties": false,
+      "properties": {
+        "base_success_rate": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "category": {
+          "type": "string"
+        },
+        "failure": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "requires": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "reward_value": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "sides": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "success": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "category",
+        "base_success_rate",
+        "sides"
+      ],
+      "type": "object"
+    },
+    "RuntimeContract": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "$ref": "#/$defs/ActionConfig"
+        },
+        "campaign": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CampaignConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineRef"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "presentation": {
+          "$ref": "#/$defs/Presentation"
+        },
+        "settlement": {
+          "$ref": "#/$defs/SettlementConfig"
+        },
+        "state_schema": {
+          "$ref": "#/$defs/StateSchema"
+        }
+      },
+      "required": [
+        "engine",
+        "state_schema",
+        "actions",
+        "settlement",
+        "presentation"
+      ],
+      "type": "object"
+    },
+    "SettlementConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "handler": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "handler"
+      ],
+      "type": "object"
+    },
+    "StateField": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_children": {
+          "type": "boolean"
+        },
+        "constraints": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "default": {},
+        "owner": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "update_policy": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "type",
+        "visibility",
+        "update_policy"
+      ],
+      "type": "object"
+    },
+    "StateSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/StateField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "fields"
+      ],
+      "type": "object"
+    },
+    "StateSection": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/StateViewField"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "order": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "order",
+        "fields"
+      ],
+      "type": "object"
+    },
+    "StateViewField": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "order": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "widget": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "label",
+        "widget",
+        "order"
+      ],
+      "type": "object"
+    },
+    "WorldClockConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar_key": {
+          "type": "string"
+        },
+        "max_due_events_per_turn": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "calendar_key",
+        "max_due_events_per_turn"
+      ],
+      "type": "object"
+    },
+    "gameplayDefinitionFile": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "additionalProperties": {},
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "search_text": {
+          "type": "string"
+        },
+        "sort_order": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "name",
+        "content",
+        "tags",
+        "search_text",
+        "visibility",
+        "sort_order"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "fatecraft.gameplay-package.schema.json",
+  "$ref": "#/$defs/PortablePackage",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Structural schema. The server additionally validates exact trusted modules, permissions, references, budgets and normalized content hashes.",
+  "title": "Fatecraft portable gameplay package v1"
+}

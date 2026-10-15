@@ -115,6 +115,26 @@ func (s *Server) requireLLMRoute(c *gin.Context, convID uuid.UUID) bool {
 }
 
 // postMessage 通过 REST 触发一次生成；结果通过该对话的 WebSocket 广播。
+func (s *Server) requireGenerationActive(c *gin.Context, id, requestID uuid.UUID) bool {
+	if _, err := s.conv.GetOwned(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return false
+	}
+	exists, err := s.conv.GenerationRequestExists(c.Request.Context(), id, requestID)
+	if err != nil {
+		fail(c, err)
+		return false
+	}
+	if exists {
+		return true
+	}
+	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
+		fail(c, err)
+		return false
+	}
+	return true
+}
+
 func (s *Server) postMessage(c *gin.Context) {
 	id, ok := paramUUID(c, "id")
 	if !ok {
@@ -125,16 +145,15 @@ func (s *Server) postMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content 不能为空"})
 		return
 	}
-	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
-		fail(c, err)
-		return
-	}
 	if !s.requireLLMRoute(c, id) {
 		return
 	}
 	requestID, err := requestIDFromString(body.RequestID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
+		return
+	}
+	if !s.requireGenerationActive(c, id, requestID) {
 		return
 	}
 	gen := s.hub.Gen()
@@ -153,10 +172,6 @@ func (s *Server) regenerate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
-		fail(c, err)
-		return
-	}
 	if !s.requireLLMRoute(c, id) {
 		return
 	}
@@ -168,6 +183,9 @@ func (s *Server) regenerate(c *gin.Context) {
 	requestID, err := requestIDFromString(body.RequestID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
+		return
+	}
+	if !s.requireGenerationActive(c, id, requestID) {
 		return
 	}
 	gen := s.hub.Gen()
@@ -185,10 +203,6 @@ func (s *Server) continueGen(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, err := s.conv.EnsureActive(c.Request.Context(), id); err != nil {
-		fail(c, err)
-		return
-	}
 	if !s.requireLLMRoute(c, id) {
 		return
 	}
@@ -200,6 +214,9 @@ func (s *Server) continueGen(c *gin.Context) {
 	requestID, err := requestIDFromString(body.RequestID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request_id 必须是有效 UUID"})
+		return
+	}
+	if !s.requireGenerationActive(c, id, requestID) {
 		return
 	}
 	gen := s.hub.Gen()

@@ -112,7 +112,7 @@ func TestPostgresBuiltinOverwritePreservesDisabledEntry(t *testing.T) {
 	if err := db.Model(&storage.ChallengeVersion{}).Where("id = ?", *pack.CurrentVersionID).Update("content_hash", strings.Repeat("0", 64)).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := importer.OverwriteBuiltin(ctx, pack.Slug); err != nil {
+	if _, err := importer.OverwriteBuiltin(ctx, pack.Slug); !errors.Is(err, storage.ErrPublishedVersion) {
 		t.Fatal(err)
 	}
 	pack, err = repo.GetPack(ctx, pack.ID)

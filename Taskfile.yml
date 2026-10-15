@@ -47,6 +47,7 @@ tasks:
     cmds:
       - go build -ldflags "-s -w" -o ../docker/backend/bin/fatecraft ./cmd/server
       - go build -ldflags "-s -w" -o ../docker/backend/bin/fatecraft-migrate ./cmd/migrate
+      - go build -ldflags "-s -w" -o ../docker/backend/bin/fatecraft-gameplay-check ./cmd/gameplay-check
 
   frontend:dev:
     desc: 本机运行前端 Vite 开发服务（代理 /api 与 /ws 到 :8081）

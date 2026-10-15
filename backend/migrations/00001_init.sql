@@ -115,6 +115,8 @@ CREATE TABLE invitation_codes (
 CREATE INDEX idx_invitation_codes_status ON invitation_codes(enabled, expires_at);
 
 CREATE TABLE challenge_packs (
+    source VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (source IN ('builtin','upload','editor')),
+    management_revision BIGINT NOT NULL DEFAULT 1 CHECK (management_revision > 0),
     id UUID PRIMARY KEY,
     slug VARCHAR(128) NOT NULL UNIQUE,
     name VARCHAR(128) NOT NULL,
@@ -128,6 +130,13 @@ CREATE TABLE challenge_packs (
 );
 
 CREATE TABLE challenge_versions (
+    provenance JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(provenance)='object'),
+    revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),
+    run_policy VARCHAR(16) NOT NULL DEFAULT 'allowed' CHECK (run_policy IN ('allowed','blocked')),
+    run_policy_reason TEXT NOT NULL DEFAULT '',
+    policy_revision BIGINT NOT NULL DEFAULT 1 CHECK (policy_revision > 0),
+    policy_actor UUID REFERENCES users(id) ON DELETE SET NULL,
+    policy_changed_at TIMESTAMPTZ,
     id UUID PRIMARY KEY,
     challenge_pack_id UUID NOT NULL REFERENCES challenge_packs(id) ON DELETE RESTRICT,
     version VARCHAR(64) NOT NULL,
@@ -1539,6 +1548,100 @@ CREATE TABLE campaign_stage_rewards (
 );
 COMMENT ON TABLE campaign_stage_rewards IS '账号级只追加阶段领奖事实，含零分和直连；不随剧情检查点回档';
 CREATE TRIGGER campaign_stage_reward_immutable BEFORE UPDATE OR DELETE ON campaign_stage_rewards FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
+
+CREATE TABLE gameplay_imports (
+    id UUID PRIMARY KEY,
+    actor_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    source VARCHAR(16) NOT NULL CHECK (source IN ('upload','builtin')),
+    file_name TEXT NOT NULL,
+    file_hash CHAR(64) NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    target_slug VARCHAR(128) NOT NULL,
+    strategy VARCHAR(32) NOT NULL CHECK (strategy IN ('update','replace_draft','fork')),
+    pack_revision BIGINT NOT NULL DEFAULT 0,
+    draft_revision BIGINT NOT NULL DEFAULT 0,
+    status VARCHAR(16) NOT NULL CHECK (status IN ('preview','imported','expired','cancelled')),
+    payload JSONB CHECK (octet_length(payload::text) <= 33554432),
+    preview JSONB NOT NULL,
+    request_id UUID,
+    result_version_id UUID,
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (request_id),
+    CHECK ((status='preview' AND payload IS NOT NULL) OR (status<>'preview' AND payload IS NULL))
+);
+CREATE INDEX gameplay_imports_actor_page ON gameplay_imports(actor_id,created_at DESC,id DESC);
+CREATE INDEX gameplay_imports_expiry ON gameplay_imports(expires_at) WHERE status='preview';
+CREATE INDEX reward_ledger_gameplay_version ON reward_ledger((metadata->>'challenge_version_id'),created_at DESC,id DESC);
+CREATE INDEX reward_ledger_gameplay_pack ON reward_ledger((metadata->'gameplay_source'->>'pack_id'),created_at DESC,id DESC);
+
+-- Emergency policies are checked at transactional write boundaries in every instance.
+-- Shared version locks allow concurrent games; policy writes wait for committed actions.
+-- +goose StatementBegin
+CREATE FUNCTION guard_gameplay_write() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    row_data JSONB;
+    version_id UUID;
+    bound_hash TEXT;
+    version_row challenge_versions%ROWTYPE;
+    pack_row challenge_packs%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN row_data := to_jsonb(OLD); ELSE row_data := to_jsonb(NEW); END IF;
+    IF TG_TABLE_NAME IN ('conversations','campaigns') AND TG_OP='UPDATE' THEN
+        IF NEW.challenge_version_id IS DISTINCT FROM OLD.challenge_version_id OR NEW.challenge_hash IS DISTINCT FROM OLD.challenge_hash THEN
+            RAISE EXCEPTION 'FC_GAMEPLAY_BINDING_INVALID';
+        END IF;
+    END IF;
+    IF TG_TABLE_NAME = 'conversations' THEN
+        IF TG_OP = 'UPDATE' AND NEW.branch_epoch = OLD.branch_epoch
+           AND NEW.status NOT IN ('active','ended') THEN RETURN NEW; END IF;
+        IF TG_OP = 'UPDATE' AND NEW.branch_epoch = OLD.branch_epoch AND NEW.status = OLD.status THEN RETURN NEW; END IF;
+        version_id := NEW.challenge_version_id; bound_hash := NEW.challenge_hash;
+    ELSIF TG_TABLE_NAME = 'campaigns' THEN
+        version_id := NEW.challenge_version_id; bound_hash := NEW.challenge_hash;
+    ELSIF row_data ? 'conversation_id' THEN
+        SELECT challenge_version_id, challenge_hash INTO version_id,bound_hash FROM conversations WHERE id=(row_data->>'conversation_id')::uuid;
+    ELSIF row_data ? 'campaign_id' THEN
+        SELECT challenge_version_id, challenge_hash INTO version_id,bound_hash FROM campaigns WHERE id=(row_data->>'campaign_id')::uuid;
+    END IF;
+    IF version_id IS NULL THEN RAISE EXCEPTION 'FC_GAMEPLAY_BINDING_INVALID'; END IF;
+    IF TG_OP = 'INSERT' AND TG_TABLE_NAME IN ('conversations','campaigns') THEN
+        SELECT p.* INTO pack_row FROM challenge_packs p JOIN challenge_versions v ON v.challenge_pack_id=p.id WHERE v.id=version_id FOR SHARE OF p;
+        IF pack_row.status <> 'active' OR pack_row.current_version_id IS DISTINCT FROM version_id THEN RAISE EXCEPTION 'FC_GAMEPLAY_ENTRY_CHANGED'; END IF;
+    END IF;
+    SELECT * INTO version_row FROM challenge_versions WHERE id=version_id FOR SHARE;
+    IF version_row.run_policy = 'blocked' THEN RAISE EXCEPTION 'FC_VERSION_BLOCKED'; END IF;
+    IF version_row.status NOT IN ('published','retired') OR btrim(version_row.content_hash) IS DISTINCT FROM bound_hash THEN RAISE EXCEPTION 'FC_GAMEPLAY_BINDING_INVALID'; END IF;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END;
+$$;
+-- +goose StatementEnd
+
+CREATE TRIGGER gameplay_conversation_guard BEFORE INSERT OR UPDATE ON conversations FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write();
+CREATE TRIGGER gameplay_campaign_guard BEFORE INSERT OR UPDATE ON campaigns FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write();
+
+-- +goose StatementBegin
+DO $$
+DECLARE table_name TEXT;
+BEGIN
+    FOREACH table_name IN ARRAY ARRAY[
+        'conversation_states','state_revisions','module_action_commits','roll_history',
+        'chat_messages','display_messages','challenge_runs','conversation_generation_runs',
+        'campaign_runtime_states','campaign_characters','campaign_techniques','campaign_item_stacks',
+        'campaign_item_instances','campaign_known_recipes','campaign_market_states','campaign_market_stocks',
+        'campaign_location_discoveries','campaign_npcs','campaign_relationships','campaign_faction_standings',
+        'campaign_scheduled_events','campaign_region_states','campaign_quests','campaign_encounters',
+        'campaign_events','campaign_action_commits','campaign_stage_rewards','campaign_checkpoints'
+    ] LOOP
+        IF table_name IN ('conversation_generation_runs','campaign_events','campaign_action_commits','campaign_stage_rewards','challenge_runs','module_action_commits','roll_history','state_revisions') THEN
+            EXECUTE format('CREATE TRIGGER gameplay_write_guard BEFORE INSERT ON %I FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write()',table_name);
+        ELSE
+            EXECUTE format('CREATE TRIGGER gameplay_write_guard BEFORE INSERT OR UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write()',table_name);
+        END IF;
+    END LOOP;
+END;
+$$;
+-- +goose StatementEnd
 
 -- +goose Down
 -- Refuse rollback even when this file is run through an external Goose tool.

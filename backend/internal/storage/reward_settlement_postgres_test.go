@@ -22,6 +22,7 @@ func TestPostgresFixedPointsSettlementIsAtomicAndOnce(t *testing.T) {
 	}{
 		{`INSERT INTO challenge_packs(id,slug,name) VALUES (?, 'points-test', 'Points')`, []any{pack}},
 		{`INSERT INTO challenge_versions(id,challenge_pack_id,version,status,manifest,content_hash,published_at) VALUES (?,?,'1.0.0','published','{}',?,CURRENT_TIMESTAMP)`, []any{version, pack, hash}},
+		{`UPDATE challenge_packs SET current_version_id = ?, status = 'active' WHERE id = ?`, []any{version, pack}},
 		{`INSERT INTO challenge_outcome_rules(id,challenge_version_id,outcome_key,category,title,verifier_key,verifier_config,reward_points) VALUES (?,?,'end','success','End','core.always','{}',100)`, []any{outcome, version}},
 	} {
 		if err := db.Exec(statement.sql, statement.args...).Error; err != nil {

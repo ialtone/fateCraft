@@ -28,6 +28,7 @@ func TestPostgresLLMRouteImmutableAndForeignKey(t *testing.T) {
 		`INSERT INTO users (id, username, display_name) VALUES ('`+playerID.String()+`', 'route-test', 'Route Test')`,
 		`INSERT INTO challenge_packs (id, slug, name) VALUES ('`+packID.String()+`', 'route-test', 'Route Test')`,
 		`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES ('`+versionID.String()+`', '`+packID.String()+`', '1.0.0', 'published', '{}'::jsonb, '`+hash+`', CURRENT_TIMESTAMP)`,
+		`UPDATE challenge_packs SET current_version_id = '`+versionID.String()+`', status = 'active' WHERE id = '`+packID.String()+`'`,
 		`INSERT INTO campaigns (id, player_id, title, challenge_version_id, challenge_hash, current_location_key, random_seed, llm_route) VALUES ('`+campaignID.String()+`', '`+playerID.String()+`', 'Route', '`+versionID.String()+`', '`+hash+`', 'world.start', 1, 'server')`,
 		`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash, campaign_id, llm_route) VALUES ('`+conversationID.String()+`', '`+playerID.String()+`', 'Route', '`+versionID.String()+`', '`+hash+`', '`+campaignID.String()+`', 'server')`,
 	)
@@ -111,6 +112,7 @@ func TestPostgresClientRouteSettlementSkipsRewards(t *testing.T) {
 		`INSERT INTO users (id, username, display_name) VALUES ('` + playerID.String() + `', 'settle-route-test', 'Settle Route Test')`,
 		`INSERT INTO challenge_packs (id, slug, name) VALUES ('` + packID.String() + `', 'settle-route-test', 'Settle Route Test')`,
 		`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES ('` + versionID.String() + `', '` + packID.String() + `', '1.0.0', 'published', '{}'::jsonb, '` + hash + `', CURRENT_TIMESTAMP)`,
+		`UPDATE challenge_packs SET current_version_id = '` + versionID.String() + `', status = 'active' WHERE id = '` + packID.String() + `'`,
 		`INSERT INTO challenge_outcome_rules (id, challenge_version_id, outcome_key, category, title, verifier_key, verifier_config) VALUES ('` + outcomeRuleID.String() + `', '` + versionID.String() + `', 'good_end', 'success', 'Good End', 'none', '{}'::jsonb)`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {
@@ -194,6 +196,7 @@ func TestPostgresClientRouteRegenerateSkipsCharge(t *testing.T) {
 		`INSERT INTO users (id, username, display_name) VALUES ('` + playerID.String() + `', 'regen-route-test', 'Regen Route Test')`,
 		`INSERT INTO challenge_packs (id, slug, name) VALUES ('` + packID.String() + `', 'regen-route-test', 'Regen Route Test')`,
 		`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES ('` + versionID.String() + `', '` + packID.String() + `', '1.0.0', 'published', '{}'::jsonb, '` + hash + `', CURRENT_TIMESTAMP)`,
+		`UPDATE challenge_packs SET current_version_id = '` + versionID.String() + `', status = 'active' WHERE id = '` + packID.String() + `'`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {
 			t.Fatalf("seed regenerate route test: %v", err)
@@ -291,6 +294,7 @@ func TestPostgresClientRouteRewriteSkipsCharge(t *testing.T) {
 		`INSERT INTO users (id, username, display_name) VALUES ('` + playerID.String() + `', 'rewrite-route-test', 'Rewrite Route Test')`,
 		`INSERT INTO challenge_packs (id, slug, name) VALUES ('` + packID.String() + `', 'rewrite-route-test', 'Rewrite Route Test')`,
 		`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES ('` + versionID.String() + `', '` + packID.String() + `', '1.0.0', 'published', '{}'::jsonb, '` + hash + `', CURRENT_TIMESTAMP)`,
+		`UPDATE challenge_packs SET current_version_id = '` + versionID.String() + `', status = 'active' WHERE id = '` + packID.String() + `'`,
 		`INSERT INTO conversations (id, player_id, title, challenge_version_id, challenge_hash, llm_route) VALUES ('` + convID.String() + `', '` + playerID.String() + `', 'Rewrite', '` + versionID.String() + `', '` + hash + `', 'client')`,
 		`INSERT INTO conversation_turns (id, conversation_id, turn_seq, trigger_type, status) VALUES ('` + turnID.String() + `', '` + convID.String() + `', 1, 'user_input', 'completed')`,
 		`INSERT INTO chat_messages (id, conversation_id, role, content, turn_id, message_seq) VALUES ('` + chatID.String() + `', '` + convID.String() + `', 'user', 'hi', '` + turnID.String() + `', 1)`,
@@ -397,6 +401,7 @@ func TestPostgresClientRouteCampaignOutcomeSkipsLedger(t *testing.T) {
 		`INSERT INTO users (id, username, display_name) VALUES ('` + playerID.String() + `', 'outcome-route-test', 'Outcome Route Test')`,
 		`INSERT INTO challenge_packs (id, slug, name) VALUES ('` + packID.String() + `', 'outcome-route-test', 'Outcome Route Test')`,
 		`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES ('` + versionID.String() + `', '` + packID.String() + `', '1.0.0', 'published', '{}'::jsonb, '` + hash + `', CURRENT_TIMESTAMP)`,
+		`UPDATE challenge_packs SET current_version_id = '` + versionID.String() + `', status = 'active' WHERE id = '` + packID.String() + `'`,
 		`INSERT INTO campaigns (id, player_id, title, challenge_version_id, challenge_hash, current_location_key, random_seed, llm_route) VALUES ('` + campaignID.String() + `', '` + playerID.String() + `', 'Route', '` + versionID.String() + `', '` + hash + `', 'world.start', 1, 'client')`,
 	} {
 		if err := db.Exec(statement).Error; err != nil {

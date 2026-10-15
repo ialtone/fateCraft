@@ -334,7 +334,7 @@ PATCH /api/admin/invitation-codes/:id
 
 GET  /api/admin/builtin-challenges
 GET  /api/admin/builtin-challenges/:slug/preview
-POST /api/admin/builtin-challenges/:slug/import
+GET  /api/admin/builtin-challenges/:slug/preview
 
 GET   /api/admin/gameplay-modules
 GET   /api/admin/reward-definitions
@@ -358,7 +358,7 @@ POST /api/admin/challenge-versions/:id/publish
 
 上下文构建日志不受详细模型日志开关影响：管理员列表返回最近构建的预算摘要，单条详情返回 Prompt 分段、必选/裁剪结果、历史消息 ID、世界书 entry ID 和 Memory lag。普通玩家上下文接口不会返回这些技术明细。
 
-内置内容列表只返回仓库包的公开元数据、版本、内容哈希、数据库当前版本和 `available/imported/update_available` 状态，不返回 Prompt 或世界书正文。导入接口只接受扫描结果中的 slug，以及请求体 `{"preview_token":"预览返回的哈希","overwrite":true}`（overwrite 按需要提供），不接受文件路径或上传内容。普通导入不会覆盖或降级；已使用版本应提升版本号并发布新快照。新版本发布事务会将旧版本标记为 retired，并把该版本下普通 active 对话标记为 archived；旧对话仍可通过只读接口浏览。`POST /conversations/:id/fork` 会按来源对话的玩法和 Persona，在当前版本创建全新的初始对话，不复制任意旧状态；Campaign 对话必须走独立的存档流程。
+内置列表返回来源版本、哈希及可导入状态；预览生成统一 GameplayImport，确认使用 /admin/gameplay-imports/:id/confirm。旧内置 /import 与 preview_token 协议移除。手动导入只生成草稿，发布不封存旧局，fork 在当前入口新开局且不复制历史进度。
 
 预览接口返回当前/拟导入结局积分规则，确认时在事务中重新计算 token；过期返回冲突，需重新预览。
 
@@ -455,6 +455,8 @@ GET /ws/llm-relay
 生产推荐由同一域名反代前后端，避免跨站 Cookie 的 SameSite 限制。
 ### 回合运行面板
 
+TPS 使用成功回合内各完成模型步骤的总输出 Token 除以模型请求总耗时之和（`model_duration_ms`），流式与非流式均包含首响应等待，不扣除隐藏推理可能占用的时间。该值为综合平均输出速度，包含供应商 usage 中的推理及工具输出，不代表纯正文流式速度；上下文装配、领域工具执行与回合落库耗时不计入分母。优先使用供应商 usage；缺失时只估算正文、可见思考、拒绝文本及工具名称/参数，不计存储包装字段、调用 ID 与 opaque replay，标记为估算值。缺少有效模型请求耗时时不展示 TPS。
+
 `GET /api/conversations/:id/runtime-inspector` 返回玩家运行面板投影。当前活动实时更新；性能和上下文只取最近一次成功完成且未失效的回合尝试，失败、部分完成、取消或运行中的尝试不替换上次成功结果。性能仅统计完成的模型步骤及已提交工具，失败诊断仍完整保留于管理日志。`context_built` 不直接更新玩家统计，成功完成后或重连时读取快照。
 
 `activity.memory_job` 返回最新归档任务的公开元数据：状态、目标回合、执行次数/上限、排队/开始/结束时间；`memory_archive` 返回当前有效归档覆盖回合和 Token 数。活动接口也返回 `memory_job`，用于轮询更新。归档正文、Worker、租约和原始错误不公开。进程级共享内容缓存与当前用户回合成功无关，不再通过此接口返回或在回合面板展示；底层缓存与诊断日志不因生成失败而伪造回滚。该接口不暴露 Prompt、世界书、密钥、原始响应或隐藏工具参数。
@@ -530,3 +532,9 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 ### 玩法入口启用状态
 
 `PUT /api/admin/challenges/:id/enabled`（管理员）请求 `{ "enabled": true }` 或 `{ "enabled": false }`，返回更新后的 ChallengePack。缺少布尔值返回 400；没有当前已发布版本的包拒绝操作。停用使玩家列表、详情和新开局不可用，已有存档可继续。`GET /api/admin/builtin-challenges` 额外返回每个已导入包的 `pack_id` 和 `enabled`，未导入项没有 `pack_id`。
+
+## 玩法包交换与版本管理
+
+新增上传/导出、导入记录/确认重查、引用、入口回退、运行策略和拥有者 gameplay-version 接口。保存/发布带 expected_revision，发布默认不切换入口；管理写入要求管理员，导入记录按操作者隔离。接口详情见专题。
+
+完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。

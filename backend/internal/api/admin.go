@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/ialtone/fatecraft/internal/challengeimport"
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
@@ -547,52 +545,15 @@ func (s *Server) listAdminBuiltins(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"builtins": items})
 }
 
-type adminBuiltinImportBody struct {
-	Overwrite    bool   `json:"overwrite"`
-	PreviewToken string `json:"preview_token"`
-}
-
 func (s *Server) previewAdminBuiltin(c *gin.Context) {
 	slug, ok := paramSlug(c, "slug")
 	if !ok {
 		return
 	}
-	preview, err := s.builtins.PreviewBuiltin(c.Request.Context(), slug)
+	preview, err := s.builtins.PreviewBuiltin(c.Request.Context(), slug, rewardActor(c))
 	if err != nil {
 		fail(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, preview)
-}
-
-func (s *Server) importAdminBuiltin(c *gin.Context) {
-	slug, ok := paramSlug(c, "slug")
-	if !ok {
-		return
-	}
-	var body adminBuiltinImportBody
-	if c.Request.ContentLength != 0 {
-		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
-			return
-		}
-	}
-	if body.PreviewToken == "" {
-		c.JSON(http.StatusConflict, gin.H{"error": "请先预览差异并确认导入", "code": "preview_required"})
-		return
-	}
-	result, err := s.builtins.ConfirmBuiltin(c.Request.Context(), slug, body.Overwrite, body.PreviewToken, rewardActor(c))
-	if errors.Is(err, challengeimport.ErrPreviewChanged) {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "preview_changed"})
-		return
-	}
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	status := http.StatusOK
-	if result.Created && !result.Overwritten {
-		status = http.StatusCreated
-	}
-	c.JSON(status, result)
 }

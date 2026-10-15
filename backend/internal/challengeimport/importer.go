@@ -31,11 +31,13 @@ const (
 )
 
 type ImportResult struct {
-	Slug        string `json:"slug"`
-	Version     string `json:"version"`
-	ContentHash string `json:"content_hash"`
-	Created     bool   `json:"created"`
-	Overwritten bool   `json:"overwritten"`
+	VersionID   uuid.UUID `json:"version_id"`
+	Status      string    `json:"status"`
+	Slug        string    `json:"slug"`
+	Version     string    `json:"version"`
+	ContentHash string    `json:"content_hash"`
+	Created     bool      `json:"created"`
+	Overwritten bool      `json:"overwritten"`
 }
 
 type BootstrapResult struct {
@@ -144,8 +146,7 @@ func (i *Importer) ImportBuiltin(ctx context.Context, slug string) (*ImportResul
 	return i.importBuiltin(ctx, slug, false)
 }
 
-// OverwriteBuiltin explicitly replaces or reactivates the repository version.
-// Runtime callers cannot supply content or a filesystem path.
+// OverwriteBuiltin only replaces an unpublished draft; published identities are immutable.
 func (i *Importer) OverwriteBuiltin(ctx context.Context, slug string) (*ImportResult, error) {
 	return i.importBuiltin(ctx, slug, true)
 }
@@ -278,15 +279,13 @@ func classifyBuiltin(
 		return StatusImported, false, false
 	}
 	if current != nil && existing == nil {
-		comparison, err := compareStableVersions(sourceVersion, current.Version)
-		if err == nil && comparison > 0 {
-			return StatusAvailable, true, false
-		}
+		return StatusAvailable, true, false
 	}
-	// 库里已存在同号版本、但与当前发布版本不同：这是已退役的旧版本。
-	// 用它覆盖会删掉旧版本、重建发布，并把较新的当前版本退役、
-	// 封存其下所有 active 对话，等同于版本回退，一律不再标为可覆盖。
+	// 已导入的非入口版本由版本管理选择，内置列表不提供发布快照覆盖。
 	if current != nil && existing != nil && existing.ID != current.ID {
+		return StatusUpdateAvailable, false, false
+	}
+	if existing != nil && existing.Status != storage.ChallengeVersionDraft {
 		return StatusUpdateAvailable, false, false
 	}
 	return StatusUpdateAvailable, false, true
@@ -327,15 +326,13 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	if pack == nil {
 		pack = &storage.ChallengePack{
 			ID: uuid.New(), Slug: manifest.ID, Name: manifest.Name,
-			Description: manifest.Description, Status: storage.ChallengePackHidden,
+			Description: manifest.Description, Status: storage.ChallengePackHidden, Source: "builtin",
 			CreatedAt: now, UpdatedAt: now,
 		}
 		if err := i.repo.CreatePack(ctx, pack); err != nil {
 			return nil, err
 		}
 	}
-	disabled := pack.CurrentVersionID != nil && pack.Status == storage.ChallengePackHidden
-
 	existing, err := i.repo.VersionByNumber(ctx, pack.ID, manifest.Version)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
@@ -343,19 +340,20 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	if errors.Is(err, storage.ErrNotFound) {
 		existing = nil
 	}
-	if existing != nil && existing.Status == storage.ChallengeVersionPublished &&
-		existing.ContentHash == loaded.hash && pack.CurrentVersionID != nil &&
-		*pack.CurrentVersionID == existing.ID {
+	if existing != nil && existing.Status != storage.ChallengeVersionDraft && existing.ContentHash == loaded.hash {
 		return &ImportResult{
-			Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash,
+			Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash, VersionID: existing.ID, Status: existing.Status,
 		}, nil
+	}
+	if existing != nil && existing.Status != storage.ChallengeVersionDraft {
+		return nil, storage.ErrPublishedVersion
 	}
 	if existing != nil && !overwrite {
 		return nil, fmt.Errorf("%w: 挑战 %s/%s 已存在", ErrOverwriteRequired, pack.Slug, manifest.Version)
 	}
 	// 导入的版本号不是当前发布版本时（无论同号版本是否存在），
 	// 都要求仓库版本高于数据库当前版本：禁止用覆盖流程回退到旧版本，
-	// 否则发布会退役较新的当前版本并封存其下所有 active 对话。
+	// 已有对话保持原版本；启动导入不提供版本回退。
 	if pack.CurrentVersionID != nil {
 		current, err := i.repo.GetVersion(ctx, *pack.CurrentVersionID)
 		if err != nil {
@@ -378,17 +376,10 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	overwritten := overwrite && pack.CurrentVersionID != nil
 	if existing != nil {
 		overwritten = true
-		if existing.Status == storage.ChallengeVersionPublished && existing.ContentHash == loaded.hash {
-			if err := i.repo.ActivatePublishedVersion(ctx, pack.ID, existing.ID); err != nil {
-				return nil, err
-			}
-			return &ImportResult{
-				Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash, Overwritten: true,
-			}, nil
-		}
-		if err := i.repo.DeleteVersionIfUnused(ctx, existing.ID); err != nil {
+		if err := i.repo.ReplaceDraftChecked(ctx, existing.ID, existing.Revision, document.Version.Manifest, document.Runtime, document.Assets, document.Definitions, document.Outcomes); err != nil {
 			return nil, err
 		}
+		return &ImportResult{Slug: pack.Slug, Version: existing.Version, ContentHash: loaded.hash, VersionID: existing.ID, Status: existing.Status, Overwritten: true}, nil
 	}
 
 	version := &storage.ChallengeVersion{
@@ -408,14 +399,8 @@ func (i *Importer) importDirectory(ctx context.Context, directory string, overwr
 	if err != nil {
 		return nil, err
 	}
-	// Same-version replacement clears the current pointer while deleting the old
-	// snapshot. Restore the administrator's choice inside this import transaction.
-	if disabled {
-		if _, err := i.repo.SetPackEnabled(ctx, pack.ID, false); err != nil {
-			return nil, err
-		}
-	}
 	return &ImportResult{
+		VersionID: version.ID, Status: published.Version.Status,
 		Slug: pack.Slug, Version: published.Version.Version,
 		ContentHash: published.Version.ContentHash, Created: true, Overwritten: overwritten,
 	}, nil

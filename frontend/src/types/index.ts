@@ -115,7 +115,6 @@ export type {
   AdminChallengePack,
   AdminBuiltinChallenge,
   BuiltinChallengeStatus,
-  BuiltinImportResult,
   GameplayModuleDescriptor,
   ChallengeVersionDocument,
   SaveChallengeVersionInput,
