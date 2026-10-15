@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Fatecraft: backend dev",
+      "label": "fateCraft: backend dev",
       "type": "shell",
       "command": "task",
       "args": ["backend:dev"],
@@ -19,7 +19,7 @@
       }
     },
     {
-      "label": "Fatecraft: frontend dev",
+      "label": "fateCraft: frontend dev",
       "type": "shell",
       "command": "task",
       "args": ["frontend:dev"],
@@ -36,10 +36,10 @@
       }
     },
     {
-      "label": "Fatecraft: dev",
+      "label": "fateCraft: dev",
       "dependsOn": [
-        "Fatecraft: backend dev",
-        "Fatecraft: frontend dev"
+        "fateCraft: backend dev",
+        "fateCraft: frontend dev"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": []

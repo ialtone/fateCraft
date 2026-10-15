@@ -22,7 +22,7 @@ LinuxDo Connect 是绑定到站内账号后的登录方式。后端使用 OAuth 
 
 是否启用 LinuxDo 登录由管理员开关控制（`auth_settings.linuxdo_login_enabled`，默认开启）；实际可用还需要部署环境变量配齐 Client ID/Secret/回调地址。关闭后登录入口隐藏，已发起的登录流程也无法完成，但不影响已有的绑定关系。两种登录方式允许同时关闭（之后无人能再登录，已有会话过期前仍有效）；仅关闭密码登录时，会检查 LinuxDo 可用且当前 owner 已绑定，避免把 owner 锁在站外。
 
-外部 access token 不作为 Fatecraft 会话使用。登录完成后，服务端创建独立随机会话令牌，浏览器只持有 HttpOnly Cookie，数据库只保存令牌 SHA-256。
+外部 access token 不作为 fateCraft 会话使用。登录完成后，服务端创建独立随机会话令牌，浏览器只持有 HttpOnly Cookie，数据库只保存令牌 SHA-256。
 
 ### 邮箱登录与注册
 

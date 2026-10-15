@@ -19,7 +19,7 @@ import (
 var conversationShareHTML = template.Must(template.New("share-preview").Parse(`<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{.Title}} · 命运茶馆</title><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
-<meta property="og:type" content="article"><meta property="og:site_name" content="命运茶馆 Fatecraft">
+<meta property="og:type" content="article"><meta property="og:site_name" content="命运茶馆 fateCraft">
 <meta property="og:title" content="{{.Title}}"><meta property="og:description" content="{{.Description}}"><meta property="og:image" content="/favicon.svg">
 <meta name="twitter:card" content="summary"><link rel="canonical" href="/s/{{.Token}}">
 <meta http-equiv="refresh" content="0;url=/shared/{{.Token}}">
@@ -221,7 +221,7 @@ func shareDescription(snapshot shareapp.Snapshot) string {
 		}
 		return plain
 	}
-	return snapshot.Attribution + " 分享的 Fatecraft 故事"
+	return snapshot.Attribution + " 分享的 fateCraft 故事"
 }
 
 func (s *Server) reportPublicConversationShare(c *gin.Context) {

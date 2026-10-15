@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "沿院落或暗渠潜入档案室，利用门禁情报或开锁器取得文件，并在追捕中寻找安全撤离机会。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "eye-off",
   "tags": [
     "潜入逃脱",

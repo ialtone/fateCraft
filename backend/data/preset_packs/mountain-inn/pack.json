@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "建设厨房与客房，把餐食投入住宿服务，在有限资金和订单期限间经营山间客栈。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "business",
   "tags": [
     "经营建设",

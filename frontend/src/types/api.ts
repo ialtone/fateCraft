@@ -1236,7 +1236,7 @@ export interface GameplayCapability {
   cost_quantity?: number
 }
 
-// Platform capabilities are owned by Fatecraft itself and are independent of
+// Platform capabilities are owned by fateCraft itself and are independent of
 // the selected challenge package. GameplayCapability remains reserved for
 // actions declared by a Runtime Contract.
 export interface PlatformCapability {

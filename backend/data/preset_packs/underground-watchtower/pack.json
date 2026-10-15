@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "选择兵营或侧道，消耗有限补给击败守卫与统领，将哨塔令牌带回入口。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "battle",
   "tags": [
     "地牢远征",

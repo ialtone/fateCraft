@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "以掌门身份招收弟子、恢复设施与传承，在生产和派遣中筹集资源，并为来袭危机留下守宗力量。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "sect",
   "tags": [
     "宗门经营",

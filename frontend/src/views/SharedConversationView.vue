@@ -122,7 +122,7 @@ function scrollToTop() {
 <template>
   <div ref="page" class="shared-page">
     <header class="shared-toolbar">
-      <a class="shared-brand" href="/">命运茶馆 <span>Fatecraft</span></a>
+      <a class="shared-brand" href="/">命运茶馆 <span>fateCraft</span></a>
       <div class="shared-actions">
         <NButton quaternary circle aria-label="复制分享链接" @click="copyLink">
           <template #icon><NIcon :component="CopyOutline" /></template>

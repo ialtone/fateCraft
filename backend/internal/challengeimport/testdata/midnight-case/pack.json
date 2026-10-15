@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "在钟楼敲响十二下前保存证据并指出真正的凶手。",
-  "author": "Fatecraft tests",
+  "author": "fateCraft tests",
   "icon": "search",
   "tags": [
     "悬疑",

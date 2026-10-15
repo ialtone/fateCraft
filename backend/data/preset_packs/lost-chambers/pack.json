@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "循两条相连线索破解石门机关，在照明和负重耗尽之前将古印带出墓室。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "explore",
   "tags": [
     "古墓探险",

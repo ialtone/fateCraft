@@ -253,7 +253,7 @@ func (s *Service) SendTestEmail(ctx context.Context, recipient string) error {
 		Host: settings.SMTPHost, Port: settings.SMTPPort, Security: settings.SMTPSecurity,
 		Username: settings.SMTPUsername, Password: password,
 		SenderEmail: settings.SenderEmail, SenderName: settings.SenderName,
-	}, MailMessage{To: recipient, Subject: "Fatecraft 发信测试", Body: "这是一封来自 Fatecraft 管理后台的 SMTP 测试邮件。"})
+	}, MailMessage{To: recipient, Subject: "fateCraft 发信测试", Body: "这是一封来自 fateCraft 管理后台的 SMTP 测试邮件。"})
 }
 
 func (s *Service) verifyRegistrationCode(ctx context.Context, email, code string, now time.Time) (*storage.EmailVerificationCode, error) {

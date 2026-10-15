@@ -1,6 +1,6 @@
-# Fatecraft 设计文档
+# fateCraft 设计文档
 
-Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系统，不是允许玩家自由拼装 Prompt 和世界书的通用聊天工具。本文档目录描述当前实现、维护边界和后续演进方向。
+fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系统，不是允许玩家自由拼装 Prompt 和世界书的通用聊天工具。本文档目录描述当前实现、维护边界和后续演进方向。
 
 ## 阅读顺序
 
@@ -25,7 +25,7 @@ Fatecraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 19. `11-roadmap.md`：已知边界和后续工作。
 20. `future-gameplay-directions.md`：未来玩法方向、扩展规则与候选方向（长期备忘）。
 
-`02-sillytavern-reference.md` 记录早期参考来源，不代表 Fatecraft 对普通用户开放相同的模板管理能力。`12-ai-actions-examples.md` 是协议示例集，规则仍以正式专题和已发布挑战版本为准。
+`02-sillytavern-reference.md` 记录早期参考来源，不代表 fateCraft 对普通用户开放相同的模板管理能力。`12-ai-actions-examples.md` 是协议示例集，规则仍以正式专题和已发布挑战版本为准。
 
 账号奖励专题：[22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)，覆盖固定通关积分、注册赠送、管理员发放与撤回、积分兑换改写次数。
 

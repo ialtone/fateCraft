@@ -6,7 +6,7 @@
 
 Campaign 模型动作结束存档后，当前相同 attempt/turn/revision 的提交保留收尾叙事权限；旧尝试、旧修订和仅持有 run 的工作不具备该权限。显式改写使用完整检查点，模型传输失败和 partial 续写不回档已提交动作。架构见[24](24-gameplay-module-architecture.md)。
 
-本文是 Fatecraft 主叙事 Agent 的统一传输、协调、事务和恢复规范。设计与题材无关，适用于导入任何符合 Runtime Contract 的挑战或长期玩法。
+本文是 fateCraft 主叙事 Agent 的统一传输、协调、事务和恢复规范。设计与题材无关，适用于导入任何符合 Runtime Contract 的挑战或长期玩法。
 
 百年飞升劫的可信数值通过模块行动更新，普通状态工具仅操作声明为 model 的叙事字段；结局按模块终态结算。青河阶段积分属于已提交账号事实，改写不回滚，当前分支的任务证据仍需重新满足。模型步骤失败或余额刷新失败都不能触发重复发放。规则与验收见 [14](14-ascension-trial-gameplay.md)、[21](21-campaign-outcome-rewards.md) 和 [25](25-core-gameplay-validation.md)。
 

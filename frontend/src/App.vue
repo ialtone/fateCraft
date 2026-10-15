@@ -97,7 +97,7 @@ async function logout() {
             <RouterLink to="/" class="brand">
               <span class="lantern" aria-hidden="true"></span>
               <span class="brand-cn">命运茶馆</span>
-              <span class="brand-en">Fatecraft</span>
+              <span class="brand-en">fateCraft</span>
             </RouterLink>
             <nav class="links">
               <RouterLink

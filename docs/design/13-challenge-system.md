@@ -40,7 +40,7 @@ Manifest 是公开元数据与入口声明，不承载技术运行细节：
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "在午夜前保存证据并指出真凶。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "search",
   "tags": ["悬疑", "调查"],
   "default_config": {

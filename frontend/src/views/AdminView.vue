@@ -1519,7 +1519,7 @@ watch(
                         />
                       </NFormItem>
                       <NFormItem label="发件人名称">
-                        <NInput v-model:value="authSettings.sender_name" placeholder="Fatecraft" />
+                        <NInput v-model:value="authSettings.sender_name" placeholder="fateCraft" />
                       </NFormItem>
                     </div>
                   </NForm>

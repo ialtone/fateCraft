@@ -10,7 +10,7 @@ declare module 'vue-router' {
 }
 
 /** 无页面标题时的兜底站点标题（与 index.html 的 <title> 保持一致） */
-const BASE_TITLE = '命运茶馆 Fatecraft'
+const BASE_TITLE = '命运茶馆 fateCraft'
 
 const router = createRouter({
   history: createWebHistory(),

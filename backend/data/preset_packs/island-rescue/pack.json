@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "在有限的食物、饮水与体力中探索荒岛，制作求援装置并赶上救援窗口。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "leaf",
   "tags": [
     "生存探索",

@@ -262,7 +262,7 @@ func explicitlyRejectsFeature(body, feature string) bool {
 	switch feature {
 	case "agent_tools":
 		// Rejecting a control parameter does not prove that function calling is
-		// unavailable. Fatecraft deliberately omits these optional controls.
+		// unavailable. fateCraft deliberately omits these optional controls.
 		if strings.Contains(details, "tool_choice") || strings.Contains(details, "parallel_tool_calls") {
 			return false
 		}

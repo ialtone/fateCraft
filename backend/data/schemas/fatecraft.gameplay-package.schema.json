@@ -1294,5 +1294,5 @@
   "$ref": "#/$defs/PortablePackage",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Structural schema. The server additionally validates exact trusted modules, permissions, references, budgets and normalized content hashes.",
-  "title": "Fatecraft portable gameplay package v1"
+  "title": "fateCraft portable gameplay package v1"
 }

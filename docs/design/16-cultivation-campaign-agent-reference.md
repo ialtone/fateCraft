@@ -8,7 +8,7 @@
 
 架构接入见[24 玩法模块](24-gameplay-module-architecture.md)：初始化与修仙内容校验归 `cultivation/campaigninit`、`cultivation/contentrules`，通用制作/采集/市场/势力/世界组件位于 `gameplay/components`。平台不需要了解境界。功法归一化层级、闭关恢复、真实最终渡劫、出身物资和阶段积分均由修仙模块维护。
 
-修仙长期 Campaign 是 Fatecraft 的单人长期世界模式。它把叙事模型和可信玩法引擎分开：
+修仙长期 Campaign 是 fateCraft 的单人长期世界模式。它把叙事模型和可信玩法引擎分开：
 
 - 模型理解玩家意图、生成叙事，并在需要改变世界时提交一个受限领域动作；
 - 后端校验动作主体、参数、版本定义、资源、位置、条件和并发版本，并计算最终结果；

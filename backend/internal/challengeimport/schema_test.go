@@ -75,7 +75,7 @@ func portableSchema() map[string]any {
 	manifest["dependencies"] = map[string]any{"type": []string{"array", "null"}, "maxItems": 0}
 	root["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	root["$id"] = "fatecraft.gameplay-package.schema.json"
-	root["title"] = "Fatecraft portable gameplay package v1"
+	root["title"] = "fateCraft portable gameplay package v1"
 	root["description"] = "Structural schema. The server additionally validates exact trusted modules, permissions, references, budgets and normalized content hashes."
 	root["$defs"] = defs
 	return root

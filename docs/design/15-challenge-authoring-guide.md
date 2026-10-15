@@ -2,7 +2,7 @@
 
 ## 目的与适用范围
 
-本文说明如何为 Fatecraft 新增不限题材的玩法。玩法可以是修仙、悬疑、生存、经营、历史推演或其他文字挑战；不要为了复用现有系统，把线索、能源、声望或金钱伪装成境界与灵石。
+本文说明如何为 fateCraft 新增不限题材的玩法。玩法可以是修仙、悬疑、生存、经营、历史推演或其他文字挑战；不要为了复用现有系统，把线索、能源、声望或金钱伪装成境界与灵石。
 
 完整玩法由四部分组成：
 
@@ -91,7 +91,7 @@ backend/data/preset_packs/<challenge-slug>/
   "version": "1.0.0",
   "runtime_entry": "runtime/runtime.json",
   "description": "在钟楼敲响十二下前保存证据并指出真凶。",
-  "author": "Fatecraft",
+  "author": "fateCraft",
   "icon": "search",
   "tags": ["悬疑", "调查"],
   "default_config": {

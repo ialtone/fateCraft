@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "fatecraft.runtime.schema.json",
-  "title": "Fatecraft Runtime v2 entry",
+  "title": "fateCraft Runtime v2 entry",
   "description": "玩法包 runtime/runtime.json 的入口契约。被引用的子文件由后端按对应 Runtime 契约编译。",
   "type": "object",
   "additionalProperties": false,

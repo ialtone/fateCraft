@@ -369,7 +369,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("Fatecraft 后端启动", zap.String("addr", addr), zap.String("dataDir", cfg.DataDir))
+	logger.Info("fateCraft 后端启动", zap.String("addr", addr), zap.String("dataDir", cfg.DataDir))
 	// Keep header/request idle timeouts explicit. WriteTimeout is intentionally
 	// omitted because the same server hosts long-lived WebSocket connections.
 	httpServer := &http.Server{

@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-用户要求代码注释使用中文（在 Fatecraft 项目实现期间提出）。
+用户要求代码注释使用中文（在 fateCraft 项目实现期间提出）。
 
 **Why:** 用户母语为中文，便于阅读维护。
 

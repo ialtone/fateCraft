@@ -1,4 +1,4 @@
-// Package platformcapability contains capabilities owned by Fatecraft itself.
+// Package platformcapability contains capabilities owned by fateCraft itself.
 //
 // These capabilities are part of the product contract, not of an individual
 // challenge runtime.  Keeping their policy here prevents a content package

@@ -744,7 +744,7 @@ func validSettingsInput(emailAuthEnabled bool) UpdateAuthSettingsInput {
 		EmailAuthEnabled: authSettingPointer(emailAuthEnabled), LinuxDOLoginEnabled: authSettingPointer(true),
 		EmailRegistrationEnabled: authSettingPointer(false), EmailVerificationEnabled: authSettingPointer(false), InvitationRequired: authSettingPointer(false),
 		SMTPHost: authSettingPointer("smtp.example.com"), SMTPPort: authSettingPointer(587), SMTPSecurity: authSettingPointer("starttls"),
-		SenderEmail: authSettingPointer("noreply@example.com"), SenderName: authSettingPointer("Fatecraft"), VerificationSubject: authSettingPointer("验证码"),
+		SenderEmail: authSettingPointer("noreply@example.com"), SenderName: authSettingPointer("fateCraft"), VerificationSubject: authSettingPointer("验证码"),
 		VerificationTemplate: authSettingPointer("验证码：{{code}}"), VerificationCodeTTLMinutes: authSettingPointer(10), VerificationResendSeconds: authSettingPointer(60),
 	}
 }

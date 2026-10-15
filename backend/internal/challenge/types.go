@@ -77,7 +77,7 @@ type PublicRuntime struct {
 	HasTrustedActions bool                           `json:"has_trusted_actions"`
 	Presentation      gameplay.Presentation          `json:"presentation"`
 	Capabilities      map[string]gameplay.Capability `json:"capabilities"`
-	// PlatformCapabilities are owned by Fatecraft and are independent of the
+	// PlatformCapabilities are owned by fateCraft and are independent of the
 	// selected challenge package. Gameplay capabilities remain in Capabilities.
 	PlatformCapabilities map[string]platformcapability.Capability `json:"platform_capabilities"`
 	Outcomes             []OutcomeView                            `json:"outcomes,omitempty"`
