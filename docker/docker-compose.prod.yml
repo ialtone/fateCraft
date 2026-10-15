@@ -7,94 +7,35 @@ x-log-options: &log-options
     max-file: "3"
 
 services:
-  postgresql:
-    logging: *log-options
-    image: postgres:18-alpine
+  fatecraft:
+    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft:${FATECRAFT_VERSION:-latest}
+    container_name: fatecraft
     restart: unless-stopped
+    stop_grace_period: 1m
     env_file:
       - ${FATECRAFT_ENV_FILE:-./backend.production.env}
     environment:
       TZ: Asia/Shanghai
+      PGDATA: /var/lib/postgresql/18/docker
+      BACKUP_DIR: /backups
+      BACKUP_TIME: ${BACKUP_TIME:-02:00}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
     ports:
-      - "15432:5432"
+      - "8088:80"
     volumes:
       - postgres_data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
-  migrate:
-    logging: *log-options
-    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-backend:${FATECRAFT_VERSION:-latest}
-    restart: "no"
-    depends_on:
-      postgresql:
-        condition: service_healthy
-    env_file:
-      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
-    command: ["./fatecraft-migrate", "up"]
-
-  postgres-backup:
-    logging: *log-options
-    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-postgres-backup:${FATECRAFT_VERSION:-latest}
-    restart: unless-stopped
-    depends_on:
-      postgresql:
-        condition: service_healthy
-    env_file:
-      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
-    environment:
-      TZ: Asia/Shanghai
-      BACKUP_DIR: /backups
-      BACKUP_CRON_SCHEDULE: "0 2 * * *"
-      BACKUP_RETENTION_DAYS: 7
-    volumes:
       - ./backups:/backups
-    cpus: 0.75
-    mem_limit: 256m
-
-  backend:
-    logging: *log-options
-    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-backend:${FATECRAFT_VERSION:-latest}
-    restart: unless-stopped
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    env_file:
-      - ${FATECRAFT_ENV_FILE:-./backend.production.env}
-    ports:
-      # 只绑定本机回环地址：公网流量必须经过 nginx（8088），后端端口不能被直接访问，
-      # 否则客户端可以伪造 X-Forwarded-For，并绕过 nginx 添加的安全响应头。
-      - "127.0.0.1:8081:8081"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:8081/api/health >/dev/null || exit 1",
+          "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB && wget -qO- http://127.0.0.1:8081/api/health >/dev/null && wget -qO- http://127.0.0.1:80/ >/dev/null",
         ]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
-
-  frontend:
+      start_period: 60s
     logging: *log-options
-    image: ${FATECRAFT_IMAGE_PREFIX:-ghcr.io/ialtone}/fatecraft-frontend:${FATECRAFT_VERSION:-latest}
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-    ports:
-      - "8088:80"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
 volumes:
   postgres_data:

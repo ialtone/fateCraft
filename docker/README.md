@@ -1,106 +1,82 @@
-# Docker Workflow
+# Docker 部署
 
-## 这台机器（不装 Docker）
+生产部署由一个 GHCR 镜像和一个 Docker 容器组成。容器内运行 PostgreSQL、FateCraft 后端、Nginx 前端以及数据库备份调度器；宿主机只需安装 Docker Engine 和 Docker Compose 插件，不需要安装 Go、Node.js 或 PostgreSQL。
 
-- 后端开发：`task backend:dev`
-- 数据库升级/状态：`task db:migrate` / `task db:status`
-- 后端测试：`task backend:test`
-- 数据库变更验证：配置专用 `FATECRAFT_TEST_DATABASE_URL` 后执行 `task backend:test:postgres`；缺少测试库会失败
-- 前端开发：`task frontend:dev`
-- 前端类型检查：`task frontend:check`
-- 可选的本地产物任务：`task backend:build` / `task frontend:build`；Docker Compose 会自行构建所需镜像，不依赖这些产物
+该方案按单机、自部署场景设计。应用与数据库共享容器的升级和故障生命周期，容器停止时整个服务会一起停止；数据库文件保存在独立 Docker named volume 中，不会写入镜像层。不要删除 `fatecraft_postgres_data` 卷，否则会删除数据库数据。
 
-本机直跑时的配置文件：`backend/.env`（参考 `backend/.env.example`）。
+## 安装与启动
 
-## 有 Docker 的机器
+在 NAS 或服务器上准备 Compose 文件和环境配置（可从仓库的 `docker` 目录取得这些文件）：
 
-### 开发环境
+```bash
+cp docker/.env.example docker/.env
+cp docker/backend.production.env docker/backend.production.env.local
+```
 
-- 配置文件：`docker/backend.development.env`
-- 启动后端 + PostgreSQL + 自动备份：`docker compose -f docker/docker-compose.dev.yml up --build`（从仓库根目录执行）
-- Compose 会在 PostgreSQL healthy 后运行一次性 `migrate` 服务；只有迁移成功后才启动后端
-- 前端开发仍在宿主机跑 `task frontend:dev`（Vite 把 `/api`、`/ws` 代理到 :8081）
-- 复用外部 PostgreSQL：改 `POSTGRES_HOST` 与 `DATABASE_URL` 后先执行
-  `docker compose -f docker/docker-compose.dev.yml run --rm --build --no-deps migrate`，再按需启动后端和备份服务
+编辑 `.env` 选择发布版本。编辑 `backend.production.env.local`，至少设置数据库密码、同步更新 `DATABASE_URL`，并设置独立且稳定的 `AUTH_DATA_ENCRYPTION_KEY`、`SHARE_LINK_SIGNING_KEY`（各至少 32 个字符）。LinuxDo Connect 未配置时，相关登录功能不可用。不要将本地密钥提交到仓库。
 
-### 生产环境
+拉取并启动：
 
-- 在仓库根目录复制配置：`cp docker/.env.example docker/.env` 和 `cp docker/backend.production.env docker/backend.production.env.local`
-- 在 `docker/.env` 设置发布版本；在 `docker/backend.production.env.local` 设置数据库密码并同步 `DATABASE_URL`，同时设置独立且稳定的 `AUTH_DATA_ENCRYPTION_KEY`、`SHARE_LINK_SIGNING_KEY`（各至少 32 字符）
-- 拉取发布镜像并启动：`docker compose --env-file docker/.env -f docker/docker-compose.prod.yml pull`，然后 `docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d`
-- 无需在部署主机安装 Go、Node.js 或构建 Docker 镜像；镜像支持 `linux/amd64` 与 `linux/arm64`
-- 升级时将 `docker/.env` 中的 `FATECRAFT_VERSION` 改为目标版本，再执行 `pull` 和 `up -d`；数据库迁移服务会在后端启动前运行
-- 访问入口：前端 `http://<host>:8088`（nginx 同时反代 `/api` 与 `/ws`，无需直连 8081）
-- 后端端口在生产 compose 中只绑定 `127.0.0.1:8081`，公网流量必须经过 nginx；`TRUSTED_PROXIES` 默认信任 Docker 网络内的 nginx，用于从 `X-Forwarded-For` 取真实客户端 IP。若改成对外暴露后端端口，必须同时收紧 `TRUSTED_PROXIES`，否则客户端可以伪造来源 IP 绕过限流
-- nginx 请求体上限为 `33m`，与后端挑战版本保存的 32 MiB 上限对齐
-- 生产前必须替换 `SHARE_LINK_SIGNING_KEY`；它至少 32 字符、独立于 `AUTH_DATA_ENCRYPTION_KEY`，且所有后端实例必须一致
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+```
 
-## 数据与初始化
+访问 `http://<host>:8088`。服务只发布 Web 端口；PostgreSQL 和后端 HTTP 端口仅在容器内部监听。生产环境应在前方配置 HTTPS 反向代理。
 
-- **数据库初始化与升级（Docker 自动编排）**：权威结构是 `backend/migrations/*.sql`。
-  两个 compose 文件都会在 PostgreSQL healthy 后运行一次性 `migrate` 服务，执行内嵌在
-  `fatecraft-migrate` 中的全部待执行 migration。空库完成初始化，已有数据库只执行新版本；
-  版本记录保存在 `goose_db_version`，迁移失败时后端不会启动。
+升级时将 `.env` 中的 `FATECRAFT_VERSION` 改为目标版本，再执行 `pull` 和 `up -d`。容器启动后会先等待 PostgreSQL 就绪、执行待运行的数据库迁移，再启动后端提供服务。空数据库会从镜像中的内置数据初始化玩法。
 
-  当前未冻结的基线变更仍并入 00001；已执行旧版 00001 的开发库不会因重新构建镜像或再次 `up` 自动同步结构。使用全新数据库或隔离测试 schema 验证，不自动删除现有数据。开始保留正式数据后冻结基线，再通过新增 migration 升级。
+## 数据与迁移
 
-  迁移仅支持 `up/status/version`，00001 明确禁止回退。可在对应 `backend.*.env` 配置 `MIGRATION_CONNECT_TIMEOUT=10s` 和 `MIGRATION_TIMEOUT=10m`；后者包含连接、等锁和 SQL 执行，必须是正的 Go duration。容器收到 SIGTERM 会取消操作并回滚未提交的事务。
+权威数据库结构位于 `backend/migrations/*.sql`。迁移版本记录在 `goose_db_version`；启动迁移失败时后端不会开始服务。
 
-  ```bash
-  # 初始化或升级数据库，然后启动后端
-  docker compose -f docker/docker-compose.dev.yml up --build postgresql migrate backend
+PostgreSQL 数据持久化在 Compose named volume `fatecraft_postgres_data`，容器内路径为 `/var/lib/postgresql`。生产数据库不映射到宿主机端口。如需用数据库客户端检查数据，可临时创建本机端口转发：
 
-  # 单独查看迁移状态
-  docker compose -f docker/docker-compose.dev.yml run --rm migrate status
-  ```
+```bash
+docker compose --env-file docker/.env -f docker/docker-compose.prod.yml exec fatecraft sh
+```
 
-  注：compose 已设置 `name: fatecraft`，容器名为 `fatecraft-postgresql-1`；
-  容器内的超级用户就是 `POSTGRES_USER` 指定的 `fatecraft`，没有 `postgres` 用户。
+进入容器后可使用 PostgreSQL 自带的 `psql` 连接 `127.0.0.1:5432`。不要为了远程数据库访问直接开放 PostgreSQL 端口。
 
-- **挑战内容**：运行时内容存于 PostgreSQL。开发 compose 挂载 `backend/data/`；生产后端镜像内含该目录，用于
-  `roll_config.yaml`、输出 Schema 和空库首次启动的内置挑战材料。后端启动时发现
-  `challenge_packs` 为空会自动校验并发布内置挑战，不需要额外命令；数据库已有任意挑战包时
-  不读取、不升级也不覆盖内容。服务不会把管理端修改写回宿主机文件。
-- **复用外部 PostgreSQL** 时由管理员创建数据库与用户，再运行迁移命令：
+当前未冻结的基线变更继续并入 `00001`；已执行旧版 `00001` 的开发数据库不会因更新容器而自动同步结构。新版本正式发布后应冻结基线，后续结构修改通过新增 migration 升级。迁移仅支持 `up/status/version`，`00001` 明确禁止回退。
 
-  ```bash
-  psql -h 你的数据库地址 -U 管理员用户 -c "CREATE DATABASE fatecraft WITH ENCODING='UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=template0;"
-  psql -h 你的数据库地址 -U 管理员用户 -c "CREATE USER fatecraft WITH PASSWORD '你的密码';"
-  psql -h 你的数据库地址 -U 管理员用户 -c "GRANT ALL PRIVILEGES ON DATABASE fatecraft TO fatecraft;"
-  psql -h 你的数据库地址 -U 管理员用户 -d fatecraft -c "GRANT ALL ON SCHEMA public TO fatecraft;"
-  cd backend
-  DATABASE_URL='postgres://fatecraft:密码@数据库地址:5432/fatecraft?sslmode=require' go run ./cmd/migrate up
-  ```
+## 备份与恢复
 
-- Postgres 18+ 的数据卷挂载到 `/var/lib/postgresql`（不要挂 `/var/lib/postgresql/data`）。
-- **端口映射**：PostgreSQL 映射到宿主机端口按环境区分——开发环境（`docker-compose.dev.yml`）用 `15433`，生产环境（`docker-compose.prod.yml`）用 `15432`（容器内均为 `5432`）。
+容器内调度器默认按东八区每天 `02:00` 执行 `pg_dump`，压缩格式备份写入宿主机 `backups`，默认保留 7 天。在 `.env` 中可设置 `BACKUP_TIME` 和 `BACKUP_RETENTION_DAYS`。
 
-## 数据库备份
+查看服务日志和立即创建备份：
 
-- 由 `postgres-backup` sidecar 容器执行，宿主机无需装 cron；限制 `0.75 CPU`、`256MB` 内存
-- 默认东八区每天 `02:00` 触发 `pg_dump`，备份输出到宿主机 `docker/backups`，任务日志输出到备份容器 stdout/stderr，可用 `docker compose -f docker/docker-compose.prod.yml logs postgres-backup` 查看（在仓库根目录执行）
-- 默认保留最近 `7` 天，可用 `BACKUP_RETENTION_DAYS` 覆盖；备份时间用 `BACKUP_CRON_SCHEDULE` 覆盖
-- 手动立即备份：
-  `docker compose -f docker-compose.prod.yml exec postgres-backup /usr/local/bin/postgres-backup-now`
-- 恢复示例：
-  `docker run --rm -e PGPASSWORD=你的密码 -v $(pwd)/backups:/backups postgres:18-alpine pg_restore --clean --if-exists --no-owner --host=你的数据库地址 --port=5432 --username=fatecraft --dbname=fatecraft /backups/你的备份文件.dump`
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml logs -f fatecraft
+docker compose --env-file .env -f docker-compose.prod.yml exec fatecraft /usr/local/bin/postgres-backup-now
+```
 
-## 其他
+恢复前停止后端进程并准备好目标数据库。以下命令会覆盖同名数据库对象；`<backup-file>` 替换为 `backups` 中的文件名：
 
-- 后端镜像在发布构建中编译服务、迁移和玩法检查工具，并包含首次初始化所需的 `backend/data`（alpine + 健康检查 `GET /api/health`）；生产容器不依赖宿主机源码目录
-- 前端镜像为 `nginx:1.27-alpine`，托管 SPA 并反代 API/WebSocket；WebSocket 反代已配置 `Upgrade` 头与 1h 读超时
-- 推送 `vX.Y.Z` 标签会先运行完整验证工作流，再发布后端、前端和备份三个 GHCR 镜像，标签包括 `vX.Y.Z`、`X.Y.Z` 和 `latest`；首次推送后需在 GitHub Packages 确认镜像包为公开，用户才能匿名拉取
-- Nginx 将 `/s/:token` 反代到后端的动态 Open Graph 外壳，再由浏览器进入 `/shared/:token` SPA 页面；该入口和公共分享 API不配置共享缓存，撤销立即生效
-- 应用访问日志会脱敏分享 token；外围 CDN、WAF 和负载均衡也必须对 `/s/*`、`/shared/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或做等价脱敏
-- 分享 HTML 使用严格 CSP、`Referrer-Policy: no-referrer` 和 `noindex,nofollow`；公开 API 的 gzip 由 Nginx 处理
-- LLM 的 Base URL、API Key 和模型可在前端「设置」页配置，用户配置写入 `llm_settings` 表，平台公共配置写入 `system_settings` 单例
-- 主站当前没有 CSP，客户端直连不受阻；今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效
-- 敏感信息写入 git 已忽略的 `backend.development.env.local` / `backend.production.env.local`；生产部署通过 `docker/.env` 中的 `FATECRAFT_ENV_FILE` 指向本地配置文件
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml exec fatecraft sh
+```
 
-## 日志容量与验收
+在容器 shell 中执行：
 
-开发/生产 Compose 所有服务使用 `json-file`，每容器 `max-size: 10m`、`max-file: 3`。需按服务和副本数汇总约 30 MiB/容器的预算；它不限制 PostgreSQL 体积和备份文件。配置修改后需按正常部署流程重建对应容器才会应用；本轮没有重建运行中的服务。旧 `backups/backup.log` 不会自动删除。
+```bash
+supervisorctl stop backend
+PGPASSWORD="$POSTGRES_PASSWORD" pg_restore --clean --if-exists --no-owner --no-privileges --host=127.0.0.1 --port=5432 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" "/backups/<backup-file>"
+supervisorctl start backend
+```
 
-后端显式配置 Info/JSON。Nginx 访问日志仅保存安全路由、状态、上游耗时与关联 ID，不记录 query、Referer 或认证字段；站点级原生请求 error log 被抑制以防泄露原始请求行，运行时失败从安全访问摘要排查，配置/启动错误保留镜像主进程默认 stderr。
+退出后重启容器：
 
-真实容器验收需检查 `docker inspect` 的 LogConfig、备份成功/失败输出、上游不可用时分享/OAuth/敏感查询的访问日志与 error 输出，以及新 schema 迁移完成后启动后端。代码和配置检查已完成，运行验收于 2026-09-30 交由维护者执行，尚无实测结果。完整规范和待测清单见[日志与诊断](../docs/design/23-logging-and-diagnostics.md)。
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml restart fatecraft
+```
+
+建议定期将 `backups` 复制到另一台设备，并实际演练恢复。
+
+## 镜像发布
+
+推送 `vX.Y.Z` 标签后，GitHub Actions 先运行验证，再构建并发布一个多架构镜像 `ghcr.io/ialtone/fatecraft`，标签包括 `vX.Y.Z`、`X.Y.Z` 和 `latest`。首次发布后需在 GitHub Packages 确认该镜像为公开，用户才可匿名拉取。
+
+镜像支持 `linux/amd64` 和 `linux/arm64`。容器内 Nginx 托管 SPA，并将 `/api`、`/s` 和 `/ws` 反代到同容器后端。Nginx 请求体上限为 `33m`，与后端挑战版本保存的 32 MiB 上限对齐。
+
+应用访问日志会脱敏分享 token；若使用 CDN、WAF 或额外负载均衡，也应对 `/s/*`、`/shared/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或作等价脱敏。日志保留、容量与诊断说明见[日志与诊断](../docs/design/23-logging-and-diagnostics.md)。
