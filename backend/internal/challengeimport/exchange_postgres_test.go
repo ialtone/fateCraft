@@ -51,6 +51,13 @@ func TestPostgresExchangeAtomicDraftReplayAndConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	confirmed, err := repo.ImportRecord(ctx, preview.ID, actor, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if confirmed.Status != "imported" || confirmed.Payload != nil || confirmed.RequestID == nil || *confirmed.RequestID != request {
+		t.Fatalf("confirmation did not persist and clear its payload: status=%s payload=%s", confirmed.Status, confirmed.Payload)
+	}
 	replay, err := importer.ConfirmUpload(ctx, actor, preview.ID, request)
 	if err != nil || replay.ResultVersionID == nil || *replay.ResultVersionID != *result.ResultVersionID {
 		t.Fatalf("lost response replay: %+v %v", replay, err)
@@ -85,6 +92,50 @@ func TestPostgresExchangeAtomicDraftReplayAndConflict(t *testing.T) {
 	}
 	if _, err := importer.ConfirmUpload(ctx, actor, stale.ID, uuid.New()); !errors.Is(err, ErrPreviewChanged) {
 		t.Fatalf("stale draft overwritten: %v", err)
+	}
+	for _, status := range []string{"cancelled", "expired"} {
+		t.Run(status, func(t *testing.T) {
+			pending, err := importer.PreviewUpload(ctx, actor, "test.json", raw, PreviewOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status == "cancelled" {
+				if err := importer.CancelImport(ctx, actor, pending.ID); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := db.Model(&storage.GameplayImport{}).Where("id = ?", pending.ID).
+				Update("expires_at", time.Now().Add(-time.Minute)).Error; err != nil {
+				t.Fatal(err)
+			}
+			stored, err := importer.ImportRecord(ctx, actor, pending.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.Status != status || stored.Payload != nil {
+				t.Fatalf("preview payload not cleared: status=%s payload=%s", stored.Status, stored.Payload)
+			}
+		})
+	}
+	builtin, err := importer.PreviewBuiltin(ctx, "underground-watchtower", actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repo.ImportRecord(ctx, builtin.ID, actor, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Source != "builtin" || len(stored.Payload) == 0 || stored.Status != "preview" {
+		t.Fatal("builtin preview did not retain its source and payload")
+	}
+	if _, err := importer.ConfirmUpload(ctx, actor, builtin.ID, uuid.New()); err != nil {
+		t.Fatalf("confirm builtin preview: %v", err)
+	}
+	stored, err = repo.ImportRecord(ctx, builtin.ID, actor, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Source != "builtin" || stored.Payload != nil || stored.Status != "imported" {
+		t.Fatal("builtin confirmation did not retain its source and clear its payload")
 	}
 }
 
@@ -127,7 +178,7 @@ func TestPostgresOldVersionContinuesAndPauseFencesWrites(t *testing.T) {
 		t.Fatalf("retired version cannot continue: %v", err)
 	}
 	message := storage.ChatMessage{ID: uuid.New(), ConversationID: conversation.ID, Role: storage.RoleAssistant, Content: "before pause", CreatedAt: time.Now(), UpdatedAt: time.Now()}
-	if err := db.Create(&message).Error; err != nil {
+	if err := storage.NewMessageRepo(db).CreateChat(ctx, &message); err != nil {
 		t.Fatal(err)
 	}
 	old, err := repo.GetVersion(ctx, initial.VersionID)
@@ -138,7 +189,9 @@ func TestPostgresOldVersionContinuesAndPauseFencesWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	message.ID = uuid.New()
+	message.MessageSeq++
 	message.Content = "must roll back"
+	message.ContentBlocks = storage.JSONDoc(`[{"kind":"text","text":"must roll back"}]`)
 	if err := db.Create(&message).Error; !errors.Is(storage.GameplayPolicyError(err), storage.ErrVersionBlocked) {
 		t.Fatalf("pause did not fence write: %v", err)
 	}
@@ -155,5 +208,8 @@ func TestPostgresOldVersionContinuesAndPauseFencesWrites(t *testing.T) {
 	message.ID = uuid.New()
 	if err := db.Create(&message).Error; err != nil {
 		t.Fatalf("resume failed: %v", err)
+	}
+	if err := db.Model(&storage.ChatMessage{}).Where("conversation_id=?", conversation.ID).Count(&count).Error; err != nil || count != 2 {
+		t.Fatalf("resume did not append a message: %d %v", count, err)
 	}
 }

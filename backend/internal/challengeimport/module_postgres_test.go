@@ -68,6 +68,9 @@ func TestPostgresModulePublicationSettlementReplayAndRewind(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if _, err := challenges.SetEnabled(ctx, pack.ID, true); err != nil {
+				t.Fatal(err)
+			}
 			exported, err := challenges.VersionDocument(ctx, published.Version.ID)
 			if err != nil {
 				t.Fatal(err)

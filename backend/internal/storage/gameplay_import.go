@@ -51,7 +51,17 @@ func (r *ChallengeRepository) ImportRecord(ctx context.Context, id, actor uuid.U
 	return &row, asNotFound(err)
 }
 func (r *ChallengeRepository) SaveImport(ctx context.Context, row *GameplayImport) error {
-	return r.db.WithContext(ctx).Save(row).Error
+	// JSONDoc serializes an empty value as JSON null. A finished import must
+	// instead clear the nullable column with SQL NULL, including on cancellation.
+	var payload any
+	if len(row.Payload) > 0 {
+		payload = row.Payload
+	}
+	return r.db.WithContext(ctx).Model(&GameplayImport{}).Where("id = ?", row.ID).
+		Updates(map[string]any{
+			"source": row.Source, "status": row.Status, "payload": payload,
+			"request_id": row.RequestID, "result_version_id": row.ResultVersionID,
+		}).Error
 }
 func (r *ChallengeRepository) ImportRequest(ctx context.Context, id, actor uuid.UUID) (*GameplayImport, error) {
 	var row GameplayImport

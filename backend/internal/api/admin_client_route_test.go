@@ -219,7 +219,11 @@ func TestUpdateAdminSystemSettingsClosesRelaysWhenClientRouteDisabled(t *testing
 	ginCtx.Request = httptest.NewRequest(http.MethodPatch, "/api/admin/settings",
 		strings.NewReader(`{"client_llm_route_enabled":false}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
-	ginCtx.Set(authUserKey, &storage.User{Role: storage.UserRoleOwner})
+	owner := &storage.User{ID: uuid.New(), Username: "route-owner", DisplayName: "Owner", Role: storage.UserRoleOwner, Status: storage.UserStatusActive}
+	if err := db.Create(owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	ginCtx.Set(authUserKey, owner)
 
 	server.updateAdminSystemSettings(ginCtx)
 	if recorder.Code != http.StatusOK {
@@ -267,7 +271,11 @@ func TestUpdateAdminSystemSettingsAccessModeSwitchKeepsRelays(t *testing.T) {
 	ginCtx.Request = httptest.NewRequest(http.MethodPatch, "/api/admin/settings",
 		strings.NewReader(`{"llm_access_mode":"user_managed"}`))
 	ginCtx.Request.Header.Set("Content-Type", "application/json")
-	ginCtx.Set(authUserKey, &storage.User{Role: storage.UserRoleOwner})
+	owner := &storage.User{ID: uuid.New(), Username: "route-owner", DisplayName: "Owner", Role: storage.UserRoleOwner, Status: storage.UserStatusActive}
+	if err := db.Create(owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	ginCtx.Set(authUserKey, owner)
 
 	server.updateAdminSystemSettings(ginCtx)
 	if recorder.Code != http.StatusOK {

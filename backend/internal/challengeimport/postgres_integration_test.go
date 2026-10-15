@@ -75,7 +75,20 @@ func assertMortalPathPublishedContent(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(definitions) != 270 || len(outcomes) != 2 || outcomes[0].RewardPoints != 700 || outcomes[1].RewardPoints != 700 {
-		t.Fatalf("incomplete fixed point publication: %+v", outcomes)
+	if len(definitions) != 270 {
+		t.Fatalf("definitions = %d, want 270", len(definitions))
+	}
+	wantPoints := map[string]int64{
+		"law_seeker": 700, "world_warden": 700,
+		"abandoned": 0, "lifespan_exhausted": 0, "perished": 0,
+	}
+	if len(outcomes) != len(wantPoints) {
+		t.Fatalf("outcomes = %d, want %d", len(outcomes), len(wantPoints))
+	}
+	for _, outcome := range outcomes {
+		points, ok := wantPoints[outcome.OutcomeKey]
+		if !ok || outcome.RewardPoints != points || !outcome.Enabled {
+			t.Fatalf("unexpected published outcome: %+v", outcome)
+		}
 	}
 }

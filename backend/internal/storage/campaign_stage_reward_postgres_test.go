@@ -23,6 +23,14 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		if err := db.Create(&row).Error; err != nil {
 			t.Fatal(err)
 		}
+		conversation := Conversation{
+			ID: uuid.New(), PlayerID: conv.PlayerID, Title: route, Status: StatusActive,
+			ChallengeVersionID: row.ChallengeVersionID, ChallengeHash: row.ChallengeHash,
+			CampaignID: &row.ID, LLMRoute: route,
+		}
+		if err := db.Create(&conversation).Error; err != nil {
+			t.Fatal(err)
+		}
 		outcomeKey := "stage-test-" + route
 		if err := db.Create(&ChallengeOutcomeRule{ID: uuid.New(), ChallengeVersionID: conv.ChallengeVersionID, OutcomeKey: outcomeKey, Category: "success", Title: outcomeKey, Tone: "success", VerifierKey: "core.always", VerifierConfig: JSONMap{}, RewardPoints: 700, Enabled: true}).Error; err != nil {
 			t.Fatal(err)
@@ -113,6 +121,12 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		}
 		if result, err := finish(); err != nil || !result.Replayed {
 			t.Fatalf("finish replay failed: %+v %v", result, err)
+		}
+		if err := db.First(&conversation, "id = ?", conversation.ID).Error; err != nil {
+			t.Fatal(err)
+		}
+		if conversation.Status != StatusEnded {
+			t.Fatal("campaign completion did not end its conversation")
 		}
 		outcomeRewards, err := loadCampaignOutcomeRewards(context.Background(), db, row)
 		if err != nil {
