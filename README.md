@@ -1,189 +1,192 @@
-# Fatecraft
+# FateCraft 命运酒馆
 
-Fatecraft 是一个由版本化玩法驱动的 AI 文字冒险平台。它把角色、场景、世界设定、状态规则、行动能力、结局和奖励组织成可以发布的完整玩法，而不是只有一段系统提示词的通用聊天界面。
+**Web 休闲文字冒险酒馆。** 选择一个故事，成为其中的角色，用自己的行动决定接下来发生什么。
 
-模型负责理解玩家意图和讲述故事，后端负责状态变化、随机判定、资源消耗、结局验证与奖励结算。故事可以自由表达，但会始终运行在玩法规则和可信存档之上。
+最初玩到猫猫头佬制作的[《浮生十梦》](https://github.com/CassiopeiaCode/TenCyclesofFate)时，我像是发现了新大陆：上班时也忍不住打开游戏，一段段体验其中的故事。后来它关站了，心里一直觉得空落落的。作为一个修仙迷，我花了数个月做出命运酒馆，希望把这种沉浸式文字冒险留在一个可以自己部署、持续创作的地方。
 
-## 玩法体验
+命运酒馆是一个开源、可自部署的 AI 文字冒险平台。玩家用自然语言行动，由 AI 推进叙事；玩法规则、角色状态、判定和结局由服务端管理，让每局故事既能自由发展，也有可验证的结果。
 
-玩家先选择一个已发布的玩法，再选择身份与开局场景。每次创建的对话都是一份独立存档，角色状态、历史事件、长期记忆和结算结果不会与其他对话混用。
+## 玩法
 
-一轮游戏大致按以下方式进行：
+玩家选择玩法、身份和开局场景后开始一段独立冒险。你可以自由描述行动，和角色交谈、调查地点、完成任务、管理资源，或尝试玩法提供的其他行动。AI 会结合当前故事和存档继续叙事；涉及判定和状态变化时，服务端依据当前玩法规则验证并记录结果。
 
-1. 玩家使用自然语言描述行动，不必局限于预设选项。
-2. 叙事模型结合当前角色、场景、世界书、历史和存档状态继续故事。
-3. 涉及判定、资源或世界变化时，模型调用当前玩法允许的动作，由后端校验并执行。
-4. 结果写回存档并实时展示，随后进入下一轮叙事。
+目前平台围绕八种题材方向提供玩法：
 
-项目支持两类玩法：
+- 修仙飞升、宗门经营
+- 生存探索、经营建设
+- 潜入逃脱、关系叙事
+- 古墓探险、地牢远征
 
-- **单局挑战**：围绕明确目标、失败条件和结算奖励展开，适合节奏紧凑、可以反复游玩的独立冒险。
-- **长期 Campaign**：持续维护地点、角色、物品、任务、市场、势力和世界事件，适合不断成长和演化的长期存档。
+故事既可以是一局有明确目标和结局的挑战，也可以是一份持续成长的长期存档。对话之间的角色状态、历史、记忆与结算互相隔离；长期游戏还会在后台整理历史，方便继续游玩。
 
-长期 Campaign 不限定修仙题材。服务端提供 `campaign.generic@1` 作为无境界的通用长期世界引擎，玩法可以围绕调查、经营、交易、势力、NPC、任务和地点探索组织自己的规则；修炼、功法和境界等机制仍由独立的 `cultivation.campaign@2` 引擎提供。玩法包只能组合服务端已经安装并审核过的引擎、状态规则和动作，不能通过配置上传或执行任意代码。
+### 内置玩法
 
-长期对话会在后台整理记忆，减少历史增长对当前回复的影响。角色栏还可以基于当前存档回答状态、任务和已发生事件，但不会借问答修改游戏事实。
+仓库附带九个可导入的玩法包，涵盖上述八种方向。两个修仙玩法共享基础设定，其他题材提供可游玩的示例：
 
-## 内置玩法
+| 玩法 | 类型 | 体验 |
+| --- | --- | --- |
+| 青河修仙志 | 修仙飞升 | 从青河村起步，修炼、探索、交易、做任务，与角色和势力共同经历长期变化 |
+| 百年飞升劫 | 修仙飞升 | 在寿元压力下积累资源、逐级突破，并选择不同的飞升路线 |
+| 青岚宗重建 | 宗门经营 | 经营宗门，在发展与生存之间作出选择 |
+| 荒岛求援 | 生存探索 | 在孤岛上寻找资源、应对危险并设法获救 |
+| 山间客栈 | 经营建设 | 经营客栈，应对日常事务与来客故事 |
+| 夜入封锁区 | 潜入逃脱 | 在封锁区域中搜集线索、规避威胁并寻找出口 |
+| 小镇旧约 | 关系叙事 | 在小镇的人际关系与旧日秘密中作出选择 |
+| 失落墓室 | 古墓探险 | 探索墓室、处理机关并寻找遗迹中的答案 |
+| 地下哨塔 | 地牢远征 | 深入危险区域，在有限资源下推进探索 |
 
-仓库现有八种主类型、九个内容包：默认提供两种共享修仙基础设定的玩法，另有生存探索、经营建设、潜入逃脱、关系叙事、古墓探险、地牢远征、宗门经营七个最小完整示例。新增示例默认 0 积分，可在后台选择导入；空库启动只按 `backend/data/bootstrap.json` 导入原有两个包。
+## 核心功能
 
-模块能力、配置与维护边界见[可信玩法模块架构](docs/design/24-gameplay-module-architecture.md)和[示例制作指南](docs/design/gameplay-modules/README.md)。八类模块与两套修仙核心玩法已完成本轮实现和本地检查；成长、时间、准备、阶段积分与双终局规则见[核心玩法验证](docs/design/25-core-gameplay-validation.md)。真实数据库、浏览器和模型验收由维护者执行，未验项目仍有明确记录。
+- **自由叙事与可信存档**：玩家可以自由描述行动；AI 负责理解和讲述，服务端负责判定、状态变更、资源消耗、结局与奖励。
+- **单局挑战与长期冒险**：支持有明确胜负目标的短局，也支持拥有角色、地点、任务、物品、市场和势力的长期 Campaign。
+- **玩法包与版本管理**：管理员可以创建、校验和发布玩法，也可以导入、导出玩法包，便于备份、分享和创作新内容。
+- **通关奖励与积分兑换**：玩法可以为阶段和结局配置积分奖励；玩家可按管理员配置兑换剧情改写次数等账号权益，管理员也可查询用户并发放积分或奖励。
+- **长期记忆与角色问答**：后台异步整理较早的对话历史；角色面板可基于当前存档回答问题，不会修改游戏事实。
+- **模型访问方式**：服务端转发适合需要可信结算和奖励的游玩；客户端直连适合希望使用自己的模型配置、由浏览器直接请求模型服务的玩家。
+- **账号与管理后台**：支持本地账号、LinuxDo Connect 和可配置的邮箱注册，提供用户、玩法、奖励、模型与诊断管理。
 
-### 青河修仙志
+### 客户端直连与服务端转发
 
-长期 Campaign。玩家从青河村起步，可以探索不同区域、修炼功法、生产和交易物品、接受任务并与 NPC 往来。角色、势力、市场和区域局势会随着行动持续演化，形成一份可以长期推进的修仙存档。
+两种模式的请求路径和奖励资格不同，请按自己的需要选择：
 
-详细规则见 [Campaign Agent 参考](docs/design/16-cultivation-campaign-agent-reference.md)。
+| 模式 | 请求路径 | API Key 保存位置 | 奖励与额度 |
+| --- | --- | --- | --- |
+| 客户端直连 | 浏览器直接连接你配置的模型服务 | 保存在当前浏览器设备；服务端不接收或保存 | 可以游玩，但不发放账号奖励，也不扣除剧情改写次数 |
+| 服务端转发 | 浏览器请求 FateCraft 后端，再由后端请求模型服务 | 写入数据库前使用 AES-GCM 加密；服务端运行时解密使用 | 支持可信结算、账号奖励与平台额度 |
 
-### 百年飞升劫
+客户端直连让模型密钥留在本设备，并使用本机网络访问模型服务；后端仍负责上下文构建、对话存档与玩法校验。由于浏览器回传的模型响应可能被修改，直连模式不发放奖励。服务端转发模式由后端直接接收模型响应，用户密钥在数据库中加密保存。两种模式下，所选模型服务都会收到生成所需的提示词和对话内容。
 
-单局挑战。玩家在寿元压力下积累资源、逐级突破，并选择离场路线：
+## 界面截图
 
-- 正统渡劫：至少化神期，完成九波雷劫，成功后获得 300 积分。
-- 虚空裂缝：至少元婴期，发现裂缝并通过穿越判定，成功后获得 200 积分。
-- 仙缘传送：至少结丹期并取得飞升符，成功后获得 150 积分。
-- 主动坐化是 <code>neutral</code> 结局，寿元耗尽是 <code>failure</code> 结局，二者都不发放挑战奖励。
+<!-- 截图位置：建议放置首页或玩法选择页截图 -->
 
-详细规则见 [单局玩法规格](docs/design/14-ascension-trial-gameplay.md)。
 
-两个玩法共享凡人、练气、筑基、结丹、元婴、化神、炼虚、合体、大乘的九阶设定，以及灵根、功法、法宝、丹药和灵石等基础语义；各自的角色、任务、事件、判定、结局和存档彼此独立。设定边界见 [内置修仙玩法共享设定](docs/design/20-cultivation-shared-setting.md)。
+<!-- 截图位置：建议放置实际对话与状态面板截图 -->
 
-## 平台能力
 
-- **玩法版本管理**：管理员可以编辑和发布角色、身份、场景、Prompt、世界书、状态规则、结局与奖励；已经开始的存档始终固定在创建时的玩法版本。
-- **自由叙事与可信行动**：玩家可以自由输入，模型只负责理解和叙事，所有会影响存档的动作仍由后端确认。
-- **独立存档与长期记忆**：消息、状态、回合、判定、记忆和问答按对话隔离，长期历史由后台异步整理。
-- **角色状态与只读问答**：玩家可以查看当前状态，并询问任务、物品和已经发生的事件。
-- **通关积分与改写次数**：玩法为结局配置固定积分，通关自动到账；积分可兑换剧情改写次数，后台可配置注册赠送、套餐并向用户发放。
-- **模型配置与能力检测**：支持用户自备模型和管理员统一模型，可分别配置叙事、记忆与角色问答模型。
-- **对话分享**：从对话页头把完整当前分支或一段连续消息发布为可撤销、可过期的只读快照，可选择匿名或显示账号名称与头像；“我的分享”集中管理所有对话的分享记录。
-- **认证与运营**：支持 LinuxDo Connect、邮箱登录与注册控制，并提供内容管理和诊断日志。
+<!-- 截图位置：建议放置奖励兑换或管理后台截图 -->
 
-## 实现概览
 
-Fatecraft 将生成过程拆成可追踪的回合和模型步骤。模型可以返回玩家可见文本，也可以请求调用当前步骤开放的工具；工具参数经过后端重新校验，并在事务中提交状态变化。
+## 项目架构
 
-```text
-玩家输入
-  -> Conversation Turn / Generation Attempt
-  -> 装配版本化 Prompt、世界书、历史、记忆与当前状态
-  -> 主叙事模型步骤
-       -> 普通文本：协议检查后写入消息
-       -> 工具调用：后端校验、事务提交、回填结果，再进入下一模型步骤
-  -> WebSocket 推送玩家可见事件
-  -> 回合封口并异步调度长期记忆
+命运酒馆采用 **职责隔离的 Agent 协作 + 配置驱动的可信玩法模块**。Go 后端以模块化单体组织业务，统一承担模型编排、玩法执行、异步任务与持久化；前端通过 HTTP 与 WebSocket 展示故事、状态和运行进度。
+
+### 前端与模型连接
+
+Vue 前端负责交互和流式展示，两种连接方式共用同一套后端玩法流程：
+
+- **服务端转发**：后端构建模型请求、连接模型服务并处理响应。
+- **客户端直连**：后端构建模型请求，通过浏览器 Relay 使用本设备密钥连接模型服务，再将原始响应传回后端处理。后端继续负责协议解析和规则校验，模型密钥留在浏览器。
+
+### 三个 Agent 如何协作
+
+后端统一调度三个职责不同的模型 Agent。它们通过已提交的存档、历史与版本化记忆协作，可以分别配置模型，以平衡叙事质量、响应速度和成本。
+
+| Agent | 负责什么 | 如何参与游戏 |
+| --- | --- | --- |
+| **主叙事 Agent** | 理解行动、调用工具、推进故事 | 在玩家回合中运行 Agent Tool Loop，根据工具返回的真实结果继续叙事 |
+| **Memory Agent** | 提炼历史梗概、人物、线索和重要选择 | 后台按需整理已完成回合，为后续叙事提供长期记忆，不阻塞当前回合 |
+| **角色问答 Agent** | 回答状态、任务和已发生事件的问题 | 读取当前存档快照独立回答，不推进主剧情，也不修改玩法状态 |
+
+```mermaid
+flowchart TD
+    API[HTTP / WebSocket 入口] --> O[回合与 Agent 编排]
+    C[上下文构建] --> N[主叙事 Agent]
+    O --> C
+    O --> N
+    N --> T[受控工具与可信玩法模块]
+    T -->|行动结果| N
+    T --> DB[(PostgreSQL)]
+    DB -->|存档与历史| C
+    O -.已完成历史.-> M[Memory Agent · 异步归档]
+    M -->|版本化记忆| DB
+    API --> Q[角色问答 Agent · 只读快照]
+    DB --> Q
+    N --> L[统一模型适配层]
+    M --> L
+    Q --> L
+    L --> P[Chat Completions / Responses]
 ```
 
-PostgreSQL 和后端领域服务是玩法事实的权威来源。浏览器、玩家文本、模型输出和 OpenAI 兼容网关都按不可信输入处理，模型不能仅凭一段叙事修改状态、指定随机结果或发放奖励。
+主叙事采用 **Agent Tool Loop**：构建上下文 → 模型选择文本或工具调用 → 服务端校验并执行工具 → 将执行结果交回模型 → 继续生成，直到完成这一轮回复。每一步只向模型开放当前可用的动作；模型可以提出行动，但状态变化、随机判定、资源消耗和奖励始终由服务端规则决定。
 
-## 技术栈
+Memory Agent 和角色问答 Agent 使用结构化输出，由后端验证结果。记忆负责保持故事连续性，当前数值和玩法进度仍以存档为准；问答拥有独立的请求和记录，不会占用主叙事的生成锁。
 
-| 层级     | 主要技术                                                                     |
-| -------- | ---------------------------------------------------------------------------- |
-| 前端     | Vue 3、Vite、TypeScript、Pinia、Naive UI                                     |
-| API      | Go 1.25、Gin、GORM                                                           |
-| 实时通信 | WebSocket                                                                    |
-| 数据库   | PostgreSQL，官方 Docker 配置使用 PostgreSQL 18                               |
-| LLM      | OpenAI 兼容 Chat Completions / Responses、Function Calling、原生 JSON Schema |
-| 部署     | Go Task、Docker Compose、Nginx、PostgreSQL 备份 sidecar                      |
+### 上下文编排与模型适配
 
-## 安装与使用
+上下文构建器按 Token 预算组织玩法 Prompt、世界书、近期完整回合、长期记忆与当前可信状态。每次生成固定使用一份已提交记忆，避免后台归档在回合中途改变模型看到的资料；当前状态和行动结果会反馈给叙事 Agent，帮助故事与存档保持一致。
+
+模型适配层统一处理 Chat Completions 与 Responses，将文本流、思考内容、工具调用及结构化结果转换成内部协议。客户端直连和服务端转发共用这一层的解析与校验，玩法模块无需适配具体模型供应商。
+
+### 配置驱动与可信玩法模块
+
+玩法扩展分为内容、规则和平台三层：
+
+| 层次 | 职责 | 主要位置 |
+| --- | --- | --- |
+| **玩法内容包** | 描述角色、身份、场景、世界书、规则参数、结局和展示布局 | `backend/data/preset_packs/` |
+| **可信玩法模块** | 实现合法行动、资源成本、时间推进、随机事件、状态变化与结局条件 | `backend/internal/gameplay/` |
+| **平台服务与编排** | 提供账号、对话、上下文、工具调度、版本管理、存档和奖励结算 | `backend/internal/orchestration/`、`challenge/`、`campaign/`、`storage/` 等 |
+
+同一种玩法规则可以搭配不同内容包，复用出新的世界与故事；需要新增机制时，再扩展对应的 Go 模块。可信模块在构建时注册，导入的内容包只提供配置，不执行上传代码。平台通过统一契约连接不同题材，使修仙、经营、探索等规则各自维护，共享对话、模型、存档和奖励能力。
+
+### 持久化与故障恢复
+
+每个回合记录生成尝试、模型步骤和工具执行结果。写入动作与奖励通过数据库事务提交，请求标识用于防止网络重试造成重复执行；分支和修订校验阻止旧请求覆盖新存档。动作已经成功而叙事中断时，可以基于已提交结果继续叙事。
+
+后台记忆任务使用 PostgreSQL 持久化队列、租约和 Worker 调度，进程重启后可恢复处理。玩法存档、已发布内容和账号账本以 PostgreSQL 为准；模型调用与运行日志为排错提供关联记录。
+
+更完整的实现说明见 [Agent Tool Loop](docs/design/19-agent-tool-loop.md)、[异步记忆与角色问答](docs/design/18-async-memory-character-inquiry.md)和[可信玩法模块架构](docs/design/24-gameplay-module-architecture.md)。
+
+## 自部署
+
+命运酒馆可以运行在自己的电脑、家庭服务器或云服务器上。生产部署推荐使用仓库提供的 Docker Compose 配置；完整的端口、数据卷、迁移、备份和恢复说明见 [Docker 部署指南](docker/README.md)。
 
 ### 环境要求
 
-- Go 1.25。
-- Node.js 20+ 和 npm。
-- 一个可访问的 PostgreSQL 数据库；可以是本机、Docker 或其他独立数据库。
-- 可选：Go Task，用于执行仓库根目录的快捷任务。
+- Docker Engine 与 Docker Compose 插件
+- Git
+- 若从源码构建：Go 1.25、Node.js 20+、npm 与 [Go Task](https://taskfile.dev/)
+- 一个可访问的 PostgreSQL 数据库；Docker Compose 配置也可以运行独立 PostgreSQL 容器
 
-### 1. 初始化数据库
+### Docker 部署
 
-Fatecraft 不使用 AutoMigrate。数据库结构由 [Goose migrations](backend/migrations) 显式维护，空数据库和已有环境使用同一个升级入口。先按下一节创建 `backend/.env` 并确认 `DATABASE_URL`，然后执行：
-
-```bash
-cd backend
-go run ./cmd/migrate up
-```
-
-查看当前版本和待执行 migration：
+从源码构建所需产物：
 
 ```bash
-go run ./cmd/migrate version
-go run ./cmd/migrate status
+task backend:build
+task frontend:build
 ```
 
-每个已执行 migration 都记录在 `goose_db_version`。服务进程不会在启动时隐式修改数据库；部署必须先让 `migrate up` 成功，再启动后端。
+生产配置模板位于 `docker/backend.production.env`。部署前至少要设置数据库密码，并同步更新 `DATABASE_URL`；还要设置稳定且独立的 `AUTH_DATA_ENCRYPTION_KEY` 和 `SHARE_LINK_SIGNING_KEY`，各自至少 32 个字符。敏感值应放入 Git 忽略的本地覆盖文件，并按 [Docker 部署指南](docker/README.md)加入 Compose 环境配置。生产部署应通过 HTTPS 反向代理对外提供服务，切勿提交密钥或密码。
 
-当前新项目的基线尚未冻结，结构变更继续并入 `00001_init.sql`。Goose 只跟踪版本，不检测已执行 SQL 的内容变化：修改 00001 后，旧开发库再次执行 `up` 不会自动补表，`status/version` 也不能证明结构一致。请在全新数据库或集成测试创建的隔离 schema 中验证；开始保留正式数据后冻结基线，后续使用增量 migration，不自动重置已有数据库。
+在仓库根目录启动：
 
-迁移命令只支持 `up/status/version`，不提供 `down`；00001 的 SQL 也明确拒绝回退，保留结构与版本记录。连接默认最多等待 `10s`，整个命令默认最多执行 `10m`（包含连接、等锁与 SQL）；可通过 `MIGRATION_CONNECT_TIMEOUT` / `MIGRATION_TIMEOUT` 调整为正的 Go duration。Ctrl+C 或 SIGTERM 会取消当前迁移，未提交的事务回滚。
+```bash
+docker compose -f docker/docker-compose.prod.yml up --build -d
+```
 
-### 2. 配置后端
+默认站点入口为 `http://<服务器地址>:8088`。首次打开会进入安装向导，用于创建唯一的站点所有者账号。生产环境请先配置 HTTPS，再开放站点给其他用户使用。
 
-复制示例配置：
+服务启动前会运行数据库迁移。空数据库会导入内置玩法；已有玩法内容不会被自动覆盖。生产 Compose 包含 PostgreSQL 备份服务，默认每天备份并保留 7 天。升级、外置数据库、密钥配置及恢复步骤见 [Docker 部署指南](docker/README.md)。
+
+### 本机开发运行
+
+安装 Go、Node.js、Go Task 和 PostgreSQL 后，复制并编辑后端配置：
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-至少确认以下项目：
-
-```env
-PORT=8081
-DATABASE_URL=postgres://user:password@host:5432/fatecraft?sslmode=disable
-DATA_DIR=data
-AUTH_DATA_ENCRYPTION_KEY=replace-with-a-stable-secret-at-least-32-characters
-SHARE_LINK_SIGNING_KEY=replace-with-an-independent-stable-secret-at-least-32-characters
-```
-
-常用环境变量：
-
-| 变量                                             | 说明                                                                                                     |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| <code>DATABASE_URL</code>                        | PostgreSQL 连接串，支持外部数据库                                                                        |
-| <code>DB_MAX_OPEN_CONNS</code>                   | 单个后端实例最大数据库连接数，默认 10；多实例部署时需汇总计算                                            |
-| <code>DB_MAX_IDLE_CONNS</code>                   | 单个后端实例最大空闲数据库连接数，默认 3                                                                 |
-| <code>DB_CONN_MAX_LIFETIME</code>                | 数据库连接最长复用时间，默认 `30m`                                                                       |
-| <code>DB_CONN_MAX_IDLE_TIME</code>               | 数据库空闲连接回收时间，默认 `5m`                                                                        |
-| <code>DATA_DIR</code>                            | <code>roll_config.yaml</code> 与内置玩法材料目录；从 <code>backend</code> 启动时默认是 <code>data</code> |
-| <code>AUTH_DATA_ENCRYPTION_KEY</code>            | 加密 LLM API Key 和 SMTP 密码；至少 32 字符，投入使用后不得随意更换                                      |
-| <code>SHARE_LINK_SIGNING_KEY</code>              | 签发公开分享链接；至少 32 字符，必须与数据加密密钥独立，轮换会让既有链接失效                              |
-| <code>ALLOWED_ORIGINS</code>                     | 允许访问 API 与 WebSocket 的前端来源，生产环境必须明确配置                                               |
-| <code>TRUSTED_PROXIES</code>                     | 允许设置 <code>X-Forwarded-For</code> 的反向代理 IP/CIDR；留空时不信任任何代理，后端端口不得对公网开放 |
-| <code>AUTH_COOKIE_SECURE</code>                  | HTTPS 部署时设为 <code>true</code>                                                                       |
-| <code>AUTH_SESSION_TTL</code>                    | 登录会话有效期，默认示例为 <code>336h</code>                                                             |
-| <code>LINUXDO_CLIENT_ID</code>                   | LinuxDo Connect 客户端 ID                                                                                |
-| <code>LINUXDO_CLIENT_SECRET</code>               | LinuxDo Connect 客户端密钥                                                                               |
-| <code>LINUXDO_REDIRECT_URI</code>                | OAuth 回调地址，必须与服务商后台完全一致                                                                 |
-| <code>LOG_LEVEL</code> / <code>LOG_FORMAT</code> | 日志级别与 <code>console</code> / <code>json</code> 格式                                                 |
-| <code>CHALLENGE_CACHE_MAX_VERSIONS</code>        | 每个后端进程最多驻留的已发布/退役挑战版本，范围 1-64，默认 16                                           |
-| <code>CHALLENGE_CACHE_MAX_MIB</code>             | 只读挑战内容缓存估算内存上限，范围 16-1024 MiB，默认 256；2C4G 建议保持默认值                            |
-
-完整注释见 [backend/.env.example](backend/.env.example)。
-
-### 3. 启动后端
+配置数据库地址、`ALLOWED_ORIGINS=http://localhost:5173` 及密钥，然后运行迁移并启动后端：
 
 ```bash
 cd backend
+go run ./cmd/migrate up
 go run ./cmd/server
 ```
 
-健康检查：
-
-```text
-GET http://localhost:8081/api/health
-```
-
-后端发现 <code>challenge_packs</code> 完全为空时，会在事务中读取 <code>backend/data/preset_packs/*</code>，校验并发布官方玩法。多个实例同时首次启动时通过 PostgreSQL advisory lock 串行初始化。
-
-只要数据库已经存在任意挑战包，启动过程就完全跳过内置内容初始化，不自动升级或覆盖数据库内容。
-
-运行时会在每个后端进程内缓存已发布/退役版本的 Manifest、Runtime、Prompt、世界书和玩法定义编译结果。PostgreSQL 仍是权威来源，草稿和玩家动态数据不缓存；多实例不要求 Redis，各实例独立受上述双重上限约束。回合运行面板可查看聚合命中率、驻留版本和估算内存。
-
-### 4. 启动前端
-
-另开终端：
+在另一个终端启动前端：
 
 ```bash
 cd frontend
@@ -191,248 +194,53 @@ npm ci
 npm run dev
 ```
 
-默认地址：
+开发地址为 `http://localhost:5173`，后端默认监听 `http://localhost:8081`。Vite 会代理 API 和 WebSocket 请求。后端不会在服务启动时隐式执行数据库迁移；每次升级请先按部署指南检查并执行 migration。
 
-- 前端：<code>http://localhost:5173</code>
-- 后端：<code>http://localhost:8081</code>
+## 首次使用
 
-Vite 开发服务器会把 <code>/api</code> 和 <code>/ws</code> 代理到后端。
+1. 打开网站并在安装向导中创建站点所有者账号。
+2. 在“设置”中选择使用自己的模型，或使用管理员配置的平台模型。
+3. 完成模型能力检测，然后从已启用玩法中选择一个身份和开局场景。
+4. 在对话中描述行动，查看角色状态、玩法信息和结算结果。
 
-生产 Nginx 还会把公开入口 <code>/s/:token</code> 转给后端生成 Open Graph 摘要，再进入前端只读页面。公开响应不使用代理共享缓存，撤销、过期、对话删除和管理员下架会在下一次读取时立即生效。
+要启用奖励功能，使用服务端转发模式。管理员可以在后台管理玩法结局积分、兑换商品和注册赠送规则；积分奖励以服务端结算结果为准。
 
-### 5. 完成首次配置
+## 技术栈
 
-空数据库首次打开时会进入网页安装向导。部署者直接在向导中设置本地用户名和密码，并可选填写邮箱作为联系地址；明确确认后该账号成为唯一的 `owner`。用户名是正式登录标识，有邮箱时邮箱也可用于登录。安装完成前邮箱和 LinuxDo 登录不会开放，完成后安装入口关闭，后续用户一律默认为普通用户。LinuxDo 只能在已有本地账号的设置中绑定，不能通过 OAuth 自动创建站内用户；管理员可在“管理 -> 第三方账户”审计绑定关系。`owner` 可在“管理 -> 用户与权限”中授予或撤销 `admin`。
+| 组件 | 技术 |
+| --- | --- |
+| 前端 | Vue 3、TypeScript、Pinia、Naive UI、Vite |
+| 后端 | Go、Gin、GORM |
+| 数据库 | PostgreSQL |
+| 实时通信 | WebSocket |
+| 模型接口 | OpenAI 兼容 Chat Completions / Responses |
+| 部署 | Docker Compose、Nginx |
 
-登录后需要完成以下配置：
+## 开发与贡献
 
-1. 在“设置”中填写用户自己的 LLM Base URL、API Key、协议与叙事模型；或者由管理员启用平台统一模型。
-2. 分别检测叙事模型的 Agent Tool Loop 能力，以及长期记忆和角色问答模型的原生 JSON Schema 能力。
-3. 创建对话并确认 WebSocket、模型输出和状态面板正常工作。
+欢迎反馈问题、提出改进建议，也欢迎制作和分享玩法包。玩法包是数据配置，动作与状态变更只能使用服务端已实现并审核的可信模块，不能通过导入配置执行任意代码。制作说明见[玩法包指南](docs/design/15-challenge-authoring-guide.md)；模块边界见[可信玩法模块架构](docs/design/24-gameplay-module-architecture.md)。
 
-## LLM 配置
-
-系统提供两种访问模式：
-
-- <code>user_managed</code>：每个用户维护自己的 LLM 设置。
-- <code>platform_managed</code>：管理员统一提供公共设置，普通用户只读使用。
-
-API Key 使用 <code>AUTH_DATA_ENCRYPTION_KEY</code> 经 AES-GCM 加密后写入数据库，运行时才在内存中解密；API 响应和诊断日志不会返回密钥。
-
-<code>user_managed</code> 下用户还可以在设置里选择请求路由：<code>server</code>（服务端转发，默认，完整享有奖励）或 <code>client</code>（浏览器用本设备 Key 直连模型，只体验对话玩法，不发放奖励、不扣改写额度）。`client` 的 Key 只存浏览器本设备（登出清除），服务端不保存；路由在对话创建时固化，切换设置后旧对话只读，需新建对话。`client` 路由由 owner 在“管理 -> 全局设置”中的“允许用户选择客户端直连”开关管理（默认开启，与公共 LLM 开关相互独立）：关闭时用户看不到路由选择，有效路由恒为 `server`，已有直连对话只读，重新开启后自动恢复。开启公共 LLM 的同时也可以打开直连开关，让用户在平台模型与自带 Key 直连之间选择。
-
-### 模型角色
-
-| 角色         | 用途                                 | 模型留空行为 | 思考强度留空行为                     |
-| ------------ | ------------------------------------ | ------------ | ------------------------------------ |
-| 叙事模型     | 流式叙事与可信工具循环               | 不允许留空   | 完全不发送思考强度字段               |
-| 长期记忆模型 | 后台异步归档，原生 JSON Schema       | 继承叙事模型 | 继承叙事思考强度；叙事也为空则不发送 |
-| 角色问答模型 | 当前存档的只读问答，原生 JSON Schema | 继承叙事模型 | 继承叙事思考强度；叙事也为空则不发送 |
-
-思考强度提供 <code>默认（不传）</code>、<code>low</code>、<code>medium</code>、<code>high</code> 候选，也允许直接输入供应商支持的自定义档位。不同供应商没有统一的思考强度元数据；“获取模型列表”只读取兼容接口的 <code>/models</code>，不能可靠推断每个模型支持哪些档位。
-
-能力检测是一次显式、无副作用的真实请求：
-
-- 叙事模型必须完成“调用诊断工具 -> 接收工具结果 -> 返回普通文本”的两步循环。
-- 长期记忆和角色问答模型必须返回符合原生 JSON Schema 的随机 nonce。
-- 检测不会自动切换模型、重试请求、记录健康分数或改变生产请求行为。
-
-## Agent 与信任边界
-
-主叙事模型每一步只能选择普通文本或当前工具快照中的真实工具。工具可能来自：
-
-- 通用状态白名单。
-- 服务端判定系统。
-- 挑战结局验证。
-- 当前 Campaign revision 投影出的动态动作。
-
-后端会重新检查工具是否仍可用、参数是否符合收窄后的 Schema、资源与前置条件是否满足、revision 是否过期，并在事务中写入结果。模型不能直接提交随机概率、骰面、账号余额、奖励数量或伪造的领域 revision。
-
-单个模型步骤不会因解析、工具或结构化契约错误而自动重放，不更换协议、不切换模型，也不会把原生 JSON Schema 静默降级为 Prompt-only JSON。只有在响应体交付前遇到连接错误、429 或网关临时错误时，传输层才按有限策略重试；失败会以明确的回合、attempt、步骤和错误码留痕。
-
-完整协议见 [Agent Tool Loop](docs/design/19-agent-tool-loop.md) 和 [AI 动作协议](docs/design/12-ai-actions.md)。
-
-## 内容与发布
-
-PostgreSQL 是运行时玩法内容的唯一权威。Character、Persona、Scenario、Prompt、WorldBook、Runtime Contract、结局和奖励规则都属于一个 <code>challenge_version</code>。
-
-管理员在“管理 -> 挑战内容”中：
-
-1. 创建玩法包和首个草稿，或从当前发布版本复制新草稿。
-2. 分区编辑基本信息、入口资产、Runtime Contract、状态 Schema、玩家展示、outcome verifier 和固定通关积分。
-3. 保存草稿并执行“校验并发布”。
-
-发布过程会在同一事务内锁定草稿、校验资源引用和已安装模块、计算稳定 SHA-256 哈希，并切换玩法包的当前版本。已发布版本不可原地修改，新版本不会改变已经开始的对话。
-
-仓库玩法包格式为：
-
-```text
-pack.json
-runtime/
-  runtime.json
-  state-schema.json
-  actions.json
-  settlement.json
-  presentation.json
-characters/
-personas/
-scenarios/
-prompts/
-worldbooks/
-```
-
-仓库 JSON 只负责空库首次初始化和管理员显式导入，不是运行时可写存储。已有数据库中的官方玩法更新必须由管理员在“内置内容”页面检查版本与哈希后显式导入或覆盖。
-
-玩法制作说明见 [挑战制作指南](docs/design/15-challenge-authoring-guide.md)。
-
-## 认证与安全
-
-- 用户角色为 `owner`、`admin`、`user`；普通注册创建 `user`，LinuxDo 只登录已绑定的本地账号，不自动创建站内用户。
-- 空库必须通过 `/setup` 首次安装向导明确设置唯一 `owner`，不能由第一个访问者自动获得管理员权限。
-- `owner` 可以管理 `admin`、认证策略和平台密钥；`admin` 负责日常运营，不能修改或转移 `owner`。
-- 初始化完成后必须始终保留唯一的 `owner`，后端事务阻止其被禁用、删除或降级。
-- 服务端会话使用随机令牌，数据库只保存令牌哈希。
-- LinuxDo Connect 使用 OAuth 2.0 + PKCE；绑定入口位于账号设置的“第三方账户”，绑定和解绑均由服务端校验。
-- 邮箱注册、验证码、邀请码和 SMTP 由管理员配置；邮箱注册默认关闭。
-- 验证码只保存 bcrypt 摘要，限制尝试次数且只能消费一次。
-- 邀请码数据库只保存 SHA-256 摘要，原文仅在创建后展示一次。
-- LLM API Key 和 SMTP 密码必须加密保存。
-
-LinuxDo 回调地址示例：
-
-```text
-本地：http://localhost:5173/api/auth/linuxdo/callback
-生产：https://example.com/api/auth/linuxdo/callback
-```
-
-生产环境必须：
-
-- 使用稳定且妥善备份的 <code>AUTH_DATA_ENCRYPTION_KEY</code>。
-- 设置明确的 <code>ALLOWED_ORIGINS</code>。
-- 在 HTTPS 下启用 <code>AUTH_COOKIE_SECURE=true</code>。
-- 不提交真实的 <code>.env</code>、API Key、SMTP 密码或数据库密码。
-
-## 诊断日志
-
-模型调用默认保存结果摘要，包括用途、模型、协议、状态、耗时、网络尝试次数和关联 ID。管理员可按需开启详细正文：请求 JSON/预览和原始响应各最多 512 KiB，合并文本最多 256 KiB；认证头、已知 API Key 和 URL 凭据被过滤。
-
-详细日志默认关闭，因为其中仍可能包含技术 Prompt、世界书、玩家文本和模型推理载荷。生产环境应按故障排查需要临时开启。
-
-<code>context_build_logs</code> 独立保存上下文预算、分段和裁剪诊断。后台支持按时间/对话/生成尝试/关联 ID 筛选和游标翻页，并显示当前实例队列与清理状态。诊断默认保留 30 天（可设 1–3650 天），有积压时限批追赶；不清理奖励、订单、管理员和分享治理审计。
-
-## Docker
-
-仓库 Docker 镜像不在容器内编译源码：后端镜像复制宿主机构建的 Linux amd64 二进制，前端镜像复制静态产物。
-
-先生成产物：
-
-```bash
-task backend:build
-task frontend:build
-```
-
-开发环境（后端、PostgreSQL、自动备份；前端仍可使用 Vite）：
-
-```bash
-docker compose -f docker/docker-compose.dev.yml up --build
-task frontend:dev
-```
-
-生产环境：
-
-```bash
-docker compose -f docker/docker-compose.prod.yml up --build -d
-```
-
-生产前端入口默认为 <code>http://&lt;host&gt;:8088</code>，Nginx 同时反代 <code>/api</code> 和 <code>/ws</code>。备份 sidecar 默认按东八区每天 02:00 执行 <code>pg_dump</code>，保留 7 天。
-
-端口、外部 PostgreSQL、数据卷、备份和恢复说明见 [Docker Workflow](docker/README.md)。
-
-## 目录
-
-```text
-backend/
-  cmd/migrate/              独立数据库迁移命令
-  cmd/server/               HTTP、WebSocket 与 Worker 组合根
-  internal/api/             Gin 路由、权限与请求边界
-  internal/auth/            登录、会话、验证码和邀请码
-  internal/challenge/       玩法查询、版本发布、哈希与奖励结算
-  internal/challengeimport/ 仓库玩法包校验、导入与空库初始化
-  internal/contextbuilder/  上下文预算、世界书和 Campaign 投影
-  internal/gameplay/        通用契约、注册表与可信题材模块
-  internal/inquiry/         角色栏只读快照与问答
-  internal/llm/             Chat / Responses、工具与 JSON Schema 适配
-  internal/memory/          异步长期记忆调度、契约与 Worker
-  internal/orchestration/   主叙事 Agent、工具目录和事务编排
-  internal/storage/         PostgreSQL 模型、仓储和奖励账本
-  migrations/               Goose SQL migration 与当前 schema 权威来源
-  data/preset_packs/        官方玩法首次初始化材料
-  data/roll_config.yaml     判定算法与词表
-frontend/
-  src/components/           对话、设置、状态和管理组件
-  src/stores/               认证、玩法、对话、运行时和奖励状态
-  src/views/                登录、玩法、对话、奖励、设置和管理页面
-docker/                     Compose、Nginx、备份和镜像上下文
-docs/design/                正式设计文档
-```
-
-## 验证
-
-使用 Task：
-
-```bash
-task backend:test
-task frontend:check
-task frontend:build
-```
-
-或直接执行：
+运行本地检查：
 
 ```bash
 cd backend
-go vet ./...
 go test ./...
-```
-
-```bash
-cd frontend
-npm run format:check
+go vet ./...
+cd ../frontend
 npm run build
 ```
 
-未配置测试库时，普通后端测试会跳过 PostgreSQL 集成测试。数据库变更验收必须为测试进程提供专用、可丢弃的 PostgreSQL 数据库，然后运行强制验证入口（在仓库根目录执行）：
-
-```powershell
-$env:FATECRAFT_TEST_DATABASE_URL = 'postgres://user:password@localhost:5432/fatecraft_test?sslmode=disable'
-task backend:test:postgres
-```
-
-该任务设置 `FATECRAFT_REQUIRE_TEST_DATABASE=true`，缺少测试库时直接失败，并以 `-count=1` 禁用测试结果缓存。也可进入 `backend`，设置这两个环境变量后执行 `go test -count=1 -timeout=10m ./...`。测试创建随机 schema，执行完整 00001 并在结束后清理该 schema；覆盖首次初始化、重复/并发迁移、基线回退拒绝和失败事务回滚。CI 已配置 PostgreSQL 服务，并使用相同的强制验证模式。测试变量需传给进程，不从 `backend/.env` 自动加载。
-
-真实供应商能力测试使用 <code>FATECRAFT_LIVE_LLM_BASE_URL</code>、<code>FATECRAFT_LIVE_LLM_API_KEY</code>、<code>FATECRAFT_LIVE_LLM_MODEL</code> 和可选的 <code>FATECRAFT_LIVE_LLM_PROTOCOL</code>，默认同样跳过。
+涉及数据库变更时，还需使用专用测试数据库运行 PostgreSQL 集成测试，命令和环境变量见[开发验证说明](docs/design/README.md)。请不要提交 `.env` 文件、API Key、SMTP 密码或数据库凭据。
 
 ## 设计文档
 
-推荐阅读顺序：
+- [设计文档索引](docs/design/README.md)
+- [挑战与玩法包制作指南](docs/design/15-challenge-authoring-guide.md)
+- [可信玩法模块架构](docs/design/24-gameplay-module-architecture.md)
+- [Agent Tool Loop](docs/design/19-agent-tool-loop.md)
+- [积分与奖励管理](docs/design/22-reward-management-and-exchange.md)
+- [Docker 部署指南](docker/README.md)
 
-1. [项目概览](docs/design/01-overview.md)
-2. [产品能力](docs/design/03-product-features.md)
-3. [挑战制作指南](docs/design/15-challenge-authoring-guide.md)
-4. [通用 Campaign Action Capability](docs/design/17-generic-campaign-action-capabilities.md)
-5. [异步长期记忆与只读角色问答](docs/design/18-async-memory-character-inquiry.md)
-6. [Agent Tool Loop](docs/design/19-agent-tool-loop.md)
-7. [Campaign 终局与奖励](docs/design/21-campaign-outcome-rewards.md)
-8. [未来玩法方向](docs/design/future-gameplay-directions.md)
+## 许可证
 
-完整索引与权威来源优先级见 [设计文档目录](docs/design/README.md)。
-
-## 当前边界
-
-- 不向普通用户提供技术 Prompt、世界书、角色、场景或奖励规则 CRUD。
-- 不允许对话创建后替换玩法版本或跨对话共享长期记忆。
-- 不在已有数据库上自动修改 schema、导入新玩法版本或覆盖管理员内容。
-- 不保证所有 OpenAI 兼容网关都正确实现 Function Calling、Responses 或原生 JSON Schema；请先执行能力检测。
-- 不从 <code>/models</code> 推断模型的思考强度、上下文窗口或价格。
-- 当前不提供通用插件市场、多人共享同一对话或跨玩法存档迁移。
-
-日志生产配置使用 `LOG_LEVEL=info`、`LOG_FORMAT=json`；Compose 对每容器按 `10m × 3` 轮转，备份日志进入 stdout/stderr。诊断队列每实例最多 128 条/32 MiB，可丢弃且计数可见；配置审计与配置更新在同一事务。更多见[日志与诊断](docs/design/23-logging-and-diagnostics.md)，其中保留本地检查结果及交由维护者执行的真实环境验收清单。
+FateCraft 以 [Apache License 2.0](LICENSE) 发布。第三方依赖、玩法包素材及单独标注的内容可能适用各自的许可证或使用条款。
