@@ -1134,3 +1134,38 @@ func TestRelationshipDeltasAreBounded(t *testing.T) {
 		t.Fatalf("relationship bounds were not enforced: %+v", relation)
 	}
 }
+
+func TestPlayerRelationshipInteractionIsRestricted(t *testing.T) {
+	store := newActionStore()
+	campaignID, npcID := uuid.New(), uuid.New()
+	store.npcs["ferryman"] = &storage.CampaignNPC{
+		ID: npcID, CampaignID: campaignID, InstanceKey: "ferryman", StableName: "老邢",
+		CurrentLocationKey: "ferry", Status: "active",
+	}
+	store.relationships[npcID] = &storage.CampaignRelationship{
+		CampaignID: campaignID, NPCID: npcID, Trust: 3, Affinity: 0,
+		PublicStance: "neutral", KnownFacts: storage.JSONMap{},
+	}
+	execution := campaign.ActionExecution{
+		Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "ferry", GameTime: 120},
+		Store:    store, ActorType: "player", ActionKey: ActionRecordInteraction,
+	}
+	outcome, err := worldactions.RecordInteraction(context.Background(), execution, map[string]any{
+		"npc_key": "ferryman", "trust_delta": int64(1), "affinity_delta": int64(1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	relation := store.relationships[npcID]
+	if relation.Trust != 4 || relation.Affinity != 1 || relation.PublicStance != "cordial" {
+		t.Fatalf("unexpected player interaction: %+v", relation)
+	}
+	if outcome.GameTimeDelta != 15 {
+		t.Fatalf("player interaction time = %d, want 15", outcome.GameTimeDelta)
+	}
+	if _, err := worldactions.RecordInteraction(context.Background(), execution, map[string]any{
+		"npc_key": "ferryman", "trust_delta": int64(20), "affinity_delta": int64(1),
+	}); err == nil {
+		t.Fatal("player interaction must reject trust_delta above 1")
+	}
+}

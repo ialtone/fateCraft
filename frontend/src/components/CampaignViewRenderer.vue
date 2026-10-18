@@ -269,12 +269,20 @@ function actionList(section: CampaignViewSection): CampaignViewAction[] {
 
 function actionItems(action: CampaignViewAction): Array<{ item?: unknown; parent?: unknown }> {
   if (!action.source_path) return [{ item: undefined }]
-  const value = read(action.source_path)
-  const parents = Array.isArray(value)
-    ? value
-    : value && typeof value === 'object'
-      ? Object.values(value)
-      : []
+  // 任务与承诺共用 accept/submit 动作；承诺在投影中是独立字段，
+  // 不能因为 source_path 只写 quests 就从界面上消失。
+  const sourcePaths =
+    action.key === 'quest.accept' || action.key === 'quest.submit'
+      ? ['quests', 'obligations']
+      : [action.source_path]
+  const parents = sourcePaths.flatMap((path) => {
+    const value = read(path)
+    return Array.isArray(value)
+      ? value
+      : value && typeof value === 'object'
+        ? Object.values(value)
+        : []
+  })
   if (!action.item_path) return parents.map((item) => ({ item }))
   return parents.flatMap((parent) => {
     const child = readRelative(action.item_path!, parent)
@@ -284,10 +292,16 @@ function actionItems(action: CampaignViewAction): Array<{ item?: unknown; parent
 
 function actionLabel(action: CampaignViewAction, item?: unknown): string {
   if (!item || typeof item !== 'object') return action.label
-  const name = (item as Record<string, unknown>).name
+  const object = item as Record<string, unknown>
+  const name = object.name
   if (!name) return action.label
   const text = String(name)
-  return /^[a-z][a-z0-9._:-]*$/i.test(text) ? action.label : `${action.label} · ${text}`
+  if (/^[a-z][a-z0-9._:-]*$/i.test(text)) return action.label
+  if (object.quest_type === 'obligation') {
+    if (action.key === 'quest.accept') return `接受承诺 · ${text}`
+    if (action.key === 'quest.submit') return `提交承诺 · ${text}`
+  }
+  return `${action.label} · ${text}`
 }
 
 function actionArguments(

@@ -154,8 +154,12 @@ function showCompletion(completion: CompletionInfo) {
   const metricLines = completion.metrics.map(
     (metric) => `${metric.label}：${String(metric.value)}${metric.unit ? ` ${metric.unit}` : ''}`,
   )
+  const chronicleLines = (completion.chronicle || [])
+    .filter((line): line is string => typeof line === 'string' && !!line.trim())
+    .map((line) => `· ${line}`)
   const details = [
     completion.summary,
+    chronicleLines.length ? `本世经历\n${chronicleLines.join('\n')}` : '',
     completion.rewardsDisabledReason
       ? '客户端直连模式不发放奖励'
       : rewardLines.length

@@ -944,6 +944,23 @@
           }
         },
         {
+          "key": "relationship.record_interaction",
+          "label": "交谈",
+          "placement": "relationships",
+          "source_path": "relationships",
+          "arguments": {
+            "npc_key": {
+              "from": "item.instance_key"
+            },
+            "trust_delta": {
+              "value": 1
+            },
+            "affinity_delta": {
+              "value": 1
+            }
+          }
+        },
+        {
           "key": "craft.learn_recipe",
           "label": "学习配方",
           "placement": "crafting",

@@ -107,6 +107,10 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 		settled := result.Settlement
 		view := storage.NewCompletion(*conv, result.Revision, "challenge:"+settled.Run.ID.String(), storage.ChallengeOutcomeRule{OutcomeKey: settled.Outcome.Key, Category: settled.Outcome.Category, Title: settled.Outcome.Title, Tone: settled.Outcome.Tone})
 		view.Summary, view.RewardsDisabledReason = settled.Run.Summary, settled.RewardsDisabledReason
+		view.Chronicle = []string{
+			"结局：" + settled.Outcome.Title,
+			"经过：" + settled.Run.Summary,
+		}
 		for _, reward := range settled.Rewards {
 			view.Rewards = append(view.Rewards, storage.CompletionReward{RewardKey: reward.RewardKeySnapshot, Name: reward.NameSnapshot, Unit: reward.UnitSnapshot, Icon: reward.IconSnapshot, Quantity: reward.Quantity, BalanceAfter: reward.BalanceAfter})
 		}

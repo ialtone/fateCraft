@@ -98,7 +98,7 @@ func Register(service *campaign.Service) {
 		{ActionInstantiateNPC, "按版本原型和实例上限在当前地点创建 NPC", []string{"model", "system"}, instantiateNPC},
 		{ActionMoveNPC, "沿地点连接移动 NPC 实例", []string{"model", "system"}, worldactions.MoveNPC},
 		{ActionSetNPCStatus, "按状态机更新 NPC 生命周期状态", []string{"model", "system"}, worldactions.SetNPCStatus},
-		{ActionRecordInteraction, "记录当前地点 NPC 的多维关系变化", []string{"model", "system"}, worldactions.RecordInteraction},
+		{ActionRecordInteraction, "记录当前地点 NPC 的多维关系变化；玩家交谈时每次固定 +1 信任/+1 亲近", []string{"player", "model", "system"}, worldactions.RecordInteraction},
 		{ActionAdjustFaction, "调整已定义势力的声望、贡献与通缉", []string{"model", "system"}, worldactions.AdjustFaction},
 		{ActionAcceptQuest, "接受已提供且符合地点条件的任务或承诺", []string{"player", "model"}, worldactions.AcceptQuest},
 		{ActionSubmitQuest, "提交任务并由后端核验目标、扣除物品和发放奖励；最终道路须玩家确认", []string{"player", "model"}, submitCultivationQuest},
@@ -496,16 +496,43 @@ func equipTechnique(_ context.Context, execution campaign.ActionExecution, argum
 	if err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	slot, err := worldactions.RequiredKey(arguments, "slot")
-	if err != nil {
-		return storage.CampaignActionOutcome{}, err
-	}
 	row, err := cultivationStore(execution).Technique(execution.Campaign.ID, key)
 	if err != nil || row.Status != "active" {
 		return storage.CampaignActionOutcome{}, worldactions.Rejected("功法不可装配: %s", key)
 	}
 	definition, err := execution.Store.Definition(execution.Campaign.ChallengeVersionID, storage.DefinitionTechnique, key)
-	if err != nil || !worldactions.ContainsDefinitionString(definition.Content["allowed_slots"], slot) {
+	if err != nil {
+		return storage.CampaignActionOutcome{}, worldactions.Rejected("功法定义不存在: %s", key)
+	}
+	allowed := definitionStrings(definition.Content["allowed_slots"])
+	if len(allowed) == 0 {
+		return storage.CampaignActionOutcome{}, worldactions.Invalid("功法 %s 没有可用的槽位定义", key)
+	}
+	slot, _ := arguments["slot"].(string)
+	if slot == "" {
+		// 玩家界面只传 technique_key；优先装入空闲的合法槽位，
+		// 全部占用时替换第一个合法槽位，仍由领域层统一重算属性。
+		rows, listErr := cultivationStore(execution).Techniques(execution.Campaign.ID)
+		if listErr != nil {
+			return storage.CampaignActionOutcome{}, listErr
+		}
+		occupied := map[string]bool{}
+		for _, other := range rows {
+			if other.ID != row.ID && other.Status == "active" && other.EquippedSlot != nil {
+				occupied[*other.EquippedSlot] = true
+			}
+		}
+		for _, candidate := range allowed {
+			if !occupied[candidate] {
+				slot = candidate
+				break
+			}
+		}
+		if slot == "" {
+			slot = allowed[0]
+		}
+	}
+	if !containsActionString(allowed, slot) {
 		return storage.CampaignActionOutcome{}, worldactions.Rejected("功法 %s 不能装配到 %s", key, slot)
 	}
 	if err := cultivationStore(execution).ClearTechniqueSlot(execution.Campaign.ID, slot, row.ID); err != nil {

@@ -16,6 +16,7 @@ export interface CompletionInfo {
   category: 'success' | 'failure' | 'neutral'
   title: string
   summary: string
+  chronicle?: string[]
   tone: string
   rewards: CompletionView['rewards']
   metrics: CompletionMetric[]

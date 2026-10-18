@@ -968,11 +968,18 @@ func ValidNPCStatusTransition(current, target string) bool {
 }
 
 func RecordInteraction(_ context.Context, execution campaign.ActionExecution, arguments map[string]any) (storage.CampaignActionOutcome, error) {
-	if err := RequireModelAuthority(execution); err != nil {
+	playerMode := execution.ActorType == "player"
+	if playerMode {
+		if err := AllowArguments(arguments, "npc_key", "trust_delta", "affinity_delta"); err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
+	} else if err := RequireModelAuthority(execution); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	if err := AllowArguments(arguments, "npc_key", "trust_delta", "fear_delta", "affinity_delta", "hostility_delta", "debt_delta", "public_stance", "known_fact_key", "known_fact"); err != nil {
-		return storage.CampaignActionOutcome{}, err
+	if !playerMode {
+		if err := AllowArguments(arguments, "npc_key", "trust_delta", "fear_delta", "affinity_delta", "hostility_delta", "debt_delta", "public_stance", "known_fact_key", "known_fact"); err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
 	}
 	npcKey, err := RequiredKey(arguments, "npc_key")
 	if err != nil {
@@ -994,52 +1001,82 @@ func RecordInteraction(_ context.Context, execution campaign.ActionExecution, ar
 		return storage.CampaignActionOutcome{}, err
 	}
 	deltas := map[string]int64{}
-	for _, field := range []string{"trust_delta", "fear_delta", "affinity_delta", "hostility_delta"} {
-		value, fieldErr := OptionalInt(arguments, field, 0, -20, 20)
+	if playerMode {
+		trustDelta, fieldErr := OptionalInt(arguments, "trust_delta", 1, 1, 1)
 		if fieldErr != nil {
 			return storage.CampaignActionOutcome{}, fieldErr
 		}
-		deltas[field] = value
-	}
-	debtDelta, err := OptionalInt(arguments, "debt_delta", 0, -1000, 1000)
-	if err != nil {
-		return storage.CampaignActionOutcome{}, err
+		affinityDelta, fieldErr := OptionalInt(arguments, "affinity_delta", 1, 1, 1)
+		if fieldErr != nil {
+			return storage.CampaignActionOutcome{}, fieldErr
+		}
+		deltas["trust_delta"] = trustDelta
+		deltas["affinity_delta"] = affinityDelta
+	} else {
+		for _, field := range []string{"trust_delta", "fear_delta", "affinity_delta", "hostility_delta"} {
+			value, fieldErr := OptionalInt(arguments, field, 0, -20, 20)
+			if fieldErr != nil {
+				return storage.CampaignActionOutcome{}, fieldErr
+			}
+			deltas[field] = value
+		}
 	}
 	relation.Trust = int(ClampInt64(int64(relation.Trust)+deltas["trust_delta"], -100, 100))
 	relation.Fear = int(ClampInt64(int64(relation.Fear)+deltas["fear_delta"], 0, 100))
 	relation.Affinity = int(ClampInt64(int64(relation.Affinity)+deltas["affinity_delta"], -100, 100))
 	relation.Hostility = int(ClampInt64(int64(relation.Hostility)+deltas["hostility_delta"], 0, 100))
-	relation.Debt += debtDelta
-	if stance, ok := arguments["public_stance"]; ok {
-		value, valid := stance.(string)
-		if !valid || strings.TrimSpace(value) == "" || len([]rune(value)) > 32 {
-			return storage.CampaignActionOutcome{}, Invalid("public_stance 无效")
+	if playerMode {
+		switch {
+		case relation.Trust >= 8 && relation.Hostility == 0:
+			relation.PublicStance = "friendly"
+		case relation.Trust >= 4 && relation.Hostility == 0:
+			relation.PublicStance = "cordial"
+		case relation.Hostility > 0:
+			relation.PublicStance = "hostile"
+		default:
+			relation.PublicStance = "neutral"
 		}
-		relation.PublicStance = value
-	}
-	if factKeyRaw, ok := arguments["known_fact_key"]; ok {
-		factKey, valid := factKeyRaw.(string)
-		fact, hasFact := arguments["known_fact"]
-		if !valid || !StableActionKey(factKey) || !hasFact {
-			return storage.CampaignActionOutcome{}, Invalid("known_fact_key 与 known_fact 必须成对且 key 合法")
+	} else {
+		debtDelta, err := OptionalInt(arguments, "debt_delta", 0, -1000, 1000)
+		if err != nil {
+			return storage.CampaignActionOutcome{}, err
 		}
-		if relation.KnownFacts == nil {
-			relation.KnownFacts = storage.JSONMap{}
+		relation.Debt += debtDelta
+		if stance, ok := arguments["public_stance"]; ok {
+			value, valid := stance.(string)
+			if !valid || strings.TrimSpace(value) == "" || len([]rune(value)) > 32 {
+				return storage.CampaignActionOutcome{}, Invalid("public_stance 无效")
+			}
+			relation.PublicStance = value
 		}
-		relation.KnownFacts[factKey] = fact
-	} else if _, hasFact := arguments["known_fact"]; hasFact {
-		return storage.CampaignActionOutcome{}, Invalid("known_fact 缺少 known_fact_key")
+		if factKeyRaw, ok := arguments["known_fact_key"]; ok {
+			factKey, valid := factKeyRaw.(string)
+			fact, hasFact := arguments["known_fact"]
+			if !valid || !StableActionKey(factKey) || !hasFact {
+				return storage.CampaignActionOutcome{}, Invalid("known_fact_key 与 known_fact 必须成对且 key 合法")
+			}
+			if relation.KnownFacts == nil {
+				relation.KnownFacts = storage.JSONMap{}
+			}
+			relation.KnownFacts[factKey] = fact
+		} else if _, hasFact := arguments["known_fact"]; hasFact {
+			return storage.CampaignActionOutcome{}, Invalid("known_fact 缺少 known_fact_key")
+		}
 	}
 	relation.LastInteractionAt = execution.Campaign.GameTime
 	relation.UpdatedAt = time.Now()
 	if err := execution.Store.SaveRelationship(relation); err != nil {
 		return storage.CampaignActionOutcome{}, err
 	}
-	return SingleEvent("npc.relationship_changed", storage.JSONMap{
+	outcome := SingleEvent("npc.relationship_changed", storage.JSONMap{
 		"npc_key": npcKey, "npc_name": npc.StableName, "trust": relation.Trust,
 		"fear": relation.Fear, "affinity": relation.Affinity, "hostility": relation.Hostility,
 		"debt": relation.Debt, "public_stance": relation.PublicStance,
-	}), nil
+	})
+	if playerMode {
+		outcome.GameTimeDelta = 15
+	}
+	return outcome, nil
 }
 
 func AdjustFaction(_ context.Context, execution campaign.ActionExecution, arguments map[string]any) (storage.CampaignActionOutcome, error) {

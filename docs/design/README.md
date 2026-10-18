@@ -24,6 +24,7 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 18. `10-api-websocket.md`：HTTP 和 WebSocket 契约。
 19. `11-roadmap.md`：已知边界和后续工作。
 20. `future-gameplay-directions.md`：未来玩法方向、扩展规则与候选方向（长期备忘）。
+21. `28-state-narrative-consistency.md`：动作结果契约、叙事绑定、分层事实校验与前后端快照一致性（规划）。
 
 `02-sillytavern-reference.md` 记录早期参考来源，不代表 fateCraft 对普通用户开放相同的模板管理能力。`12-ai-actions-examples.md` 是协议示例集，规则仍以正式专题和已发布挑战版本为准。
 
@@ -89,6 +90,7 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 | 对话分享、公开快照、分享 token、举报或治理 | 03、04、05、06、07、10，并同步 README 与 docker/README |
 | 通用 Campaign 动作、能力投影、Runtime 白名单或事务协议 | 17，并同步 06、08、12、13、15 |
 | Runtime 字段所有权、Campaign/会话边界、状态工具或 Snapshot 来源 | 17、19，并同步 05、07、15 |
+| 动作结果、叙事绑定、事实校验或状态展示一致性 | 28，并同步 05、07、10、12、16、19 |
 | 账号奖励、发放、注册赠送、撤回或兑换 | 22，并同步 03、05、06、07、10、13、15、21 |
 | Campaign 阶段/终局积分、账号收益快照或账本语义 | 21，并同步 05、07、10、13、15 和对应玩法文档 |
 | 主叙事 Tool Loop、Provider 传输、工具事务、JSON Schema 或显式诊断 | 19，并同步 06、07、10、12、18 |
@@ -100,3 +102,5 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 - [26. 玩法结局、玩家确认与恢复](26-gameplay-ending-lifecycle.md)
 
 玩法包交换、管理员版本控制、旧局继续、运行暂停和奖励实际来源：[27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。该专题包含 JSON/ZIP 完整示例、结构 Schema、资源上限与部署检查。
+
+状态与剧情一致性专题：[28 动作结果、叙事绑定与事实校验](28-state-narrative-consistency.md)。该专题定义 `ActionResult`、`state_hash`、叙事 revision 绑定、L0/L1/L2 校验、stale 生成处理和前端原子快照，当前为规划，落地前不得按已实现能力使用。

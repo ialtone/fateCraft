@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,7 @@ type CompletionView struct {
 	Title                 string             `json:"title"`
 	Tone                  string             `json:"tone"`
 	Summary               string             `json:"summary"`
+	Chronicle             []string           `json:"chronicle,omitempty"`
 	Rewards               []CompletionReward `json:"rewards"`
 	Metrics               []CompletionMetric `json:"metrics"`
 	NextActions           []string           `json:"next_actions"`
@@ -43,7 +45,7 @@ type CompletionMetric struct {
 }
 
 func NewCompletion(conv Conversation, revision int64, identity string, outcome ChallengeOutcomeRule) *CompletionView {
-	return &CompletionView{ID: fmt.Sprintf("%s/%d/%d", identity, conv.BranchEpoch, revision), ConversationID: conv.ID, BranchEpoch: conv.BranchEpoch, Revision: revision, Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title, Tone: outcome.Tone, Summary: "本局已按可信玩法规则结束。", Rewards: []CompletionReward{}, Metrics: []CompletionMetric{}, NextActions: []string{"replay", "back_to_challenges"}}
+	return &CompletionView{ID: fmt.Sprintf("%s/%d/%d", identity, conv.BranchEpoch, revision), ConversationID: conv.ID, BranchEpoch: conv.BranchEpoch, Revision: revision, Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title, Tone: outcome.Tone, Summary: "本局已按可信玩法规则结束。", Chronicle: []string{}, Rewards: []CompletionReward{}, Metrics: []CompletionMetric{}, NextActions: []string{"replay", "back_to_challenges"}}
 }
 
 func CompletionFromResult(result JSONMap) *CompletionView {
@@ -126,5 +128,130 @@ func (s *CampaignActionStore) CampaignCompletion(ctx context.Context, row Campai
 		return nil, err
 	}
 	view.Metrics = append(view.Metrics, CompletionMetric{Label: "已到账阶段积分（保留）", Value: stagePoints, Unit: "积分"})
+	if state, stateErr := s.DomainState(ctx, row); stateErr == nil && state != nil {
+		view.Chronicle = campaignLifeChronicle(state, row, outcome, stagePoints)
+		view.Summary = campaignCompletionSummary(state, row, outcome, stagePoints)
+	}
 	return view, nil
+}
+
+var campaignMainlineQuests = map[string]bool{
+	"cave-rescue":                 true,
+	"foundation-preparation":      true,
+	"county-stability-choice":     true,
+	"hunt-abyssal-isle":           true,
+	"seal-rift-heart":             true,
+	"great-ascension-preparation": true,
+	"warden-ending":               true,
+	"seeker-ending":               true,
+}
+
+func campaignLifeChronicle(state *CampaignDomainState, row Campaign, outcome ChallengeOutcomeRule, stagePoints int64) []string {
+	if state == nil || state.Character == nil {
+		return nil
+	}
+	character := state.Character
+	lines := make([]string, 0, 8)
+	if realm := realmStageName(state, character.RealmKey, character.StageKey); realm != "" {
+		lines = append(lines, "境界："+realm)
+	}
+	if location := definitionName(state, DefinitionLocation, row.CurrentLocationKey); location != "" {
+		lines = append(lines, "终点："+location)
+	}
+	lines = append(lines, fmt.Sprintf("寿元：%d / %d 天", character.AgeDays, character.LifespanDays))
+	if len(state.StageRewards) == 0 {
+		lines = append(lines, "阶段：未达成")
+	} else {
+		parts := make([]string, 0, len(state.StageRewards))
+		for _, reward := range state.StageRewards {
+			parts = append(parts, fmt.Sprintf("%s（+%d 分）", reward.Name, reward.GrantedPoints))
+		}
+		lines = append(lines, "阶段："+strings.Join(parts, "、"))
+	}
+	mainline := make([]string, 0, 6)
+	for _, quest := range state.Quests {
+		if quest.Status != "completed" || !campaignMainlineQuests[quest.QuestKey] {
+			continue
+		}
+		if name := definitionName(state, DefinitionQuest, quest.QuestKey); name != "" {
+			mainline = append(mainline, name)
+		}
+	}
+	if len(mainline) > 0 {
+		lines = append(lines, "主线："+strings.Join(mainline, "、"))
+	}
+	for _, encounter := range state.Encounters {
+		if encounter.Status == "won" && encounter.EncounterKey == "final-ascension-tribulation" {
+			lines = append(lines, "天劫：九霄劫云 · 渡过")
+			break
+		}
+	}
+	if outcome.OutcomeKey == "abandoned" {
+		lines = append(lines, fmt.Sprintf("终局：中止求道（保留阶段积分 %d 分）", stagePoints))
+	} else {
+		lines = append(lines, "终局："+outcome.Title)
+	}
+	return lines
+}
+
+func campaignCompletionSummary(state *CampaignDomainState, row Campaign, outcome ChallengeOutcomeRule, stagePoints int64) string {
+	if state == nil || state.Character == nil {
+		return "本局已按可信玩法规则结束。"
+	}
+	character := state.Character
+	realm := realmStageName(state, character.RealmKey, character.StageKey)
+	switch {
+	case row.Status == CampaignStatusAbandoned:
+		return fmt.Sprintf("玩家主动终止本世，止步于%s，保留阶段积分 %d 分。", realm, stagePoints)
+	case row.Status == CampaignStatusDead:
+		return fmt.Sprintf("本世在%s止步，气血耗尽。", realm)
+	case outcome.OutcomeKey == "lifespan_exhausted":
+		return fmt.Sprintf("本世寿元耗尽，止步于%s。", realm)
+	default:
+		return fmt.Sprintf("本世历经 %d 天，最终%s。", character.AgeDays, outcome.Title)
+	}
+}
+
+func definitionName(state *CampaignDomainState, kind, key string) string {
+	if state == nil || strings.TrimSpace(key) == "" {
+		return ""
+	}
+	definition, ok := state.Definition(kind, key)
+	if !ok {
+		return key
+	}
+	if strings.TrimSpace(definition.Name) != "" {
+		return definition.Name
+	}
+	return key
+}
+
+func realmStageName(state *CampaignDomainState, realmKey, stageKey string) string {
+	definition, ok := state.Definition(DefinitionRealm, realmKey)
+	if !ok {
+		return realmKey
+	}
+	name := definition.Name
+	if strings.TrimSpace(name) == "" {
+		name = realmKey
+	}
+	stages := lifeStrings(definition.Content["stages"])
+	labels := lifeStrings(definition.Content["stage_labels"])
+	for index, stage := range stages {
+		if stage == stageKey && index < len(labels) {
+			return name + " · " + labels[index]
+		}
+	}
+	return name
+}
+
+func lifeStrings(value any) []string {
+	values, _ := value.([]any)
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		if text, ok := raw.(string); ok && text != "" {
+			out = append(out, text)
+		}
+	}
+	return out
 }

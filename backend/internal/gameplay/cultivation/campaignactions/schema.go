@@ -25,7 +25,7 @@ func actionArgumentSchema(key string) storage.JSONMap {
 		}),
 		ActionBreakthrough:   worldactions.ObjectSchema(nil, nil),
 		ActionLearnTechnique: worldactions.OneKeySchema("technique_key", "当前可学习的功法 key"),
-		ActionEquipTechnique: worldactions.ObjectSchema([]string{"technique_key", "slot"}, map[string]any{
+		ActionEquipTechnique: worldactions.ObjectSchema([]string{"technique_key"}, map[string]any{
 			"technique_key": worldactions.StringSchema("已掌握的功法 key"), "slot": worldactions.StringSchema("功法槽位 key"),
 		}),
 		ActionUnequipTechnique: worldactions.OneKeySchema("technique_key", "当前已装配的功法 key"),

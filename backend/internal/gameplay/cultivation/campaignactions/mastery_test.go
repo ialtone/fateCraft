@@ -42,3 +42,42 @@ func TestPracticeReachesHighTechniqueLayersAndEquipmentDoesNotDuplicateEffects(t
 		})
 	}
 }
+
+func TestEquipTechniqueInfersSlotWhenUIOmitsIt(t *testing.T) {
+	store := newActionStore()
+	id := uuid.New()
+	primary := "primary"
+	store.character = &storage.CampaignCharacter{
+		CampaignID: id, RealmKey: "mortal", CultivationRequired: 100,
+		BaseMaxHealth: 100, MaxHealth: 100, Health: 100,
+		BaseMaxMana: 20, MaxMana: 20, Mana: 20, LifespanDays: 10000,
+	}
+	store.techniques["occupied"] = &storage.CampaignTechnique{
+		ID: uuid.New(), CampaignID: id, TechniqueKey: "occupied", Status: "active", EquippedSlot: &primary,
+		LearnedLayer: 1,
+	}
+	store.definitions[storage.DefinitionTechnique+":occupied"] = &storage.GameplayDefinition{
+		Kind: storage.DefinitionTechnique, Key: "occupied",
+		Content: storage.JSONMap{"allowed_slots": []any{"primary"}, "max_layer": int64(1), "layer_effects": []any{}},
+	}
+	store.techniques["multi"] = &storage.CampaignTechnique{
+		ID: uuid.New(), CampaignID: id, TechniqueKey: "multi", Status: "active", LearnedLayer: 1,
+	}
+	store.definitions[storage.DefinitionTechnique+":multi"] = &storage.GameplayDefinition{
+		Kind: storage.DefinitionTechnique, Key: "multi",
+		Content: storage.JSONMap{"allowed_slots": []any{"primary", "secondary"}, "max_layer": int64(1), "layer_effects": []any{}},
+	}
+	execution := campaign.ActionExecution{
+		Campaign: storage.Campaign{ID: id}, Store: store, ActorType: "player",
+	}
+	if _, err := equipTechnique(context.Background(), execution, map[string]any{"technique_key": "multi"}); err != nil {
+		t.Fatal(err)
+	}
+	row := store.techniques["multi"]
+	if row.EquippedSlot == nil || *row.EquippedSlot != "secondary" {
+		t.Fatalf("expected free secondary slot, got %+v", row.EquippedSlot)
+	}
+	if store.techniques["occupied"].EquippedSlot == nil {
+		t.Fatal("occupied technique must remain equipped when a free slot exists")
+	}
+}

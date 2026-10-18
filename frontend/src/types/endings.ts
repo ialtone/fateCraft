@@ -11,6 +11,7 @@ export interface CompletionView {
   title: string
   tone: string
   summary: string
+  chronicle?: string[]
   rewards: Array<{
     reward_key: string
     name: string
