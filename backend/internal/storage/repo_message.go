@@ -13,10 +13,40 @@ import (
 	"github.com/google/uuid"
 	"github.com/ialtone/fatecraft/internal/operation"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrMessageNotUser 表示目标展示消息不是可供玩家改写的用户输入。
 var ErrMessageNotUser = errors.New("目标消息不是用户输入")
+
+// ErrNarrativeStale 表示生成期间 Campaign 权威状态已经推进；旧叙事不得落库。
+var ErrNarrativeStale = errors.New("叙事绑定的 Campaign 状态已过期")
+
+type NarrativeActionBinding struct {
+	ID       string
+	Revision int64
+}
+
+type NarrativeBinding struct {
+	CampaignID       uuid.UUID
+	Revision         int64
+	StateHash        string
+	Actions          []NarrativeActionBinding
+	ValidationStatus string
+	ValidationDetail JSONMap
+}
+
+// BeforeCreate keeps the validation columns valid for every existing caller
+// that constructs a display message without narrative metadata.
+func (m *DisplayMessage) BeforeCreate(_ *gorm.DB) error {
+	if strings.TrimSpace(m.ValidationStatus) == "" {
+		m.ValidationStatus = "not_applicable"
+	}
+	if m.ValidationDetail == nil {
+		m.ValidationDetail = JSONMap{}
+	}
+	return nil
+}
 
 // RewriteUserMessageInput 描述一次原子剧情改写。奖励消费、消息编辑和后续分支截断
 // 必须在同一事务内完成，避免任一步骤失败后留下已扣奖励或半截消息树。
@@ -90,6 +120,100 @@ func (r *MessageRepo) CreateAssistantWithDisplay(ctx context.Context, convID, di
 			display.TurnID, display.AttemptID = &operationMetadata.TurnID, &operationMetadata.AttemptID
 		}
 		return tx.Create(&display).Error
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return &chat, &display, nil
+}
+
+// CreateAssistantWithNarrativeBinding persists the assistant message only when
+// the Campaign row still matches the revision/hash captured for generation.
+// The action bindings and the display row are written in the same transaction.
+func (r *MessageRepo) CreateAssistantWithNarrativeBinding(ctx context.Context, convID, displayID uuid.UUID, content, markdown string, metadata map[string]any, tokenCount *int, blocks JSONDoc, binding NarrativeBinding) (*ChatMessage, *DisplayMessage, error) {
+	if contentBlocksMissing(blocks) {
+		blocks = messageTextContentBlocks(content)
+	}
+	if err := validateContentBlocks(blocks); err != nil {
+		return nil, nil, err
+	}
+	if binding.CampaignID == uuid.Nil || binding.Revision < 0 || strings.TrimSpace(binding.StateHash) == "" {
+		return nil, nil, fmt.Errorf("叙事绑定参数无效")
+	}
+	var chat ChatMessage
+	var display DisplayMessage
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var conv Conversation
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conv, "id = ?", convID).Error; err != nil {
+			return asNotFound(err)
+		}
+		if conv.CampaignID == nil || *conv.CampaignID != binding.CampaignID {
+			return ErrNotFound
+		}
+		var campaign Campaign
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&campaign, "id = ?", binding.CampaignID).Error; err != nil {
+			return asNotFound(err)
+		}
+		if campaign.Revision != binding.Revision || campaign.StateHash != strings.TrimSpace(binding.StateHash) {
+			return ErrNarrativeStale
+		}
+		actionRevisions := make(map[string]int64, len(binding.Actions))
+		for _, action := range binding.Actions {
+			var commit CampaignActionCommit
+			if err := tx.First(&commit, "campaign_id = ? AND idempotency_key = ?", binding.CampaignID, action.ID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return fmt.Errorf("叙事绑定的动作不存在: %s", action.ID)
+				}
+				return err
+			}
+			if commit.Revision > binding.Revision {
+				return fmt.Errorf("叙事绑定的动作版本晚于当前快照: %s", action.ID)
+			}
+			actionRevisions[action.ID] = commit.Revision
+		}
+		now := time.Now()
+		chat = ChatMessage{ID: uuid.New(), ConversationID: convID, Role: RoleAssistant, Kind: "text", Content: content, ContentBlocks: blocks, TokenCount: tokenCount, CreatedAt: now, UpdatedAt: now}
+		if operationMetadata, ok := operation.FromContext(ctx); ok {
+			chat.TurnID, chat.AttemptID = &operationMetadata.TurnID, &operationMetadata.AttemptID
+		}
+		if err := r.createChatInTx(ctx, tx, &chat); err != nil {
+			return err
+		}
+		if metadata == nil {
+			metadata = map[string]any{}
+		}
+		revision := binding.Revision
+		status := strings.TrimSpace(binding.ValidationStatus)
+		if status == "" {
+			status = "passed"
+		}
+		detail := binding.ValidationDetail
+		if detail == nil {
+			detail = JSONMap{}
+		}
+		stateHash := binding.StateHash
+		display = DisplayMessage{
+			ID: displayID, ConversationID: convID, ChatMessageID: &chat.ID,
+			Type: "assistant", Markdown: markdown, Metadata: JSONMap(metadata),
+			Reasoning: ReasoningTextBlocks(blocks), CreatedAt: now,
+			CampaignRevision: &revision, CampaignStateHash: &stateHash,
+			ValidationStatus: status, ValidationDetail: detail,
+		}
+		if operationMetadata, ok := operation.FromContext(ctx); ok {
+			display.TurnID, display.AttemptID = &operationMetadata.TurnID, &operationMetadata.AttemptID
+		}
+		if err := tx.Create(&display).Error; err != nil {
+			return err
+		}
+		for _, action := range binding.Actions {
+			if err := tx.Create(&DisplayMessageCampaignAction{
+				DisplayMessageID: display.ID, CampaignID: binding.CampaignID,
+				ActionID: action.ID, Revision: actionRevisions[action.ID],
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, nil, err

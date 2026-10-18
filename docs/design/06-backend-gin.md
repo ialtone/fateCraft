@@ -157,6 +157,8 @@ LinuxDo 流程保存哈希后的 state、PKCE verifier、purpose、绑定用户�
 9. 写工具已提交但最终文本失败时，attempt/turn 标记为 `partial`，已提交事实保留；用户可以使用只提供文本通道的“继续叙事”收尾。
 10. 封口后异步规划 Memory，结束当前 run 并更新对话时间；只有拥有该 run 的 Worker 可以释放兼容性忙碌投影。
 
+Campaign 文本通道额外执行事实门禁：落库前用最新 `narrative_context` 校验境界、资源、库存、位置和强语义主张；矛盾句先做一次确定性删除修复，仍失败则改用后端模板，并在 `display_messages.validation_detail` 记录违规路径。持久化助手消息时重新锁定 Campaign，比较生成时的 `revision` 与 `state_hash`；不匹配返回 `narrative_stale`，旧叙事不写入时间线。`state_hash` 由 `CampaignStateHash` 在动作事务内计算，检查点恢复后重算；叙事、动作关联和状态快照不跨两个独立写事务。
+
 流式模式会把模型步骤中的 reasoning 和正文作为临时预览通过 WebSocket 推送；在同一连接内，相邻同键增量会按时间/大小阈值合并，以避免高频帧挤满出站队列。步骤完整解析后若发现工具调用，服务端发送 `agent.text.reset` 并丢弃伴随文本；只有无工具的完整步骤才保存最终消息。工具参数和未完整结束的临时文本不进入玩家时间线，控制与事实事件不会因队列满而静默丢弃。完整协议见 [19-agent-tool-loop.md](19-agent-tool-loop.md)。
 
 ## 服务端判定工具

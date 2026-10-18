@@ -1,4 +1,4 @@
-import type { Campaign, ChallengeRunReward } from './api'
+import type { Campaign, ChallengeRunReward, NarrativeActionResult } from './api'
 
 export interface RuleSchema {
   type: 'object' | 'array' | 'string' | 'integer' | 'number' | 'boolean'
@@ -65,6 +65,7 @@ export interface ModuleActionResult {
   campaign?: Campaign
   revision: number
   result: Record<string, unknown>
+  narrative?: NarrativeActionResult
   settlement?: {
     run: { summary: string }
     outcome: {

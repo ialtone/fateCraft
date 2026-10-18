@@ -6,6 +6,7 @@ import { useConversationStore } from '@/stores/conversations'
 import { useCampaignStore } from '@/stores/campaign'
 import { useRuntimeStore } from '@/stores/runtime'
 import { presentValue } from '@/lib/presentation'
+import { collectEndingEntries, type EndingEntry } from '@/lib/ending-actions'
 import GuidanceRenderer from '@/components/GuidanceRenderer.vue'
 import type {
   CampaignViewAction,
@@ -31,6 +32,16 @@ const activeSection = ref('')
 const rewardsDisabledReason = computed(() => {
   const value = snapshot.value?.['rewards_disabled_reason']
   return typeof value === 'string' && value ? value : ''
+})
+
+const endingEntries = computed<EndingEntry[]>(() => {
+  const ending = conversations.endingState
+  if (!ending || ending.is_processing) return []
+  return collectEndingEntries(
+    ending.ending_capabilities,
+    ending.abandon_action,
+    new Set((view.value?.actions ?? []).map((action) => action.key)),
+  )
 })
 
 const sections = computed(() =>
@@ -398,6 +409,36 @@ function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
   else void run()
 }
 
+function runEnding(entry: EndingEntry) {
+  const conv = conversations.current
+  const row = campaign.snapshot?.campaign
+  if (
+    !conv ||
+    !row ||
+    conv.status !== 'active' ||
+    conv.is_processing ||
+    actions.pending ||
+    actions.acting
+  )
+    return
+  const input = {
+    request_id: crypto.randomUUID(),
+    branch_epoch: conv.branch_epoch,
+    expected_revision: row.revision,
+    key: entry.capability.key,
+    arguments: entry.arguments,
+  }
+  dialog.warning({
+    title: `确认${entry.label}`,
+    content: `${entry.capability.description}。确认后由后端重新校验并执行；达到结局后不能继续本局。`,
+    positiveText: '确认执行',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      void actions.execute(conv.id, input)
+    },
+  })
+}
+
 function emptyText(section: CampaignViewSection): string {
   return view.value?.empty_states?.[section.key] || '暂无可展示内容'
 }
@@ -536,6 +577,22 @@ function emptyText(section: CampaignViewSection): string {
             {{ emptyText(section) }}
           </div>
         </section>
+        <section v-if="endingEntries.length" class="section ending-section">
+          <h3>结局</h3>
+          <div class="ending-actions">
+            <NButton
+              v-for="entry in endingEntries"
+              :key="`${entry.capability.key}:${entry.label}`"
+              size="small"
+              secondary
+              type="warning"
+              :disabled="actions.acting || campaign.loading || !!actions.pending"
+              @click="runEnding(entry)"
+            >
+              {{ entry.label }}
+            </NButton>
+          </div>
+        </section>
       </template>
     </div>
   </aside>
@@ -607,6 +664,14 @@ function emptyText(section: CampaignViewSection): string {
   color: var(--text-faint);
   font-size: 11px;
   font-weight: 600;
+}
+.ending-section {
+  border-bottom: none;
+}
+.ending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .field-row {
   display: grid;

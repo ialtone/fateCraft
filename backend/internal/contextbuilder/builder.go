@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/llm"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/tokenizer"
@@ -55,10 +56,13 @@ type Input struct {
 	// CampaignProjection 是长期存档的有界可信投影；nil 表示普通单局挑战。
 	CampaignProjection         map[string]any
 	CampaignProjectionPriority []string
-	State                      map[string]any
-	StateFingerprint           string
-	Summary                    *storage.ConversationMemory
-	WorldActivated             []worldbook.Activated
+	// NarrativeContext binds the next assistant narrative to the exact
+	// Campaign revision and committed actions used to build the projection.
+	NarrativeContext *gameplay.TurnNarrativeContext
+	State            map[string]any
+	StateFingerprint string
+	Summary          *storage.ConversationMemory
+	WorldActivated   []worldbook.Activated
 	// RuntimeDirective 是服务端为本次生成注入的必选约束，不写入聊天历史。
 	RuntimeDirective string
 	// OutputContract 是服务端持有的输出协议契约（与解析层严格校验一一对应）。
@@ -523,7 +527,10 @@ func renderCampaignProjection(projection map[string]any) string {
 	if err != nil {
 		b = []byte("{}")
 	}
-	return "<campaign_projection>\n" + string(b) + "\n</campaign_projection>"
+	return "<campaign_projection>\n" + string(b) + "\n</campaign_projection>\n" +
+		"<state_authority>\n" +
+		"narrative_context.actions 是本次已提交动作的唯一事实来源；只把 changes 写成状态变化，preserved 不得写成恢复、清除或提升，current_facts 是当前值。未出现在 change 中的获得、失去、突破、痊愈或寿元变化一律不得编造；details_partial=true 时省略字段只能模糊描述，不能补具体数值。\n" +
+		"</state_authority>"
 }
 
 func renderCharacter(c *storage.Character) string {

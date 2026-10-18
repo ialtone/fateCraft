@@ -183,11 +183,13 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 长期玩法权威存档头，固定 `player_id`、挑战版本、内容哈希及创建时选择的 Character、Persona、Scenario。`revision` 每次成功领域动作加一，`event_sequence` 按实际事件条数递增，两者不能混用。`game_time` 只能单调推进，`random_seed` 不通过普通 API 暴露。
 
+`state_hash` 是当前权威状态的规范化 SHA-256：覆盖存档头中影响叙事的字段以及全部 Campaign 领域表，按键排序并排除 `created_at`、`updated_at` 等非语义时间戳。服务创建存档时写入首个真实哈希，每次成功动作在同一事务内重算；检查点恢复后也必须重算。该哈希与 `revision` 一起用于拒绝过期叙事，不能单独作为并发版本使用。
+
 ### `campaign_events` 与 `campaign_action_commits`
 
 `campaign_events` 是数据库触发器保护的只追加审计记录；`visibility` 区分 player、model、internal，玩家事件接口只返回 player。一次动作可产生多条连续事件。
 
-`campaign_action_commits` 以 `campaign_id + idempotency_key` 为主键，保存动作 key、提交后 revision、事件区间和公开结果。重试先检查该表，再检查 active 状态与 expected revision；同一幂等键换用其他动作会被拒绝。
+`campaign_action_commits` 以 `campaign_id + idempotency_key` 为主键，保存动作 key、提交后 revision、事件区间、公开结果和 `narrative`。`narrative` 是稳定的 `ActionResult`：动作 ID、revision、`state_hash`、`goal_status`、有界 `changes`、`current_facts`、`preserved` 与断言约束；重放直接返回同一结果，不重新执行 Handler。表上另有 `state_hash` 与 `schema_version`，便于一致性审计。
 
 ### Campaign 领域表
 
@@ -226,6 +228,8 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 `agent_steps` 记录每次模型调用的步骤号、模型、协议、输出通道、完整工具快照及哈希、Campaign revision、token 与结束原因。`agent_tool_invocations` 以 `attempt_id + call_id` 唯一，保存参数哈希、`received/rejected/committed/failed/abandoned` 状态和有界公开结果；所属对话已无活动租约的残留 `received` 会由回收器标记为 `abandoned/generation_lost`，不会自动重放。
 
 `chat_messages` 是进入 LLM 上下文的内部消息，使用数据库分配的稳定 `message_seq` 并关联 turn/attempt。`content_blocks` 是唯一的模型内容字段，按原始顺序保存 `text`、`thinking`、`refusal`、`tool_call` 以及 provider-owned `replay`；因此 Chat 与 Responses 的协议差异不会扩散到数据库。`content` 仅作为普通文本索引/投影，工具调用和工具结果仍通过 `kind`、`tool_call_id`、`tool_invocation_id` 关联。同一模型步骤的完整调用批次只保存一条 assistant 声明，行级关联指向首个 invocation；其余调用由同一声明内的 call_id 对应各自 invocation 和 tool_result，不能为每个调用再插入空声明。消息上的 Token 计数只有在 `tokenizer_version` 与当前版本一致、且内容仍是相同的单文本块时才可复用。`display_messages` 是玩家时间线投影；关联 assistant 消息时，接口只从 `content_blocks` 提取安全的可读 `thinking` 文本，忽略 provider 原始加密字段，前端默认折叠并在流式思考期间展开。重新生成与剧情改写事务都会锁定目标、扣除平台级剧情改写额度、递增 branch epoch、失效旧分支 turn/message/Memory 并建立新用户回合；Campaign 事实按目标回合完整检查点恢复，奖励账本不回档；缺少检查点则拒绝。
+
+Campaign 助手叙事在 `display_messages` 上额外保存 `campaign_revision`、`campaign_state_hash`、`validation_status` 和 `validation_detail`。`validation_status` 取值是 `not_applicable`、`passed`、`repaired`、`fallback`、`stale`、`failed`；只有通过校验或修复后的正文会进入玩家时间线。`display_message_campaign_actions` 以 `(display_message_id, action_id)` 关联同回合的全部来源动作，并用 `(campaign_id, action_id)` 复合外键指回 `campaign_action_commits`。该关联表用于追溯“这段叙事由哪些动作产生”，以及查询尚未被正式叙事消费的动作；系统动作回执不参与消费判定。
 
 ### `conversation_states` 与 `state_revisions`
 

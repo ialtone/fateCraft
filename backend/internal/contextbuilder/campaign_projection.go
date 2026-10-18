@@ -11,7 +11,7 @@ import (
 
 var campaignCoreKeys = []string{
 	"id", "status", "current_location_key", "game_time", "revision",
-	"narrative_facts",
+	"state_hash", "narrative_facts", "narrative_context",
 }
 
 type fittedCampaignProjection struct {

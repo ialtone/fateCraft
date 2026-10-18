@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { IncomingSocketEvent } from '@/types'
+import type { DisplayMessage, IncomingSocketEvent } from '@/types'
 import { isKnownSocketEvent } from '@/types'
 import { useChatStore } from './chat'
 import { useStateStore } from './state'
@@ -35,6 +35,8 @@ export const useSocketStore = defineStore('socket', () => {
   // 已收到终止事件的 operation。它迟到的 notice/error 只展示、不再重新锁定，
   // 否则下一回合的新 operation 事件会被当作“其他操作”全部丢弃。
   const finishedOperations = new Set<string>()
+  // Campaign 正文先到达、快照后到达时，先缓冲正文，避免正文与侧栏处于不同版本。
+  const pendingCampaignMessages = new Map<string, DisplayMessage[]>()
 
   function finishActiveOperation() {
     if (activeOperationID) {
@@ -87,7 +89,13 @@ export const useSocketStore = defineStore('socket', () => {
     if (currentConvId.value !== convId) return
 
     if (convRes.status === 'fulfilled' && convRes.value.campaign_id) {
-      campaign.load(convRes.value.campaign_id).catch(() => {})
+      await campaign.load(convRes.value.campaign_id).catch(() => {})
+      const latestBound = [...chat.messages]
+        .reverse()
+        .find((message) => message.type === 'assistant' && message.campaign_revision !== undefined)
+      if (latestBound && !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)) {
+        await campaign.load(convRes.value.campaign_id).catch(() => {})
+      }
     }
 
     // 服务端已不在生成：说明断线窗口里错过了 agent.turn.completed / error，
@@ -166,6 +174,7 @@ export const useSocketStore = defineStore('socket', () => {
     seenAgentEvents.clear()
     lastAgentSequence.clear()
     finishedOperations.clear()
+    pendingCampaignMessages.clear()
     activeAgentAttempt = null
     activeOperationID = null
     queuedCount.value = 0
@@ -175,6 +184,58 @@ export const useSocketStore = defineStore('socket', () => {
       ws.value = null
     }
     connected.value = false
+  }
+
+  function flushCampaignMessages(convId: string) {
+    const queued = pendingCampaignMessages.get(convId)
+    if (!queued?.length) return
+    const campaign = useCampaignStore()
+    const chat = useChatStore()
+    const remaining: DisplayMessage[] = []
+    for (const message of queued) {
+      if (
+        campaign.snapshot?.campaign &&
+        campaign.snapshot.campaign.revision > (message.campaign_revision ?? 0)
+      ) {
+        continue
+      }
+      if (campaign.matches(message.campaign_revision, message.campaign_state_hash)) {
+        chat.applyServerMessage(message)
+      } else {
+        remaining.push(message)
+      }
+    }
+    if (remaining.length) pendingCampaignMessages.set(convId, remaining)
+    else pendingCampaignMessages.delete(convId)
+  }
+
+  function applyCampaignMessage(convId: string, message: DisplayMessage) {
+    const conv = useConversationStore()
+    const campaign = useCampaignStore()
+    const chat = useChatStore()
+    if (
+      message.campaign_revision === undefined ||
+      !conv.current?.campaign_id ||
+      conv.current.id !== convId
+    ) {
+      chat.applyServerMessage(message)
+      return
+    }
+    const current = campaign.snapshot?.campaign
+    if (current && current.revision > message.campaign_revision) {
+      // The narrative belongs to an older revision; showing it beside the new
+      // sidebar would be the exact mismatch this guard exists to prevent.
+      return
+    }
+    if (campaign.matches(message.campaign_revision, message.campaign_state_hash)) {
+      chat.applyServerMessage(message)
+      flushCampaignMessages(convId)
+      return
+    }
+    const queued = pendingCampaignMessages.get(convId) || []
+    queued.push(message)
+    pendingCampaignMessages.set(convId, queued)
+    void campaign.load(conv.current.campaign_id).then(() => flushCampaignMessages(convId)).catch(() => {})
   }
 
   function handleEvent(ev: IncomingSocketEvent) {
@@ -278,13 +339,15 @@ export const useSocketStore = defineStore('socket', () => {
         break
       case 'message_created':
         if (ev.message?.type === 'user') guidance.reset()
-        if (ev.message) chat.applyServerMessage(ev.message)
+        if (ev.message && currentConvId.value)
+          applyCampaignMessage(currentConvId.value, ev.message)
         break
       case 'guidance.updated':
         guidance.set(ev.payload.guidance)
         break
       case 'message_updated':
-        if (ev.message) chat.applyServerMessage(ev.message)
+        if (ev.message && currentConvId.value)
+          applyCampaignMessage(currentConvId.value, ev.message)
         break
       case 'branch.replaced':
         guidance.reset()

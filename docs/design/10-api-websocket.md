@@ -143,9 +143,9 @@ POST /api/campaigns/:id/actions
 POST /api/campaigns/:id/abandon
 ```
 
-创建存档只接收挑战 slug、Persona slug 和可选标题；标题为空时使用玩法名称。后端固定发布版本、内容哈希和资产。`POST /api/campaigns/:id/conversations` 不接收独立标题，只创建一次并继承存档名，重复创建返回 409。领域动作必须提交 `action_id`、稳定 `key`、`expected_revision` 和严格参数对象。成功响应包含更新后的 Campaign、事件和公开结果；同一 `action_id` 重试返回 `replayed=true`，并发旧 revision 返回 409。
+创建存档只接收挑战 slug、Persona slug 和可选标题；标题为空时使用玩法名称。后端固定发布版本、内容哈希和资产。`POST /api/campaigns/:id/conversations` 不接收独立标题，只创建一次并继承存档名，重复创建返回 409。领域动作必须提交 `action_id`、稳定 `key`、`expected_revision` 和严格参数对象。成功响应包含更新后的 Campaign（含 `state_hash`）、事件、公开结果和 `narrative` ActionResult；同一 `action_id` 重试返回 `replayed=true`，并发旧 revision 返回 409。`narrative` 只用于展示和诊断，不能作为下一次请求的可信输入。
 
-`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。所有快照均包含平台保留的 `reward_points`（实际终局积分）、`outcome_rewards`、`stage_rewards`、`stage_reward_points`（实际阶段合计）和 `total_reward_points`（两者之和）。`stage_rewards` 保存阶段 key、名称、配置/实际积分、停发原因与领取时间。改写后的活动存档仍保留已经领取的账号事实；直连实际积分为 0。局内阶段可用性由 `progression` 提供，不能用历史到账代替当前分支前置。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
+`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。`campaign` 头同时返回 `revision` 与 `state_hash`，客户端必须用它们判断消息归属。所有快照均包含平台保留的 `reward_points`（实际终局积分）、`outcome_rewards`、`stage_rewards`、`stage_reward_points`（实际阶段合计）和 `total_reward_points`（两者之和）。`stage_rewards` 保存阶段 key、名称、配置/实际积分、停发原因与领取时间。改写后的活动存档仍保留已经领取的账号事实；直连实际积分为 0。局内阶段可用性由 `progression` 提供，不能用历史到账代替当前分支前置。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
 
 制作交易玩家动作 key 包括 `craft.learn_recipe`、`craft.execute_recipe`、`trade.buy` 和 `trade.sell`。配方动作只接收 `recipe_key`；交易动作接收 `market_key`、`item_kind`、`item_key`、`quality_key` 和 `quantity`，出售独立装备时还必须提交 `item_instance_id` 且数量为 1。服务端计算材料选择、成败、品质、补货和价格，响应 `result` 仅用于展示，不能作为下一次请求的可信输入。
 
@@ -166,6 +166,8 @@ POST   /api/messages/:id/edit-and-regenerate
 消息写操作必须解析消息所属对话，再校验当前用户和 active 状态。不能只按 message ID 更新。内部消息没有通用 PATCH/DELETE API；edit-and-regenerate 必须经过 Runtime capability、奖励消费、分支与完整检查点检查。
 
 `roll_result` 的 `metadata` 可包含版本化判定详情：`details_version`、`roll_key`、`roll_title`、`roll_category`、`roll_outcome` 和 `conditions`。`roll_outcome` 至少包含 `rolled`、`sides`、`success_rate`、`success`、`level`、`breakdown` 与服务端计算的 `success_range`；`conditions` 只返回公开条件投影，客户端必须忽略未知版本和非公开条件。该详情随现有消息 REST 响应及 `message_created` 一起传输，不新增接口或数据库列；旧客户端继续只渲染 `markdown`。
+
+Campaign 助手消息额外返回 `campaign_revision`、`campaign_state_hash`、`validation_status` 和 `validation_detail`。`message_created` / `message_updated` 的接收方必须先与当前 Campaign 快照比较：同 revision/hash 才能显示；消息版本落后时丢弃，版本领先时缓冲并拉取快照。`display_message_campaign_actions` 是服务端内部追溯关系，不单独暴露为公开接口；普通消息这些字段为空或 `not_applicable`。
 
 regenerate、continue 和 edit-and-regenerate 通过后台生成任务执行，最终消息与状态通过 WebSocket 广播。REST `202 Accepted` 只表示 durable run 已接收；前端不得据此乐观删除、截断或认定分支替换成功，必须等待操作终态或重新读取快照。
 

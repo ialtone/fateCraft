@@ -58,6 +58,7 @@ type repository interface {
 	List(context.Context, uuid.UUID, []string) ([]storage.Campaign, error)
 	ListEvents(context.Context, uuid.UUID, []string, int64, int) ([]storage.CampaignEvent, error)
 	RecentEvents(context.Context, uuid.UUID, []string, int) ([]storage.CampaignEvent, error)
+	NarrativeInputs(context.Context, uuid.UUID, int64, int) ([]storage.CampaignActionCommit, error)
 	DomainState(context.Context, uuid.UUID) (*storage.CampaignDomainState, error)
 	CreateConversation(context.Context, uuid.UUID, *storage.Conversation, storage.JSONMap, int) error
 }
@@ -517,8 +518,9 @@ func (s *Service) executeAction(
 	actorID := playerID.String()
 	result, err := committer.CommitAction(ctx, storage.CommitCampaignActionInput{
 		CampaignID: id, PlayerID: playerID, ExpectedRevision: in.ExpectedRevision,
-		IdempotencyKey: in.ActionID, ActionKey: in.Key, ActorType: actorType,
-		ActorID: &actorID, SourceMessageID: sourceMessageID,
+		IdempotencyKey: in.ActionID, ActionKey: in.Key, Label: registered.Definition.Description,
+		ActorType: actorType,
+		ActorID:   &actorID, SourceMessageID: sourceMessageID,
 	}, func(store *storage.CampaignActionStore, row storage.Campaign) (storage.CampaignActionOutcome, error) {
 		var beforeView map[string]any
 		var factPaths []string
@@ -658,7 +660,8 @@ func (s *Service) ContextProjection(ctx context.Context, id uuid.UUID, query ...
 	projection := map[string]any{
 		"id": row.ID.String(), "status": row.Status,
 		"current_location_key": row.CurrentLocationKey, "game_time": row.GameTime,
-		"revision": row.Revision, "recent_events": boundedContextEvents(events, 16*1024),
+		"revision": row.Revision, "state_hash": row.StateHash,
+		"recent_events": boundedContextEvents(events, 16*1024),
 	}
 	referenceQuery := ""
 	if len(query) > 0 {
@@ -681,6 +684,11 @@ func (s *Service) ContextProjection(ctx context.Context, id uuid.UUID, query ...
 		return ProjectionView{}, err
 	}
 	projection["narrative_facts"] = facts
+	narrativeContext, err := s.narrativeContext(ctx, *row)
+	if err != nil {
+		return ProjectionView{}, err
+	}
+	projection["narrative_context"] = narrativeContext
 	capabilities, err := s.actionCapabilities(ctx, *row, domain, contract.Engine, contract.Campaign.ActionAllowlist, "model", referenceQuery)
 	if err != nil {
 		return ProjectionView{}, err
@@ -695,6 +703,35 @@ func (s *Service) ContextProjection(ctx context.Context, id uuid.UUID, query ...
 	priority = append(priority, "recent_events")
 	priority = append(priority, domainView.Priority...)
 	return ProjectionView{Data: projection, Priority: priority}, nil
+}
+
+func (s *Service) narrativeContext(ctx context.Context, row storage.Campaign) (gameplay.TurnNarrativeContext, error) {
+	commits, err := s.repo.NarrativeInputs(ctx, row.ID, row.Revision, 4)
+	if err != nil {
+		return gameplay.TurnNarrativeContext{}, err
+	}
+	actions := make([]gameplay.ActionResult, 0, len(commits))
+	for _, commit := range commits {
+		action, actionErr := storage.CampaignActionResultFromCommit(commit)
+		if actionErr != nil {
+			return gameplay.TurnNarrativeContext{}, actionErr
+		}
+		if action != nil {
+			actions = append(actions, *action)
+		}
+	}
+	revisionFrom := row.Revision
+	if len(actions) > 0 && actions[0].Revision > 0 {
+		revisionFrom = actions[0].Revision - 1
+	}
+	result := gameplay.TurnNarrativeContext{
+		CampaignID: row.ID.String(), RevisionFrom: revisionFrom,
+		RevisionTo: row.Revision, StateHash: row.StateHash, Actions: actions,
+	}
+	if err := result.Validate(); err != nil {
+		return gameplay.TurnNarrativeContext{}, err
+	}
+	return result, nil
 }
 
 func actionAllowsActor(definition ActionDefinition, actorType string) bool {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/operation"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -57,23 +58,34 @@ type CommitCampaignActionInput struct {
 	ExpectedRevision int64
 	IdempotencyKey   string
 	ActionKey        string
+	Label            string
 	ActorType        string
 	ActorID          *string
 	SourceMessageID  *uuid.UUID
 }
 
 type CampaignActionResult struct {
-	Campaign    Campaign        `json:"campaign"`
-	Events      []CampaignEvent `json:"events"`
-	Result      JSONMap         `json:"result"`
-	RollMessage *DisplayMessage `json:"roll_message,omitempty"`
-	Replayed    bool            `json:"replayed"`
+	Campaign    Campaign               `json:"campaign"`
+	Events      []CampaignEvent        `json:"events"`
+	Result      JSONMap                `json:"result"`
+	Narrative   *gameplay.ActionResult `json:"narrative,omitempty"`
+	RollMessage *DisplayMessage        `json:"roll_message,omitempty"`
+	Replayed    bool                   `json:"replayed"`
 }
 
 type CampaignInitializer func(*gorm.DB, *Campaign) error
 
 type CampaignInitialization struct {
 	Initialize CampaignInitializer
+}
+
+// BeforeCreate keeps direct status/seed inserts (including test fixtures) valid
+// before the service computes the real state hash.
+func (c *Campaign) BeforeCreate(_ *gorm.DB) error {
+	if strings.TrimSpace(c.StateHash) == "" {
+		c.StateHash = strings.Repeat("0", 64)
+	}
+	return nil
 }
 
 type GameplayDefinitionProvider interface {
@@ -103,7 +115,15 @@ func (r *CampaignRepository) Create(ctx context.Context, row *Campaign, initiali
 		if len(initialization) != 1 || initialization[0].Initialize == nil {
 			return fmt.Errorf("Campaign 缺少已注册的初始化处理器")
 		}
-		return initialization[0].Initialize(tx, row)
+		if err := initialization[0].Initialize(tx, row); err != nil {
+			return err
+		}
+		stateHash, err := CampaignStateHash(ctx, tx, *row)
+		if err != nil {
+			return err
+		}
+		row.StateHash = stateHash
+		return tx.Model(&Campaign{}).Where("id = ?", row.ID).Update("state_hash", stateHash).Error
 	})
 }
 
@@ -294,6 +314,10 @@ func (r *CampaignRepository) CommitAction(
 			result = CampaignActionResult{
 				Campaign: campaign, Events: events, Result: existing.Result, Replayed: true,
 			}
+			result.Narrative, err = campaignActionResultFromCommit(existing)
+			if err != nil {
+				return err
+			}
 			result.RollMessage, err = loadCampaignRollDisplay(ctx, tx, campaign.ID, in.IdempotencyKey)
 			if err != nil {
 				return err
@@ -371,13 +395,19 @@ func (r *CampaignRepository) CommitAction(
 			campaign.OutcomeKey = *outcome.OutcomeKey
 			campaign.CompletedAtGameTime = &newGameTime
 		}
+		stateHash, err := CampaignStateHash(ctx, tx, campaign)
+		if err != nil {
+			return err
+		}
+		campaign.StateHash = stateHash
 		update := tx.Model(&Campaign{}).
 			Where("id = ? AND revision = ?", campaign.ID, in.ExpectedRevision).
 			Updates(map[string]any{
 				"status": campaign.Status, "outcome_key": campaign.OutcomeKey,
 				"completed_at_game_time": campaign.CompletedAtGameTime, "current_location_key": campaign.CurrentLocationKey,
 				"game_time": campaign.GameTime, "revision": campaign.Revision,
-				"event_sequence": campaign.EventSequence, "updated_at": campaign.UpdatedAt,
+				"event_sequence": campaign.EventSequence, "state_hash": campaign.StateHash,
+				"updated_at": campaign.UpdatedAt,
 			})
 		if update.Error != nil {
 			return update.Error
@@ -402,10 +432,28 @@ func (r *CampaignRepository) CommitAction(
 		if err != nil {
 			return err
 		}
+		narrative, err := gameplay.BuildActionResult(campaignNarrativeFeedback(publicResult), gameplay.ActionResultMeta{
+			ActionID: in.IdempotencyKey, ActionKey: in.ActionKey, ActorType: in.ActorType,
+			Revision: campaign.Revision, StateHash: campaign.StateHash, GameTime: campaign.GameTime,
+			Summary: in.Label,
+		})
+		if err != nil {
+			return err
+		}
+		narrativeRaw, err := json.Marshal(narrative)
+		if err != nil {
+			return err
+		}
+		narrativeDocument := JSONMap{}
+		if err := json.Unmarshal(narrativeRaw, &narrativeDocument); err != nil {
+			return err
+		}
 		commit := CampaignActionCommit{
 			CampaignID: campaign.ID, IdempotencyKey: in.IdempotencyKey, ActionKey: in.ActionKey,
 			Revision: campaign.Revision, FirstSequence: firstSequence,
-			LastSequence: campaign.EventSequence, Result: publicResult, CreatedAt: now,
+			LastSequence: campaign.EventSequence, Result: publicResult,
+			Narrative: narrativeDocument, StateHash: campaign.StateHash,
+			SchemaVersion: int16(narrative.SchemaVersion), CreatedAt: now,
 		}
 		if hasMetadata {
 			commit.TurnID = &metadata.TurnID
@@ -414,13 +462,60 @@ func (r *CampaignRepository) CommitAction(
 		if err := tx.Create(&commit).Error; err != nil {
 			return err
 		}
-		result = CampaignActionResult{Campaign: campaign, Events: events, Result: publicResult, RollMessage: rollMessage}
+		result = CampaignActionResult{Campaign: campaign, Events: events, Result: publicResult, Narrative: &narrative, RollMessage: rollMessage}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
+}
+
+func campaignNarrativeFeedback(result JSONMap) map[string]any {
+	if result == nil {
+		return nil
+	}
+	raw, ok := result["narrative_feedback"]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch value := raw.(type) {
+	case map[string]any:
+		return value
+	case JSONMap:
+		return map[string]any(value)
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var feedback map[string]any
+	if err := json.Unmarshal(encoded, &feedback); err != nil {
+		return nil
+	}
+	return feedback
+}
+
+func campaignActionResultFromCommit(commit *CampaignActionCommit) (*gameplay.ActionResult, error) {
+	if commit == nil || len(commit.Narrative) == 0 {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(commit.Narrative)
+	if err != nil {
+		return nil, err
+	}
+	var result gameplay.ActionResult
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(result.ActionKey) == "" {
+		return nil, nil
+	}
+	return &result, nil
+}
+
+func CampaignActionResultFromCommit(commit CampaignActionCommit) (*gameplay.ActionResult, error) {
+	return campaignActionResultFromCommit(&commit)
 }
 
 func campaignRollIDs(campaignID uuid.UUID, idempotencyKey string) (uuid.UUID, uuid.UUID, uuid.UUID) {

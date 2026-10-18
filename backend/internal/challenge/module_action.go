@@ -15,6 +15,7 @@ import (
 type ModuleActionResult struct {
 	Completion        *storage.CompletionView `json:"completion,omitempty"`
 	Campaign          *storage.Campaign       `json:"campaign,omitempty"`
+	Narrative         *gameplay.ActionResult  `json:"narrative,omitempty"`
 	Revision          int64                   `json:"revision"`
 	Result            map[string]any          `json:"result"`
 	Events            []gameplay.RuntimeEvent `json:"events"`
@@ -48,7 +49,7 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 		if err != nil {
 			return nil, err
 		}
-		return &ModuleActionResult{Revision: committed.Campaign.Revision, Result: committed.Result, Campaign: &committed.Campaign, Completion: storage.CompletionFromResult(committed.Result)}, nil
+		return &ModuleActionResult{Revision: committed.Campaign.Revision, Result: committed.Result, Campaign: &committed.Campaign, Narrative: committed.Narrative, Completion: storage.CompletionFromResult(committed.Result)}, nil
 	}
 	if module.Runtime == nil {
 		return nil, fmt.Errorf("可信模块执行器未安装")
@@ -94,7 +95,14 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 			events = append(events, event)
 		}
 	}
-	result := &ModuleActionResult{Revision: transition.State.Revision, Result: transition.Result, Events: events, NarrativeFeedback: feedback}
+	narrative, err := gameplay.BuildActionResult(feedback, gameplay.ActionResultMeta{
+		ActionID:  fmt.Sprintf("%s:%d", key, transition.State.Revision),
+		ActionKey: key, ActorType: actor, Revision: transition.State.Revision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := &ModuleActionResult{Revision: transition.State.Revision, Result: transition.Result, Events: events, NarrativeFeedback: feedback, Narrative: &narrative}
 	if transition.State.Status != gameplay.RunActive {
 		playerID, err := uuid.Parse(conv.PlayerID)
 		if err != nil {

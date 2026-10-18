@@ -75,6 +75,28 @@ func TestInstalledNarrativeCoreCoversEightGameplayTypes(t *testing.T) {
 			for _, o := range pack.Outcomes {
 				content.Outcomes = append(content.Outcomes, contract.Outcome{Key: o.Key, Category: o.Category, RewardPoints: o.RewardPoints, Enabled: true})
 			}
+			hasSuccess := false
+			for _, outcome := range pack.Outcomes {
+				if outcome.Category == "success" {
+					hasSuccess = true
+					break
+				}
+			}
+			if !hasSuccess {
+				t.Fatal("pack has no success outcome")
+			}
+			endingActions := 0
+			for _, action := range descriptor.Runtime.Actions() {
+				if action.Ending {
+					endingActions++
+				}
+			}
+			if endingActions == 0 {
+				t.Fatal("module has no ending action")
+			}
+			if runtime.Mode == contract.RuntimeModeCampaign && endingActions < 2 {
+				t.Fatal("campaign module has no non-abandon ending action")
+			}
 			run, err := kernel.Initialize(descriptor.Runtime, content, contract.InitialInput{PersonaKey: persona.ID, Random: kernel.NewRandom(0, "narrative-core")})
 			if err != nil {
 				t.Fatal(err)

@@ -392,6 +392,7 @@ type Campaign struct {
 	GameTime            int64      `gorm:"column:game_time;not null" json:"game_time"`
 	Revision            int64      `gorm:"column:revision;not null" json:"revision"`
 	EventSequence       int64      `gorm:"column:event_sequence;not null" json:"event_sequence"`
+	StateHash           string     `gorm:"column:state_hash;not null" json:"state_hash"`
 	RandomSeed          int64      `gorm:"column:random_seed;not null" json:"-"`
 	// LLMRoute 创建时固化，之后不可修改；client 路由对象不产生任何账号收益。
 	LLMRoute  string    `gorm:"column:llm_route;not null" json:"llm_route"`
@@ -478,6 +479,9 @@ type CampaignActionCommit struct {
 	FirstSequence  int64      `gorm:"column:first_sequence;not null" json:"first_sequence"`
 	LastSequence   int64      `gorm:"column:last_sequence;not null" json:"last_sequence"`
 	Result         JSONMap    `gorm:"column:result;type:jsonb;not null" json:"result"`
+	Narrative      JSONMap    `gorm:"column:narrative;type:jsonb;not null" json:"narrative"`
+	StateHash      string     `gorm:"column:state_hash;not null" json:"state_hash"`
+	SchemaVersion  int16      `gorm:"column:schema_version;not null" json:"schema_version"`
 	TurnID         *uuid.UUID `gorm:"column:turn_id;type:uuid" json:"turn_id,omitempty"`
 	AttemptID      *uuid.UUID `gorm:"column:attempt_id;type:uuid" json:"attempt_id,omitempty"`
 	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at"`
@@ -664,12 +668,27 @@ type DisplayMessage struct {
 	Reasoning          string     `gorm:"-" json:"reasoning,omitempty"`
 	TurnID             *uuid.UUID `gorm:"column:turn_id;type:uuid" json:"turn_id,omitempty"`
 	AttemptID          *uuid.UUID `gorm:"column:attempt_id;type:uuid" json:"attempt_id,omitempty"`
+	CampaignRevision   *int64     `gorm:"column:campaign_revision" json:"campaign_revision,omitempty"`
+	CampaignStateHash  *string    `gorm:"column:campaign_state_hash" json:"campaign_state_hash,omitempty"`
+	ValidationStatus   string     `gorm:"column:validation_status;not null" json:"validation_status"`
+	ValidationDetail   JSONMap    `gorm:"column:validation_detail;type:jsonb;not null" json:"validation_detail,omitempty"`
 	InvalidatedAt      *time.Time `gorm:"column:invalidated_at" json:"invalidated_at,omitempty"`
 	InvalidationReason string     `gorm:"column:invalidation_reason" json:"invalidation_reason,omitempty"`
 	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
 }
 
 func (DisplayMessage) TableName() string { return "display_messages" }
+
+type DisplayMessageCampaignAction struct {
+	DisplayMessageID uuid.UUID `gorm:"column:display_message_id;primaryKey;type:uuid" json:"display_message_id"`
+	CampaignID       uuid.UUID `gorm:"column:campaign_id;primaryKey;type:uuid" json:"campaign_id"`
+	ActionID         string    `gorm:"column:action_id;primaryKey" json:"action_id"`
+	Revision         int64     `gorm:"column:revision;not null" json:"revision"`
+}
+
+func (DisplayMessageCampaignAction) TableName() string {
+	return "display_message_campaign_actions"
+}
 
 type ConversationShare struct {
 	ID                   uuid.UUID  `gorm:"column:id;primaryKey;type:uuid" json:"id"`

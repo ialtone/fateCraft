@@ -14,6 +14,7 @@ export type {
   Campaign,
   CampaignEvent,
   CampaignActionResult,
+  NarrativeActionResult,
   CampaignSnapshot,
   CampaignCharacterView,
   CampaignTechniqueView,

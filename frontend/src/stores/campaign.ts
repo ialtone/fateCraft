@@ -38,14 +38,7 @@ export const useCampaignStore = defineStore('campaign', () => {
     try {
       const loaded = await campaignsApi.snapshot(id)
       if (generation !== requestGeneration) return loaded
-      const current = snapshot.value
-      if (
-        !current ||
-        current.campaign.id !== id ||
-        loaded.campaign.revision >= current.campaign.revision
-      ) {
-        snapshot.value = loaded
-      }
+      applySnapshot(loaded)
       return loaded
     } catch (cause: any) {
       if (generation === requestGeneration && requestID === latestRequest) {
@@ -61,11 +54,42 @@ export const useCampaignStore = defineStore('campaign', () => {
   }
 
   function applyCampaign(campaign: Campaign) {
+    if (snapshot.value?.campaign.id !== campaign.id) return
+    if (campaign.revision < snapshot.value.campaign.revision) return
     if (
-      snapshot.value?.campaign.id === campaign.id &&
-      campaign.revision >= snapshot.value.campaign.revision
-    )
-      snapshot.value.campaign = campaign
+      campaign.revision === snapshot.value.campaign.revision &&
+      campaign.state_hash !== snapshot.value.campaign.state_hash
+    ) {
+      error.value = '状态版本冲突，正在重新同步'
+      void load(campaign.id).catch(() => {})
+      return
+    }
+    snapshot.value.campaign = campaign
+  }
+
+  function applySnapshot(next: CampaignSnapshot): boolean {
+    const current = snapshot.value
+    if (!current || current.campaign.id !== next.campaign.id) {
+      snapshot.value = next
+      return true
+    }
+    if (next.campaign.revision < current.campaign.revision) return false
+    if (
+      next.campaign.revision === current.campaign.revision &&
+      next.campaign.state_hash !== current.campaign.state_hash
+    ) {
+      error.value = '状态版本冲突，正在重新同步'
+      return false
+    }
+    snapshot.value = next
+    return true
+  }
+
+  function matches(revision?: number, stateHash?: string): boolean {
+    const current = snapshot.value?.campaign
+    if (!current || revision === undefined) return false
+    if (current.revision !== revision) return false
+    return !stateHash || current.state_hash === stateHash
   }
 
   async function execute(key: string, args: Record<string, unknown>) {
@@ -164,5 +188,18 @@ export const useCampaignStore = defineStore('campaign', () => {
     error.value = null
   }
 
-  return { snapshot, loading, acting, error, pending, load, execute, retry, applyCampaign, reset }
+  return {
+    snapshot,
+    loading,
+    acting,
+    error,
+    pending,
+    load,
+    execute,
+    retry,
+    applyCampaign,
+    applySnapshot,
+    matches,
+    reset,
+  }
 })

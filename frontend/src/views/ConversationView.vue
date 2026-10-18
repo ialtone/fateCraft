@@ -242,6 +242,17 @@ async function open(id: string) {
       : Promise.resolve(null),
   ])
   if (stale(id)) return
+  if (convStore.current?.campaign_id) {
+    const latestBound = [...chat.messages]
+      .reverse()
+      .find((message) => message.type === 'assistant' && message.campaign_revision !== undefined)
+    if (
+      latestBound &&
+      !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)
+    ) {
+      await campaign.load(convStore.current.campaign_id).catch(() => {})
+    }
+  }
   socket.connect(id)
   if (results.some((result) => result.status === 'rejected')) {
     message.warning('部分对话数据加载失败，可稍后刷新页面重试')

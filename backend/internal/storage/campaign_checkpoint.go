@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -144,7 +145,25 @@ func restoreCampaignCheckpoint(tx *gorm.DB, conv Conversation, turnID uuid.UUID)
 	if err := tx.Model(&Campaign{}).Where("id = ?", row.ID).Updates(map[string]any{"revision": revision, "game_time": snapshot.GameTime, "status": snapshot.Status, "outcome_key": snapshot.Outcome, "completed_at_game_time": snapshot.CompletedAt, "current_location_key": snapshot.Location, "updated_at": time.Now()}).Error; err != nil {
 		return err
 	}
-	return tx.Exec("UPDATE campaign_runtime_states SET state = jsonb_set(state, '{revision}', to_jsonb(?::bigint)) WHERE campaign_id = ?", revision, row.ID).Error
+	if err := tx.Exec("UPDATE campaign_runtime_states SET state = jsonb_set(state, '{revision}', to_jsonb(?::bigint)) WHERE campaign_id = ?", revision, row.ID).Error; err != nil {
+		return err
+	}
+	restored := row
+	restored.Revision = revision
+	restored.GameTime = snapshot.GameTime
+	restored.Status = snapshot.Status
+	restored.OutcomeKey = snapshot.Outcome
+	restored.CompletedAtGameTime = snapshot.CompletedAt
+	restored.CurrentLocationKey = snapshot.Location
+	hashContext := tx.Statement.Context
+	if hashContext == nil {
+		hashContext = context.Background()
+	}
+	stateHash, err := CampaignStateHash(hashContext, tx, restored)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&Campaign{}).Where("id = ?", row.ID).Update("state_hash", stateHash).Error
 }
 
 // Domain-specific invariants are checked by the pinned module on projection

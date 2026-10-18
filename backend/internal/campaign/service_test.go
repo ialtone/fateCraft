@@ -57,6 +57,10 @@ func (r *campaignRepoStub) RecentEvents(context.Context, uuid.UUID, []string, in
 	return nil, nil
 }
 
+func (r *campaignRepoStub) NarrativeInputs(context.Context, uuid.UUID, int64, int) ([]storage.CampaignActionCommit, error) {
+	return nil, nil
+}
+
 func (r *campaignRepoStub) ListConversations(context.Context, uuid.UUID) ([]storage.Conversation, error) {
 	if r.conversation == nil {
 		return nil, nil

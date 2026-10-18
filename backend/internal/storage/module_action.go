@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -21,6 +22,8 @@ type ModuleActionCommit struct {
 	ArgumentsHash  string
 	TurnID         uuid.UUID `gorm:"type:uuid"`
 	Result         JSONMap   `gorm:"type:jsonb"`
+	Narrative      JSONMap   `gorm:"type:jsonb"`
+	SchemaVersion  int16
 	CreatedAt      time.Time
 }
 
@@ -85,7 +88,17 @@ func (r *ChallengeRepository) CommitModuleAction(ctx context.Context, in CommitM
 		if err := NewTurnRepo(tx).SealStatus(bound, preparation.Turn.ID, preparation.Attempt.ID, AttemptStatusCompleted, "", ""); err != nil {
 			return err
 		}
-		return tx.Create(&ModuleActionCommit{ID: uuid.New(), ConversationID: conv.ID, BranchEpoch: conv.BranchEpoch, RequestID: in.RequestID, ActionKey: in.ActionKey, ArgumentsHash: in.ArgumentsHash, TurnID: preparation.Turn.ID, Result: result, CreatedAt: now}).Error
+		narrative := JSONMap{}
+		if raw, ok := result["narrative"]; ok && raw != nil {
+			encoded, marshalErr := json.Marshal(raw)
+			if marshalErr != nil {
+				return marshalErr
+			}
+			if unmarshalErr := json.Unmarshal(encoded, &narrative); unmarshalErr != nil {
+				return unmarshalErr
+			}
+		}
+		return tx.Create(&ModuleActionCommit{ID: uuid.New(), ConversationID: conv.ID, BranchEpoch: conv.BranchEpoch, RequestID: in.RequestID, ActionKey: in.ActionKey, ArgumentsHash: in.ArgumentsHash, TurnID: preparation.Turn.ID, Result: result, Narrative: narrative, SchemaVersion: 1, CreatedAt: now}).Error
 	})
 	return result, err
 }

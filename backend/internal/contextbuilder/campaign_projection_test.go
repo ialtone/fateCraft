@@ -71,7 +71,9 @@ func TestFitCampaignProjectionHonorsProviderTopicPriority(t *testing.T) {
 func decodeCampaignProjection(t *testing.T, content string) map[string]any {
 	t.Helper()
 	content = strings.TrimPrefix(content, "<campaign_projection>\n")
-	content = strings.TrimSuffix(content, "\n</campaign_projection>")
+	if end := strings.Index(content, "\n</campaign_projection>"); end >= 0 {
+		content = content[:end]
+	}
 	var decoded map[string]any
 	if err := json.Unmarshal([]byte(content), &decoded); err != nil {
 		t.Fatalf("decode projection: %v", err)

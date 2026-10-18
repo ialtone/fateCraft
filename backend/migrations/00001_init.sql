@@ -254,6 +254,9 @@ CREATE TABLE campaigns (
     game_time BIGINT NOT NULL DEFAULT 0 CHECK (game_time >= 0),
     revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0),
     event_sequence BIGINT NOT NULL DEFAULT 0 CHECK (event_sequence >= 0),
+    -- 权威状态的规范化哈希；服务创建和每次成功动作都会重算，默认值仅保护测试/直接插入。
+    state_hash CHAR(64) NOT NULL DEFAULT repeat('0', 64)
+        CHECK (state_hash ~ '^[0-9a-f]{64}$'),
     random_seed BIGINT NOT NULL CHECK (random_seed >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -810,6 +813,12 @@ CREATE TABLE campaign_action_commits (
     first_sequence BIGINT NOT NULL CHECK (first_sequence > 0),
     last_sequence BIGINT NOT NULL CHECK (last_sequence >= first_sequence),
     result JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(result) = 'object'),
+    -- 动作结果的稳定契约，供模型上下文、事实校验和结局汇总复用。
+    narrative JSONB NOT NULL DEFAULT '{}'::jsonb
+        CHECK (jsonb_typeof(narrative) = 'object' AND octet_length(narrative::text) <= 65536),
+    state_hash CHAR(64) NOT NULL DEFAULT repeat('0', 64)
+        CHECK (state_hash ~ '^[0-9a-f]{64}$'),
+    schema_version SMALLINT NOT NULL DEFAULT 1 CHECK (schema_version > 0),
     turn_id UUID,
     attempt_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -824,6 +833,7 @@ CREATE TABLE campaign_action_commits (
         REFERENCES campaign_events(campaign_id, sequence) ON DELETE RESTRICT
 );
 CREATE INDEX idx_campaign_action_commits_revision ON campaign_action_commits(campaign_id, revision);
+CREATE INDEX idx_campaign_action_commits_hash ON campaign_action_commits(campaign_id, state_hash);
 
 CREATE TABLE display_messages (
     id UUID PRIMARY KEY,
@@ -834,6 +844,15 @@ CREATE TABLE display_messages (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     turn_id UUID,
     attempt_id UUID,
+    -- Campaign 叙事与生成时权威快照的绑定；非 Campaign 消息保持 NULL。
+    campaign_revision BIGINT CHECK (campaign_revision >= 0),
+    campaign_state_hash CHAR(64) CHECK (campaign_state_hash ~ '^[0-9a-f]{64}$'),
+    validation_status VARCHAR(16) NOT NULL DEFAULT 'not_applicable'
+        CHECK (validation_status IN (
+            'not_applicable', 'passed', 'repaired', 'fallback', 'stale', 'failed'
+        )),
+    validation_detail JSONB NOT NULL DEFAULT '{}'::jsonb
+        CHECK (jsonb_typeof(validation_detail) = 'object'),
     invalidated_at TIMESTAMPTZ,
     invalidation_reason VARCHAR(128) NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -844,6 +863,23 @@ CREATE INDEX idx_display_messages_conversation ON display_messages(conversation_
 CREATE INDEX idx_display_messages_active_cursor
     ON display_messages(conversation_id, created_at DESC, id DESC)
     WHERE invalidated_at IS NULL;
+CREATE INDEX idx_display_messages_campaign_binding
+    ON display_messages(conversation_id, campaign_revision, campaign_state_hash);
+
+-- 一条叙事可能由同一回合的多个工具动作产生，因此使用独立关联表而不是单列。
+CREATE TABLE display_message_campaign_actions (
+    display_message_id UUID NOT NULL REFERENCES display_messages(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
+    action_id VARCHAR(160) NOT NULL,
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    PRIMARY KEY (display_message_id, action_id),
+    CONSTRAINT fk_display_message_campaign_action
+        FOREIGN KEY (campaign_id, action_id)
+        REFERENCES campaign_action_commits(campaign_id, idempotency_key)
+        ON DELETE RESTRICT
+);
+CREATE INDEX idx_display_message_campaign_actions_action
+    ON display_message_campaign_actions(campaign_id, action_id);
 
 CREATE TABLE conversation_shares (
     id UUID PRIMARY KEY,
@@ -935,6 +971,9 @@ CREATE TABLE module_action_commits (
     arguments_hash VARCHAR(64) NOT NULL,
     turn_id UUID NOT NULL REFERENCES conversation_turns(id) ON DELETE RESTRICT,
     result JSONB NOT NULL CHECK (jsonb_typeof(result) = 'object'),
+    narrative JSONB NOT NULL DEFAULT '{}'::jsonb
+        CHECK (jsonb_typeof(narrative) = 'object' AND octet_length(narrative::text) <= 65536),
+    schema_version SMALLINT NOT NULL DEFAULT 1 CHECK (schema_version > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (conversation_id, branch_epoch, request_id)
 );
@@ -1417,10 +1456,13 @@ COMMENT ON TABLE campaign_quests IS 'Campaign 普通任务与承诺的状态机�
 COMMENT ON TABLE campaign_encounters IS 'Campaign 当前遭遇的可信状态、参与者、回合和结算快照';
 COMMENT ON TABLE campaign_events IS 'Campaign 只追加领域事件，visibility 控制玩家与模型可见范围';
 COMMENT ON TABLE campaign_action_commits IS 'Campaign 领域动作幂等提交记录，一次动作可对应多条事件';
+COMMENT ON COLUMN campaign_action_commits.narrative IS '动作的稳定 ActionResult 契约，供叙事生成、校验与诊断复用';
+COMMENT ON COLUMN campaign_action_commits.state_hash IS '动作提交后权威 Campaign 状态的规范化哈希';
 COMMENT ON TABLE conversations IS '玩家创建的叙事会话；每个长期 Campaign 最多绑定一个持续对话';
 COMMENT ON TABLE conversation_generation_runs IS '对话可写生成的持久租约与所有权记录，用于并发互斥和进程恢复';
 COMMENT ON TABLE chat_messages IS '进入模型上下文的对话消息，含 Chat/Responses 思考协议回放字段';
 COMMENT ON TABLE display_messages IS '玩家可见的时间线消息及安全展示元数据';
+COMMENT ON TABLE display_message_campaign_actions IS '助手叙事与同回合 Campaign 动作的来源关联，用于审计和未消费动作查询';
 COMMENT ON TABLE conversation_shares IS '对话连续消息范围的不可变公开快照、所有权和撤销状态';
 COMMENT ON TABLE conversation_share_reports IS '公开对话分享的匿名举报记录和来源去重指纹';
 COMMENT ON TABLE conversation_share_audit_events IS '管理员处理公开分享与举报的不可变审计事件';
@@ -1449,6 +1491,7 @@ COMMENT ON COLUMN conversations.challenge_hash IS '创建对话时固定的已�
 COMMENT ON COLUMN conversations.campaign_id IS '为空表示普通单局挑战；非空时唯一绑定一个长期 Campaign';
 COMMENT ON COLUMN campaigns.revision IS '每次成功领域动作递增一次，用于乐观并发控制';
 COMMENT ON COLUMN campaigns.event_sequence IS 'Campaign 事件序列游标，与动作 revision 分开维护';
+COMMENT ON COLUMN campaigns.state_hash IS '当前权威状态的规范化哈希，叙事写入前必须匹配';
 COMMENT ON COLUMN campaigns.random_seed IS '服务端生成的存档随机种子，不通过普通 API 暴露';
 COMMENT ON COLUMN users.password_hash IS '邮箱密码的 bcrypt 摘要，永不保存明文密码';
 COMMENT ON COLUMN users.username IS '站内登录用户名：2-32 个字符，不含 @、空白和控制字符；按 lower(username) 大小写不敏感唯一，与展示昵称 display_name 分开保存';
@@ -1631,7 +1674,8 @@ BEGIN
         'campaign_item_instances','campaign_known_recipes','campaign_market_states','campaign_market_stocks',
         'campaign_location_discoveries','campaign_npcs','campaign_relationships','campaign_faction_standings',
         'campaign_scheduled_events','campaign_region_states','campaign_quests','campaign_encounters',
-        'campaign_events','campaign_action_commits','campaign_stage_rewards','campaign_checkpoints'
+        'campaign_events','campaign_action_commits','campaign_stage_rewards','campaign_checkpoints',
+        'display_message_campaign_actions'
     ] LOOP
         IF table_name IN ('conversation_generation_runs','campaign_events','campaign_action_commits','campaign_stage_rewards','challenge_runs','module_action_commits','roll_history','state_revisions') THEN
             EXECUTE format('CREATE TRIGGER gameplay_write_guard BEFORE INSERT ON %I FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write()',table_name);

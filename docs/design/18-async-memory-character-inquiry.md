@@ -27,6 +27,7 @@ fateCraft 是可导入任意题材玩法的通用平台。长期记忆与角色�
 6. Campaign 事件和动作提交保持只追加。regenerate/rewrite 必须恢复目标完整检查点，并失效旧分支；缺少检查点时拒绝，不能仅删除消息伪造事实回滚。
 7. Character Inquiry 不获取生成锁，不把未完成的流式候选暴露给客户端，不进入主消息、Context Builder 或 Memory 来源。
 8. 问答之外唯一允许的写入是专用 inquiry thread/message 和可选详细 LLM 请求日志。
+9. Memory 和角色问答只读取已提交事件、通过校验的叙事和当前玩家快照；不得写 Campaign 领域表、覆盖 `ActionResult` 或触发动作重放。摘要与当前快照冲突时以快照为准，并记录告警。Memory 的来源应保留事件 ID 与生成 revision，便于定位版本错位。
 
 ## 回合与生成尝试
 

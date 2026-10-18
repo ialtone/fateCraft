@@ -1,6 +1,16 @@
 # 28. 状态与剧情一致性：动作结果、叙事绑定与事实校验
 
-> 状态：规划。本文描述目标架构与实施顺序，除“已落地的前置修复”一节外，均不代表当前代码已经实现。
+> 状态：已实现（核心契约、哈希、绑定、确定性校验、兜底与前端同帧刷新）。模型语义复核和归档指标属于后续增强。
+
+实现落点：
+
+- 契约：`backend/internal/gameplay/contract/action_result.go`
+- 状态哈希：`backend/internal/storage/campaign_state_hash.go`
+- 动作提交与 ActionResult：`backend/internal/storage/campaign.go`
+- 未消费动作与绑定：`backend/internal/storage/campaign_narrative.go`、`storage/repo_message.go`
+- 上下文注入：`backend/internal/campaign/service.go`、`backend/internal/orchestration/assemble.go`
+- 校验与兜底：`backend/internal/orchestration/narrative_validate.go`
+- 前端同帧刷新：`frontend/src/stores/campaign.ts`、`frontend/src/stores/socket.ts`
 
 ## 1. 要解决的问题
 
@@ -32,7 +42,7 @@
 - Runtime 投影与 `field_ownership` 已明确“每个字段只有一个所有权域”。
 - `conversation_generation_runs` 已提供生成租约，可承载 stale 判定。
 
-缺口在于：动作结果还不是面向叙事的稳定契约，叙事记录没有状态版本，生成后没有事实校验，前端也没有把“消息 + 状态投影”作为一个原子快照消费。
+本轮已补齐：动作结果成为持久 `ActionResult`，叙事记录绑定 revision 与 `state_hash`，落库前执行确定性事实校验，前端按 revision/hash 缓冲并对齐消息与侧栏。模型语义复核、失败指标和归档诊断仍属于后续增强。
 
 ## 3. 核心不变量
 
@@ -183,7 +193,7 @@ L0 结构校验 -> L1 硬事实校验 -> L2 语义主张校验
 state_hash CHAR(64) NOT NULL CHECK (state_hash ~ '^[0-9a-f]{64}$'),
 ```
 
-创建 Campaign 时必须由初始化逻辑写入首个哈希；不得使用全零占位值进入正式运行。
+创建 Campaign 时由 `CampaignRepository.Create` 在初始化完成后写入首个真实哈希。数据库默认全零哈希只保护测试夹具和直接插入路径，不能作为正式存档的最终值。
 
 ### 6.2 `campaign_action_commits`
 
@@ -192,6 +202,8 @@ state_hash CHAR(64) NOT NULL CHECK (state_hash ~ '^[0-9a-f]{64}$'),
 ```sql
 state_hash CHAR(64) NOT NULL CHECK (state_hash ~ '^[0-9a-f]{64}$'),
 schema_version SMALLINT NOT NULL DEFAULT 1 CHECK (schema_version > 0),
+narrative JSONB NOT NULL DEFAULT '{}'::jsonb
+    CHECK (jsonb_typeof(narrative) = 'object' AND octet_length(narrative::text) <= 65536),
 ```
 
 并增加索引：
@@ -208,7 +220,6 @@ CREATE INDEX idx_campaign_action_commits_hash
 ```sql
 campaign_revision BIGINT CHECK (campaign_revision >= 0),
 campaign_state_hash CHAR(64) CHECK (campaign_state_hash ~ '^[0-9a-f]{64}$'),
-campaign_action_id VARCHAR(160),
 validation_status VARCHAR(16) NOT NULL DEFAULT 'not_applicable'
     CHECK (validation_status IN (
         'not_applicable', 'passed', 'repaired', 'fallback', 'stale', 'failed'
@@ -224,7 +235,25 @@ validation_detail JSONB NOT NULL DEFAULT '{}'::jsonb
 - `stale` 与 `failed` 消息不得作为正式助手叙事进入上下文；建议直接不写入，或用 `invalidated_at` 标记。
 - 增加 `CREATE INDEX idx_display_messages_campaign_binding ON display_messages(conversation_id, campaign_revision, campaign_state_hash);`
 
-不使用跨表外键绑定 `campaign_action_id`，因为它是动作幂等键而非单列主键；由提交事务和应用层校验保证一致。
+### 6.4 `display_message_campaign_actions`
+
+一个叙事可能绑定同回合的多个动作，使用关联表而不是在消息上放单个 `action_id`：
+
+```sql
+CREATE TABLE display_message_campaign_actions (
+    display_message_id UUID NOT NULL REFERENCES display_messages(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
+    action_id VARCHAR(160) NOT NULL,
+    revision BIGINT NOT NULL CHECK (revision > 0),
+    PRIMARY KEY (display_message_id, action_id),
+    CONSTRAINT fk_display_message_campaign_action
+        FOREIGN KEY (campaign_id, action_id)
+        REFERENCES campaign_action_commits(campaign_id, idempotency_key)
+        ON DELETE RESTRICT
+);
+```
+
+关联表只记录已通过校验的助手叙事；系统动作回执不参与“动作已消费”的判定。未消费动作查询按 `campaign_id + revision <= 当前 revision` 且不存在有效助手绑定来筛选。
 
 ## 7. 生成与提交协议
 
@@ -233,9 +262,9 @@ validation_detail JSONB NOT NULL DEFAULT '{}'::jsonb
 主叙事 Prompt 中注入一段结构化、不可编辑的 `NarrativeContext`，至少包含：
 
 - 当前 `revision`、`state_hash`、游戏时间、地点。
-- 本次 `ActionResult` 全文。
+- 本回合全部未消费 `ActionResult`（最多 4 个）。
 - 当前玩家投影（左侧状态栏使用的同一份数据）。
-- 明确规则：只能复述 `facts` 与 `summary` 支持的结果；`preserved` 中的字段不得写成“已恢复/已清除”；不得创造未出现于 `added` 的获得物。
+- 明确规则：状态变化只能来自 `changes`；`preserved` 中的字段不得写成“已恢复/已清除”；不得创造未出现于 `changes` 的获得物。
 
 历史正文只用于语气与连续性，不得作为数值来源。若历史正文与当前快照冲突，以快照为准。
 
@@ -269,12 +298,12 @@ validation_detail JSONB NOT NULL DEFAULT '{}'::jsonb
 - 否定句、假设句、回忆句不按既成事实处理。
 - 不得把 `preserved` 写成变化，不得把 `blocked` 写成 `completed`。
 
-L2 允许使用一次轻量模型校验，但校验模型只能输出结构化违规列表，不能改写状态，也不能直接生成替代正文。
+当前 L2 采用确定性规则：只识别突破、伤势、气血、寿元、库存等能映射到路径的强主张。后续可增加一次轻量模型校验，但校验模型只能输出结构化违规列表，不能改写状态，也不能直接生成替代正文。
 
 ### 7.3 失败处理
 
-1. 第一次失败：携带违规列表重生成一次，仍使用同一个 `ActionResult` 与 `state_hash`。
-2. 第二次失败：使用后端模板生成简短结果说明，例如“你尝试突破，但灵气不足，境界仍为炼气九层。”，标记 `validation_status='fallback'`。
+1. 第一次失败：删除包含违规主张的句子并重新校验；仍使用同一个 `ActionResult` 与 `state_hash`。成功时标记 `validation_status='repaired'`。
+2. 修复后仍失败：使用后端模板生成简短结果说明，例如“你尝试突破，但灵气不足，境界仍为炼气九层。”，标记 `validation_status='fallback'`。
 3. 任何情况下都不重新执行动作，不修改 `campaign_action_commits.result`。
 4. 校验器自身异常按失败处理，记录 `validation_detail.error`，不得放行未校验正文。
 
@@ -296,14 +325,13 @@ L2 允许使用一次轻量模型校验，但校验模型只能输出结构化�
 
 ### 8.1 原子快照
 
-Campaign 相关 HTTP 与 WebSocket 响应统一携带：
+Campaign 快照接口返回 `campaign`（含 `revision`、`state_hash`）与完整玩家 `view`；WebSocket 的 `message_created` / `message_updated` 在助手消息上携带 `campaign_revision`、`campaign_state_hash`、`validation_status` 与 `validation_detail`。
 
 ```json
 {
-  "campaign_id": "…",
-  "revision": 42,
-  "state_hash": "…",
-  "view": { "…": "左侧状态栏投影" },
+  "campaign_revision": 42,
+  "campaign_state_hash": "…",
+  "validation_status": "passed",
   "message": { "…": "本次叙事" }
 }
 ```
@@ -311,9 +339,11 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 前端以 `revision` 单调递增为准则：
 
 - 同一对话只接受不小于当前 revision 的快照。
-- 收到更高 revision 时，消息与 `view` 一次性替换。
-- 发现 revision 跳号时，丢弃增量并重新拉取完整快照。
-- 不允许“消息已追加、侧栏稍后刷新”的两段式更新。
+- 收到消息时先与当前快照比较：同 revision/hash 才写入 `chat`。
+- 消息版本高于当前快照时先缓冲，拉取快照后在同一个同步块应用侧栏和消息。
+- 消息版本低于当前快照时丢弃，避免旧正文配新侧栏。
+- revision 跳号或同 revision 不同 hash 时丢弃增量并重新拉取完整快照。
+- `ending_capabilities` 中未被 Presentation 渲染的可用终局动作进入通用“结局”区；带 `plans` 的终结任务按方案展开，`abandon_action` 不重复显示。
 
 ### 8.2 展示来源
 
@@ -327,7 +357,7 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 自动归档作为旁路服务：
 
 - 输入只包括已提交事件、通过校验的叙事和绑定快照。
-- 输出 `MemorySummary` 必须带 `source_event_ids` 与 `campaign_revision`。
+- 输出 Memory 保留来源回合/事件 evidence；额外写入 `campaign_revision` 属于后续增强，不改变只读边界。
 - 可以报告“摘要与快照不一致”，但不能写 Campaign 状态、覆盖动作结果或触发动作重放。
 - 超时、失败、模型不可用都不阻塞主回合，也不改变存档。
 - 角色问答引用记忆时，必须同时读取当前快照；冲突时明确以当前快照为准。
@@ -351,7 +381,7 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 
 ## 11. 分阶段实施
 
-### P0：契约与绑定
+### P0：契约与绑定（已完成）
 
 - 定义 `ActionResult`、`FactChange`、`goal_status` 的 Go 类型与 JSON Schema。
 - 在 `00001_init.sql` 增加 `state_hash`、动作结果版本与 `display_messages` 绑定列。
@@ -360,23 +390,23 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 
 验收：同一动作重放不改变状态；旧 revision 的叙事无法写入；任一 Campaign 消息都能追溯到动作与快照。
 
-### P1：L0/L1 校验与兜底
+### P1：L0/L1 校验与兜底（已完成）
 
 - 实现结构校验与硬事实验证。
-- 失败重生成一次；仍失败写模板兜底。
+- 失败先做一次确定性删除修复；仍失败写模板兜底。
 - 记录 `validation_detail`，管理端可查询。
 
 验收：境界、资源、库存、位置、任务状态的错误主张不会进入正式时间线。
 
-### P2：L2 与前端原子刷新
+### P2：L2 与前端原子刷新（已完成确定性部分）
 
-- 实现语义主张校验与否定/假设句处理。
+- 实现可映射语义主张校验与否定/假设句处理。
 - HTTP/WS 返回统一快照；前端按 revision 单调应用。
 - 增加 stale 提示与自动重拉。
 
 验收：突破失败、伤势未愈、关系仅 +1 等场景中，正文与侧栏完全一致。
 
-### P3：归档、记忆与观测
+### P3：归档、记忆与观测（后续增强）
 
 - 归档与 Memory 绑定来源事件和 revision，保持只读。
 - 增加校验失败、兜底、stale、重生成指标。
@@ -393,6 +423,8 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 - L1 数值、枚举、集合比较；否定句与假设句不误判。
 - 隐藏事实不会进入玩家可见校验上下文。
 
+对应文件：`backend/internal/storage/campaign_state_hash_test.go`、`backend/internal/gameplay/contract/action_result_test.go`、`backend/internal/orchestration/narrative_validate_test.go`。
+
 集成测试：
 
 - 动作提交后 revision 与 hash 同步递增；重放返回同一结果。
@@ -400,6 +432,8 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 - 校验失败重生成一次；动作没有第二次结算。
 - 两次失败写入模板兜底并标记 `fallback`。
 - 消息与快照在同一响应中返回，前端拒绝旧 revision。
+
+对应文件：`backend/internal/storage/campaign_narrative_postgres_test.go`，以及现有 `campaign_postgres_integration_test.go`。
 
 场景测试：
 
@@ -409,7 +443,7 @@ Campaign 相关 HTTP 与 WebSocket 响应统一携带：
 - 装备多槽功法时侧栏槽位与后端一致。
 - 成功、失败、中止结局弹窗均包含本世经历。
 
-## 13. 观测与告警
+## 13. 观测与告警（后续增强）
 
 建议指标：
 

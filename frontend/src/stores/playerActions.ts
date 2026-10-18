@@ -67,15 +67,25 @@ export const usePlayerActionStore = defineStore('playerActions', () => {
       clear()
       if (!scope.isCurrent(token)) return result
       if (result.completion) conversations.consumeCompletion(result.completion)
-      if (result.campaign) useCampaignStore().applyCampaign(result.campaign)
+      const campaign = useCampaignStore()
+      const chat = useChatStore()
+      if (result.campaign) campaign.applyCampaign(result.campaign)
       const refreshed = await Promise.allSettled([
         useStateStore().load(id),
-        useChatStore().load(id),
+        chat.load(id),
         conversations.load(id),
         conversations.loadEndingState(id),
         useRewardStore().load(),
-        ...(result.campaign ? [useCampaignStore().load(result.campaign.id)] : []),
+        ...(result.campaign ? [campaign.load(result.campaign.id)] : []),
       ])
+      if (result.campaign && scope.isCurrent(token)) {
+        const latestBound = [...chat.messages]
+          .reverse()
+          .find((message) => message.type === 'assistant' && message.campaign_revision !== undefined)
+        if (latestBound && !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)) {
+          await campaign.load(result.campaign.id).catch(() => {})
+        }
+      }
       if (scope.isCurrent(token) && refreshed.some((r) => r.status === 'rejected'))
         error.value = '操作已完成，部分展示未刷新，请刷新查看。'
       return result

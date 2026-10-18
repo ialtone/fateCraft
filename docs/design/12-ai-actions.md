@@ -85,6 +85,12 @@ Campaign Projection Provider 根据行锁外的当前快照产生动态 `ActionC
 
 revision 过期、参数越界、目标失效或资源不足时，领域写入整体回滚，工具返回公开 `action_rejected`。完整能力架构见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
 
+### ActionResult 与叙事反馈
+
+Campaign 动作提交时把事务内已有的 `narrative_feedback` 提升为持久 `ActionResult`，与 `campaign_action_commits` 同事务保存。字段包括 `schema_version`、`action_id`、`action_key`、`actor_type`、`revision`、`state_hash`、`game_time`、`goal_status`、`summary`、`changes`、`current_facts`、`preserved` 和 `constraints`。`goal_status` 只由领域结果决定：`success=true` 为 `completed`，`success=false` 为 `failed`，有变化但无成功字段为 `progressed`，无变化为 `unchanged`。`details_partial=true` 表示反馈被有界省略，未知不能解释为空或零。
+
+`changes` 是唯一允许写成状态变化的依据；`preserved` 明确本次未改变的关键字段（境界、伤势、气血、寿元等），防止“气血回满”推导出“伤势痊愈”。单局模块沿用同一 `NarrativeFeedback` 形状，但只写 `module_action_commits.narrative`，不参与 Campaign 的 `state_hash` 绑定。重放返回原始 ActionResult，不重新计算失败判定、随机数或领域事实。
+
 ## 挑战完成
 
 模型只能通过 `fc_complete_challenge` 提交 `outcome_key` 和 `summary`。标题、category、tone、验证器、奖励 key、数量、倍率、余额、run ID 和结算时间均来自后端。

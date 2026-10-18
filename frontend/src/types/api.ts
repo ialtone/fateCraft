@@ -77,6 +77,7 @@ export interface Campaign {
   current_location_key: string
   game_time: number
   revision: number
+  state_hash: string
   event_sequence: number
   created_at: string
   updated_at: string
@@ -97,10 +98,34 @@ export interface CampaignEvent {
   created_at: string
 }
 
+export interface NarrativeActionResult {
+  schema_version: number
+  action_id: string
+  action_key: string
+  actor_type: string
+  revision: number
+  state_hash?: string
+  game_time: number
+  goal_status: 'unchanged' | 'progressed' | 'completed' | 'failed' | 'blocked'
+  summary: string
+  changes: Array<{
+    path: string
+    label?: string
+    kind?: string
+    before: unknown
+    after: unknown
+  }>
+  current_facts: Record<string, unknown>
+  preserved?: Array<{ path: string; label?: string; reason?: string }>
+  constraints?: { allowed?: string[]; forbidden?: string[] }
+  details_partial?: boolean
+}
+
 export interface CampaignActionResult {
   campaign: Campaign
   events: CampaignEvent[]
   result: Record<string, unknown>
+  narrative?: NarrativeActionResult
   roll_message?: DisplayMessage
   replayed: boolean
 }
@@ -482,6 +507,11 @@ export interface DisplayMessage {
   metadata: Record<string, any>
   /** 模型可读思考内容（不包含协议原始 reasoning item） */
   reasoning?: string
+  /** Campaign 叙事绑定的状态版本；非 Campaign 消息为空 */
+  campaign_revision?: number
+  campaign_state_hash?: string
+  validation_status?: 'not_applicable' | 'passed' | 'repaired' | 'fallback' | 'stale' | 'failed'
+  validation_detail?: Record<string, unknown>
   /** 创建时间 */
   created_at: string
 }

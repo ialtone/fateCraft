@@ -82,7 +82,9 @@ Context Builder 还会在构建日志的 `segments` 中追加 `history_compactio
 
 ## State 与 Campaign Projection
 
-`<current_state>` 和 `<campaign_projection>` 是 required 段，但 Campaign Projection 不是不可拆的大 JSON。`id`、`status`、`current_location_key`、`game_time` 和 `revision` 是平台最小核心；玩法模块返回的顶层主题在此核心上分层装入。内部 `action_capabilities` 构建原生工具和只读限制说明，不作为执行目录进入该正文。
+`<current_state>` 和 `<campaign_projection>` 是 required 段，但 Campaign Projection 不是不可拆的大 JSON。`id`、`status`、`current_location_key`、`game_time`、`revision`、`state_hash`、`narrative_facts` 和 `narrative_context` 是平台最小核心；玩法模块返回的顶层主题在此核心上分层装入。内部 `action_capabilities` 构建原生工具和只读限制说明，不作为执行目录进入该正文。
+
+`narrative_context` 绑定本轮生成使用的 Campaign 快照：`revision_from`、`revision_to`、`state_hash` 和最多 4 个尚未被正式叙事消费的 `ActionResult`。每个 ActionResult 包含动作 ID、`goal_status`、有界 `changes`、`current_facts`、`preserved` 和断言约束。历史正文只提供语气与连续性；状态变化只能来自 `changes`，`preserved` 中的字段不得写成恢复、清除或提升，`details_partial=true` 时省略字段不能补具体数值。该段与 `state_hash` 一起属于 required 核心，压缩时不得丢弃。
 
 模块声明的 `narrative_facts` 单独提取为 required `<narrative_facts>` 消息，放在历史之后并携带当前 revision/status 等头部；从较大的 Projection 删除同名核心，避免重复传输。每个模块最多声明 20 条投影路径，事实对象最多 4 KiB，动作反馈另可补充运行头部。值为零、false 与缺失严格区分，缺失表示 `unavailable`。最小事实放不下返回 `ErrRequiredOverflow`，不能为了保留长背包或旧正文而裁掉当前境界等核心。
 

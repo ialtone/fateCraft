@@ -24,7 +24,7 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 18. `10-api-websocket.md`：HTTP 和 WebSocket 契约。
 19. `11-roadmap.md`：已知边界和后续工作。
 20. `future-gameplay-directions.md`：未来玩法方向、扩展规则与候选方向（长期备忘）。
-21. `28-state-narrative-consistency.md`：动作结果契约、叙事绑定、分层事实校验与前后端快照一致性（规划）。
+21. `28-state-narrative-consistency.md`：动作结果契约、叙事绑定、分层事实校验与前后端快照一致性。
 
 `02-sillytavern-reference.md` 记录早期参考来源，不代表 fateCraft 对普通用户开放相同的模板管理能力。`12-ai-actions-examples.md` 是协议示例集，规则仍以正式专题和已发布挑战版本为准。
 
@@ -103,4 +103,4 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 
 玩法包交换、管理员版本控制、旧局继续、运行暂停和奖励实际来源：[27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。该专题包含 JSON/ZIP 完整示例、结构 Schema、资源上限与部署检查。
 
-状态与剧情一致性专题：[28 动作结果、叙事绑定与事实校验](28-state-narrative-consistency.md)。该专题定义 `ActionResult`、`state_hash`、叙事 revision 绑定、L0/L1/L2 校验、stale 生成处理和前端原子快照，当前为规划，落地前不得按已实现能力使用。
+状态与剧情一致性专题：[28 动作结果、叙事绑定与事实校验](28-state-narrative-consistency.md)。该专题定义已实现的 `ActionResult`、`state_hash`、叙事 revision 绑定、确定性 L0/L1 校验、修复/兜底、stale 生成处理和前端原子快照；模型语义复核与归档指标仍属于后续增强。

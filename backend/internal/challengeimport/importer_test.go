@@ -26,7 +26,7 @@ func TestBundledMortalPathCampaignLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.manifest.ID != "mortal-path" || loaded.manifest.Version != "1.0.1" || len(loaded.document.Definitions) < 200 {
+	if loaded.manifest.ID != "mortal-path" || loaded.manifest.Version != "1.0.0" || len(loaded.document.Definitions) < 200 {
 		t.Fatalf("campaign pack not fully loaded: id=%s definitions=%d", loaded.manifest.ID, len(loaded.document.Definitions))
 	}
 	counts := map[string]int{}

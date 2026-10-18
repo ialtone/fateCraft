@@ -147,6 +147,19 @@ func (g *Generator) assembleInputWithCache(
 		}
 		in.CampaignProjection = projection.Data
 		in.CampaignProjectionPriority = projection.Priority
+		if raw, ok := projection.Data["narrative_context"]; ok && raw != nil {
+			encoded, encodeErr := json.Marshal(raw)
+			if encodeErr != nil {
+				return in, nil, nil, encodeErr
+			}
+			var narrative gameplay.TurnNarrativeContext
+			if decodeErr := json.Unmarshal(encoded, &narrative); decodeErr != nil {
+				return in, nil, nil, decodeErr
+			}
+			if narrative.CampaignID != "" {
+				in.NarrativeContext = &narrative
+			}
+		}
 	} else if len(contract.Actions.Domain) > 0 {
 		content, err := g.challenge.ModuleContentForVersion(ctx, conv.ChallengeVersionID, conv.ChallengeHash)
 		if err != nil {

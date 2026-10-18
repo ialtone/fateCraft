@@ -381,11 +381,58 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 				return
 			}
+			validationStatus := "not_applicable"
+			validationDetail := storage.JSONMap{}
+			if in.NarrativeContext != nil {
+				validationStatus, validationDetail = ValidateNarrative(text, in.NarrativeContext)
+				if validationStatus != "passed" {
+					validationDetail["original_status"] = validationStatus
+					originalDetail := validationDetail
+					if repaired := RepairNarrative(text, originalDetail); repaired != "" {
+						if repairedStatus, repairedDetail := ValidateNarrative(repaired, in.NarrativeContext); repairedStatus == "passed" {
+							text = repaired
+							validationStatus = "repaired"
+							validationDetail = repairedDetail
+							validationDetail["original_status"] = originalDetail["original_status"]
+							validationDetail["original_violations"] = originalDetail["violations"]
+						}
+					}
+					if validationStatus == "failed" {
+						text = renderNarrativeFallback(in.NarrativeContext)
+						validationStatus = "fallback"
+						validationDetail["fallback"] = true
+					}
+					if settings.StreamEnabled || validationStatus != "passed" {
+						runtimeEvents.send(realtime.TypeAgentTextReset, stepNo, map[string]any{
+							"message_id": displayID.String(),
+						})
+						runtimeEvents.send(realtime.TypeAgentTextDelta, stepNo, map[string]any{
+							"message_id": displayID.String(), "delta": text, "preview": true,
+						})
+					}
+					contentBlocks = nil
+				}
+			}
 			tokens := g.counter.Count(text)
 			persistStartedAt := time.Now()
-			_, display, err := g.chatSvc.AppendAssistantWithIDAndBlocks(attemptCtx, convID, displayID, text, text, meta, &tokens, contentBlocks)
+			var display *storage.DisplayMessage
+			var err error
+			if in.NarrativeContext != nil {
+				if binding := narrativeBindingFromContext(*in.NarrativeContext, validationStatus, validationDetail); binding != nil {
+					_, display, err = g.chatSvc.AppendAssistantWithNarrativeBinding(attemptCtx, convID, displayID, text, text, meta, &tokens, contentBlocks, *binding)
+				} else {
+					_, display, err = g.chatSvc.AppendAssistantWithIDAndBlocks(attemptCtx, convID, displayID, text, text, meta, &tokens, contentBlocks)
+				}
+			} else {
+				_, display, err = g.chatSvc.AppendAssistantWithIDAndBlocks(attemptCtx, convID, displayID, text, text, meta, &tokens, contentBlocks)
+			}
 			turnPersistMS += time.Since(persistStartedAt).Milliseconds()
 			if err != nil {
+				if errors.Is(err, storage.ErrNarrativeStale) {
+					markGenerationFailure(ctx, "finalize", "narrative_stale")
+					g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, errors.New("状态已更新，本轮叙事未保存；请基于最新状态继续"), emit)
+					return
+				}
 				markGenerationFailure(ctx, "finalize", "assistant_persist_failed")
 				g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, mutatingCount > 0, err, emit)
 				return

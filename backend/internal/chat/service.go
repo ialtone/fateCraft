@@ -33,6 +33,7 @@ type messageRepo interface {
 type atomicMessageRepo interface {
 	CreateUserWithDisplay(context.Context, uuid.UUID, string, *int) (*storage.ChatMessage, *storage.DisplayMessage, error)
 	CreateAssistantWithDisplay(context.Context, uuid.UUID, uuid.UUID, string, string, map[string]any, *int, storage.JSONDoc) (*storage.ChatMessage, *storage.DisplayMessage, error)
+	CreateAssistantWithNarrativeBinding(context.Context, uuid.UUID, uuid.UUID, string, string, map[string]any, *int, storage.JSONDoc, storage.NarrativeBinding) (*storage.ChatMessage, *storage.DisplayMessage, error)
 	CreateSystemWithDisplay(context.Context, uuid.UUID, string, string, string, map[string]any) (*storage.ChatMessage, *storage.DisplayMessage, error)
 }
 
@@ -136,6 +137,23 @@ func (s *Service) AppendAssistantWithIDAndBlocks(ctx context.Context, convID, di
 		return nil, nil, err
 	}
 	return chatMsg, disp, nil
+}
+
+// AppendAssistantWithNarrativeBinding is the Campaign path: the display row is
+// written only if the Campaign revision/hash still matches the generation
+// snapshot, and every source action is linked in the same transaction.
+func (s *Service) AppendAssistantWithNarrativeBinding(ctx context.Context, convID, displayID uuid.UUID, content string, markdown string, metadata map[string]any, tokenCount *int, blocks storage.JSONDoc, binding storage.NarrativeBinding) (*storage.ChatMessage, *storage.DisplayMessage, error) {
+	if repo, ok := s.repo.(interface {
+		CreateAssistantWithNarrativeBinding(context.Context, uuid.UUID, uuid.UUID, string, string, map[string]any, *int, storage.JSONDoc, storage.NarrativeBinding) (*storage.ChatMessage, *storage.DisplayMessage, error)
+	}); ok {
+		if len(blocks) == 0 || string(blocks) == "null" {
+			blocks = textBlocks(content)
+		}
+		return repo.CreateAssistantWithNarrativeBinding(ctx, convID, displayID, content, markdown, metadata, tokenCount, blocks, binding)
+	}
+	// Small test repositories predate narrative binding; keep them usable while
+	// production always uses the atomic path above.
+	return s.AppendAssistantWithIDAndBlocks(ctx, convID, displayID, content, markdown, metadata, tokenCount, blocks)
 }
 
 func textBlocks(content string) storage.JSONDoc {

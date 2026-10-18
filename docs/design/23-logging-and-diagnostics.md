@@ -50,6 +50,8 @@ Nginx access log 使用安全路径和后端 `X-Request-ID`；未到达后端的
 
 慢阈值只改变日志级别，不改变业务超时。
 
+Campaign 叙事校验的诊断写入 `display_messages.validation_detail`，包含 layer、违规 code/path/claim、期望值与实际值、原始校验状态和修复/兜底标记。日志只记录 `campaign_id`、`action_id`、`revision`、`state_hash` 前缀和违规 path，不记录完整领域状态、隐藏事实或整段正文；模型正文仍遵循详细正文采集开关。
+
 ## 模型摘要和正文预算
 
 摘要包含模型、协议、用途、设置来源/修订、开始时间、总耗时、HTTP 状态、网络尝试次数、成功状态、稳定错误码，以及供应商提供时的 token 使用量。未知 usage 保持空值。传输成功与结构化交付成功分别保存；非结构化请求的结构状态在界面显示“不适用”。

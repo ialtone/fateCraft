@@ -147,6 +147,10 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 
 保存当前长期存档的权威玩家快照。玩家动作使用客户端生成的唯一 `action_id` 和快照 revision 提交；执行期间禁止重复点击，成功后重新读取完整快照，revision 冲突或业务拒绝时同样刷新后再展示错误。`campaign_updated` 只用于及时更新 Campaign 头并触发重新读取，不能作为可靠库存账本。
 
+快照按 `campaign.revision` 单调应用，同一 revision 但 `state_hash` 不同视为冲突并强制重拉。收到带 `campaign_revision` / `campaign_state_hash` 的 `message_created` 或 `message_updated` 时，`socket` 先与当前快照比较：一致才把消息写入 `chat`；正文版本更新时先缓冲消息、拉取快照后再原子应用；正文版本落后于当前快照时直接丢弃。动作完成后的刷新若发现最新叙事与快照不匹配，也会再拉一次快照。这样左侧状态栏与正文不会因为两个独立请求的到达顺序而长期错位。
+
+`ending_capabilities` 是服务端提供的终局目录。Campaign 侧栏会把尚未被 `campaign_view.actions` 渲染的可用终局动作显示在通用“结局”区，包含带 `plans` 的多方案结局；`abandon_action` 已由顶部“结束”按钮覆盖，不重复显示。这样即使某个玩法包只配置状态字段、不配置动作按钮，玩家仍能触发只有 player 可执行的 `finish`、`conclude` 或终结任务。
+
 ### `inquiry`
 
 保存当前对话的专用角色问答 thread、消息、加载/发送状态和 stale 提示。切换对话时必须清空；询问失败不能改变 `chat`、`socket`、`state` 或 `campaign` Store。

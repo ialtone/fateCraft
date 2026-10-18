@@ -157,6 +157,8 @@ RegisteredAction
 6. 领域事实、事件、时间、位置、Campaign 状态、revision、Campaign 幂等记录、Agent invocation、assistant tool-call 消息、tool-result 消息和 attempt 写工具计数原子提交。
 7. 数据库提交后才广播 Campaign、状态、判定或结算事件；下一模型步骤重新读取最新 Projection 和 revision，并构建新的工具快照。
 
+同一步骤把动作反馈写入 `campaign_action_commits.narrative`，并在提交后计算 `campaigns.state_hash`。`ActionResult` 是模型叙事与事实校验的唯一状态输入；它不替代公开 `result`，也不允许前端或模型用它反向写领域表。一个回合的多个动作按提交顺序进入 `TurnNarrativeContext`，助手叙事通过 `display_message_campaign_actions` 关联全部来源动作。系统动作回执不是叙事，不能被误判为“动作已被消费”。
+
 `GameplayDefinition` 属于固定 ChallengeVersion，可以通过 `challenge.Service` 的版本编译缓存按 `kind:key` 读取。Campaign Repository 在使用缓存前传入并校验存档固定的 `challenge_hash`，为本次 DomainState 或 ActionStore 复制外层索引及嵌套 JSON，调用方不能修改共享缓存。角色、功法实例、库存、市场、NPC、任务、事件、revision 和其他 Campaign 事实仍必须从当前事务连接读取；定义缓存不能替代 Campaign 行锁或事务内能力复核。
 
 Handler 返回 rejected/failed 时，内部哨兵回滚该工具事务内的所有领域写入，再单独保存 invocation 与有界公开 tool result。此前已经 committed 的其他工具不回滚；如果后续模型步骤失败，attempt 为 `partial`。不存在内部模型重试或把失败调用当成成功事实。
