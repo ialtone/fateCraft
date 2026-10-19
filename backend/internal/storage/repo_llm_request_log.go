@@ -2,6 +2,10 @@ package storage
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -26,7 +30,65 @@ func (r *LLMRequestLogRepo) Create(ctx context.Context, row *LLMRequestLog) erro
 	if len(row.RequestBody) == 0 {
 		row.RequestBody = JSONDoc(`{}`)
 	}
-	return r.db.WithContext(ctx).Create(row).Error
+	// Diagnostic writes must never wait for another parent row while holding
+	// earlier FK locks: business transactions may need those rows in reverse
+	// order. Prelock every FK parent without waiting, rolling back all acquired
+	// locks before a bounded retry. Keep the real FK constraints on the insert.
+	for attempt := 0; ; attempt++ {
+		err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := lockLLMLogParents(tx, row); err != nil {
+				return err
+			}
+			return tx.Create(row).Error
+		})
+		if err == nil || attempt == 2 || !retryableDiagnosticLock(err) {
+			return err
+		}
+		// The failed transaction has rolled back; do not retain parent locks or
+		// a connection while waiting. The async writer also bounds total time.
+		timer := time.NewTimer(time.Duration(20<<attempt) * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func lockLLMLogParents(tx *gorm.DB, row *LLMRequestLog) error {
+	parents := []struct {
+		table string
+		id    *uuid.UUID
+	}{
+		{"conversations", row.ConversationID},
+		{"generation_attempts", row.AttemptID},
+		{"memory_jobs", row.MemoryJobID},
+		{"conversation_memories", row.MemoryID},
+	}
+	for _, parent := range parents {
+		if parent.id == nil {
+			continue
+		}
+		var id uuid.UUID
+		// Table names are fixed above, never supplied by a request.
+		err := tx.Raw("SELECT id FROM "+parent.table+" WHERE id = ? FOR KEY SHARE NOWAIT", *parent.id).Row().Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("diagnostic parent %s: %w", parent.table, gorm.ErrForeignKeyViolated)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func retryableDiagnosticLock(err error) bool {
+	var state interface{ SQLState() string }
+	if !errors.As(err, &state) {
+		return false
+	}
+	return state.SQLState() == "55P03" || state.SQLState() == "40P01"
 }
 
 func (r *LLMRequestLogRepo) List(ctx context.Context, filter LogQuery) ([]LLMRequestLog, string, bool, error) {

@@ -184,3 +184,15 @@ go -C backend test -race ./internal/logging ./internal/llm ./internal/realtime .
 活动发布器记录快照读取失败并关闭受影响对话订阅；数据库 LISTEN 缺口关闭所有本地订阅以恢复。健康空闲零周期读取与 CPU 降幅是不同指标：功能测试已覆盖前者，后者仍需在 2 核/2.5GiB Beta 环境实测 SQL、CPU、P95、触发器和锁成本。尚未新增完整的按恢复原因聚合指标；测试记录不能替代线上容量数据。
 
 NOTIFY 无 durable replay，健康空闲且没有后续触发的静默末条业务事件丢失没有确定恢复时限。普通 ping/pong 仅检测连接，已知任务 watchdog 只核验任务。详见重构验收记录。
+
+### 模型诊断写入与业务行锁
+
+异步日志有独立事务，但 `llm_request_logs` 的外键仍会对 conversation、attempt、memory job、memory 父行取得 KEY SHARE 锁。异步不等于锁隔离；若业务同时用 FOR UPDATE 锁定多个父行，交叉取得锁可能造成死锁，且被 PostgreSQL 中止的可能是业务事务。
+
+生成写围栏 `AssertGenerationActive` 先单独对 conversation 取得 FOR NO KEY UPDATE 锁，再校验并锁定 run、attempt、turn，避免联合查询执行计划改变“先对话”的顺序。FOR NO KEY UPDATE 与外键 KEY SHARE 兼容，仍阻止业务更新、删除与生命周期变更。围栏和业务写入必须在同一事务内；等待锁后重新检查状态、分支和生成归属，不能依靠锁前读到的状态授权。
+
+诊断插入在同一短事务内，对所有非空外键父行逐个执行 FOR KEY SHARE NOWAIT，再实际插入，保留数据库外键约束。遇到父行繁忙立即回滚，释放本次已取得的全部锁；只对 55P03 / 40P01 最多尝试 3 次，间隔 20 / 40 毫秒，退避期间不保留本次事务连接或父行锁。最终失败沿用异步 writer 的 Failed 计数及限频告警，不把错误返回生成任务。重试仅覆盖诊断事务，不重放模型调用或业务工具。父行已不存在则拒绝该条诊断，不插入悬空引用。异步 writer 的单条 5 秒上下文预算继续生效。
+
+真实 PostgreSQL 回归覆盖 run / attempt 围栏与外键锁双向兼容、受保护行仍排斥其他业务写锁、步骤创建与完成、四类繁忙父行的锁释放和失败回滚、锁释放后日志恢复、缺失父行拒绝，以及取消与围栏并发时的重新校验。修复前实现会在同一外键锁回归中超时，修复后通过。此验证针对并发正确性，不是性能或容量测试；无需修改 schema。
+
+2026-10-19 本地验证：使用独立 PostgreSQL，强制启用数据库集成测试，`go test -p 2 ./... -count=1 -timeout=10m` 全量通过；`go vet ./...` 通过。未执行性能测试，未操作项目实际数据库。

@@ -30,6 +30,8 @@ Campaign 模型动作结束存档后，当前相同 attempt/turn/revision 的提
 
 REST 重试若与仍在运行的原请求使用同一 `request_id`，接口返回 `202 {"status":"replayed"}`，结果继续经 WebSocket 推送；只有不同的新请求才返回 409。
 
+生成写围栏在同一业务事务内先锁 conversation，再联合校验并锁定 run、attempt、turn；使用 FOR NO KEY UPDATE，保留写入互斥并兼容模型诊断外键的 KEY SHARE。诊断写入遇到繁忙父行须回滚后有限重试，避免持有部分父行锁再阻塞业务。完整锁协议与并发验证见[日志、诊断与配置审计](23-logging-and-diagnostics.md#模型诊断写入与业务行锁)。
+
 ## 玩家输入信任边界
 
 玩家消息始终作为低信任剧情数据传入模型，不能升级为 system/developer 指令。服务端输出契约会在完整历史之后再次声明这一点；当前玩家消息命中提示注入、越权或提示词泄露表达时，平台只追加一条不含原文的短安全提示，不删除、改写或拒绝玩家内容。

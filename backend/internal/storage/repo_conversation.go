@@ -457,9 +457,11 @@ func isGenerationRunTerminal(status string) bool {
 	}
 }
 
-// AssertGenerationActive must be called by generation write boundaries. The
-// query locks both rows when used inside a transaction, so a lifecycle change
-// cannot pass between validation and the protected write.
+// AssertGenerationActive must be called by generation write boundaries.
+// Lock the conversation before the joined rows, matching lifecycle/branch
+// transactions regardless of the join plan. NO KEY UPDATE still excludes
+// business updates/deletes, but allows diagnostic foreign-key KEY SHARE locks.
+// Callers must keep this check and the protected write in one transaction.
 func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uuid.UUID) error {
 	generation, ok := operation.GenerationFromContext(ctx)
 	if !ok {
@@ -469,12 +471,19 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 		return ErrGenerationNotActive
 	}
 	var row struct{ ID uuid.UUID }
+	if err := db.WithContext(ctx).Raw(`SELECT id FROM conversations WHERE id = ? FOR NO KEY UPDATE`, conversationID).
+		Row().Scan(&row.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrGenerationNotActive
+		}
+		return err
+	}
 	queryText := `
 		SELECT c.id
 		FROM conversations c
 		JOIN conversation_generation_runs r ON r.conversation_id = c.id
 		WHERE c.id = ? AND r.id = ? AND c.status = ? AND r.status = ?
-		FOR UPDATE`
+		FOR NO KEY UPDATE OF c, r`
 	args := []any{conversationID, generation.ID, StatusActive, GenerationRunRunning}
 	// 一旦 attempt 已存在，围栏就不能只看 durable run：分支改写可能在旧模型请求
 	// 尚未退出时作废其 turn/attempt，因此要求 attempt 仍在运行且绑定当前分支，
@@ -500,7 +509,7 @@ func AssertGenerationActive(ctx context.Context, db *gorm.DB, conversationID uui
 			          AND cc.attempt_id = a.id AND cc.turn_id = t.id))))
 			  AND a.id = ? AND a.status = ? AND a.branch_epoch = c.branch_epoch
 			  AND t.status = ? AND t.invalidated_at IS NULL
-			FOR UPDATE OF c, r, a, t`
+			FOR NO KEY UPDATE OF c, r, a, t`
 		args = []any{conversationID, generation.ID, GenerationRunRunning,
 			StatusActive, StatusEnded,
 			metadata.AttemptID, AttemptStatusRunning, TurnStatusPending}
