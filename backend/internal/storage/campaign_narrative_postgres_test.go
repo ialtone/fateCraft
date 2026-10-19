@@ -143,4 +143,43 @@ func TestPostgresCampaignNarrativeBindingAndStaleRejection(t *testing.T) {
 	); !errors.Is(err, ErrNarrativeStale) {
 		t.Fatalf("stale binding error = %v, want ErrNarrativeStale", err)
 	}
+
+	outcomeID := uuid.New()
+	if err := db.Exec(`INSERT INTO challenge_outcome_rules
+        (id, challenge_version_id, outcome_key, category, title, tone, verifier_key, verifier_config, enabled)
+        VALUES (?, ?, 'perished', 'failure', '身死道消', 'error', 'core.always', '{}'::jsonb, true)`,
+		outcomeID, versionID).Error; err != nil {
+		t.Fatal(err)
+	}
+	death, err := repository.CommitAction(ctx, CommitCampaignActionInput{
+		CampaignID: campaignID, PlayerID: playerID, ExpectedRevision: result.Campaign.Revision,
+		IdempotencyKey: "action-death", ActionKey: "test.death", ActorType: "system",
+	}, func(_ *CampaignActionStore, _ Campaign) (CampaignActionOutcome, error) {
+		status := CampaignStatusDead
+		key := "perished"
+		return CampaignActionOutcome{
+			Status: &status, OutcomeKey: &key,
+			Events: []CampaignEventDraft{{
+				EventType: "character.died", Visibility: CampaignVisibilityPlayer, Payload: JSONMap{"cause_key": "test"},
+			}},
+			Result: JSONMap{"cause_key": "test"},
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("death path must settle, not roll back: %v", err)
+	}
+	if death.Campaign.Status != CampaignStatusDead || death.Campaign.OutcomeKey != "perished" {
+		t.Fatalf("death campaign = %+v", death.Campaign)
+	}
+	completion, err := newCampaignActionStore(ctx, db, death.Campaign, nil).CampaignCompletion(ctx, death.Campaign, "action-death")
+	if err != nil || completion == nil || completion.Key != "perished" || completion.Category != "failure" {
+		t.Fatalf("death completion = %+v, err=%v", completion, err)
+	}
+	var conversationStatus string
+	if err := db.Raw(`SELECT status FROM conversations WHERE id = ?`, conversation.ID).Scan(&conversationStatus).Error; err != nil {
+		t.Fatal(err)
+	}
+	if conversationStatus != StatusEnded {
+		t.Fatalf("death path conversation status = %q, want %q", conversationStatus, StatusEnded)
+	}
 }

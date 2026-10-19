@@ -733,12 +733,15 @@ func adjustVitals(_ context.Context, execution campaign.ActionExecution, argumen
 	outcome := worldactions.SingleEvent("character.vitals_changed", payload)
 	if character.Health == 0 {
 		status := storage.CampaignStatusDead
+		key := "perished"
 		outcome.Status = &status
+		outcome.OutcomeKey = &key
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
 			EventType: "character.died", Visibility: storage.CampaignVisibilityPlayer,
-			Payload: storage.JSONMap{"cause_key": cause, "game_time": execution.Campaign.GameTime},
+			Payload: storage.JSONMap{"cause_key": cause, "outcome_key": key, "game_time": execution.Campaign.GameTime},
 		})
 		outcome.Result["campaign_status"] = status
+		outcome.Result["outcome_key"] = key
 	}
 	return outcome, nil
 }
@@ -1060,12 +1063,15 @@ func gather(ctx context.Context, execution campaign.ActionExecution, arguments m
 	worldactions.AttachCampaignRoll(&outcome, rollResult)
 	if character.Health == 0 {
 		status := storage.CampaignStatusDead
+		key := "perished"
 		outcome.Status = &status
+		outcome.OutcomeKey = &key
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
 			EventType: "character.died", Visibility: storage.CampaignVisibilityPlayer,
-			Payload: storage.JSONMap{"cause_key": "gathering-risk", "game_time": execution.Campaign.GameTime + table.Minutes},
+			Payload: storage.JSONMap{"cause_key": "gathering-risk", "outcome_key": key, "game_time": execution.Campaign.GameTime + table.Minutes},
 		})
 		outcome.Result["campaign_status"] = status
+		outcome.Result["outcome_key"] = key
 	}
 	appendLifespanResolution(&outcome, character, exhausted)
 	return outcome, nil
@@ -1271,10 +1277,13 @@ func appendLifespanResolution(outcome *storage.CampaignActionOutcome, character 
 		return
 	}
 	status := storage.CampaignStatusDead
+	key := "lifespan_exhausted"
 	outcome.Status = &status
+	outcome.OutcomeKey = &key
 	outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
 		EventType: "character.lifespan_exhausted", Visibility: storage.CampaignVisibilityPlayer,
-		Payload: storage.JSONMap{"age_days": character.AgeDays, "lifespan_days": character.LifespanDays},
+		Payload: storage.JSONMap{"age_days": character.AgeDays, "lifespan_days": character.LifespanDays, "outcome_key": key},
 	})
 	outcome.Result["campaign_status"] = status
+	outcome.Result["outcome_key"] = key
 }

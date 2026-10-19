@@ -953,7 +953,8 @@ func TestPracticeExhaustsLifespanAtDayBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if store.character.AgeDays != 100 || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead {
+	if store.character.AgeDays != 100 || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead ||
+		outcome.OutcomeKey == nil || *outcome.OutcomeKey != "lifespan_exhausted" {
 		t.Fatalf("lifespan was not exhausted: character=%+v outcome=%+v", store.character, outcome)
 	}
 	if len(outcome.Events) != 2 || outcome.Events[1].EventType != "character.lifespan_exhausted" {
@@ -1079,7 +1080,8 @@ func TestAdjustVitalsEndsCampaignAtZeroHealth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if store.character.Health != 0 || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead {
+	if store.character.Health != 0 || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead ||
+		outcome.OutcomeKey == nil || *outcome.OutcomeKey != "perished" {
 		t.Fatalf("lethal vital change did not end campaign: character=%+v outcome=%+v", store.character, outcome)
 	}
 	if len(outcome.Events) != 2 || outcome.Events[1].EventType != "character.died" {

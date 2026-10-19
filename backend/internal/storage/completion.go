@@ -203,10 +203,10 @@ func campaignCompletionSummary(state *CampaignDomainState, row Campaign, outcome
 	switch {
 	case row.Status == CampaignStatusAbandoned:
 		return fmt.Sprintf("玩家主动终止本世，止步于%s，保留阶段积分 %d 分。", realm, stagePoints)
-	case row.Status == CampaignStatusDead:
-		return fmt.Sprintf("本世在%s止步，气血耗尽。", realm)
 	case outcome.OutcomeKey == "lifespan_exhausted":
 		return fmt.Sprintf("本世寿元耗尽，止步于%s。", realm)
+	case row.Status == CampaignStatusDead:
+		return fmt.Sprintf("本世在%s止步，气血耗尽。", realm)
 	default:
 		return fmt.Sprintf("本世历经 %d 天，最终%s。", character.AgeDays, outcome.Title)
 	}

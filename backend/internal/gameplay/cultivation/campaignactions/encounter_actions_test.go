@@ -186,7 +186,8 @@ func TestEncounterDefendFleeAndTerminalStates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if row.Status != "lost" || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead {
+		if row.Status != "lost" || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead ||
+			outcome.OutcomeKey == nil || *outcome.OutcomeKey != "perished" {
 			t.Fatalf("unexpected death resolution: outcome=%+v encounter=%+v", outcome, row)
 		}
 	})
@@ -212,7 +213,8 @@ func TestEncounterDefendFleeAndTerminalStates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if store.character.AgeDays != 10 || row.Status != "lost" || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead {
+		if store.character.AgeDays != 10 || row.Status != "lost" || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead ||
+			outcome.OutcomeKey == nil || *outcome.OutcomeKey != "lifespan_exhausted" {
 			t.Fatalf("unexpected lifespan resolution: outcome=%+v encounter=%+v character=%+v", outcome, row, store.character)
 		}
 	})

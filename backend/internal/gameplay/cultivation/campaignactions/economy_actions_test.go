@@ -108,6 +108,39 @@ func TestCraftFailureConsumesConfiguredLossAndAppliesFailureOutcome(t *testing.T
 	}
 }
 
+func TestCraftFailureDeathCarriesOutcomeKey(t *testing.T) {
+	store := newActionStore()
+	campaignID := uuid.New()
+	store.character = &storage.CampaignCharacter{
+		CampaignID: campaignID, Mana: 10, MaxMana: 10, Health: 3, MaxHealth: 20,
+		LifespanDays: 1000, Injuries: storage.JSONMap{}, LongTermEffects: storage.JSONMap{},
+	}
+	store.recipes["pill"] = &storage.CampaignKnownRecipe{CampaignID: campaignID, RecipeKey: "pill"}
+	store.techniques["alchemy"] = &storage.CampaignTechnique{TechniqueKey: "alchemy", Status: "active"}
+	toolID := uuid.New()
+	store.instances[toolID] = &storage.CampaignItemInstance{ID: toolID, DefinitionKey: "furnace", State: "stored", Durability: 10}
+	store.stacks[stackKey("herb", "common")] = &storage.CampaignItemStack{CampaignID: campaignID, ItemKey: "herb", QualityKey: "common", Quantity: 3}
+	definition := recipeDefinition("pill", 0, 5000)
+	definition.Content["failure_effect"] = map[string]any{
+		"health_damage": int64(10), "category": "injury", "effect_key": "lethal",
+		"severity": int64(100), "duration_minutes": int64(60), "description": "重伤",
+	}
+	store.definitions[storage.DefinitionRecipe+":pill"] = definition
+	store.definitions[storage.DefinitionItem+":pill"] = stackableDefinition("pill", "丹药")
+	execution := campaign.ActionExecution{
+		Campaign: storage.Campaign{ID: campaignID, CurrentLocationKey: "workshop", RandomSeed: 9},
+		Store:    store, ActorType: "player", ActionID: "craft-death",
+	}
+	outcome, err := executeRecipe(context.Background(), execution, map[string]any{"recipe_key": "pill"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.character.Health != 0 || outcome.Status == nil || *outcome.Status != storage.CampaignStatusDead ||
+		outcome.OutcomeKey == nil || *outcome.OutcomeKey != "perished" {
+		t.Fatalf("lethal craft did not produce a settleable death: character=%+v outcome=%+v", store.character, outcome)
+	}
+}
+
 func TestCraftUsesAuthoritativeCampaignRoll(t *testing.T) {
 	store := newActionStore()
 	campaignID := uuid.New()

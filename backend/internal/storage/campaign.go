@@ -21,6 +21,7 @@ var (
 	ErrCampaignRevisionConflict    = errors.New("长期存档 revision 冲突")
 	ErrCampaignIdempotencyConflict = errors.New("领域动作幂等键已被其他动作使用")
 	ErrCampaignHasConversation     = errors.New("长期存档已经绑定对话")
+	ErrCampaignOutcomeMissing      = errors.New("Campaign 终局缺少 outcome_key")
 )
 
 type CampaignEventDraft struct {
@@ -616,8 +617,8 @@ func validateCampaignOutcome(campaign Campaign, outcome CampaignActionOutcome) e
 		if outcome.Status == nil || *outcome.Status == CampaignStatusActive || !validCampaignKey(*outcome.OutcomeKey, 128) {
 			return fmt.Errorf("Campaign 结局 key 无效")
 		}
-	} else if outcome.Status != nil && *outcome.Status != CampaignStatusActive && *outcome.Status != CampaignStatusAbandoned {
-		return fmt.Errorf("Campaign 完成时必须提供结局 key")
+	} else if outcome.Status != nil && *outcome.Status != CampaignStatusActive {
+		return fmt.Errorf("%w: status=%s", ErrCampaignOutcomeMissing, *outcome.Status)
 	}
 	totalPayloadBytes := 0
 	for _, event := range outcome.Events {

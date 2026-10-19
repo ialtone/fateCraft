@@ -182,11 +182,14 @@ func executeRecipe(ctx context.Context, execution campaign.ActionExecution, argu
 	}
 	if character.Health == 0 {
 		status := storage.CampaignStatusDead
+		outcomeKey := "perished"
 		outcome.Status = &status
+		outcome.OutcomeKey = &outcomeKey
 		outcome.Result["campaign_status"] = status
+		outcome.Result["outcome_key"] = outcomeKey
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
 			EventType: "character.died", Visibility: storage.CampaignVisibilityPlayer,
-			Payload: storage.JSONMap{"cause_key": "craft.failure", "recipe_key": key},
+			Payload: storage.JSONMap{"cause_key": "craft.failure", "recipe_key": key, "outcome_key": outcomeKey},
 		})
 	} else {
 		appendLifespanResolution(&outcome, character, exhausted)

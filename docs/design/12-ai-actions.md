@@ -91,6 +91,8 @@ Campaign 动作提交时把事务内已有的 `narrative_feedback` 提升为持�
 
 `changes` 是唯一允许写成状态变化的依据；`preserved` 明确本次未改变的关键字段（境界、伤势、气血、寿元等），防止“气血回满”推导出“伤势痊愈”。单局模块沿用同一 `NarrativeFeedback` 形状，但只写 `module_action_commits.narrative`，不参与 Campaign 的 `state_hash` 绑定。重放返回原始 ActionResult，不重新计算失败判定、随机数或领域事实。
 
+Campaign 领域动作只要把状态推进到 `completed`、`dead` 或 `abandoned`，就必须同时提交已启用的 `outcome_key`。修仙气血归零使用 `perished`，寿元耗尽使用 `lifespan_exhausted`；采集风险、制作失败和遭遇失败都在写入 `dead` 前补齐对应 key。缺少 key 时 `validateCampaignOutcome` 返回 `campaign_outcome_missing`（409），而不是让事务以 500 回滚。失败结局与成功结局走同一 `CampaignCompletion` 收据路径，必须真实关闭对话、写入完成快照并返回 chronicle。
+
 ## 挑战完成
 
 模型只能通过 `fc_complete_challenge` 提交 `outcome_key` 和 `summary`。标题、category、tone、验证器、奖励 key、数量、倍率、余额、run ID 和结算时间均来自后端。

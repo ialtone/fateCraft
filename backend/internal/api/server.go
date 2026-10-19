@@ -362,6 +362,8 @@ func fail(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, storage.ErrNotFound), errors.Is(err, challenge.ErrNotPublished), errors.Is(err, challengeimport.ErrBuiltinNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "资源不存在"})
+	case errors.Is(err, storage.ErrCampaignOutcomeMissing):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "campaign_outcome_missing"})
 	case challengeFailureStatus(err):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, conversation.ErrNotActive), errors.Is(err, storage.ErrConversationNotActive), errors.Is(err, challenge.ErrConversationEnded):

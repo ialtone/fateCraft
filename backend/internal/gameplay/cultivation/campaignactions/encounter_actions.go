@@ -349,10 +349,15 @@ func finishEncounter(execution campaign.ActionExecution, encounter *storage.Camp
 	if status == "lost" && character.Health == 0 {
 		campaignStatus := storage.CampaignStatusDead
 		outcome.Status = &campaignStatus
+		if outcome.OutcomeKey == nil {
+			key := "perished"
+			outcome.OutcomeKey = &key
+			outcome.Result["outcome_key"] = key
+		}
 		outcome.Result["campaign_status"] = campaignStatus
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{
 			EventType: "character.defeated", Visibility: storage.CampaignVisibilityPlayer,
-			Payload: storage.JSONMap{"encounter_id": encounter.ID.String(), "cause": "encounter"},
+			Payload: storage.JSONMap{"encounter_id": encounter.ID.String(), "cause": "encounter", "outcome_key": *outcome.OutcomeKey},
 		})
 	}
 	return *outcome, nil

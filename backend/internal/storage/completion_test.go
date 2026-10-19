@@ -79,3 +79,24 @@ func TestCampaignLifeChronicleSummarizesAbandon(t *testing.T) {
 		t.Fatalf("unexpected abandon chronicle: %#v", chronicle)
 	}
 }
+
+func TestCampaignLifeChronicleSummarizesFailureCause(t *testing.T) {
+	state := &CampaignDomainState{
+		Character: &CampaignCharacter{
+			RealmKey: "qi-refining", StageKey: "layer-3",
+			AgeDays: 5900, LifespanDays: 43800,
+		},
+	}
+	row := Campaign{Status: CampaignStatusDead}
+	perished := ChallengeOutcomeRule{OutcomeKey: "perished", Title: "身陨道消"}
+	if summary := campaignCompletionSummary(state, row, perished, 0); !strings.Contains(summary, "气血耗尽") {
+		t.Fatalf("unexpected death summary: %s", summary)
+	}
+	exhausted := ChallengeOutcomeRule{OutcomeKey: "lifespan_exhausted", Title: "寿元耗尽"}
+	if summary := campaignCompletionSummary(state, row, exhausted, 0); !strings.Contains(summary, "寿元耗尽") || strings.Contains(summary, "气血耗尽") {
+		t.Fatalf("unexpected lifespan summary: %s", summary)
+	}
+	if chronicle := campaignLifeChronicle(state, row, exhausted, 0); !strings.Contains(strings.Join(chronicle, "\n"), "终局：寿元耗尽") {
+		t.Fatalf("unexpected death chronicle: %#v", chronicle)
+	}
+}
