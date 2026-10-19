@@ -95,7 +95,6 @@ CREATE TABLE email_verification_codes (
     consumed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_email_verification_lookup ON email_verification_codes(email, purpose, created_at DESC);
 CREATE UNIQUE INDEX idx_email_verification_active ON email_verification_codes(email, purpose) WHERE consumed_at IS NULL;
 CREATE INDEX idx_email_verification_expires ON email_verification_codes(expires_at);
 
@@ -112,7 +111,6 @@ CREATE TABLE invitation_codes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_invitation_codes_status ON invitation_codes(enabled, expires_at);
 
 CREATE TABLE challenge_packs (
     source VARCHAR(16) NOT NULL DEFAULT 'editor' CHECK (source IN ('builtin','upload','editor')),
@@ -216,7 +214,6 @@ CREATE TABLE gameplay_definitions (
 );
 CREATE INDEX idx_gameplay_definitions_catalog
     ON gameplay_definitions(challenge_version_id, kind, sort_order, key);
-CREATE INDEX idx_gameplay_definitions_tags ON gameplay_definitions USING GIN(tags);
 
 CREATE TABLE challenge_outcome_rules (
     reward_points BIGINT NOT NULL DEFAULT 0 CHECK (reward_points BETWEEN 0 AND 9007199254740991),
@@ -234,7 +231,6 @@ CREATE TABLE challenge_outcome_rules (
     UNIQUE (challenge_version_id, outcome_key),
     UNIQUE (id, challenge_version_id)
 );
-CREATE INDEX idx_challenge_outcomes_version ON challenge_outcome_rules(challenge_version_id, enabled);
 
 
 CREATE TABLE campaigns (
@@ -715,7 +711,6 @@ CREATE TABLE agent_steps (
         FOREIGN KEY (conversation_id, attempt_id)
         REFERENCES generation_attempts(conversation_id, id) ON DELETE CASCADE
 );
-CREATE INDEX idx_agent_steps_attempt ON agent_steps(attempt_id, step_no);
 
 CREATE TABLE agent_tool_invocations (
     id UUID PRIMARY KEY,
@@ -805,7 +800,6 @@ CREATE TABLE campaign_events (
     CONSTRAINT fk_campaign_event_turn FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE RESTRICT,
     CONSTRAINT fk_campaign_event_attempt FOREIGN KEY (attempt_id) REFERENCES generation_attempts(id) ON DELETE RESTRICT
 );
-CREATE INDEX idx_campaign_events_idempotency ON campaign_events(campaign_id, idempotency_key);
 
 CREATE TABLE campaign_action_commits (
     campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
@@ -835,7 +829,6 @@ CREATE TABLE campaign_action_commits (
         REFERENCES campaign_events(campaign_id, sequence) ON DELETE RESTRICT
 );
 CREATE INDEX idx_campaign_action_commits_revision ON campaign_action_commits(campaign_id, revision);
-CREATE INDEX idx_campaign_action_commits_hash ON campaign_action_commits(campaign_id, state_hash);
 
 CREATE TABLE display_messages (
     id UUID PRIMARY KEY,
@@ -1008,7 +1001,6 @@ CREATE TABLE conversation_memories (
 CREATE UNIQUE INDEX uq_conversation_memories_source
     ON conversation_memories(conversation_id, source_hash)
     WHERE invalidated_at IS NULL;
-CREATE INDEX idx_conversation_memories_chain ON conversation_memories(conversation_id, version DESC);
 
 ALTER TABLE conversations
     ADD CONSTRAINT fk_conversations_current_memory
@@ -1253,7 +1245,6 @@ CREATE TABLE player_reward_balances (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (player_id, reward_key)
 );
-CREATE INDEX idx_player_reward_balances_reward ON player_reward_balances(reward_key, balance DESC);
 
 CREATE TABLE roll_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1697,8 +1688,6 @@ CREATE TABLE conversation_activity_versions (
     version BIGINT NOT NULL DEFAULT 0,
     transaction_id BIGINT NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_activity_latest_turn ON conversation_turns(conversation_id, turn_seq DESC, id DESC)
-    WHERE invalidated_at IS NULL;
 CREATE INDEX idx_activity_latest_memory_job ON memory_jobs(conversation_id, created_at DESC, id DESC);
 
 -- +goose StatementBegin

@@ -371,8 +371,27 @@ go test -count=1 -timeout=10m ./...
 
 ### 活动稳定版本
 
-新项目直接在 00001_init.sql 定义 conversation_activity_versions(conversation_id, version, transaction_id)、最新有效 turn / memory job 索引和 record_activity_change 延迟约束触发器，无历史回填或增量迁移。独立版本行在业务写入后更新，避免新增 memory job 与 conversation 的反向锁依赖。
+新项目直接在 00001_init.sql 定义 conversation_activity_versions(conversation_id, version, transaction_id)、最新 memory job 索引和 record_activity_change 延迟约束触发器，无历史回填或增量迁移。最新有效 turn 查询复用 `(conversation_id, turn_seq)` 唯一索引，按 turn_seq 倒序读取并过滤失效行。独立版本行在业务写入后更新，避免新增 memory job 与 conversation 的反向锁依赖。
 
 触发器覆盖 conversations、conversation_turns、generation_attempts、chat_messages、memory_jobs 的稳定字段。同事务同对话最多递增一次，回滚同时撤销版本和 NOTIFY；续租、step_count、纯 phase 不递增。相关 INSERT/DELETE 保守失效，版本不表示精确内容变化次数。按 schema 隔离的 pg_notify 在提交后交付；它不是可重放事件日志。
 
 活动 UPDATE 触发器使用显式稳定列的 WHEN ROW(...) IS DISTINCT FROM ROW(...)，在入延迟队列前过滤无变化、正文与心跳更新，不序列化整行 JSONB。INSERT/DELETE 与 UPDATE 分开定义，版本仍延迟至事务提交。00001 增加 idx_chat_messages_active_turn_role：chat_messages(conversation_id, turn_id, role) WHERE invalidated_at IS NULL，用于活动能力的消息存在性查询。本轮仅验证结构与功能，未做查询计划或性能对比。
+
+### 索引精简
+
+按当前仓储查询清理 10 个普通索引，00001 中显式 CREATE INDEX（含 UNIQUE）由 96 个减为 86 个，其中显式 UNIQUE 仍为 14 个；此计数不含主键和 UNIQUE 约束自动创建的索引。所有主键、唯一约束及组合外键保持不变。
+
+| 移除索引 | 依据 / 现有访问路径 |
+| --- | --- |
+| idx_agent_steps_attempt | 与 `(attempt_id, step_no)` 唯一约束重复 |
+| idx_conversation_memories_chain | 固定 conversation_id 后，`(conversation_id, version)` 唯一索引可倒序扫描 |
+| idx_email_verification_lookup | 当前只查未消费验证码，`idx_email_verification_active` 部分唯一索引保证最多一条，无须按创建时间排序 |
+| idx_challenge_outcomes_version | 列表和单条查询使用 `(challenge_version_id, outcome_key)` 唯一索引；单条查询再检查 enabled |
+| idx_activity_latest_turn | 复用 `(conversation_id, turn_seq)` 唯一索引；同对话 turn_seq 唯一，无须 id 排序 |
+| idx_invitation_codes_status | 当前无 enabled / expires_at 筛选列表查询 |
+| idx_gameplay_definitions_tags | 当前按版本加载，标签在应用层处理，无 SQL 标签检索 |
+| idx_player_reward_balances_reward | 当前按玩家及奖励键读取，无跨玩家奖励余额排行 |
+| idx_campaign_action_commits_hash | 按幂等键或 revision 读取后校验哈希，无哈希检索 |
+| idx_campaign_events_idempotency | 事件按 sequence 读取，幂等检查由 action_commits 主键承担 |
+
+活动查询保留 `idx_chat_messages_active_turn_role` 和 `idx_activity_latest_memory_job` 两个专用索引。最新回合复用唯一索引会过滤失效回合，若将来出现大量连续失效回合，需根据实际查询表现重新评估部分索引。本次仅做结构与功能回归，不做性能测试，不据此宣称 CPU 降幅或容量提升。后续新增索引应对应具体筛选、排序或约束需求，不为尚未实现的查询预建索引。

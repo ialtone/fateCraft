@@ -74,7 +74,7 @@ func (r *ActivityRepo) Snapshot(ctx context.Context, id uuid.UUID, owner string)
  FROM conversations c
  LEFT JOIN conversation_activity_versions v ON v.conversation_id=c.id
  LEFT JOIN LATERAL (SELECT id,status FROM conversation_turns WHERE conversation_id=c.id
- AND invalidated_at IS NULL ORDER BY turn_seq DESC,id DESC LIMIT 1) t ON true
+ AND invalidated_at IS NULL ORDER BY turn_seq DESC LIMIT 1) t ON true
  LEFT JOIN LATERAL (SELECT id,committed_mutating_tool_count FROM generation_attempts
  WHERE turn_id=t.id ORDER BY attempt_no DESC LIMIT 1) a ON true
  LEFT JOIN LATERAL (SELECT * FROM memory_jobs WHERE conversation_id=c.id

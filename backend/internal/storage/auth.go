@@ -447,7 +447,7 @@ func (r *AuthRepository) LatestEmailVerification(ctx context.Context, email, pur
 	var code EmailVerificationCode
 	err := r.db.WithContext(ctx).
 		Where("email = ? AND purpose = ? AND consumed_at IS NULL", email, purpose).
-		Order("created_at DESC").First(&code).Error
+		Take(&code).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
 	}

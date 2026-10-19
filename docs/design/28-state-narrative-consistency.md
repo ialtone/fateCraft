@@ -207,12 +207,7 @@ narrative JSONB NOT NULL DEFAULT '{}'::jsonb
     CHECK (jsonb_typeof(narrative) = 'object' AND octet_length(narrative::text) <= 65536),
 ```
 
-并增加索引：
-
-```sql
-CREATE INDEX idx_campaign_action_commits_hash
-    ON campaign_action_commits(campaign_id, state_hash);
-```
+动作提交按 `(campaign_id, idempotency_key)` 主键读取，历史恢复按 `(campaign_id, revision)` 索引读取；`state_hash` 随记录加载后用于校验。当前没有按哈希检索的查询，因此不为 `(campaign_id, state_hash)` 单独建索引。
 
 ### 6.3 `display_messages`
 
