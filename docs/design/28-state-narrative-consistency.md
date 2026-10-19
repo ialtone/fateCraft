@@ -465,6 +465,6 @@ Campaign 快照接口返回 `campaign`（含 `revision`、`state_hash`）与完�
 - 不为旧存档做兼容迁移；本项目当前以新建存档为准。
 
 
-### 活动快照与业务资源恢复（2026-10-19）
+### 活动快照与业务资源恢复
 
 activity_version 只表示活动稳定投影，不能作为消息、状态或 Campaign 的统一版本。完整活动快照可跳号直接应用；分支切换、回合变化、生成解锁和已知事件缺口仍恢复业务资源。首次订阅和重连等待 ready，REST 读取期间缓冲消息并按 ID/attempt 合并；当前 attempt 的持久消息不能因为终态快照先到而丢弃。无可比较版本的缓冲 state_update 触发补读，Campaign 继续验证 revision/hash。跨 endpoint 的并行 REST 并不构成原子快照。

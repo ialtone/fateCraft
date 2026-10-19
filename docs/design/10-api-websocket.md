@@ -527,7 +527,7 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 诊断状态返回 `{instance_id,writer,cleanup}`，读取进程内队列和最近清理状态，不扫描日志表。具体字段与权限边界见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
 
 
-## 结局提议与恢复接口（2026-10-11）
+## 结局提议与恢复接口
 
 新增 `GET /conversations/:id/endings`：返回 revision、branch_epoch、has_trusted_actions、abandon_action、ending_capabilities、proposal、completion、is_processing。提议事件为 `ending.proposed`；两种模式的真实结束都返回/广播 `CompletionView`，WS 字段为 `challenge_completed.completion`。确认仍调用现有玩家动作端点。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 
@@ -543,7 +543,7 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
 
 
-### 活动快照与恢复协议（2026-10-19）
+### 活动快照与恢复协议
 
 /activity、activity_updated.snapshot 和 runtime inspector.activity 共用 storage.ActivityRepo 投影。新增 activity_version、conversation_id、branch_epoch、conversation_status、is_processing、turn_id、attempt_id；memory_job 包含公开 ID。稳定字段与版本来自同一 SQL 语句；phase 独立补充，is_processing=false 时为 idle。
 

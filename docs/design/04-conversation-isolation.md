@@ -144,7 +144,7 @@ WebSocket 握手先经过会话认证。生成器开始工作前再次读取并�
 对象路由与当前有效路由不一致时禁止任何模型调用：REST 返回 409（`code=llm_route_mismatch`），WS 返回 `notice`，不创建 run/turn/attempt、不扣额度；生成中途改设置时当前回合按 `llm_route_mismatch` 失败。Memory Worker 遇到不匹配或 `client` 路由无 Relay 连接时把任务放回 pending（不计失败）；角色问答返回 409。
 
 
-## 结局确认隔离（2026-10-11）
+## 结局确认隔离
 
 结局提议及结果绑定 conversation、branch_epoch 和 revision。玩家确认提交原修订，动作结果不明按原 request_id 重查。切换会话清除作用域和旧弹窗；恢复只读取当前有效分支，历史正文不制造终态。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 

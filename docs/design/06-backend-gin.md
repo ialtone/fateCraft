@@ -293,7 +293,7 @@ GORM 使用自定义 zap logger：绑定参数通过 `ParamsFilter` 保持为占
 配置保存与管理员审计在同一事务内锁行、计算脱敏差异；并发旧版本返回 `409/settings_conflict`。缓存更新和 Relay 关闭发生在提交后。关闭服务先停止生产者，再在有界时间内排空诊断队列；超时记录未排空数量。具体字段和运维边界见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
 
 
-## 结局生命周期（2026-10-11）
+## 结局生命周期
 
 Campaign 终态、关联对话关闭和完整结局结果在原动作事务提交；所有入口广播统一 completion。绑定可信玩法禁止普通关闭绕过结算，模型玩家权限保持分离。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 
@@ -304,14 +304,14 @@ Campaign 终态、关联对话关闭和完整结局结果在原动作事务提�
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
 
 
-### 活动快照与通知（2026-10-19）
+### 活动快照与通知
 
 /activity 与 runtime inspector 共用 ActivityRepo，玩家入口验证身份和所有权，内部广播才省略 owner。稳定投影单条 SQL 读取最新有效 turn、attempt、memory job，并用 EXISTS 判断消息存在；生成中的 phase 另读且校验 attempt，空闲不读取 phase。
 
 启动时建立独立 PostgreSQL LISTEN 连接，先于 worker 和 HTTP 服务。通知只在提交后到达，有订阅者才构造完整快照，25ms 合并同对话通知。连接断开导致现有 WS 订阅关闭，重连必须 REST 恢复。旧 memory ActivitySink 已移除，业务状态变化由数据库触发器统一覆盖。其余 Hub 事件与队列仍是进程内，不能按活动通知的跨连接能力推断多实例支持。
 
 
-### 邮件发送适配器（2026-10-19）
+### 邮件发送适配器
 
 auth.Mailer 接口保留，SMTP 实现使用 github.com/wneessen/go-mail v0.8.1 构造 MIME 邮件并执行 SMTP 会话。注册验证码与后台测试邮件共用该适配器；现有纯文本模板、发件人、端口和凭据配置不变，不新增数据库字段。中文主题、显示名称与正文编码由库负责，邮件头拒绝 CR/LF。
 

@@ -301,7 +301,7 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 - 今后若给主站加 CSP，`connect-src` 必须允许用户配置的模型域名，否则客户端直连整体失效。
 
 
-## 统一结局交互（2026-10-11）
+## 统一结局交互
 
 顶栏中止、模块行动和模型提议确认共用 playerActions 请求日志。HTTP、WS、刷新恢复使用同一结局消费器，按稳定 ID 去重，已关闭窗口可通过“查看结局”重开。生成中禁用确认，活动快照与按需对账补偿标记更新。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 
@@ -312,7 +312,7 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
 
 
-### 活动恢复协调（2026-10-19）
+### 活动恢复协调
 
 ConversationView 不再设置 5 秒活动定时器。socket store 等待 subscription.ready 后统一恢复业务资源，期间有限缓冲；context store 负责活动单飞、最高目标版本、请求代际和 phase 合并。请求失败保留成功快照并标记 stale，旧响应不能覆盖新页面；完整活动推送不触发 /activity 补读。
 

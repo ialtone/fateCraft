@@ -250,7 +250,7 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 性能日志的正常模型步骤/工具耗时为 Debug，模型达到 60 秒、工具达到 1 秒记 Warn，失败和回合摘要保留。脱敏、正文状态和容量细则见[日志、诊断与配置审计](23-logging-and-diagnostics.md)。
 
 
-## 终局提议（2026-10-11）
+## 终局提议
 
 `fc_propose_ending` 读取玩家终局预览，在原工具事务中校验后记录待确认提议；不执行玩家动作。`ending.proposed` 通知前端读取确认入口。当前终局目录与事实约束在历史之后；真实结束才进入既有有限收尾授权。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 

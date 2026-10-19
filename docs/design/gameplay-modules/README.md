@@ -98,7 +98,7 @@ Preview/Capability 的拒绝解释应描述真实、公开的前置，不泄露�
 规则现状参考[单局](../14-ascension-trial-gameplay.md)、[长期](../16-cultivation-campaign-agent-reference.md)和[共同设定](../20-cultivation-shared-setting.md)。两包离线平衡样本与真实环境待验项见[25 验证记录](../25-core-gameplay-validation.md)。后续调整以真实实现与固定版本为准。
 
 
-## 内容作者的退出声明（2026-10-11）
+## 内容作者的退出声明
 
 共用运行时必须声明 `AbandonAction` 对应 player-only、零参数 `Ending` 动作，内容保留完整动作目录和启用的 neutral 零积分退出 Outcome。平台发布时运行初始退出探针。其他玩家终局使用 Ending 元数据及公开参数方案；不得以 Prompt 绕过领域门槛。 完整协议见 [26 玩法结局生命周期](../26-gameplay-ending-lifecycle.md)。
 

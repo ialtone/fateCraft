@@ -369,7 +369,7 @@ go test -count=1 -timeout=10m ./...
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
 
 
-### 活动稳定版本（2026-10-19）
+### 活动稳定版本
 
 新项目直接在 00001_init.sql 定义 conversation_activity_versions(conversation_id, version, transaction_id)、最新有效 turn / memory job 索引和 record_activity_change 延迟约束触发器，无历史回填或增量迁移。独立版本行在业务写入后更新，避免新增 memory job 与 conversation 的反向锁依赖。
 

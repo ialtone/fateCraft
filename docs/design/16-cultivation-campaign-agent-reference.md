@@ -389,10 +389,10 @@ PostgreSQL 集成测试读取 `FATECRAFT_TEST_DATABASE_URL`，为每次测试创
 后续 Agent 改动时应先确定变化属于“静态定义”“动态事实”“领域动作”“投影”还是“叙事”。任何影响资源、成长、位置、关系、时间、任务、遭遇或结局的能力都必须进入领域动作和 PostgreSQL 事实层，不能只修改 Prompt 或前端。
 
 
-## 中止与真实完成（2026-10-11）
+## 中止与真实完成
 
 `campaign.abandon` 为玩家终局，活动遭遇不阻止中止。模型可提议，由玩家在界面确认。Campaign 终态在原动作事务关闭对话并保存完整结果；保留已到账阶段积分，不额外发终局积分。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 
-## 状态与剧情一致性（2026-10-18）
+## 状态与剧情一致性
 
 每次成功动作在同一事务内生成持久 `ActionResult`，包含 `state_hash`、`goal_status`、`changes`、`current_facts` 与 `preserved`。模型上下文通过 `narrative_context` 获得本回合全部未消费动作；正文落库前只校验可映射到这些事实的境界、气血、法力、神识、寿元、库存和强主张。矛盾句先删除一次，仍失败使用模板兜底；不重放动作、不回滚状态。叙事与 `campaign.revision`、`state_hash` 绑定，过期生成返回 `narrative_stale`。完整规则见 [28 状态与剧情一致性](28-state-narrative-consistency.md)。

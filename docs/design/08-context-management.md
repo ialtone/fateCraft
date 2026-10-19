@@ -131,6 +131,6 @@ Worker 不扫描世界书。世界书只在正常 Context Build 时按固定挑�
 - Memory Worker 失败：保持最后成功链头，不中断当前叙事。
 
 
-## 终局事实与目录（2026-10-11）
+## 终局事实与目录
 
 有界 `ending_capabilities` 只提供玩家终局预览，不授予模型执行权。终局提示作为必选 RuntimeDirective 放到历史之后，和当前事实一起约束旧正文；预算不足不调用模型。提议、拒绝、真实提交必须区分，正文不被用作结局检测器。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
