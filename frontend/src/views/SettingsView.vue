@@ -933,12 +933,14 @@ function clearDeviceKey() {
   }
 
   .save-row {
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    position: static;
+    margin-top: 20px;
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
   }
 
   .save-row > .n-button {
-    width: auto;
-    min-width: min(240px, 70vw);
+    width: 100%;
+    min-width: 0;
   }
 }
 </style>

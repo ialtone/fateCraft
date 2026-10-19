@@ -12,7 +12,7 @@ const STORAGE_KEY = 'gft-theme'
 function initialMode(): ThemeMode {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved === 'dark' || saved === 'light') return saved
-  return 'dark' // 夜茶馆是默认形态
+  return 'light' // 首次访问使用宣纸（亮色）
 }
 
 export const useThemeStore = defineStore('theme', () => {

@@ -9,6 +9,15 @@
       content="命运茶馆 fateCraft —— 沉浸式 AI 文字冒险与角色扮演平台。结构化状态面板、世界书、天命判定与「轮回试炼」修仙玩法，支持任意 OpenAI 兼容模型。"
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // 首次访问默认宣纸亮色；已保存的暗色偏好在首屏渲染前恢复，避免闪白/闪黑。
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem('gft-theme') === 'dark' ? 'dark' : 'light'
+      } catch {
+        document.documentElement.dataset.theme = 'light'
+      }
+    </script>
     <!-- 主题色跟随「墨与琥珀」双态配色：亮色宣纸 / 暗色夜茶馆 -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3ecdf" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15110d" />

@@ -278,13 +278,41 @@ async function submit() {
 }
 
 .create-dialog :deep(.n-dialog__content) {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 4px;
+}
+
+.create-dialog {
+  display: flex;
+  max-height: calc(100dvh - 24px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.create-dialog :deep(.n-dialog__action) {
+  flex: 0 0 auto;
+  padding-top: 12px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-soft);
 }
 
 @media (max-width: 480px) {
   .challenge-summary {
     padding: 12px;
+  }
+
+  .create-dialog :deep(.n-dialog__action) {
+    display: flex;
+    gap: 10px;
+  }
+
+  .create-dialog :deep(.n-dialog__action .n-button) {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 </style>

@@ -139,8 +139,16 @@ const reasoningEffortOptions = computed(() => [
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   width: 100%;
   min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .llm-model-setting {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
 }
 </style>
