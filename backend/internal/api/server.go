@@ -51,6 +51,7 @@ type Server struct {
 	messages       *storage.MessageRepo
 	agents         *storage.AgentRepo
 	turns          *storage.TurnRepo
+	activity       *storage.ActivityRepo
 	rewards        *storage.RewardRepository
 	llmRequestLogs *storage.LLMRequestLogRepo
 	hub            *realtime.Hub
@@ -82,6 +83,7 @@ type Deps struct {
 	Messages       *storage.MessageRepo
 	Agents         *storage.AgentRepo
 	Turns          *storage.TurnRepo
+	Activity       *storage.ActivityRepo
 	Rewards        *storage.RewardRepository
 	LLMRequestLogs *storage.LLMRequestLogRepo
 	Hub            *realtime.Hub
@@ -127,7 +129,7 @@ func NewServer(d Deps) *Server {
 		conv: d.Conv, campaigns: d.Campaigns, chat: d.Chat, state: d.State, challenges: d.Challenges, builtins: d.Builtins,
 		memory: d.Memory, inquiries: d.Inquiries,
 		settings: d.Settings, llmSettings: d.LLMSettings, system: d.System, ctxLogs: d.CtxLogs, messages: d.Messages, agents: d.Agents, rewards: d.Rewards,
-		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns,
+		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns, activity: d.Activity,
 		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
 		auth: d.Auth, cookieSecure: d.CookieSecure, diagnostics: d.Diagnostics,
 	}

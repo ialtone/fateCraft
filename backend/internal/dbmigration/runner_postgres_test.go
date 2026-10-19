@@ -117,7 +117,7 @@ func assertBaselineObjects(t *testing.T, db interface {
 		want   int
 	}{
 		{"functions", `SELECT count(*) FROM pg_proc WHERE pronamespace = current_schema()::regnamespace AND proname IN ('reject_reward_ledger_mutation', 'reject_campaign_event_mutation', 'reject_campaign_action_commit_mutation', 'reject_llm_route_change')`, &functions, 4},
-		{"triggers", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('reward_ledger'::regclass, 'campaign_events'::regclass, 'campaign_action_commits'::regclass, 'conversations'::regclass, 'campaigns'::regclass)`, &triggers, 10},
+		{"triggers", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('reward_ledger'::regclass, 'campaign_events'::regclass, 'campaign_action_commits'::regclass, 'conversations'::regclass, 'campaigns'::regclass)`, &triggers, 11},
 		{"indexes", `SELECT count(*) FROM pg_indexes WHERE schemaname = current_schema() AND indexname IN ('idx_users_username_lower', 'idx_users_single_owner', 'idx_challenge_versions_pack', 'idx_reward_ledger_player')`, &indexes, 4},
 		{"seed rows", `SELECT count(*) FROM reward_exchange_offers WHERE id = '00000000-0000-0000-0000-000000000001'`, &seedRows, 1},
 		{"reward tables with comments", `SELECT count(*) FROM pg_class WHERE relnamespace=current_schema()::regnamespace AND relname IN ('registration_reward_rules','reward_exchange_offers','reward_exchange_revisions','reward_exchange_orders') AND obj_description(oid,'pg_class') IS NOT NULL`, &rewardTables, 4},

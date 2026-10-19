@@ -302,3 +302,10 @@ Campaign 终态、关联对话关闭和完整结局结果在原动作事务提�
 内置/JSON/ZIP 经过同一 Portable 编译器；确认、草稿和审计原子提交。部署前 gameplay-check 只读检查精确模块依赖，服务器保留不兼容存档只读访问。
 
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
+
+
+### 活动快照与通知（2026-10-19）
+
+/activity 与 runtime inspector 共用 ActivityRepo，玩家入口验证身份和所有权，内部广播才省略 owner。稳定投影单条 SQL 读取最新有效 turn、attempt、memory job，并用 EXISTS 判断消息存在；生成中的 phase 另读且校验 attempt，空闲不读取 phase。
+
+启动时建立独立 PostgreSQL LISTEN 连接，先于 worker 和 HTTP 服务。通知只在提交后到达，有订阅者才构造完整快照，25ms 合并同对话通知。连接断开导致现有 WS 订阅关闭，重连必须 REST 恢复。旧 memory ActivitySink 已移除，业务状态变化由数据库触发器统一覆盖。其余 Hub 事件与队列仍是进程内，不能按活动通知的跨连接能力推断多实例支持。

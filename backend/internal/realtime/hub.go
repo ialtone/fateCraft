@@ -61,11 +61,12 @@ type Hub struct {
 	gen      Generator
 	upgrader websocket.Upgrader
 
-	mu      sync.Mutex
-	closed  bool
-	conns   map[uuid.UUID]map[*conn]struct{} // 每个对话的连接集合
-	cancels map[uuid.UUID]*genTask           // 每个对话当前生成任务
-	queued  map[uuid.UUID][]queuedGeneration // 显式 steer/follow-up 队列
+	mu                  sync.Mutex
+	closed              bool
+	activityUnavailable bool
+	conns               map[uuid.UUID]map[*conn]struct{} // 每个对话的连接集合
+	cancels             map[uuid.UUID]*genTask           // 每个对话当前生成任务
+	queued              map[uuid.UUID][]queuedGeneration // 显式 steer/follow-up 队列
 }
 
 // genTask 包装一次生成任务的取消函数；用指针身份区分新旧任务，
@@ -169,6 +170,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, convID uuid.UUID) er
 		return errHubClosed
 	}
 	defer h.unregister(convID, c)
+	c.enqueue(Event{Type: TypeSubscriptionReady, ConversationID: convID.String()})
 
 	go h.writePump(c)
 	// WebSocket request context 关闭后连接仍可继续生成，保留其中的认证身份值。
@@ -179,7 +181,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, convID uuid.UUID) er
 func (h *Hub) register(convID uuid.UUID, c *conn) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.closed {
+	if h.closed || h.activityUnavailable {
 		return false
 	}
 	if h.conns[convID] == nil {
@@ -216,6 +218,43 @@ func (h *Hub) Broadcast(convID uuid.UUID, ev Event) {
 	// connection applies its own coalescing/backpressure policy independently.
 	for _, c := range targets {
 		c.enqueue(ev)
+	}
+}
+
+// SetActivityAvailable invalidates all subscriptions on a database-notification
+// gap. Reconnecting clients must take fresh REST snapshots after ready.
+func (h *Hub) SetActivityAvailable(available bool) {
+	h.mu.Lock()
+	h.activityUnavailable = !available
+	var targets []*conn
+	if !available {
+		for _, set := range h.conns {
+			for c := range set {
+				targets = append(targets, c)
+			}
+		}
+	}
+	h.mu.Unlock()
+	for _, c := range targets {
+		c.close()
+	}
+}
+
+func (h *Hub) HasSubscribers(id uuid.UUID) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.conns[id]) > 0
+}
+
+func (h *Hub) InvalidateConversation(id uuid.UUID) {
+	h.mu.Lock()
+	var targets []*conn
+	for c := range h.conns[id] {
+		targets = append(targets, c)
+	}
+	h.mu.Unlock()
+	for _, c := range targets {
+		c.close()
 	}
 }
 

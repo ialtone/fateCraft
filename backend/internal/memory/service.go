@@ -13,12 +13,7 @@ const (
 	DefaultProtectedTurns = 4
 	DefaultScheduleTokens = 4000
 	TokenizerVersion      = "heuristic-v1"
-	ActivityIdle          = "idle"
-	ActivityQueued        = "queued"
-	ActivityRunning       = "running"
 )
-
-type ActivitySink func(conversationID uuid.UUID, status string)
 
 type repository interface {
 	Latest(context.Context, uuid.UUID) (*storage.ConversationMemory, error)
@@ -32,10 +27,9 @@ type repository interface {
 // Service exposes committed memory snapshots and lightweight scheduling only.
 // Model calls are owned by Worker and never happen on the narrative path.
 type Service struct {
-	repo     repository
-	counter  tokenizer.Counter
-	wake     func()
-	activity ActivitySink
+	repo    repository
+	counter tokenizer.Counter
+	wake    func()
 }
 
 func NewService(repo repository, counter tokenizer.Counter) *Service {
@@ -43,8 +37,6 @@ func NewService(repo repository, counter tokenizer.Counter) *Service {
 }
 
 func (s *Service) SetWake(wake func()) { s.wake = wake }
-
-func (s *Service) SetActivitySink(sink ActivitySink) { s.activity = sink }
 
 func (s *Service) Latest(ctx context.Context, conversationID uuid.UUID) (*storage.ConversationMemory, error) {
 	memory, err := s.repo.Latest(ctx, conversationID)
@@ -83,9 +75,6 @@ func (s *Service) Schedule(ctx context.Context, conversationID uuid.UUID, force 
 	if err == nil && job != nil && s.wake != nil {
 		s.wake()
 	}
-	if err == nil && job != nil && s.activity != nil {
-		s.activity(conversationID, activityForJob(job.Status))
-	}
 	return job, err
 }
 
@@ -94,10 +83,3 @@ func (s *Service) Jobs(ctx context.Context, conversationID uuid.UUID, limit int)
 }
 
 func (s *Service) Count(text string) int { return s.counter.Count(text) }
-
-func activityForJob(status string) string {
-	if status == storage.MemoryJobRunning {
-		return ActivityRunning
-	}
-	return ActivityQueued
-}

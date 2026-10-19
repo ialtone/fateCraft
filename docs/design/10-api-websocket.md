@@ -196,7 +196,7 @@ GET /api/conversations/:id/activity
 
 新对话尚未完成首次上下文构建时，`context/last` 返回 `204 No Content`，这是正常空状态而不是资源错误。对话不存在或不属于当前玩家时仍返回 404。
 
-activity 返回 `narrative` 和 `memory` 两类当前状态，并投影当前有效回合的 `turn_status`、`can_continue`、`can_regenerate`。叙事状态为 `idle/preparing/model/tool`，并可附带 `step_no` 和题材无关的 `tool_category=state/roll/settlement/action`；Memory 状态为 `idle/queued/running`。它用于刷新和 WebSocket 重连后的恢复；按钮能力以服务端投影为准，不能由最后一条消息类型推断。
+activity 返回 `narrative` 和 `memory` 两类当前状态，并投影当前有效回合的 `turn_status`、`can_continue`、`can_regenerate`。叙事状态为 `idle/preparing/model/tool/streaming`，并可附带 `step_no` 和题材无关的 `tool_category=state/roll/settlement/action`；Memory 状态为 `idle/queued/running`。它用于刷新和 WebSocket 重连后的恢复；按钮能力以服务端投影为准，不能由最后一条消息类型推断。
 
 主叙事流式正文通过 `agent.text.delta` 实时推送。该正文在模型步骤通道确认前只是临时预览，不代表已写入可信历史；如果同一步随后出现工具调用，服务端发送 `agent.text.reset`（携带临时 `message_id` 和 `reason=tool_call`）清空预览，再进入工具流程。`agent.text.reset` 不清除 reasoning 或生成状态。最终正文以 `message_created` 的持久化消息为准；取消、失败、partial、断线重连时临时正文不恢复。
 
@@ -430,7 +430,8 @@ GET /ws/llm-relay
 | `state_update` | `state` | 当前状态的新完整值 |
 | `campaign_updated` | `campaign`, `domain_events` | 长期存档领域动作已提交；客户端应重新读取权威快照 |
 | `context_built` | `context_build_id` | 上下文日志可读取 |
-| `activity_updated` | `activity`, `status` | 后台活动变化；当前仅 Memory 使用 `queued/running/idle` |
+| `subscription.ready` | `conversation_id` | 鉴权且注册订阅后发送，客户端再开始 REST 对账 |
+| `activity_updated` | `activity_version`, `branch_epoch`, `snapshot`, `reason` | 提交后完整活动快照；同一对话可合并到最新版本 |
 | `conversation_ended` | conversation ID | 手动结束或状态变更 |
 | `challenge_completed` | `run_id`, `outcome`, `reward_grants`, `metrics`, `next_actions` | 通用挑战结算成功；`client` 路由时 `outcome.rewards_disabled_reason=client_llm_route` 且无奖励 |
 | `error` | `error` | 生成、权限或持久化错误 |
@@ -461,7 +462,7 @@ TPS 使用成功回合内各完成模型步骤的总输出 Token 除以模型请
 
 `GET /api/conversations/:id/runtime-inspector` 返回玩家运行面板投影。当前活动实时更新；性能和上下文只取最近一次成功完成且未失效的回合尝试，失败、部分完成、取消或运行中的尝试不替换上次成功结果。性能仅统计完成的模型步骤及已提交工具，失败诊断仍完整保留于管理日志。`context_built` 不直接更新玩家统计，成功完成后或重连时读取快照。
 
-`activity.memory_job` 返回最新归档任务的公开元数据：状态、目标回合、执行次数/上限、排队/开始/结束时间；`memory_archive` 返回当前有效归档覆盖回合和 Token 数。活动接口也返回 `memory_job`，用于轮询更新。归档正文、Worker、租约和原始错误不公开。进程级共享内容缓存与当前用户回合成功无关，不再通过此接口返回或在回合面板展示；底层缓存与诊断日志不因生成失败而伪造回滚。该接口不暴露 Prompt、世界书、密钥、原始响应或隐藏工具参数。
+`activity.memory_job` 返回最新归档任务的公开元数据：状态、目标回合、执行次数/上限、排队/开始/结束时间；`memory_archive` 返回当前有效归档覆盖回合和 Token 数。活动接口也返回 `memory_job`，用于按需对账和提交后推送。归档正文、Worker、租约和原始错误不公开。进程级共享内容缓存与当前用户回合成功无关，不再通过此接口返回或在回合面板展示；底层缓存与诊断日志不因生成失败而伪造回滚。该接口不暴露 Prompt、世界书、密钥、原始响应或隐藏工具参数。
 
 ## 对话分享 API
 
@@ -540,3 +541,14 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 新增上传/导出、导入记录/确认重查、引用、入口回退、运行策略和拥有者 gameplay-version 接口。保存/发布带 expected_revision，发布默认不切换入口；管理写入要求管理员，导入记录按操作者隔离。接口详情见专题。
 
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
+
+
+### 活动快照与恢复协议（2026-10-19）
+
+/activity、activity_updated.snapshot 和 runtime inspector.activity 共用 storage.ActivityRepo 投影。新增 activity_version、conversation_id、branch_epoch、conversation_status、is_processing、turn_id、attempt_id；memory_job 包含公开 ID。稳定字段与版本来自同一 SQL 语句；phase 独立补充，is_processing=false 时为 idle。
+
+版本由 conversation_activity_versions 保存，00001 中的延迟触发器使稳定变更与递增原子提交，同事务同对话至多一次。续租、step 和 delta 不递增。PG NOTIFY 在提交后唤醒服务端，25ms 合并后按对话读一次完整快照。根 branch_epoch=0 可省略。
+
+完整快照可跨版本直接应用；refresh_required=true 的失效通知只提高目标版本，需取得至少该版本的快照。当前发布器发送完整快照。agent phase 仍按 attempt + sequence 排序，不用 activity_version 排序字符。无版本业务事件不能覆盖更新的权威快照。
+
+客户端先缓冲、收到 subscription.ready 后读取活动及消息/状态/Campaign/结局/guidance 等快照，再合并事件。ready 超过 5 秒、恢复超过 15 秒或缓冲超过 2048 条/约 2MiB 时关闭连接恢复。健康空闲不轮询；已知任务无进展由 watchdog 核验，断线时按需退避。LISTEN 缺口关闭 WS 订阅以强制重建快照。协议不提供 durable replay，仍按单实例部署。

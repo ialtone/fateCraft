@@ -48,18 +48,3 @@ func TestPlayerContextSummaryDoesNotExposePromptDiagnostics(t *testing.T) {
 		}
 	}
 }
-
-func TestPublicMemoryActivityOnlyExposesActiveStages(t *testing.T) {
-	tests := map[string]string{
-		storage.MemoryJobPending:   "queued",
-		storage.MemoryJobRunning:   "running",
-		storage.MemoryJobSucceeded: "idle",
-		storage.MemoryJobFailed:    "idle",
-		storage.MemoryJobCancelled: "idle",
-	}
-	for input, want := range tests {
-		if got := publicMemoryActivity(input); got != want {
-			t.Fatalf("publicMemoryActivity(%q) = %q, want %q", input, got, want)
-		}
-	}
-}

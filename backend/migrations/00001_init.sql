@@ -1687,6 +1687,75 @@ END;
 $$;
 -- +goose StatementEnd
 
+-- Keep revision locks separate from business rows. Deferred triggers acquire
+-- them only after business writes, avoiding a job -> conversation lock inversion
+-- against branch replacement (conversation -> job).
+CREATE TABLE conversation_activity_versions (
+    conversation_id UUID PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    version BIGINT NOT NULL DEFAULT 0,
+    transaction_id BIGINT NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_activity_latest_turn ON conversation_turns(conversation_id, turn_seq DESC, id DESC)
+    WHERE invalidated_at IS NULL;
+CREATE INDEX idx_activity_latest_memory_job ON memory_jobs(conversation_id, created_at DESC, id DESC);
+
+-- +goose StatementBegin
+CREATE FUNCTION record_activity_change() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    conversation UUID;
+    old_fields JSONB := '{}'::jsonb;
+    new_fields JSONB := '{}'::jsonb;
+    field TEXT;
+    changed BOOLEAN;
+BEGIN
+    IF TG_TABLE_NAME = 'conversations' THEN
+        conversation := COALESCE(NEW.id, OLD.id);
+    ELSE
+        conversation := COALESCE(NEW.conversation_id, OLD.conversation_id);
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        FOREACH field IN ARRAY TG_ARGV LOOP
+            old_fields := old_fields || jsonb_build_object(field, to_jsonb(OLD) -> field);
+            new_fields := new_fields || jsonb_build_object(field, to_jsonb(NEW) -> field);
+        END LOOP;
+        IF old_fields = new_fields THEN RETURN NULL; END IF;
+    END IF;
+    -- A cascading delete needs no snapshot; its owning REST action removes the
+    -- page. Schema qualification also isolates integration-test schemas.
+    EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.conversations WHERE id = $1)', TG_TABLE_SCHEMA)
+        INTO changed USING conversation;
+    IF NOT changed THEN RETURN NULL; END IF;
+    EXECUTE format('INSERT INTO %I.conversation_activity_versions AS v
+        (conversation_id, version, transaction_id) VALUES ($1, 1, txid_current())
+        ON CONFLICT (conversation_id) DO UPDATE
+        SET version = v.version + 1, transaction_id = txid_current()
+        WHERE v.transaction_id <> txid_current() RETURNING true', TG_TABLE_SCHEMA)
+        INTO changed USING conversation;
+    IF changed THEN
+        PERFORM pg_notify('fatecraft_activity_' || substr(md5(TG_TABLE_SCHEMA), 1, 16), conversation::text);
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+
+CREATE CONSTRAINT TRIGGER activity_conversation AFTER INSERT OR UPDATE ON conversations
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
+        'status', 'is_processing', 'branch_epoch', 'llm_route');
+CREATE CONSTRAINT TRIGGER activity_turn AFTER INSERT OR UPDATE OR DELETE ON conversation_turns
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
+        'status', 'invalidated_at', 'turn_seq');
+CREATE CONSTRAINT TRIGGER activity_attempt AFTER INSERT OR UPDATE OR DELETE ON generation_attempts
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
+        'status', 'attempt_no', 'branch_epoch', 'committed_mutating_tool_count');
+CREATE CONSTRAINT TRIGGER activity_message AFTER INSERT OR UPDATE OR DELETE ON chat_messages
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
+        'role', 'turn_id', 'invalidated_at');
+CREATE CONSTRAINT TRIGGER activity_memory_job AFTER INSERT OR UPDATE OR DELETE ON memory_jobs
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
+        'status', 'target_until_turn_seq', 'execution_count', 'max_executions',
+        'created_at', 'started_at', 'finished_at');
+
 -- +goose Down
 -- Refuse rollback even when this file is run through an external Goose tool.
 -- Raising inside the migration transaction preserves both schema and version.

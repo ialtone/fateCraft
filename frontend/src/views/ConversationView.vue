@@ -195,7 +195,6 @@ function showCompletion(completion: CompletionInfo) {
 
 // 组件是否已卸载：卸载后进行中的 open() 不得再触碰 store / socket
 let disposed = false
-let activityTimer: ReturnType<typeof setInterval> | null = null
 
 // 最新 id 守卫：open() 的每个 await 期间用户可能已切换对话或离开本页，
 // 陈旧的 open 继续跑会用旧对话数据覆盖新对话、其尾部的 socket.connect
@@ -220,76 +219,39 @@ async function open(id: string) {
   try {
     await convStore.load(id)
   } catch (err: any) {
-    if (!stale(id)) message.error(`加载对话失败：${err?.message || '未知错误'}`)
+    if (!stale(id)) {
+      message.error(`加载对话失败：${err?.message || '未知错误'}`)
+      socket.connect(id)
+    }
     return
   }
   if (stale(id)) return
-  // 进入正在生成的对话（刷新页面 / 从列表点入）：agent.turn.started 已经
-  // 错过，不标记的话输入框不锁、也没有任何“生成中”指示。占位与增量由
-  // 后续 WS 事件补齐，结束兜底见 activity 轮询。
+  // 订阅就绪后的统一恢复负责首屏快照、消息和生成状态。
   if (convStore.current?.is_processing) chat.markGenerating()
-  // 次要数据任一加载失败都不能阻断实时连接：否则页面停在断线降级状态，
-  // REST 发送后输入框会一直锁住。
-  const results = await Promise.allSettled([
-    chat.load(id),
-    guidance.load(id),
-    stateStore.load(id),
-    context.loadRuntimeInspector(id),
-    runtime.load(id),
-    convStore.loadEndingState(id),
-    convStore.current?.campaign_id
-      ? campaign.load(convStore.current.campaign_id)
-      : Promise.resolve(null),
-  ])
-  if (stale(id)) return
-  if (convStore.current?.campaign_id) {
-    const latestBound = [...chat.messages]
-      .reverse()
-      .find((message) => message.type === 'assistant' && message.campaign_revision !== undefined)
-    if (
-      latestBound &&
-      !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)
-    ) {
-      await campaign.load(convStore.current.campaign_id).catch(() => {})
-    }
-  }
   socket.connect(id)
-  if (results.some((result) => result.status === 'rejected')) {
-    message.warning('部分对话数据加载失败，可稍后刷新页面重试')
-  }
 }
 
 onMounted(async () => {
-  // 轮询先于任何 await 启动：首次加载失败时仍需要它兜底解锁输入框。
-  activityTimer = setInterval(async () => {
-    if (disposed || !convId.value) return
-    const id = convId.value
-    await context.loadActivity(id)
-    if (stale(id)) return
-    if (convStore.endingState?.is_processing && context.activity.narrative === 'idle') {
-      convStore.loadEndingState(id).catch(() => {})
-    }
-    // 兜底复位：open() 因 is_processing 标记的“生成中”在服务端结束、而
-    // 本端又错过了收尾事件时（narrative 回到 idle 且没有流式占位），把
-    // 状态收回来，避免输入框永久锁死。有流式占位说明生成仍在事件流内，
-    // 交由 turn.completed / failed / error 正常收尾。
-    if (
-      !disposed &&
-      chat.isGenerating &&
-      !chat.streamingId &&
-      context.activity.narrative === 'idle'
-    ) {
-      chat.stopGenerating()
-      convStore.loadEndingState(convId.value).catch(() => {})
-      guidance.load(convId.value)
-      chat.load(convId.value).catch(() => {})
-    }
-  }, 5000)
+  window.addEventListener('resize', updateInspectorVisibility)
+  document.addEventListener('visibilitychange', updateInspectorVisibility)
   await rewards.load().catch(() => {})
   // 设置决定路由匹配判断与直连徽标；失败时不阻断页面，后端闸门兜底。
   await settings.load().catch(() => {})
   await open(convId.value)
 })
+
+function updateInspectorVisibility() {
+  context.setInspectorVisible(
+    document.visibilityState !== 'hidden' &&
+      (window.innerWidth > 768 ? showInspector.value : mobilePane.value === 'context'),
+  )
+}
+
+watch(
+  () => [showInspector.value, mobilePane.value, socket.currentConvId] as const,
+  updateInspectorVisibility,
+  { immediate: true },
+)
 
 watch(convId, (id, prev) => {
   if (id && id !== prev) open(id)
@@ -299,10 +261,9 @@ onBeforeUnmount(() => {
   // 先置卸载标记，让进行中的 open() 在下一个 await 后自行中止，
   // 避免陈旧续体在列表页重新 connect 出无限重连定时器
   disposed = true
-  if (activityTimer) {
-    clearInterval(activityTimer)
-    activityTimer = null
-  }
+  window.removeEventListener('resize', updateInspectorVisibility)
+  document.removeEventListener('visibilitychange', updateInspectorVisibility)
+  context.setInspectorVisible(false)
   socket.disconnect()
   convStore.clearCurrent()
   playerActions.reset()

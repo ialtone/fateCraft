@@ -367,3 +367,10 @@ go test -count=1 -timeout=10m ./...
 00001 新增 gameplay_imports、Pack 来源/管理修订、Version 内容修订/运行策略/来源摘要及账本索引。写栅栏持有版本共享锁，策略变更按包→版本锁顺序持有排他锁。开局在事务内检查当前入口，版本绑定不可改。新项目只更新 00001，不新增 00002、不自动迁移或清库。
 
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
+
+
+### 活动稳定版本（2026-10-19）
+
+新项目直接在 00001_init.sql 定义 conversation_activity_versions(conversation_id, version, transaction_id)、最新有效 turn / memory job 索引和 record_activity_change 延迟约束触发器，无历史回填或增量迁移。独立版本行在业务写入后更新，避免新增 memory job 与 conversation 的反向锁依赖。
+
+触发器覆盖 conversations、conversation_turns、generation_attempts、chat_messages、memory_jobs 的稳定字段。同事务同对话最多递增一次，回滚同时撤销版本和 NOTIFY；续租、step_count、纯 phase 不递增。相关 INSERT/DELETE 保守失效，版本不表示精确内容变化次数。按 schema 隔离的 pg_notify 在提交后交付；它不是可重放事件日志。

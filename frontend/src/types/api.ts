@@ -746,9 +746,17 @@ export type ToolActivityCategory =
   'state' | 'roll' | 'settlement' | 'action' | 'guidance' | (string & {})
 
 export interface ConversationActivity {
+  activity_version?: number
+  conversation_id?: string
+  branch_epoch?: number
+  conversation_status?: string
+  is_processing?: boolean
+  turn_id?: string | null
+  attempt_id?: string | null
   narrative: NarrativeActivityStatus
   memory: MemoryActivityStatus
   memory_job?: {
+    id?: string
     status: string
     target_until_turn: number
     execution_count: number
@@ -1762,10 +1770,16 @@ export interface ActivityUpdatedEvent extends SocketEventBase {
   type: 'activity_updated'
   activity?: 'memory'
   status?: MemoryActivityStatus
+  activity_version?: number
+  branch_epoch?: number
+  snapshot?: ConversationActivity
+  refresh_required?: boolean
+  reason?: string
 }
 
 /** 已知的服务端事件联合体（switch ev.type 可按字面量收窄成员） */
 export type SocketEvent =
+  | (SocketEventBase & { type: 'subscription.ready' })
   | GuidanceUpdatedEvent
   | AgentTurnStartedEvent
   | AgentStepStartedEvent
@@ -1808,6 +1822,7 @@ export type IncomingSocketEvent = SocketEvent | UnknownSocketEvent
 // 已知事件类型清单。用 Record<SocketEvent['type'], true> 保证与联合体
 // 一一对应：新增事件成员却漏登记时编译器会报错。
 const KNOWN_SOCKET_EVENT_TYPES: Record<SocketEvent['type'], true> = {
+  'subscription.ready': true,
   'guidance.updated': true,
   'agent.turn.started': true,
   'agent.step.started': true,

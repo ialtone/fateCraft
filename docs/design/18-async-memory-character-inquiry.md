@@ -113,7 +113,7 @@ Worker 使用进程根 context 和独立串行执行器，不继承 HTTP/WS 请�
 - 来源、分支、链头或租约变化：丢弃候选，不推进覆盖边界。
 - 数据库失败：不创建可见半成品，不影响当前叙事。
 
-普通玩家只在上下文检查器看到“等待记忆归档”或“正在执行记忆归档”，不暴露 Memory job ID、执行次数、失败原因，也不提供失败 Toast 或重试按钮。状态由 WebSocket 即时通知，并以只读 activity 接口在刷新和重连后恢复。Worker 在调用模型前预分配候选 Memory ID；管理员开启详细模型日志后，可用 `purpose=memory`、memory job ID、候选 memory ID 和原始上游响应排查。成功提交沿用该 ID，失败候选不会生成 Memory 版本。
+普通玩家只在上下文检查器看到“等待记忆归档”或“正在执行记忆归档”，不展示内部失败原因；公开接口包含 job ID 和执行次数供同步与检查器使用，也不提供失败 Toast 或重试按钮。状态由 WebSocket 即时通知，并以只读 activity 接口在刷新和重连后恢复。Worker 在调用模型前预分配候选 Memory ID；管理员开启详细模型日志后，可用 `purpose=memory`、memory job ID、候选 memory ID 和原始上游响应排查。成功提交沿用该 ID，失败候选不会生成 Memory 版本。
 
 ## Context Builder
 
@@ -190,3 +190,6 @@ Memory 使用 `memory_archive_v1`，Inquiry 使用 `character_inquiry_v1`，两�
 | 权威表结构 | `backend/migrations/*.sql`，由 `cmd/migrate` 执行 |
 
 修改这些边界时至少运行 `go test ./...`、`go vet ./...` 和 `vue-tsc --noEmit`；发布前再执行项目约定的生产构建。PostgreSQL 集成测试使用随机隔离 schema，设置 `FATECRAFT_TEST_DATABASE_URL` 后执行；测试结束会删除该 schema。
+
+
+活动通知统一由 memory_jobs 稳定字段的提交触发，覆盖 schedule、目标合并、claim、release、retry、cancel 与终态。旧 ActivitySink 回调已移除。租约续期与 updated_at 不递增活动版本；完整 activity 推送携带公开任务元数据，客户端不为排队/执行 phase 查询 inspector，归档完成且检查器可见时才刷新归档信息。

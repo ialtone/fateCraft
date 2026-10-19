@@ -253,3 +253,6 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 ## 终局提议（2026-10-11）
 
 `fc_propose_ending` 读取玩家终局预览，在原工具事务中校验后记录待确认提议；不执行玩家动作。`ending.proposed` 通知前端读取确认入口。当前终局目录与事实约束在历史之后；真实结束才进入既有有限收尾授权。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
+
+
+活动稳定版本与 agent sequence 分离：纯 phase、step_count 和 delta 不递增版本，也不触发 REST/inspector 查询。turn/attempt 终态与生成锁释放若分两次事务，各自推送；终态不代表 is_processing 已释放。客户端只用通过去重和 sequence 校验的事件更新进展，已知生成 75 秒无进展后核验权威快照，漏终态时仍可关闭流式占位。REST phase 不覆盖读取期间已收到的同 attempt 新 phase。

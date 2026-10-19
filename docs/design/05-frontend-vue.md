@@ -303,10 +303,19 @@ Campaign Renderer 只能读取当前版本后端返回的 Campaign Snapshot；St
 
 ## 统一结局交互（2026-10-11）
 
-顶栏中止、模块行动和模型提议确认共用 playerActions 请求日志。HTTP、WS、刷新恢复使用同一结局消费器，按稳定 ID 去重，已关闭窗口可通过“查看结局”重开。生成中禁用确认，活动轮询补偿标记更新。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
+顶栏中止、模块行动和模型提议确认共用 playerActions 请求日志。HTTP、WS、刷新恢复使用同一结局消费器，按稳定 ID 去重，已关闭窗口可通过“查看结局”重开。生成中禁用确认，活动快照与按需对账补偿标记更新。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 
 ## 玩法包交换与版本管理
 
 内容管理分离玩法包、版本管理、上传、记录和编辑；玩家页面展示原版、当前入口和运行暂停原因。奖励后台按实际包/版本筛选，来源名称取发放快照。
 
 完整协议见 [27 玩法包交换与版本生命周期](27-gameplay-package-exchange-and-versions.md)。
+
+
+### 活动恢复协调（2026-10-19）
+
+ConversationView 不再设置 5 秒活动定时器。socket store 等待 subscription.ready 后统一恢复业务资源，期间有限缓冲；context store 负责活动单飞、最高目标版本、请求代际和 phase 合并。请求失败保留成功快照并标记 stale，旧响应不能覆盖新页面；完整活动推送不触发 /activity 补读。
+
+健康空闲时 activity 和 inspector 周期请求为零。前台在线但断线时 5→10→30 秒抖动退避；已知生成或 memory 任务 75 秒无进展才核验，重复无进展退避至 5 分钟。隐藏/离线暂停兜底，可见/online 合并恢复。生成解锁以权威 is_processing=false 为准，包含遗留 streaming placeholder；恢复只读，不重发玩家动作。
+
+检查器仅实际可见时读取，隐藏时标记 dirty，可见时在回合终态、分支替换和 memory 完成等边界合并刷新。phase/delta 不查 inspector。它返回的 activity 也经过统一版本校验。消息按 ID/attempt、Campaign 按 revision/hash 合并；缓冲无版本 state_update 改为补读，避免把 REST 状态回滚。

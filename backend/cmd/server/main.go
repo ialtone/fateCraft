@@ -65,6 +65,7 @@ func main() {
 	memRepo := storage.NewMemoryRepo(db)
 	turnRepo := storage.NewTurnRepo(db)
 	agentRepo := storage.NewAgentRepo(db)
+	activityRepo := storage.NewActivityRepo(db)
 	ctxRepo := storage.NewContextRepo(db)
 	settingsRepo := storage.NewSettingsRepo(db)
 	systemSettingsRepo := storage.NewSystemSettingsRepo(db)
@@ -258,20 +259,13 @@ func main() {
 		Rewards:    rewardRepo,
 	})
 	hub := realtime.NewHub(gen, cfg.AllowedOrigins)
-	memoryActivitySink := memory.ActivitySink(func(conversationID uuid.UUID, status string) {
-		hub.Broadcast(conversationID, realtime.Event{
-			Type: realtime.TypeActivityUpdated, ConversationID: conversationID.String(),
-			Activity: "memory", Status: status,
-		})
-	})
-	memSvc.SetActivitySink(memoryActivitySink)
-	memoryWorker.SetActivitySink(memoryActivitySink)
 
 	// HTTP 服务。
 	server := api.NewServer(api.Deps{
 		Conv: convSvc, Campaigns: campaignSvc, Chat: chatSvc, State: stateSvc, Challenges: challengeSvc, Builtins: builtinImporter,
 		Memory: memSvc, Inquiries: inquirySvc, Settings: settingsRepo, LLMSettings: llmSettingsSvc, System: systemSettingsRepo, CtxLogs: ctxRepo, Messages: msgRepo, Agents: agentRepo,
 		Rewards: rewardRepo, LLMRequestLogs: llmRequestLogRepo, Turns: turnRepo,
+		Activity: activityRepo,
 		Diagnostics: func() any {
 			return map[string]any{"instance_id": cfg.InstanceID, "writer": auditWriter.Status(), "cleanup": diagnosticLogRepo.Status()}
 		},
@@ -314,6 +308,11 @@ func main() {
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	workerCtx, stopWorker := context.WithCancel(rootCtx)
+	stopActivity, err := realtime.StartActivityNotifications(workerCtx, cfg.DatabaseURL, activityRepo, hub)
+	if err != nil {
+		logger.Fatal("启动活动状态通知失败", zap.Error(err))
+	}
+	defer stopActivity()
 	go memoryWorker.Run(workerCtx)
 	memoryWorker.Wake()
 	// Short bounded cleanup rounds can catch up without monopolizing the database.

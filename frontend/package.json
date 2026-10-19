@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:activity": "node --test tests/activity-reconciliation.test.mjs",
     "test:campaign-actions": "node --test tests/campaign-actions.test.mjs",
     "test:ending-actions": "node --test tests/ending-actions.test.mjs",
     "test:module-actions": "node --experimental-strip-types --test tests/module-actions.test.mjs",

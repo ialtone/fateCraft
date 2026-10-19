@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, shallowRef, watch } from 'vue'
 import type { DisplayMessage, IncomingSocketEvent } from '@/types'
 import { isKnownSocketEvent } from '@/types'
 import { useChatStore } from './chat'
@@ -18,7 +18,7 @@ const RECONNECT_MAX_DELAY = 30000
 const NON_LOCKING_SCOPED_EVENTS = new Set(['notice', 'error', 'generation.replayed'])
 
 export const useSocketStore = defineStore('socket', () => {
-  const ws = ref<WebSocket | null>(null)
+  const ws = shallowRef<WebSocket | null>(null)
   const connected = ref(false)
   // 断线后正在尝试自动重连
   const reconnecting = ref(false)
@@ -37,6 +37,114 @@ export const useSocketStore = defineStore('socket', () => {
   const finishedOperations = new Set<string>()
   // Campaign 正文先到达、快照后到达时，先缓冲正文，避免正文与侧栏处于不同版本。
   const pendingCampaignMessages = new Map<string, DisplayMessage[]>()
+  let session = 0
+  let ready = false
+  let recovering = false
+  let recoveryFlight: Promise<void> | null = null
+  let businessPending = false
+  let activityPending = false
+  let buffered: IncomingSocketEvent[] = []
+  let bufferedBytes = 0
+  let readyTimer: ReturnType<typeof setTimeout> | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let taskTimer: ReturnType<typeof setTimeout> | null = null
+  let recoveryTimer: ReturnType<typeof setTimeout> | null = null
+  let stopTaskWatch: (() => void) | null = null
+  let retryDelay = 5000
+  let taskDelay = 75000
+  let targetVersion = 0
+  let narrativeProgress = 0
+  let memoryProgress = 0
+  const terminalAttempts = new Set<string>()
+
+  const foreground = () => typeof document === 'undefined' || document.visibilityState !== 'hidden'
+  const online = () => typeof navigator === 'undefined' || navigator.onLine !== false
+
+  function stopRecoveryTimers() {
+    if (retryTimer) clearTimeout(retryTimer)
+    if (taskTimer) clearTimeout(taskTimer)
+    retryTimer = taskTimer = null
+  }
+
+  function scheduleFallback(immediate = false) {
+    if (!currentConvId.value || retryTimer || !foreground() || !online()) return
+    const epoch = session
+    const wait = immediate ? 0 : retryDelay * (0.9 + Math.random() * 0.2)
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      if (epoch !== session || !currentConvId.value) return
+      void resyncConversation(currentConvId.value, true)
+        .catch(() => {})
+        .finally(() => {
+          if (epoch !== session) return
+          retryDelay = retryDelay === 5000 ? 10000 : 30000
+          if (!ready || businessPending || useContextStore().activityStale) scheduleFallback()
+        })
+    }, wait)
+  }
+
+  function armTaskWatchdog() {
+    if (taskTimer) clearTimeout(taskTimer)
+    taskTimer = null
+    if (!ready || !currentConvId.value || !foreground() || !online()) return
+    const activity = useContextStore().activity
+    const generating = activity.is_processing || useChatStore().isGenerating
+    const memoryBusy = activity.memory === 'queued' || activity.memory === 'running'
+    if (!generating && !memoryBusy) return
+    const deadline = Math.min(
+      generating ? narrativeProgress + taskDelay : Infinity,
+      memoryBusy ? memoryProgress + taskDelay : Infinity,
+    )
+    const epoch = session
+    taskTimer = setTimeout(
+      () => {
+        taskTimer = null
+        if (epoch !== session || !currentConvId.value) return
+        const current = useContextStore().activity
+        const narrativeDue =
+          (current.is_processing || useChatStore().isGenerating) &&
+          Date.now() - narrativeProgress >= taskDelay
+        const memoryDue = current.memory !== 'idle' && Date.now() - memoryProgress >= taskDelay
+        if (!narrativeDue && !memoryDue) {
+          armTaskWatchdog()
+          return
+        }
+        const context = useContextStore()
+        const previous = context.activity.activity_version
+        void context
+          .loadActivity(currentConvId.value)
+          .then(() => {
+            if (epoch !== session) return
+            const snapshot = context.activity
+            if (
+              (snapshot.is_processing === false && useChatStore().isGenerating) ||
+              snapshot.activity_version !== previous
+            ) {
+              return resyncConversation(currentConvId.value!, true)
+            }
+          })
+          .catch(() => {
+            if (epoch === session) scheduleFallback()
+          })
+          .finally(() => {
+            if (epoch !== session) return
+            taskDelay = Math.min(taskDelay * 2, 300000)
+            narrativeProgress = memoryProgress = Date.now()
+            armTaskWatchdog()
+          })
+      },
+      Math.max(0, deadline - Date.now()),
+    )
+  }
+
+  function resume() {
+    stopRecoveryTimers()
+    if (!currentConvId.value || !foreground() || !online()) return
+    retryDelay = 5000
+    useContextStore().invalidateInspector()
+    if (ready) void resyncConversation(currentConvId.value, true).catch(() => scheduleFallback())
+    else scheduleFallback(true)
+  }
 
   function finishActiveOperation() {
     if (activeOperationID) {
@@ -54,6 +162,22 @@ export const useSocketStore = defineStore('socket', () => {
   function connect(convId: string) {
     disconnect()
     currentConvId.value = convId
+    useContextStore().enter(convId)
+    narrativeProgress = memoryProgress = Date.now()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', resume)
+      window.addEventListener('offline', resume)
+      document.addEventListener('visibilitychange', resume)
+    }
+    stopTaskWatch = watch(
+      () => [
+        useChatStore().isGenerating,
+        useContextStore().activity.memory,
+        useContextStore().activity.is_processing,
+      ],
+      armTaskWatchdog,
+    )
+    scheduleFallback()
     openSocket(convId)
   }
 
@@ -62,76 +186,190 @@ export const useSocketStore = defineStore('socket', () => {
   // state_update / context_built / conversation_ended 等事件没有任何补发机制，
   // 错过即永久丢失；不重拉的话，时间线、状态面板和对话状态会缺一段，
   // 直到用户手动刷新页面。
-  async function resyncConversation(convId: string) {
-    useGuidanceStore().load(convId)
-    const chat = useChatStore()
-    const state = useStateStore()
-    const context = useContextStore()
-    const convStore = useConversationStore()
-    const campaign = useCampaignStore()
-    // 状态与上下文相互独立、失败互不影响；resync 失败不致命，静默忽略即可
-    state.load(convId).catch(() => {})
-    context.loadRuntimeInspector(convId).catch(() => {})
-
-    // 对话本体与消息列表需要等到结果再做流式复位判断：
-    // - 对话本体带回 status 真值（补上断线期间错过的结局/结束）
-    //   与 is_processing（服务端是否仍在生成）
-    // - 消息列表带回断线期间落库的新消息（整表替换天然不会产生重复）
-    // 先记下等待前的流式 id：若等待期间收到了新的 agent.turn.started，
-    // 说明快照里的 is_processing 已过期，不能拿旧快照去复位新一轮生成。
-    const streamingIdBefore = chat.streamingId
-    const [convRes] = await Promise.allSettled([convStore.load(convId), chat.load(convId)])
-
-    if (currentConvId.value === convId) convStore.loadEndingState(convId).catch(() => {})
-
-    // 等待期间用户已切走（disconnect 会清空 currentConvId）：立即中止，
-    // 避免对旧对话的流式复位波及新对话
-    if (currentConvId.value !== convId) return
-
-    if (convRes.status === 'fulfilled' && convRes.value.campaign_id) {
-      await campaign.load(convRes.value.campaign_id).catch(() => {})
-      const latestBound = [...chat.messages]
-        .reverse()
-        .find((message) => message.type === 'assistant' && message.campaign_revision !== undefined)
-      if (latestBound && !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)) {
-        await campaign.load(convRes.value.campaign_id).catch(() => {})
+  function resyncConversation(
+    convId: string,
+    full = true,
+    minimumVersion = 0,
+    readActivity = true,
+  ): Promise<void> {
+    if (currentConvId.value !== convId) return Promise.resolve()
+    businessPending ||= full
+    activityPending ||= readActivity
+    targetVersion = Math.max(targetVersion, minimumVersion)
+    if (recoveryFlight) return recoveryFlight
+    const epoch = session
+    const request = (async () => {
+      const chat = useChatStore()
+      const context = useContextStore()
+      const conv = useConversationStore()
+      const campaign = useCampaignStore()
+      recovering = true
+      recoveryTimer = setTimeout(() => {
+        if (epoch === session) ws.value?.close()
+      }, 15000)
+      try {
+        // At most two immediate passes. Subsequent changes recover with backoff.
+        for (let pass = 0; pass < 2; pass++) {
+          const business = businessPending
+          const activityRead = activityPending
+          businessPending = false
+          activityPending = false
+          const before = context.activity
+          const results = await Promise.allSettled([
+            ...(activityRead ? [context.loadActivity(convId, targetVersion)] : []),
+            ...(business
+              ? [
+                  conv.load(convId),
+                  chat.load(convId),
+                  useStateStore().load(convId),
+                  useGuidanceStore().load(convId),
+                  conv.loadEndingState(convId),
+                  useRuntimeStore().load(convId),
+                  useRewardStore().load(),
+                ]
+              : []),
+          ])
+          if (epoch !== session) return
+          const failure = results.find((result) => result.status === 'rejected')
+          if (failure?.status === 'rejected') throw failure.reason
+          const snapshot = context.activity
+          if (
+            !business &&
+            ((snapshot.is_processing === false && chat.isGenerating) ||
+              snapshot.branch_epoch !== before.branch_epoch ||
+              snapshot.turn_id !== before.turn_id ||
+              snapshot.conversation_status !== before.conversation_status)
+          ) {
+            businessPending = true
+          }
+          if (business) {
+            if (context.inspectorVisible && context.inspectorDirty) {
+              void context.loadRuntimeInspector(convId)
+            }
+            if (conv.current?.campaign_id) {
+              await campaign.load(conv.current.campaign_id)
+              if (epoch !== session) return
+              const latest = [...chat.messages]
+                .reverse()
+                .find((m) => m.type === 'assistant' && m.campaign_revision !== undefined)
+              if (
+                latest &&
+                !campaign.matches(latest.campaign_revision, latest.campaign_state_hash)
+              ) {
+                await campaign.load(conv.current.campaign_id)
+                if (epoch !== session) return
+              }
+            }
+            if (snapshot.attempt_id && snapshot.turn_status !== 'pending')
+              terminalAttempts.add(snapshot.attempt_id)
+            const processing = snapshot.is_processing ?? conv.current?.is_processing
+            if (processing === false) {
+              finishActiveOperation()
+              chat.stopGenerating()
+            } else if (processing) {
+              if (activeAgentAttempt !== snapshot.attempt_id) finishActiveOperation()
+              activeAgentAttempt = snapshot.attempt_id || null
+              chat.markGenerating()
+            }
+            if (conv.current && snapshot.conversation_status) {
+              conv.current.status = snapshot.conversation_status as typeof conv.current.status
+              if (snapshot.is_processing !== undefined)
+                conv.current.is_processing = snapshot.is_processing
+            }
+          }
+          if (!businessPending && !activityPending) break
+        }
+        if (ready) retryDelay = 5000
+      } catch (error: any) {
+        if (epoch === session) businessPending = true
+        if (
+          epoch === session &&
+          [401, 403, 404].includes(error?.response?.status ?? error?.status)
+        ) {
+          disconnect()
+          lastError.value = '无法继续访问此对话，请重新登录或返回对话列表'
+        }
+        throw error
+      } finally {
+        if (epoch === session) {
+          if (recoveryTimer) clearTimeout(recoveryTimer)
+          recoveryTimer = null
+          recovering = false
+          const events = buffered
+          buffered = []
+          bufferedBytes = 0
+          for (const event of events) {
+            const attempt = typeof event.attempt_id === 'string' ? event.attempt_id : null
+            if (attempt && context.activity.attempt_id && attempt !== context.activity.attempt_id) {
+              if (event.type === 'agent.turn.started') businessPending = true
+              continue
+            }
+            // State events have no comparable REST revision. A buffered older
+            // state must not roll back a newer snapshot; verify once more.
+            if (event.type === 'state_update') {
+              businessPending = true
+              continue
+            }
+            handleEvent(event)
+          }
+          armTaskWatchdog()
+        }
       }
-    }
-
-    // 服务端已不在生成：说明断线窗口里错过了 agent.turn.completed / error，
-    // 必须复位流式状态，否则输入框会永久停留在「叙事织就中」。
-    // 服务端仍在生成、或对话本体拉取失败（真值未知）：保持现状不强行复位，
-    // 让后续的流式事件自然收尾——宁可保守也不误杀仍在进行的生成。
-    // 已知限制：仍在生成时上面的 chat.load 会冲掉尚未落库的流式占位，
-    // 后续增量在 message_created 到达前暂不可见（找不到对应消息被丢弃），
-    // 最终消息不丢也不重复，只是这段时间内看不到打字机效果。
-    if (convRes.status === 'fulfilled' && chat.streamingId === streamingIdBefore) {
-      if (convRes.value.is_processing) chat.markGenerating()
-      else chat.stopGenerating()
-    }
+    })()
+    recoveryFlight = request
+    void request
+      .finally(() => {
+        if (epoch !== session || recoveryFlight !== request) return
+        recoveryFlight = null
+        if (businessPending || activityPending) scheduleFallback()
+      })
+      .catch(() => {})
+    return request
   }
 
   // 实际建立 WebSocket 连接（供首连与重连复用）。
   function openSocket(convId: string) {
+    ready = false
+    recovering = false
+    buffered = []
+    bufferedBytes = 0
+    if (readyTimer) clearTimeout(readyTimer)
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const socket = new WebSocket(`${proto}://${window.location.host}/ws/conversations/${convId}`)
     ws.value = socket
 
     socket.onopen = () => {
       if (ws.value !== socket || currentConvId.value !== convId) return
-      connected.value = true
       // 连接已恢复：清掉断线期间 onerror 留下的错误提示，避免横幅常驻不散
       lastError.value = null
       // 此前有过退避尝试则说明本次是断线重连，而非首次连接
-      const isReconnect = reconnectAttempts > 0
       // 重连成功：重置退避状态
       reconnecting.value = false
       reconnectAttempts = 0
-      if (isReconnect && currentConvId.value) resyncConversation(currentConvId.value)
+      // Subscription readiness is required. A missing acknowledgement enters
+      // disconnected recovery instead of treating an unregistered socket as live.
+      readyTimer = setTimeout(() => {
+        readyTimer = null
+        if (ws.value !== socket || currentConvId.value !== convId || ready) return
+        socket.close()
+      }, 5000)
     }
     socket.onclose = () => {
       if (ws.value !== socket) return
+      session++
+      useContextStore().invalidateRequests()
+      recoveryFlight = null
+      recovering = false
+      buffered = []
+      bufferedBytes = 0
+      if (recoveryTimer) clearTimeout(recoveryTimer)
+      recoveryTimer = null
+      ready = false
+      if (readyTimer) clearTimeout(readyTimer)
+      readyTimer = null
       connected.value = false
+      stopRecoveryTimers()
+      scheduleFallback()
       scheduleReconnect()
     }
     socket.onerror = () => {
@@ -141,9 +379,23 @@ export const useSocketStore = defineStore('socket', () => {
     socket.onmessage = (ev) => {
       if (ws.value !== socket || currentConvId.value !== convId) return
       try {
-        handleEvent(JSON.parse(ev.data) as IncomingSocketEvent)
+        const event = JSON.parse(ev.data) as IncomingSocketEvent
+        if (!event || typeof event.type !== 'string') throw new Error('Invalid socket event')
+        if (event.type === 'subscription.ready') {
+          if (ready) return
+          ready = true
+          connected.value = true
+          if (readyTimer) clearTimeout(readyTimer)
+          readyTimer = null
+          stopRecoveryTimers()
+          void resyncConversation(convId).catch(() => scheduleFallback())
+        } else if (!ready || recovering) {
+          buffered.push(event)
+          bufferedBytes += typeof ev.data === 'string' ? ev.data.length * 2 : 0
+          if (buffered.length > 2048 || bufferedBytes > 2 * 1024 * 1024) socket.close()
+        } else handleEvent(event)
       } catch {
-        // 忽略无法解析的消息。
+        socket.close()
       }
     }
   }
@@ -161,6 +413,30 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function disconnect() {
+    session++
+    useContextStore().invalidateRequests()
+    ready = false
+    recovering = false
+    recoveryFlight = null
+    businessPending = false
+    activityPending = false
+    buffered = []
+    bufferedBytes = 0
+    terminalAttempts.clear()
+    stopRecoveryTimers()
+    if (readyTimer) clearTimeout(readyTimer)
+    if (recoveryTimer) clearTimeout(recoveryTimer)
+    readyTimer = recoveryTimer = null
+    stopTaskWatch?.()
+    stopTaskWatch = null
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', resume)
+      window.removeEventListener('offline', resume)
+      document.removeEventListener('visibilitychange', resume)
+    }
+    retryDelay = 5000
+    taskDelay = 75000
+    targetVersion = 0
     // 主动断开：取消重连并清空状态
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
@@ -235,18 +511,88 @@ export const useSocketStore = defineStore('socket', () => {
     const queued = pendingCampaignMessages.get(convId) || []
     queued.push(message)
     pendingCampaignMessages.set(convId, queued)
-    void campaign.load(conv.current.campaign_id).then(() => flushCampaignMessages(convId)).catch(() => {})
+    void campaign
+      .load(conv.current.campaign_id)
+      .then(() => flushCampaignMessages(convId))
+      .catch(() => {})
   }
 
   function handleEvent(ev: IncomingSocketEvent) {
     // 后端新增而前端尚未定义的事件类型：直接忽略，防止炸掉运行时；
     // 过滤后 ev 收窄为 SocketEvent，switch 各分支按 type 字面量继续收窄成员。
     if (!isKnownSocketEvent(ev)) return
+
+    if (typeof ev.conversation_id === 'string' && ev.conversation_id !== currentConvId.value) return
+    const eventAttempt = typeof ev.attempt_id === 'string' ? ev.attempt_id : ''
+    if (eventAttempt && ev.type.startsWith('agent.') && terminalAttempts.has(eventAttempt)) return
+    const contextStore = useContextStore()
+    if (ev.type === 'activity_updated') {
+      const previous = contextStore.activity
+      if (ev.snapshot) {
+        if (
+          ev.snapshot.activity_version !== ev.activity_version ||
+          ev.snapshot.branch_epoch !== (ev.branch_epoch ?? 0)
+        ) {
+          if (currentConvId.value)
+            void resyncConversation(currentConvId.value).catch(() => scheduleFallback())
+          return
+        }
+        if (contextStore.applyActivitySnapshot(ev.snapshot)) {
+          const next = contextStore.activity
+          if (
+            previous.memory !== next.memory ||
+            previous.memory_job?.id !== next.memory_job?.id ||
+            previous.memory_job?.execution_count !== next.memory_job?.execution_count
+          ) {
+            memoryProgress = Date.now()
+            taskDelay = 75000
+            if (next.memory === 'idle') contextStore.invalidateInspector()
+          }
+          if (
+            (previous.turn_status !== next.turn_status && next.turn_status !== 'pending') ||
+            previous.branch_epoch !== next.branch_epoch
+          )
+            contextStore.invalidateInspector()
+          if (
+            (next.is_processing === false && useChatStore().isGenerating) ||
+            previous.branch_epoch !== next.branch_epoch ||
+            (previous.turn_id !== next.turn_id && activeAgentAttempt !== next.attempt_id) ||
+            previous.conversation_status !== next.conversation_status
+          ) {
+            if (next.is_processing === false) useChatStore().stopGenerating()
+            if (currentConvId.value)
+              void resyncConversation(currentConvId.value, true, 0, false).catch(() =>
+                scheduleFallback(),
+              )
+          }
+          if (next.attempt_id && next.turn_status !== 'pending')
+            terminalAttempts.add(next.attempt_id)
+          if (terminalAttempts.size > 256)
+            terminalAttempts.delete(terminalAttempts.values().next().value!)
+        }
+      } else if (ev.refresh_required && typeof ev.activity_version === 'number') {
+        if (ev.activity_version > (previous.activity_version ?? -1) && currentConvId.value) {
+          void resyncConversation(currentConvId.value, false, ev.activity_version).catch(() =>
+            scheduleFallback(),
+          )
+        }
+      } else if (currentConvId.value) {
+        // Legacy memory notifications are invalidations, never unversioned writes.
+        memoryProgress = Date.now()
+        void resyncConversation(currentConvId.value, false).catch(() => scheduleFallback())
+      }
+      armTaskWatchdog()
+      return
+    }
     if (ev.conversation_id && ev.conversation_id !== currentConvId.value) return
 
     const sequenced = ev.type.startsWith('agent.') || ev.type === 'guidance.updated'
     if (sequenced && !acceptAgentEvent(ev)) return
     if (!sequenced && (ev.operation_id || ev.attempt_id) && !acceptScopedEvent(ev)) return
+    if (ev.type.startsWith('agent.')) {
+      narrativeProgress = Date.now()
+      taskDelay = 75000
+    }
 
     const chat = useChatStore()
     const state = useStateStore()
@@ -256,6 +602,7 @@ export const useSocketStore = defineStore('socket', () => {
     const campaign = useCampaignStore()
     const runtime = useRuntimeStore()
     const guidance = useGuidanceStore()
+    if (eventAttempt && ev.type.startsWith('agent.')) context.notePhaseAttempt(eventAttempt)
 
     switch (ev.type) {
       case 'agent.turn.started':
@@ -263,7 +610,6 @@ export const useSocketStore = defineStore('socket', () => {
         lastError.value = null
         context.setNarrative('preparing')
         if (ev.payload?.message_id) chat.beginStream(ev.payload.message_id)
-        if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
         break
       case 'agent.step.started':
         context.setNarrative('model', { step_no: ev.step_no })
@@ -273,7 +619,6 @@ export const useSocketStore = defineStore('socket', () => {
           step_no: ev.step_no,
           tool_category: ev.payload?.category,
         })
-        if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
         break
       case 'agent.tool.finished':
         context.setNarrative('preparing', { step_no: ev.step_no })
@@ -298,7 +643,7 @@ export const useSocketStore = defineStore('socket', () => {
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.endStream(ev.payload.message_id)
         rewards.load().catch(() => {})
-        if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
+        context.invalidateInspector()
         finishActiveOperation()
         break
       case 'agent.turn.partial':
@@ -307,15 +652,10 @@ export const useSocketStore = defineStore('socket', () => {
         context.setNarrative('idle')
         // partial 回合已经提交了可信事实，重新生成要消耗改写额度；
         // 这里不写死数量，交给平台能力和随后刷新的 inspector 决定。
-        context.setTurnCapabilities({
-          turn_status: 'partial',
-          can_regenerate: true,
-          regenerate_cost_quantity: undefined,
-        })
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         lastError.value = ev.payload?.message || '动作已执行，但叙事未完成。请继续叙事。'
         rewards.load().catch(() => {})
-        if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
+        context.invalidateInspector()
         finishActiveOperation()
         break
       case 'agent.turn.failed':
@@ -323,15 +663,10 @@ export const useSocketStore = defineStore('socket', () => {
         if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         guidance.reset()
         context.setNarrative('idle')
-        context.setTurnCapabilities({
-          turn_status: ev.type === 'agent.turn.cancelled' ? 'cancelled' : 'failed',
-          can_regenerate: true,
-          regenerate_cost_quantity: 0,
-        })
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         // 失败或取消后付费的重新生成会先退款，再推送终止事件；这里刷新余额。
         rewards.load().catch(() => {})
-        if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
+        context.invalidateInspector()
         finishActiveOperation()
         break
       case 'agent.queue.updated':
@@ -339,15 +674,13 @@ export const useSocketStore = defineStore('socket', () => {
         break
       case 'message_created':
         if (ev.message?.type === 'user') guidance.reset()
-        if (ev.message && currentConvId.value)
-          applyCampaignMessage(currentConvId.value, ev.message)
+        if (ev.message && currentConvId.value) applyCampaignMessage(currentConvId.value, ev.message)
         break
       case 'guidance.updated':
         guidance.set(ev.payload.guidance)
         break
       case 'message_updated':
-        if (ev.message && currentConvId.value)
-          applyCampaignMessage(currentConvId.value, ev.message)
+        if (ev.message && currentConvId.value) applyCampaignMessage(currentConvId.value, ev.message)
         break
       case 'branch.replaced':
         guidance.reset()
@@ -355,17 +688,9 @@ export const useSocketStore = defineStore('socket', () => {
         rewards.load().catch(() => {})
         break
       case 'generation.replayed':
-        if (currentConvId.value) guidance.load(currentConvId.value)
         if (currentConvId.value) {
-          const replayConvId = currentConvId.value
-          Promise.allSettled([conv.load(replayConvId), chat.load(replayConvId)]).then(
-            ([convResult]) => {
-              if (currentConvId.value !== replayConvId || convResult.status !== 'fulfilled') return
-              if (convResult.value.is_processing) chat.markGenerating()
-              else chat.stopGenerating()
-            },
-          )
-          context.loadRuntimeInspector(currentConvId.value).catch(() => {})
+          context.invalidateInspector()
+          void resyncConversation(currentConvId.value, true).catch(() => scheduleFallback())
         }
         break
       case 'module.action_committed':
@@ -394,17 +719,12 @@ export const useSocketStore = defineStore('socket', () => {
         // Context is constructed before the outcome is known. Only committed
         // successful attempts should replace the runtime panel statistics.
         break
-      case 'activity_updated':
-        if (ev.activity === 'memory' && ev.status) {
-          context.setActivity('memory', ev.status)
-          if (currentConvId.value) context.loadRuntimeInspector(currentConvId.value).catch(() => {})
-        }
-        break
       case 'conversation_ended':
         guidance.reset()
-        conv.markEnded()
-        chat.stopGenerating()
-        context.setNarrative('idle')
+        // Legacy lifecycle events have no revision. Verify them instead of
+        // allowing a late end event to overwrite a newer restore snapshot.
+        if (currentConvId.value)
+          void resyncConversation(currentConvId.value).catch(() => scheduleFallback())
         break
       case 'ending.proposed':
         if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
@@ -443,6 +763,20 @@ export const useSocketStore = defineStore('socket', () => {
         finishActiveOperation()
         break
     }
+    if (
+      [
+        'agent.turn.completed',
+        'agent.turn.partial',
+        'agent.turn.failed',
+        'agent.turn.cancelled',
+      ].includes(ev.type)
+    ) {
+      if (eventAttempt) terminalAttempts.add(eventAttempt)
+      if (context.activity.activity_version === undefined && currentConvId.value) {
+        void resyncConversation(currentConvId.value, false).catch(() => scheduleFallback())
+      }
+    }
+    armTaskWatchdog()
   }
 
   function acceptAgentEvent(ev: any) {
@@ -483,7 +817,8 @@ export const useSocketStore = defineStore('socket', () => {
     if (sequenceStart <= previous) return false
     lastAgentSequence.set(attemptId, sequence)
     if (previous > 0 && sequenceStart > previous + 1 && currentConvId.value) {
-      resyncConversation(currentConvId.value).catch(() => {})
+      void resyncConversation(currentConvId.value).catch(() => scheduleFallback())
+      return false
     }
     return true
   }
@@ -498,8 +833,16 @@ export const useSocketStore = defineStore('socket', () => {
     const operationId = typeof ev.operation_id === 'string' ? ev.operation_id : ''
     const attemptId = typeof ev.attempt_id === 'string' ? ev.attempt_id : ''
     if (operationId) {
-      // 已结束操作的迟到事实直接丢弃。
-      if (finishedOperations.has(operationId)) return false
+      // A committed message may arrive after the REST message read and terminal
+      // snapshot. Merge it only for the authoritative current attempt, without
+      // re-locking the finished operation. Other facts still require recovery.
+      if (finishedOperations.has(operationId)) {
+        return (
+          (ev.type === 'message_created' || ev.type === 'message_updated') &&
+          !!attemptId &&
+          attemptId === useContextStore().activity.attempt_id
+        )
+      }
       if (activeOperationID && activeOperationID !== operationId) return false
       activeOperationID = operationId
     }

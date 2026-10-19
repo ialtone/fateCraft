@@ -63,7 +63,6 @@ type Worker struct {
 	wake     chan struct{}
 	wg       sync.WaitGroup
 	schedule func(context.Context, uuid.UUID)
-	activity ActivitySink
 	// relayAvailable 报告玩家当前是否有可用的 Relay 连接；为 nil 时视为无连接。
 	// 阶段 3 由 llmrelay.Registry 注入。
 	relayAvailable func(playerID string) bool
@@ -98,8 +97,6 @@ func (w *Worker) Wake() {
 }
 
 func (w *Worker) SetScheduler(schedule func(context.Context, uuid.UUID)) { w.schedule = schedule }
-
-func (w *Worker) SetActivitySink(sink ActivitySink) { w.activity = sink }
 
 // SetRelayAvailability 注入 Relay 连接可用性判断；client 路由的任务只在有连接时领取执行。
 func (w *Worker) SetRelayAvailability(available func(playerID string) bool) {
@@ -170,7 +167,6 @@ func (w *Worker) drain(ctx context.Context) {
 		// 领到任务说明队列非空：在开始执行前唤醒一个空闲循环并行领取下一个。
 		// 队列空时 Claim 返回 ErrNotFound，不会再传递唤醒，因此不会空转。
 		w.Wake()
-		w.notifyActivity(job.ConversationID, ActivityRunning)
 		w.executeGuarded(ctx, job)
 	}
 }
@@ -347,7 +343,6 @@ func (w *Worker) execute(root context.Context, job *storage.MemoryJob) {
 		return
 	}
 	log.Info("异步长期记忆已提交", zap.Int64("covered_until_turn_seq", memory.CoveredUntilTurnSeq), zap.Int("tokens", memory.TokenCount))
-	w.notifyActivity(job.ConversationID, ActivityIdle)
 	if w.schedule != nil {
 		w.schedule(context.WithoutCancel(root), job.ConversationID)
 	}
@@ -397,17 +392,6 @@ func (w *Worker) finishFailure(root context.Context, job *storage.MemoryJob, cod
 			logging.Named("memory").Warn("记录记忆任务失败状态失败", zap.String("job_id", job.ID.String()), zap.Error(failErr))
 		}
 		return
-	}
-	if retryAt != nil {
-		w.notifyActivity(job.ConversationID, ActivityQueued)
-	} else {
-		w.notifyActivity(job.ConversationID, ActivityIdle)
-	}
-}
-
-func (w *Worker) notifyActivity(conversationID uuid.UUID, status string) {
-	if w.activity != nil {
-		w.activity(conversationID, status)
 	}
 }
 

@@ -48,42 +48,16 @@ func (s *Server) getRuntimeInspector(c *gin.Context) {
 	if !ok {
 		return
 	}
-	owned, err := s.conv.GetOwned(c.Request.Context(), id)
-	if err != nil {
-		fail(c, err)
+	snapshot, ok := s.ownedActivity(c, id)
+	if !ok {
 		return
 	}
-	act := conversationActivityResponse{Narrative: "idle", Memory: "idle"}
-	if s.turns != nil {
-		if cap, err := s.turns.CurrentCapabilities(c.Request.Context(), id); err == nil && cap != nil {
-			act.TurnStatus = cap.Status
-			act.CanContinue = cap.CanContinue
-			act.CanRegenerate = cap.CanRegenerate
-			act.RegenerateCostQuantity = cap.RegenerateCostQuantity
-		}
-	}
-	// client 路由不扣费：展示的改写额度恒为 0。
-	if owned.LLMRoute == storage.LLMRouteClient {
-		act.RegenerateCostQuantity = 0
-	}
-	if s.agents != nil {
-		if a, err := s.agents.CurrentActivity(c.Request.Context(), id); err == nil && a != nil {
-			act.Narrative = a.Phase
-			act.StepNo = a.StepNo
-			act.ToolCategory = publicAgentToolCategory(a.ToolName)
-		}
-	}
+	act := *snapshot
 	log, _ := s.ctxLogs.Last(c.Request.Context(), id)
 	var req *playerContextBuildSummary
 	if log != nil {
 		v := summarizePlayerContextBuild(log)
 		req = &v
-	}
-	if s.memory != nil {
-		if jobs, err := s.memory.Jobs(c.Request.Context(), id, 1); err == nil && len(jobs) > 0 {
-			act.Memory = publicMemoryActivity(jobs[0].Status)
-			act.MemoryJob = summarizePlayerMemoryJob(jobs[0])
-		}
 	}
 	var performance *playerTurnPerformanceSummary
 	if s.agents != nil {
@@ -103,15 +77,7 @@ func (s *Server) getRuntimeInspector(c *gin.Context) {
 
 // Public metadata only: archive bodies, worker identity, leases and provider
 // errors belong to administrator diagnostics, not the player runtime panel.
-type playerMemoryJobSummary struct {
-	Status          string     `json:"status"`
-	TargetUntilTurn int64      `json:"target_until_turn"`
-	ExecutionCount  int        `json:"execution_count"`
-	MaxExecutions   int        `json:"max_executions"`
-	CreatedAt       time.Time  `json:"created_at"`
-	StartedAt       *time.Time `json:"started_at,omitempty"`
-	FinishedAt      *time.Time `json:"finished_at,omitempty"`
-}
+type playerMemoryJobSummary = storage.ActivityMemoryJob
 
 type playerMemoryArchiveSummary struct {
 	CoveredFromTurn  int64     `json:"covered_from_turn"`
@@ -121,7 +87,7 @@ type playerMemoryArchiveSummary struct {
 }
 
 func summarizePlayerMemoryJob(job storage.MemoryJob) *playerMemoryJobSummary {
-	return &playerMemoryJobSummary{Status: job.Status, TargetUntilTurn: job.TargetUntilTurnSeq, ExecutionCount: job.ExecutionCount, MaxExecutions: job.MaxExecutions, CreatedAt: job.CreatedAt, StartedAt: job.StartedAt, FinishedAt: job.FinishedAt}
+	return &playerMemoryJobSummary{ID: job.ID, Status: job.Status, TargetUntilTurn: job.TargetUntilTurnSeq, ExecutionCount: job.ExecutionCount, MaxExecutions: job.MaxExecutions, CreatedAt: job.CreatedAt, StartedAt: job.StartedAt, FinishedAt: job.FinishedAt}
 }
 
 func summarizePlayerTurnPerformance(snapshot *storage.AgentAttemptPerformance, now time.Time) playerTurnPerformanceSummary {
