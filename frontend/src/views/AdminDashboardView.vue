@@ -7,14 +7,18 @@ const auth = useAuthStore()
 
 const areas = [
   { to: '/admin/users', title: '用户与权限', description: '管理角色、账号状态和 owner 转交。' },
-  { to: '/admin/settings', title: '全局设置', description: '调整判定系统、平台 LLM 和诊断策略。' },
+  { to: '/admin/settings', title: '全局设置', description: '调整判定系统和平台 LLM。' },
   { to: '/admin/auth', title: '账号与注册', description: '控制登录、注册、SMTP 和邀请码。' },
   {
     to: '/admin/identities',
     title: '第三方账户',
     description: '审计站内账号与 LinuxDo 等外部身份的绑定。',
   },
-  { to: '/admin/logs', title: '诊断日志', description: '查看模型请求与上下文构建明细。' },
+  {
+    to: '/admin/logs',
+    title: '诊断日志',
+    description: '配置日志策略并查看模型请求与上下文构建明细。',
+  },
   {
     to: '/admin/rewards',
     title: '奖励管理',

@@ -19,14 +19,15 @@ export const systemSettingFields = {
     'public_llm_memory_reasoning_effort',
     'public_llm_inquiry_reasoning_effort',
   ],
-  logs: [
-    'detailed_llm_logging_enabled',
-    'detailed_llm_logging_scope',
-    'detailed_llm_logging_target_id',
-    'diagnostic_log_cleanup_enabled',
-    'diagnostic_log_retention_days',
-  ],
 } as const satisfies Record<string, readonly (keyof AdminSystemSettings)[]>
+
+export const logSettingFields = [
+  'detailed_llm_logging_enabled',
+  'detailed_llm_logging_scope',
+  'detailed_llm_logging_target_id',
+  'diagnostic_log_cleanup_enabled',
+  'diagnostic_log_retention_days',
+] as const satisfies readonly (keyof AdminSystemSettings)[]
 
 export const authSettingFields = {
   login: [

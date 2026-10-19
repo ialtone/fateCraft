@@ -4,6 +4,7 @@ import AdminDiagnostics from '@/components/AdminDiagnostics.vue'
 import DetailedLogScope from '@/components/DetailedLogScope.vue'
 import {
   systemSettingFields,
+  logSettingFields,
   authSettingFields,
   pickSettings,
   applySavedSettings,
@@ -78,6 +79,7 @@ const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 const activeTab = ref('settings')
+type SettingsGroup = SystemSettingsTab | 'logs'
 const settingsTab = ref<SystemSettingsTab>('gameplay')
 const authTab = ref<AuthSettingsTab | 'invitations'>('login')
 const sharingTab = ref('shares')
@@ -87,7 +89,11 @@ function managePack(id: string) {
   managedPackId.value = id
   challengesTab.value = 'versions'
 }
-const settingsTabLabels = { gameplay: '判定规则', llm: '模型服务', logs: '日志策略' }
+const settingsTabLabels: Record<SettingsGroup, string> = {
+  gameplay: '判定规则',
+  llm: '模型服务',
+  logs: '日志策略',
+}
 const authTabLabels = { login: '登录与注册', smtp: '发信邮箱', verification: '验证码邮件' }
 const route = useRoute(),
   router = useRouter()
@@ -278,9 +284,8 @@ async function loadSettings() {
   }
 }
 
-async function saveSettings() {
+async function saveSettings(group: SettingsGroup = settingsTab.value) {
   if (!settings.value || savingSettings.value) return
-  const group = settingsTab.value
   if (group === 'llm' && !auth.isOwner) return
   if (
     group === 'logs' &&
@@ -290,7 +295,8 @@ async function saveSettings() {
     message.warning('请选择采集用户或填写完整对话 ID')
     return
   }
-  const fields: readonly (keyof AdminSystemSettings)[] = systemSettingFields[group]
+  const fields: readonly (keyof AdminSystemSettings)[] =
+    group === 'logs' ? logSettingFields : systemSettingFields[group]
   const body: Record<string, unknown> = pickSettings(settings.value, fields)
   if (group === 'logs')
     body.detailed_llm_logging_target_id =
@@ -936,7 +942,7 @@ watch(
   () => props.section,
   (section) => {
     activeTab.value = tabNameForSection(section)
-    if (section === 'all' || section === 'settings') void loadSettings()
+    if (section === 'all' || section === 'settings' || section === 'logs') void loadSettings()
     if (section === 'all' || section === 'auth') {
       void loadAuthSettings()
       void loadInvitations()
@@ -1275,8 +1281,24 @@ watch(
                   </NCollapseItem>
                 </NCollapse></section
             ></NTabPane>
-            <NTabPane name="logs" tab="日志策略" display-directive="show:lazy"
-              ><section class="admin-section">
+          </NTabs>
+          <div v-if="settings" class="actions">
+            <NButton
+              type="primary"
+              :loading="savingSettings"
+              :disabled="settingsTab === 'llm' && !auth.isOwner"
+              @click="saveSettings()"
+              >保存{{ settingsTabLabels[settingsTab] }}</NButton
+            >
+          </div></NSpin
+        ></NTabPane
+      >
+
+      <NTabPane v-if="sectionVisible('logs')" name="logs" tab="诊断日志">
+        <AdminDiagnostics @open-llm="openLLMLog" @open-context="openContextLog">
+          <template #policy>
+            <NSpin :show="loadingSettings">
+              <section class="admin-section">
                 <h3>日志采集与保留</h3>
                 <p class="section-sub">模型调用摘要始终保留；详细正文与过期诊断清理分别控制。</p>
                 <NForm v-if="settings" label-placement="top" :disabled="savingSettings">
@@ -1336,25 +1358,17 @@ watch(
                       v-model:target-id="settings.detailed_llm_logging_target_id"
                       :enabled="settings.detailed_llm_logging_enabled"
                     />
-                  </NFormItem> </NForm
-                ><NButton secondary @click="router.push('/admin/logs')">查看诊断日志</NButton>
-              </section></NTabPane
-            >
-          </NTabs>
-          <div v-if="settings" class="actions">
-            <NButton
-              type="primary"
-              :loading="savingSettings"
-              :disabled="settingsTab === 'llm' && !auth.isOwner"
-              @click="saveSettings"
-              >保存{{ settingsTabLabels[settingsTab] }}</NButton
-            >
-          </div></NSpin
-        ></NTabPane
-      >
-
-      <NTabPane v-if="sectionVisible('logs')" name="logs" tab="诊断日志">
-        <AdminDiagnostics @open-llm="openLLMLog" @open-context="openContextLog" />
+                  </NFormItem>
+                </NForm>
+                <div v-if="settings" class="actions">
+                  <NButton type="primary" :loading="savingSettings" @click="saveSettings('logs')"
+                    >保存日志策略</NButton
+                  >
+                </div>
+              </section>
+            </NSpin>
+          </template>
+        </AdminDiagnostics>
       </NTabPane>
 
       <NTabPane v-if="sectionVisible('gameplay')" name="gameplay" tab="玩法能力">

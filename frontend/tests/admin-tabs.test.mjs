@@ -69,7 +69,7 @@ function tabGroups(file) {
 test('sub-tabs belong to their management area and retain mounted drafts', () => {
   const groups = tabGroups('../src/views/AdminView.vue')
   for (const [owner, names] of Object.entries({
-    settings: ['gameplay', 'llm', 'logs'],
+    settings: ['gameplay', 'llm'],
     auth: ['login', 'smtp', 'verification', 'invitations'],
     challenges: ['catalog', 'versions', 'upload', 'imports', 'editor'],
     sharing: ['shares', 'reports'],
@@ -86,6 +86,16 @@ test('sub-tabs belong to their management area and retain mounted drafts', () =>
     !groups[0].names.includes('editor'),
     'version editor must not leak into other admin areas',
   )
+})
+
+test('diagnostics tabs include the log policy', () => {
+  assert.deepEqual(tabGroups('../src/components/AdminDiagnostics.vue')[0].names, [
+    'llm',
+    'context',
+    'audit',
+    'status',
+    'policy',
+  ])
 })
 
 test('reward, user, and challenge panels separate independent workflows', () => {

@@ -166,7 +166,7 @@ watch(tab, () => {
   ++sequence
   busy.value = false
   if (tab.value === 'status') void loadStatus()
-  else void load()
+  else if (tab.value !== 'policy') void load()
 })
 onMounted(() => {
   void load()
@@ -177,15 +177,19 @@ onMounted(() => {
 <template>
   <section class="diagnostics">
     <NAlert type="info" :show-icon="false"
-      >模型调用默认保留结果摘要；详细正文仅在全局设置中开启且匹配采集范围时保存。诊断日志可能按保留策略清理，奖励与管理审计独立保留。</NAlert
+      >模型调用默认保留结果摘要；详细正文仅在「日志策略」标签页中开启且匹配采集范围时保存。诊断日志可能按保留策略清理，奖励与管理审计独立保留。</NAlert
     >
     <NTabs v-model:value="tab" type="line">
       <NTabPane name="llm" tab="模型调用" />
       <NTabPane name="context" tab="上下文构建" />
       <NTabPane name="audit" tab="管理审计" />
       <NTabPane name="status" tab="诊断状态" />
+      <NTabPane name="policy" tab="日志策略" />
     </NTabs>
-    <template v-if="tab !== 'status'">
+    <div v-show="tab === 'policy'">
+      <slot name="policy" />
+    </div>
+    <template v-if="tab !== 'status' && tab !== 'policy'">
       <form class="filters" @submit.prevent="load()">
         <NDatePicker
           v-model:value="range"
@@ -316,7 +320,7 @@ onMounted(() => {
         <NButton v-if="more" class="more" :loading="busy" @click="load(true)">加载更多</NButton>
       </NSpin>
     </template>
-    <template v-else>
+    <template v-else-if="tab === 'status'">
       <NButton @click="loadStatus">刷新状态</NButton>
       <NAlert v-if="statusError" type="error">{{ statusError }}</NAlert>
       <template v-if="status">
