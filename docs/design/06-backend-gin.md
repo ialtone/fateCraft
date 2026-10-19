@@ -309,3 +309,14 @@ Campaign 终态、关联对话关闭和完整结局结果在原动作事务提�
 /activity 与 runtime inspector 共用 ActivityRepo，玩家入口验证身份和所有权，内部广播才省略 owner。稳定投影单条 SQL 读取最新有效 turn、attempt、memory job，并用 EXISTS 判断消息存在；生成中的 phase 另读且校验 attempt，空闲不读取 phase。
 
 启动时建立独立 PostgreSQL LISTEN 连接，先于 worker 和 HTTP 服务。通知只在提交后到达，有订阅者才构造完整快照，25ms 合并同对话通知。连接断开导致现有 WS 订阅关闭，重连必须 REST 恢复。旧 memory ActivitySink 已移除，业务状态变化由数据库触发器统一覆盖。其余 Hub 事件与队列仍是进程内，不能按活动通知的跨连接能力推断多实例支持。
+
+
+### 邮件发送适配器（2026-10-19）
+
+auth.Mailer 接口保留，SMTP 实现使用 github.com/wneessen/go-mail v0.8.1 构造 MIME 邮件并执行 SMTP 会话。注册验证码与后台测试邮件共用该适配器；现有纯文本模板、发件人、端口和凭据配置不变，不新增数据库字段。中文主题、显示名称与正文编码由库负责，邮件头拒绝 CR/LF。
+
+安全模式严格映射：tls 为隐式 TLS，starttls 必须成功升级，不支持则失败，none 为不升级；TLS 最低 1.2 并校验服务器证书。配置用户名时继续使用 PLAIN 认证，不启用允许远端明文传递凭据的 NoEnc 模式。管理员配置端口始终保留，不自动尝试降级端口。
+
+每封邮件整个发送过程最多 15 秒，并遵守调用方更短的截止时间和取消。库的 context 主要控制拨号，适配器额外在取消时关闭连接，覆盖 SMTP greeting、AUTH、DATA、QUIT 等等待；失败握手也释放连接。发送不自动重试，避免接受邮件后的模糊失败造成重复验证码邮件。SMTP 接受不代表最终送达收件箱。验证码有效期、重发限制、失败清理与密码加密仍由 auth 业务层负责。
+
+本机模拟 SMTP 测试覆盖 UTF-8/MIME、点转义、收件人拒绝、STARTTLS 不降级、TLS 证书拒绝、头注入，以及已建立连接上的取消/截止时间；不向真实邮箱投递测试邮件。

@@ -1,16 +1,14 @@
 package auth
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
-	"mime"
 	"net"
-	"net/mail"
-	"net/smtp"
 	"strings"
 	"time"
+
+	mail "github.com/wneessen/go-mail"
 )
 
 type SMTPConfig struct {
@@ -35,82 +33,86 @@ type Mailer interface {
 
 type smtpMailer struct{}
 
+const mailSendTimeout = 15 * time.Second
+
 func (smtpMailer) Send(ctx context.Context, cfg SMTPConfig, message MailMessage) error {
-	address := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
-	dialer := &net.Dialer{Timeout: 15 * time.Second}
+	// Bound the entire exchange, including greeting, TLS, AUTH, DATA and QUIT.
+	ctx, cancel := context.WithTimeout(ctx, mailSendTimeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	for _, header := range []string{cfg.SenderEmail, cfg.SenderName, message.To, message.Subject} {
+		if strings.ContainsAny(header, "\r\n") {
+			return fmt.Errorf("邮件头不能包含换行符")
+		}
+	}
+	msg := mail.NewMsg()
+	if err := msg.FromFormat(cfg.SenderName, cfg.SenderEmail); err != nil {
+		return fmt.Errorf("发件地址无效: %w", err)
+	}
+	if err := msg.To(message.To); err != nil {
+		return fmt.Errorf("收件地址无效: %w", err)
+	}
+	msg.Subject(message.Subject)
+	msg.SetBodyString(mail.TypeTextPlain, message.Body)
+
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: cfg.Host}
-
-	var client *smtp.Client
-	if cfg.Security == "tls" {
-		conn, err := tls.DialWithDialer(dialer, "tcp", address, tlsConfig)
-		if err != nil {
-			return fmt.Errorf("连接 SMTP TLS 失败: %w", err)
-		}
-		client, err = smtp.NewClient(conn, cfg.Host)
-		if err != nil {
-			_ = conn.Close()
-			return err
-		}
-	} else {
-		conn, err := dialer.DialContext(ctx, "tcp", address)
-		if err != nil {
-			return fmt.Errorf("连接 SMTP 失败: %w", err)
-		}
-		client, err = smtp.NewClient(conn, cfg.Host)
-		if err != nil {
-			_ = conn.Close()
-			return err
-		}
-		if cfg.Security == "starttls" {
-			if ok, _ := client.Extension("STARTTLS"); !ok {
-				_ = client.Close()
-				return fmt.Errorf("SMTP 服务器不支持 STARTTLS")
-			}
-			if err := client.StartTLS(tlsConfig); err != nil {
-				_ = client.Close()
-				return fmt.Errorf("SMTP STARTTLS 失败: %w", err)
-			}
-		}
+	options := []mail.Option{mail.WithPort(cfg.Port), mail.WithTimeout(mailSendTimeout), mail.WithTLSConfig(tlsConfig)}
+	switch cfg.Security {
+	case "tls":
+		options = append(options, mail.WithSSL())
+	case "starttls":
+		options = append(options, mail.WithTLSPolicy(mail.TLSMandatory))
+	case "none":
+		options = append(options, mail.WithTLSPolicy(mail.NoTLS))
+	default:
+		return fmt.Errorf("SMTP 安全模式无效")
 	}
-	defer client.Close()
-
 	if cfg.Username != "" {
-		if err := client.Auth(smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)); err != nil {
-			return fmt.Errorf("SMTP 认证失败: %w", err)
+		// Preserve PLAIN authentication's refusal to send credentials over an
+		// unencrypted remote connection; never select the NoEnc variant.
+		options = append(options, mail.WithSMTPAuth(mail.SMTPAuthPlain), mail.WithUsername(cfg.Username), mail.WithPassword(cfg.Password))
+	}
+
+	// go-mail's context controls dialing, while later commands use I/O deadlines.
+	// Track the connection so request cancellation also interrupts an established
+	// SMTP exchange and failed handshakes always release their socket.
+	var connection net.Conn
+	var stopCancel func() bool
+	defer func() {
+		if stopCancel != nil {
+			stopCancel()
 		}
-	}
-	if err := client.Mail(cfg.SenderEmail); err != nil {
-		return err
-	}
-	if err := client.Rcpt(message.To); err != nil {
-		return err
-	}
-	w, err := client.Data()
+		if connection != nil {
+			_ = connection.Close()
+		}
+	}()
+	options = append(options, mail.WithDialContextFunc(func(dialCtx context.Context, network, address string) (net.Conn, error) {
+		dialer := &net.Dialer{Timeout: mailSendTimeout}
+		var conn net.Conn
+		var err error
+		if cfg.Security == "tls" {
+			conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsConfig}).DialContext(dialCtx, network, address)
+		} else {
+			conn, err = dialer.DialContext(dialCtx, network, address)
+		}
+		if err != nil {
+			return nil, err
+		}
+		connection = conn
+		stopCancel = context.AfterFunc(ctx, func() { _ = conn.Close() })
+		return conn, nil
+	}))
+	client, err := mail.NewClient(cfg.Host, options...)
 	if err != nil {
-		return err
+		return fmt.Errorf("SMTP 配置无效: %w", err)
 	}
-	writer := bufio.NewWriter(w)
-	from := (&mail.Address{Name: cfg.SenderName, Address: cfg.SenderEmail}).String()
-	headers := []string{
-		"From: " + from,
-		"To: " + message.To,
-		"Subject: " + mime.QEncoding.Encode("UTF-8", message.Subject),
-		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
-		"Content-Transfer-Encoding: 8bit",
-		"",
-		strings.ReplaceAll(strings.ReplaceAll(message.Body, "\r\n", "\n"), "\n", "\r\n"),
+	if err := client.DialAndSendWithContext(ctx, msg); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("SMTP 发送失败: %w", err)
 	}
-	if _, err := writer.WriteString(strings.Join(headers, "\r\n")); err != nil {
-		_ = w.Close()
-		return err
-	}
-	if err := writer.Flush(); err != nil {
-		_ = w.Close()
-		return err
-	}
-	if err := w.Close(); err != nil {
-		return err
-	}
-	return client.Quit()
+	return nil
 }
