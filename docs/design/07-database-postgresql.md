@@ -374,3 +374,5 @@ go test -count=1 -timeout=10m ./...
 新项目直接在 00001_init.sql 定义 conversation_activity_versions(conversation_id, version, transaction_id)、最新有效 turn / memory job 索引和 record_activity_change 延迟约束触发器，无历史回填或增量迁移。独立版本行在业务写入后更新，避免新增 memory job 与 conversation 的反向锁依赖。
 
 触发器覆盖 conversations、conversation_turns、generation_attempts、chat_messages、memory_jobs 的稳定字段。同事务同对话最多递增一次，回滚同时撤销版本和 NOTIFY；续租、step_count、纯 phase 不递增。相关 INSERT/DELETE 保守失效，版本不表示精确内容变化次数。按 schema 隔离的 pg_notify 在提交后交付；它不是可重放事件日志。
+
+活动 UPDATE 触发器使用显式稳定列的 WHEN ROW(...) IS DISTINCT FROM ROW(...)，在入延迟队列前过滤无变化、正文与心跳更新，不序列化整行 JSONB。INSERT/DELETE 与 UPDATE 分开定义，版本仍延迟至事务提交。00001 增加 idx_chat_messages_active_turn_role：chat_messages(conversation_id, turn_id, role) WHERE invalidated_at IS NULL，用于活动能力的消息存在性查询。本轮仅验证结构与功能，未做查询计划或性能对比。

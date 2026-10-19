@@ -783,6 +783,8 @@ CREATE TABLE chat_messages (
     UNIQUE (tool_invocation_id, kind)
 );
 CREATE INDEX idx_chat_messages_active ON chat_messages(conversation_id, message_seq) WHERE invalidated_at IS NULL;
+CREATE INDEX idx_chat_messages_active_turn_role ON chat_messages(conversation_id, turn_id, role)
+    WHERE invalidated_at IS NULL;
 
 CREATE TABLE campaign_events (
     id UUID PRIMARY KEY,
@@ -1703,22 +1705,12 @@ CREATE INDEX idx_activity_latest_memory_job ON memory_jobs(conversation_id, crea
 CREATE FUNCTION record_activity_change() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     conversation UUID;
-    old_fields JSONB := '{}'::jsonb;
-    new_fields JSONB := '{}'::jsonb;
-    field TEXT;
     changed BOOLEAN;
 BEGIN
     IF TG_TABLE_NAME = 'conversations' THEN
         conversation := COALESCE(NEW.id, OLD.id);
     ELSE
         conversation := COALESCE(NEW.conversation_id, OLD.conversation_id);
-    END IF;
-    IF TG_OP = 'UPDATE' THEN
-        FOREACH field IN ARRAY TG_ARGV LOOP
-            old_fields := old_fields || jsonb_build_object(field, to_jsonb(OLD) -> field);
-            new_fields := new_fields || jsonb_build_object(field, to_jsonb(NEW) -> field);
-        END LOOP;
-        IF old_fields = new_fields THEN RETURN NULL; END IF;
     END IF;
     -- A cascading delete needs no snapshot; its owning REST action removes the
     -- page. Schema qualification also isolates integration-test schemas.
@@ -1739,22 +1731,46 @@ END;
 $$;
 -- +goose StatementEnd
 
-CREATE CONSTRAINT TRIGGER activity_conversation AFTER INSERT OR UPDATE ON conversations
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
-        'status', 'is_processing', 'branch_epoch', 'llm_route');
-CREATE CONSTRAINT TRIGGER activity_turn AFTER INSERT OR UPDATE OR DELETE ON conversation_turns
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
-        'status', 'invalidated_at', 'turn_seq');
-CREATE CONSTRAINT TRIGGER activity_attempt AFTER INSERT OR UPDATE OR DELETE ON generation_attempts
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
-        'status', 'attempt_no', 'branch_epoch', 'committed_mutating_tool_count');
-CREATE CONSTRAINT TRIGGER activity_message AFTER INSERT OR UPDATE OR DELETE ON chat_messages
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
-        'role', 'turn_id', 'invalidated_at');
-CREATE CONSTRAINT TRIGGER activity_memory_job AFTER INSERT OR UPDATE OR DELETE ON memory_jobs
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change(
-        'status', 'target_until_turn_seq', 'execution_count', 'max_executions',
-        'created_at', 'started_at', 'finished_at');
+-- Evaluate stable columns before enqueueing deferred UPDATE work. Explicit
+-- comparisons avoid serializing entire rows (including large message bodies)
+-- and keep lease heartbeats / phase-only writes out of the deferred queue.
+CREATE CONSTRAINT TRIGGER activity_conversation AFTER INSERT ON conversations
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_conversation_update AFTER UPDATE ON conversations
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    WHEN (ROW(OLD.status, OLD.is_processing, OLD.branch_epoch, OLD.llm_route)
+        IS DISTINCT FROM ROW(NEW.status, NEW.is_processing, NEW.branch_epoch, NEW.llm_route))
+    EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_turn AFTER INSERT OR DELETE ON conversation_turns
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_turn_update AFTER UPDATE ON conversation_turns
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    WHEN (ROW(OLD.status, OLD.invalidated_at, OLD.turn_seq)
+        IS DISTINCT FROM ROW(NEW.status, NEW.invalidated_at, NEW.turn_seq))
+    EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_attempt AFTER INSERT OR DELETE ON generation_attempts
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_attempt_update AFTER UPDATE ON generation_attempts
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    WHEN (ROW(OLD.status, OLD.attempt_no, OLD.branch_epoch, OLD.committed_mutating_tool_count)
+        IS DISTINCT FROM ROW(NEW.status, NEW.attempt_no, NEW.branch_epoch, NEW.committed_mutating_tool_count))
+    EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_message AFTER INSERT OR DELETE ON chat_messages
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_message_update AFTER UPDATE ON chat_messages
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    WHEN (ROW(OLD.role, OLD.turn_id, OLD.invalidated_at)
+        IS DISTINCT FROM ROW(NEW.role, NEW.turn_id, NEW.invalidated_at))
+    EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_memory_job AFTER INSERT OR DELETE ON memory_jobs
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION record_activity_change();
+CREATE CONSTRAINT TRIGGER activity_memory_job_update AFTER UPDATE ON memory_jobs
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    WHEN (ROW(OLD.status, OLD.target_until_turn_seq, OLD.execution_count, OLD.max_executions,
+              OLD.created_at, OLD.started_at, OLD.finished_at)
+        IS DISTINCT FROM ROW(NEW.status, NEW.target_until_turn_seq, NEW.execution_count, NEW.max_executions,
+                             NEW.created_at, NEW.started_at, NEW.finished_at))
+    EXECUTE FUNCTION record_activity_change();
 
 -- +goose Down
 -- Refuse rollback even when this file is run through an external Goose tool.

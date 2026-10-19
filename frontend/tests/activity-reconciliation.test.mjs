@@ -461,3 +461,73 @@ test('reconnect refreshes a visible inspector after missed terminal events', asy
   assert.equal(fixture.inspectorReads(), before + 1)
   assert.equal(fixture.context.inspectorDirty, false)
 })
+
+test('subscription registration failures retain exponential reconnect backoff', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  fixture.socket.connect('a')
+  for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+    const transport = sockets.at(-1)
+    transport.open()
+    assert.equal(fixture.socket.connected, false)
+    transport.close()
+    const count = sockets.length
+    t.mock.timers.tick(delay - 1)
+    await settle()
+    assert.equal(sockets.length, count)
+    t.mock.timers.tick(1)
+    await settle()
+    assert.equal(sockets.length, count + 1)
+    assert.equal(fixture.socket.reconnecting, true)
+  }
+  const healthy = sockets.at(-1)
+  healthy.open()
+  assert.equal(fixture.socket.reconnecting, true)
+  healthy.receive({ type: 'subscription.ready', conversation_id: 'a' })
+  await settle()
+  assert.equal(fixture.socket.reconnecting, false)
+  healthy.close()
+  const count = sockets.length
+  t.mock.timers.tick(1000)
+  await settle()
+  assert.equal(sockets.length, count + 1)
+})
+
+test('foreign ready cannot reset registration backoff or start recovery', async () => {
+  const fixture = browserSetup()
+  fixture.socket.connect('a')
+  sockets.at(-1).open()
+  sockets.at(-1).receive({ type: 'subscription.ready', conversation_id: 'other' })
+  await settle()
+  assert.equal(fixture.socket.connected, false)
+  assert.equal(fixture.reads(), 0)
+})
+
+test('permanent read failures stop recovery while transient failures remain retryable', async (t) => {
+  const { isRetryableReadError } = await server.ssrLoadModule('/src/utils/recovery.ts')
+  for (const status of [400, 401, 403, 404, 410, 422]) {
+    assert.equal(isRetryableReadError({ response: { status } }), false)
+    assert.equal(isRetryableReadError({ status }), false)
+  }
+  for (const status of [408, 429, 500, 502, 503, 504]) {
+    assert.equal(isRetryableReadError({ response: { status } }), true)
+  }
+  assert.equal(isRetryableReadError(Error('Network Error')), true)
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  for (const status of [401, 403, 404, 410]) {
+    const fixture = browserSetup()
+    fixture.conv.load = async () => {
+      throw { response: { status } }
+    }
+    await ready(fixture)
+    assert.equal(fixture.socket.currentConvId, null)
+    assert.equal(fixture.socket.reconnecting, false)
+    const count = sockets.length
+    const reads = fixture.reads()
+    t.mock.timers.tick(60000)
+    await settle()
+    assert.equal(sockets.length, count)
+    assert.equal(fixture.reads(), reads)
+    fixture.socket.disconnect()
+  }
+})

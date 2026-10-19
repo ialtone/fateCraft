@@ -33,6 +33,7 @@ import { usePlayerActionStore } from '@/stores/playerActions'
 import { useCampaignStore } from '@/stores/campaign'
 import { useInquiryStore } from '@/stores/inquiry'
 import type { CompletionInfo } from '@/stores/conversations'
+import { isRetryableReadError } from '@/utils/recovery'
 
 const ConversationShareDialog = defineAsyncComponent(
   () => import('@/components/ConversationShareDialog.vue'),
@@ -221,7 +222,7 @@ async function open(id: string) {
   } catch (err: any) {
     if (!stale(id)) {
       message.error(`加载对话失败：${err?.message || '未知错误'}`)
-      socket.connect(id)
+      if (isRetryableReadError(err)) socket.connect(id)
     }
     return
   }

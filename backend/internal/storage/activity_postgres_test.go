@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,5 +147,49 @@ func TestActivitySnapshotMatchesCurrentCapabilities(t *testing.T) {
 		if snapshot.CanContinue != capabilities.CanContinue || snapshot.CanRegenerate != capabilities.CanRegenerate || snapshot.RegenerateCostQuantity != capabilities.RegenerateCostQuantity {
 			t.Fatalf("%s: %+v != %+v", status, snapshot, capabilities)
 		}
+	}
+}
+
+func TestActivityMessageUpdatesOnlyInvalidateStableFields(t *testing.T) {
+	db := testdb.Open(t, "activity_message_update")
+	id := seedGenerationTestConversation(t, db)
+	ctx := context.Background()
+	repo := NewActivityRepo(db)
+	message := ChatMessage{ID: uuid.New(), ConversationID: id, Role: RoleAssistant, Content: "original", CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := NewMessageRepo(db).CreateChat(ctx, &message); err != nil {
+		t.Fatal(err)
+	}
+	read := func() *ActivitySnapshot {
+		t.Helper()
+		snapshot, err := repo.Snapshot(ctx, id, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return snapshot
+	}
+	previous := read().ActivityVersion
+	// Content-only edits and unchanged stable columns must not invalidate activity,
+	// even with a large body. This is a semantic regression test, not a benchmark.
+	if err := db.Model(&ChatMessage{}).Where("id=?", message.ID).Updates(map[string]any{
+		"content": strings.Repeat("正文", 16384), "role": RoleAssistant, "invalidated_at": nil,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := read().ActivityVersion; got != previous {
+		t.Fatalf("content-only update changed version: %d -> %d", previous, got)
+	}
+	for _, update := range []map[string]any{
+		{"role": RoleUser},
+		{"invalidated_at": time.Now()},
+		{"invalidated_at": nil},
+	} {
+		if err := db.Model(&ChatMessage{}).Where("id=?", message.ID).Updates(update).Error; err != nil {
+			t.Fatal(err)
+		}
+		got := read().ActivityVersion
+		if got != previous+1 {
+			t.Fatalf("stable update %v: version %d -> %d", update, previous, got)
+		}
+		previous = got
 	}
 }

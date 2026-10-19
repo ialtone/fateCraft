@@ -14,7 +14,7 @@ WebSocket 负责状态变化推送，GET /api/conversations/:id/activity 保留�
 
 ### 统一活动投影
 
-storage.ActivityRepo.Snapshot 统一供 REST、WebSocket 和 runtime inspector 使用。稳定字段通过单条 SQL 读取，版本与数据处于同一 PostgreSQL 语句快照。使用 lateral 最新记录和 EXISTS 消息存在性判断，保留原有继续、重新生成和 client 路由零成本语义。
+storage.ActivityRepo.Snapshot 统一供 REST、WebSocket 和 runtime inspector 使用。稳定字段通过单条 SQL 读取，版本与数据处于同一 PostgreSQL 语句快照。使用 lateral 最新记录和 EXISTS 消息存在性判断，保留原有继续、重新生成和 client 路由零成本语义。00001 增加 chat_messages(conversation_id, turn_id, role) WHERE invalidated_at IS NULL 的部分索引，对应能力投影的查询条件；本轮未测量执行计划或读写成本，不承诺具体收益。
 
 快照包含：
 
@@ -32,7 +32,7 @@ REST 必须验证玩家身份和对话所有权，内部广播才允许省略 ow
 00001 中的 deferred constraint triggers 覆盖 conversations、conversation_turns、generation_attempts、chat_messages、memory_jobs。相关稳定字段变化时，版本和业务写入在同一事务提交；同一事务对同一对话最多递增一次，回滚不递增、不通知。
 
 - 覆盖创建回合、attempt 收尾、生成锁获取/释放、分支替换、结束/恢复，以及 memory 排队、claim、重试、取消和终态；后台恢复也走相同数据库约束。
-- UPDATE 仅比较指定稳定字段，续租时间、step_count、token/delta 和纯 phase 不递增版本。
+- UPDATE 使用独立触发器的 WHEN ROW(...) IS DISTINCT FROM ROW(...)，只比较指定稳定字段，不再将 OLD/NEW 整行反复转换为 JSONB。正文、续租、step_count 等无关变化不会进入延迟触发队列；INSERT/DELETE 单独注册，稳定变更仍在提交阶段递增版本。
 - 关联记录的 INSERT/DELETE 以及相关稳定列变化采用保守失效；即使不是最终投影的最新记录也可能递增，版本不是内容哈希，也不是消息计数。
 - 同事务改后又改回仍可能递增；不要把版本相等之外的推断用于判断业务幂等。
 
@@ -42,7 +42,7 @@ REST 必须验证玩家身份和对话所有权，内部广播才允许省略 ow
 
 ### 协议
 
-连接鉴权并注册进 hub 后发送 subscription.ready。客户端等待 ready 才声明连接就绪，5 秒未确认则关闭并进入断线恢复。新项目不保留“没有 ready 也算健康”的旧服务端路径。
+连接鉴权并注册进 hub 后发送 subscription.ready。客户端等待 ready 才声明连接就绪，5 秒未确认则关闭并进入断线恢复。新项目不保留“没有 ready 也算健康”的旧服务端路径。重连按 1→2→4→8→16→30 秒退避，只有收到当前对话的 ready 才重置；TCP/WS onopen 本身不重置，避免订阅注册失败时每秒重连。
 
 activity_updated 发送 conversation_id、activity_version、branch_epoch、reason=stable_state_changed 和完整 snapshot。根 envelope 的 branch_epoch=0 可省略，snapshot 内始终存在。完整快照允许跨版本直接应用，不因为跳号自动请求 /activity。
 
@@ -78,7 +78,7 @@ socket store 合并活动和业务恢复，业务失败即使 activity 成功仍
 | WS 不可用且页面可见/在线 | 5 → 10 → 30 秒退避，带抖动 |
 | 已知生成或 memory queued/running 无进展 | 75 秒后核验，重复无进展退避至 5 分钟；完成后停止 |
 | 页面隐藏或离线 | 暂停兜底请求，恢复时对账 |
-| 401/403/404 | 停止该对话自动恢复，提示重新登录或返回列表 |
+| 不可恢复的 HTTP 错误（如 400/401/403/404/410） | 初次读取失败不建立 WS；恢复中遇到则停止自动恢复。仅网络错误、408、429、5xx 自动重试 |
 
 仅接受的有效任务事件更新进展时间，重复事件与连接心跳不延后 watchdog。权威 is_processing=false 可以清除遗留 streaming placeholder 并解锁输入，恢复过程不自动重发写动作。
 
@@ -98,10 +98,12 @@ Hub、生成队列和其他业务事件仍在进程内；即便 PG 活动通知�
 
 已增加真实 PostgreSQL 集成测试：基线初始化/不可逆约束、事务内一次递增、回滚、phase/续租不递增、所有权、能力投影一致性、memory 终态、提交后推送及无变化不推送、ready 和订阅失效。
 
-前端活动专项测试覆盖 17 个场景：模拟 10 分钟空闲零请求、单飞目标补读、WS 满足目标、旧 phase/响应过滤、失败保留状态、隐藏检查器、缓冲消息、漏终态解锁、phase 零 REST、根 branch=0、业务失败重试、终态交错消息、重复事件、ready 超时和重连检查器恢复。模拟时间测试不等同真实浏览器容量测试。
+前端活动专项测试覆盖 20 个场景：模拟 10 分钟空闲零请求、单飞目标补读、WS 满足目标、旧 phase/响应过滤、失败保留状态、隐藏检查器、缓冲消息、漏终态解锁、phase 零 REST、根 branch=0、业务失败重试、终态交错消息、重复事件、ready 超时、重连检查器恢复、订阅失败退避及其上限、错误对话 ready 和永久读取错误停止恢复。模拟时间测试不等同真实浏览器容量测试。
 
-仍需在 Beta 相同 2 核 / 2.5GiB、禁用 swap 环境做 A/B：保持模拟 LLM、历史和思考时间一致，覆盖 1/50/100 空闲页面与 10/50/100 持续用户、检查器可见/隐藏及重连风暴，比较请求数、SQL、CPU、P95 和新增触发器/锁成本。压测客户端必须使用新协议。未执行前不宣称 CPU 降幅或容量提升。
+本轮按用户要求不运行性能测试、EXPLAIN 性能对比或 A/B。若后续评估容量，应在 Beta 相同 2 核 / 2.5GiB、禁用 swap 环境做 A/B：保持模拟 LLM、历史和思考时间一致，覆盖 1/50/100 空闲页面与 10/50/100 持续用户、检查器可见/隐藏及重连风暴，比较请求数、SQL、CPU、P95 和新增触发器/锁成本。压测客户端必须使用新协议。未执行前不宣称 CPU 降幅或容量提升。
 
 正式协议和运行边界已同步至 design/05、06、07、10、18、19、23、26、28。完成上述性能验收后可归档本文。
 
-最终验证：后端 go test -p 2 ./... -count=1 全量通过（使用独立本机 PostgreSQL 测试实例，强制启用数据库集成测试）；前端 45 项测试全部通过，vue-tsc 与 Vite 生产构建通过。未操作项目实际数据库。
+前轮验证：后端 go test -p 2 ./... -count=1 全量通过（使用独立本机 PostgreSQL 测试实例，强制启用数据库集成测试）；前端 45 项测试全部通过，vue-tsc 与 Vite 生产构建通过。未操作项目实际数据库。
+
+本轮边界优化验证：独立 PostgreSQL 的迁移、存储与 realtime 功能测试通过，涵盖稳定字段 NULL 转换、正文更新不递增、事务递增和提交后通知；前端 49 项测试及 vue-tsc/Vite 生产构建通过。容量仍按 Beta 约 100 名同时活跃用户保守规划，不将 225 作为已验证容量。

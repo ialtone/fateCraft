@@ -319,3 +319,5 @@ ConversationView 不再设置 5 秒活动定时器。socket store 等待 subscri
 健康空闲时 activity 和 inspector 周期请求为零。前台在线但断线时 5→10→30 秒抖动退避；已知生成或 memory 任务 75 秒无进展才核验，重复无进展退避至 5 分钟。隐藏/离线暂停兜底，可见/online 合并恢复。生成解锁以权威 is_processing=false 为准，包含遗留 streaming placeholder；恢复只读，不重发玩家动作。
 
 检查器仅实际可见时读取，隐藏时标记 dirty，可见时在回合终态、分支替换和 memory 完成等边界合并刷新。phase/delta 不查 inspector。它返回的 activity 也经过统一版本校验。消息按 ID/attempt、Campaign 按 revision/hash 合并；缓冲无版本 state_update 改为补读，避免把 REST 状态回滚。
+
+WS 建连重试使用 1→2→4→8→16→30 秒退避，只在收到当前 conversation 的 subscription.ready 后重置，onopen 不算订阅成功。首屏读取与恢复共用错误分类：网络错误、408、429 和 5xx 可自动恢复；其他 HTTP 错误停止，初次 401/403/404 等失败不再建立 WebSocket。

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef, watch } from 'vue'
 import type { DisplayMessage, IncomingSocketEvent } from '@/types'
 import { isKnownSocketEvent } from '@/types'
+import { isRetryableReadError } from '@/utils/recovery'
 import { useChatStore } from './chat'
 import { useStateStore } from './state'
 import { useContextStore } from './context'
@@ -282,10 +283,7 @@ export const useSocketStore = defineStore('socket', () => {
         if (ready) retryDelay = 5000
       } catch (error: any) {
         if (epoch === session) businessPending = true
-        if (
-          epoch === session &&
-          [401, 403, 404].includes(error?.response?.status ?? error?.status)
-        ) {
+        if (epoch === session && !isRetryableReadError(error)) {
           disconnect()
           lastError.value = '无法继续访问此对话，请重新登录或返回对话列表'
         }
@@ -342,10 +340,6 @@ export const useSocketStore = defineStore('socket', () => {
       if (ws.value !== socket || currentConvId.value !== convId) return
       // 连接已恢复：清掉断线期间 onerror 留下的错误提示，避免横幅常驻不散
       lastError.value = null
-      // 此前有过退避尝试则说明本次是断线重连，而非首次连接
-      // 重连成功：重置退避状态
-      reconnecting.value = false
-      reconnectAttempts = 0
       // Subscription readiness is required. A missing acknowledgement enters
       // disconnected recovery instead of treating an unregistered socket as live.
       readyTimer = setTimeout(() => {
@@ -382,9 +376,12 @@ export const useSocketStore = defineStore('socket', () => {
         const event = JSON.parse(ev.data) as IncomingSocketEvent
         if (!event || typeof event.type !== 'string') throw new Error('Invalid socket event')
         if (event.type === 'subscription.ready') {
+          if (event.conversation_id !== convId) return
           if (ready) return
           ready = true
           connected.value = true
+          reconnecting.value = false
+          reconnectAttempts = 0
           if (readyTimer) clearTimeout(readyTimer)
           readyTimer = null
           stopRecoveryTimers()
