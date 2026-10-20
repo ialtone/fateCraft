@@ -75,7 +75,7 @@ docker compose --env-file .env -f docker-compose.prod.yml restart fatecraft
 
 ## 镜像发布
 
-推送 `vX.Y.Z` 标签后，GitHub Actions 先运行验证，再构建并发布一个多架构镜像 `ghcr.io/ialtone/fatecraft`，随后使用同一标签创建 GitHub Release；Release 标题默认显示标签名，预发布版本标记为 pre-release。镜像包含 `vX.Y.Z` 和 `X.Y.Z`，只有正式版额外更新 `latest`。首次发布后需在 GitHub Packages 确认该镜像为公开，用户才可匿名拉取。
+推送 `vX.Y.Z` 标签后，GitHub Actions 先运行验证，再构建并发布一个多架构镜像 `ghcr.io/ialtone/fatecraft`，随后使用同一标签创建 GitHub Release；Release 标题显示标签名。镜像包含 `vX.Y.Z`、`X.Y.Z` 和 `latest`。首次发布后需在 GitHub Packages 确认该镜像为公开，用户才可匿名拉取。
 
 镜像支持 `linux/amd64` 和 `linux/arm64`。容器内 Nginx 托管 SPA，并将 `/api`、`/s` 和 `/ws` 反代到同容器后端。Nginx 请求体上限为 `33m`，与后端挑战版本保存的 32 MiB 上限对齐。
 
