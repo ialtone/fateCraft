@@ -20,12 +20,16 @@ import { useChatStore } from '@/stores/chat'
 import { useConversationStore } from '@/stores/conversations'
 import { useStateStore } from '@/stores/state'
 import { useCampaignStore } from '@/stores/campaign'
+import { useSocketStore } from '@/stores/socket'
+import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 
-const props = defineProps<{ convId: string }>()
+const props = defineProps<{ convId: string; visible: boolean }>()
 const chat = useChatStore()
 const conversations = useConversationStore()
 const state = useStateStore()
 const campaign = useCampaignStore()
+const socket = useSocketStore()
+const gameplay = useGameplayVersionStore()
 const snapshot = ref<ModuleActionSnapshot | null>(null)
 const selectedKey = ref<string | null>(null)
 const planIndex = ref<number | null>(null)
@@ -34,8 +38,13 @@ const actions = usePlayerActionStore()
 const dialog = useDialog()
 const { pending, acting: submitting, error } = storeToRefs(actions)
 const loading = ref(false)
+const checkingGameplay = ref(false)
 let generation = 0
 let alive = true
+let inFlight: Promise<void> | null = null
+let queued = false
+let dirty = true
+let scheduled: ReturnType<typeof setTimeout> | null = null
 const active = computed(() =>
   snapshot.value?.action_capabilities.find((a) => a.key === selectedKey.value),
 )
@@ -51,29 +60,71 @@ const minutes = computed(() => plan.value?.minutes ?? active.value?.metadata?.mi
 const blocked = computed(
   () =>
     loading.value ||
+    checkingGameplay.value ||
     submitting.value ||
     chat.isGenerating ||
+    socket.writeBlocked ||
     conversations.current?.id !== props.convId ||
     conversations.current?.status !== 'active',
 )
 
+function invalidate() {
+  dirty = true
+  if (!alive || !props.visible || socket.writeBlocked) return
+  schedule()
+}
+
+function schedule(immediate = false) {
+  if (!alive || !props.visible || socket.writeBlocked) return
+  if (scheduled) return
+  if (immediate) {
+    void load()
+    return
+  }
+  scheduled = setTimeout(() => {
+    scheduled = null
+    if (alive && props.visible && dirty) void load()
+  }, 50)
+}
+
 async function load() {
+  if (!alive || !props.visible || socket.writeBlocked) {
+    dirty = true
+    return
+  }
+  if (inFlight) {
+    queued = true
+    return inFlight
+  }
+  dirty = false
   const id = props.convId
-  const version = ++generation
+  const version = generation
   loading.value = true
+  const request = (async () => {
+    try {
+      const next = await moduleActionsApi.get(id)
+      if (!alive || version !== generation || id !== props.convId || socket.writeBlocked) return
+      snapshot.value = next
+      if (!next.action_capabilities.some((a) => a.key === selectedKey.value))
+        selectedKey.value = next.action_capabilities[0]?.key ?? null
+    } catch (cause) {
+      if (alive && version === generation)
+        error.value = axios.isAxiosError(cause)
+          ? cause.response?.data?.error || '暂时无法读取行动，请刷新重试。'
+          : '读取行动失败。'
+    } finally {
+      if (alive && version === generation) loading.value = false
+    }
+  })()
+  inFlight = request
   try {
-    const next = await moduleActionsApi.get(id)
-    if (!alive || version !== generation || id !== props.convId) return
-    snapshot.value = next
-    if (!next.action_capabilities.some((a) => a.key === selectedKey.value))
-      selectedKey.value = next.action_capabilities[0]?.key ?? null
-  } catch (cause) {
-    if (alive && version === generation)
-      error.value = axios.isAxiosError(cause)
-        ? cause.response?.data?.error || '暂时无法读取行动，请刷新重试。'
-        : '读取行动失败。'
+    await request
   } finally {
-    if (alive && version === generation) loading.value = false
+    if (inFlight === request) inFlight = null
+    if (alive && (queued || dirty)) {
+      queued = false
+      schedule()
+    }
   }
 }
 watch(active, (action) => {
@@ -90,45 +141,79 @@ watch(active, (action) => {
 })
 watch(
   () => props.convId,
-  (id) => {
+  () => {
     generation++
     snapshot.value = null
     selectedKey.value = null
-    void load()
+    loading.value = false
+    checkingGameplay.value = false
+    inFlight = null
+    queued = false
+    dirty = true
+    if (props.visible) schedule(true)
   },
   { immediate: true },
 )
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) {
+      dirty = true
+      schedule(true)
+    }
+  },
+)
 // The same state boundary covers model tools, rewinds and other browser tabs.
+// Hidden panels only mark dirty; they do not issue requests.
 watch(
   () => state.state,
   () => {
-    if (!submitting.value) void load()
+    if (!submitting.value) invalidate()
   },
 )
 watch(
   () => chat.isGenerating,
   (value) => {
-    if (!value) void load()
+    if (!value) invalidate()
   },
 )
 watch(
   () => campaign.snapshot?.campaign.revision,
   () => {
-    if (!submitting.value) void load()
+    if (!submitting.value) invalidate()
   },
 )
 onBeforeUnmount(() => {
   alive = false
   generation++
+  if (scheduled) clearTimeout(scheduled)
+  scheduled = null
 })
 
+async function ensureGameplayFresh(id: string) {
+  try {
+    const info = await gameplay.ensureFresh(id)
+    if (!alive || props.convId !== id || socket.writeBlocked) return false
+    if (!info.run_allowed) {
+      error.value = info.reason || '当前玩法版本已暂停运行，无法提交行动。'
+      return false
+    }
+    return true
+  } catch {
+    error.value = '玩法版本状态暂时无法读取，请刷新后重试。'
+    return false
+  }
+}
+
 async function execute() {
+  if (socket.writeBlocked) return
   if (
     submitting.value ||
     (!pending.value && (blocked.value || !active.value?.available || !snapshot.value))
   )
     return
   const id = props.convId
+  const version = generation
   const input: ModuleActionInput = pending.value ?? {
     request_id: crypto.randomUUID(),
     branch_epoch: snapshot.value!.branch_epoch,
@@ -137,8 +222,17 @@ async function execute() {
     arguments: { ...(plan.value?.arguments ?? argumentsValue.value) },
   }
   const run = async () => {
-    await actions.execute(id, input)
-    if (alive && props.convId === id) await load()
+    if (socket.writeBlocked || checkingGameplay.value || version !== generation || !alive) return
+    checkingGameplay.value = true
+    try {
+      if (!(await ensureGameplayFresh(id))) return
+      if (version !== generation || props.convId !== id || socket.writeBlocked || chat.isGenerating)
+        return
+      await actions.execute(id, input)
+      if (alive && version === generation && props.convId === id) await load()
+    } finally {
+      if (version === generation) checkingGameplay.value = false
+    }
   }
   if (active.value?.ending && !pending.value) {
     dialog.warning({

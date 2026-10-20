@@ -18,6 +18,7 @@ export const useCampaignStore = defineStore('campaign', () => {
   let campaignID = ''
   let activeRequests = 0
   let latestRequest = 0
+  let minimumRequest = 0
 
   async function load(id: string) {
     if (campaignID !== id) {
@@ -37,16 +38,20 @@ export const useCampaignStore = defineStore('campaign', () => {
     loading.value = true
     try {
       const loaded = await campaignsApi.snapshot(id)
-      if (generation !== requestGeneration) return loaded
+      if (generation !== requestGeneration || requestID < minimumRequest) return loaded
       applySnapshot(loaded)
       return loaded
     } catch (cause: any) {
-      if (generation === requestGeneration && requestID === latestRequest) {
+      if (
+        generation === requestGeneration &&
+        requestID === latestRequest &&
+        requestID >= minimumRequest
+      ) {
         error.value = cause?.message || '长期世界加载失败'
       }
       throw cause
     } finally {
-      if (generation === requestGeneration) {
+      if (generation === requestGeneration && requestID >= minimumRequest) {
         activeRequests--
         loading.value = activeRequests > 0
       }
@@ -188,6 +193,12 @@ export const useCampaignStore = defineStore('campaign', () => {
     error.value = null
   }
 
+  function invalidateRequests() {
+    minimumRequest = latestRequest + 1
+    activeRequests = 0
+    loading.value = false
+  }
+
   return {
     snapshot,
     loading,
@@ -201,5 +212,6 @@ export const useCampaignStore = defineStore('campaign', () => {
     applySnapshot,
     matches,
     reset,
+    invalidateRequests,
   }
 })

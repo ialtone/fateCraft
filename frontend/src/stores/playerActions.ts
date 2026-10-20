@@ -4,10 +4,10 @@ import axios from 'axios'
 import { moduleActionsApi } from '@/api'
 import { createActionScope, clearMatchingAction } from '@/lib/action-scope'
 import { useConversationStore } from './conversations'
-import { useStateStore } from './state'
 import { useChatStore } from './chat'
-import { useRewardStore } from './rewards'
 import { useCampaignStore } from './campaign'
+import { useConversationResources } from './conversationResources'
+import { useSocketStore } from './socket'
 import type { ModuleActionInput } from '@/types/module-actions'
 
 // One request journal serves ordinary module actions, confirmed endings and top-bar exit.
@@ -37,6 +37,7 @@ export const usePlayerActionStore = defineStore('playerActions', () => {
   }
 
   async function execute(id: string, input?: ModuleActionInput) {
+    if (useSocketStore().writeBlocked) return null
     const conversations = useConversationStore()
     if (acting.value || currentID !== id || conversations.current?.id !== id) return null
     if (pending.value && input && input.request_id !== pending.value.request_id) return null
@@ -70,20 +71,27 @@ export const usePlayerActionStore = defineStore('playerActions', () => {
       const campaign = useCampaignStore()
       const chat = useChatStore()
       if (result.campaign) campaign.applyCampaign(result.campaign)
-      const refreshed = await Promise.allSettled([
-        useStateStore().load(id),
-        chat.load(id),
-        conversations.load(id),
-        conversations.loadEndingState(id),
-        useRewardStore().load(),
-        ...(result.campaign ? [campaign.load(result.campaign.id)] : []),
+      const resources = useConversationResources()
+      resources.enter(id)
+      const refreshed = await resources.refresh([
+        'state',
+        'messages',
+        'conversation',
+        'endings',
+        'rewards',
       ])
+      if (result.campaign) await resources.load('campaign').catch(() => {})
       if (result.campaign && scope.isCurrent(token)) {
         const latestBound = [...chat.messages]
           .reverse()
-          .find((message) => message.type === 'assistant' && message.campaign_revision !== undefined)
-        if (latestBound && !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)) {
-          await campaign.load(result.campaign.id).catch(() => {})
+          .find(
+            (message) => message.type === 'assistant' && message.campaign_revision !== undefined,
+          )
+        if (
+          latestBound &&
+          !campaign.matches(latestBound.campaign_revision, latestBound.campaign_state_hash)
+        ) {
+          await resources.load('campaign').catch(() => {})
         }
       }
       if (scope.isCurrent(token) && refreshed.some((r) => r.status === 'rejected'))

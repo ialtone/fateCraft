@@ -30,7 +30,7 @@ const groups = computed<GuidanceGroup[]>(() =>
 
 async function select(item: GuidanceItem) {
   const active = guidance.active
-  if (!active || props.disabled || chat.isGenerating || pending.value) return
+  if (!active || props.disabled || socket.writeBlocked || chat.isGenerating || pending.value) return
   const convId = props.convId
   const selection = `${convId}:${active.id}:${item.key}`
   if (retry?.selection !== selection) retry = { selection, requestId: crypto.randomUUID() }
@@ -44,7 +44,7 @@ async function select(item: GuidanceItem) {
     if (props.convId !== convId) return
     chat.stopGenerating()
     message.error(err.message || '提交行动提示失败')
-    await guidance.load(convId)
+    if (!socket.writeBlocked) await guidance.load(convId).catch(() => {})
   } finally {
     pending.value = false
   }

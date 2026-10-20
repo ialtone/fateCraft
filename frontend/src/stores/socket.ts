@@ -1,22 +1,32 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import type { DisplayMessage, IncomingSocketEvent } from '@/types'
 import { isKnownSocketEvent } from '@/types'
 import { isRetryableReadError } from '@/utils/recovery'
+import { conversationsApi } from '@/api'
 import { useChatStore } from './chat'
 import { useStateStore } from './state'
 import { useContextStore } from './context'
 import { useConversationStore } from './conversations'
-import { useRewardStore } from './rewards'
 import { useCampaignStore } from './campaign'
-import { useRuntimeStore } from './runtime'
 import { useGuidanceStore } from './guidance'
+import { useConversationResources } from './conversationResources'
 
-// 自动重连参数：指数退避，1s 起步，上限 30s。
-const RECONNECT_BASE_DELAY = 1000
-const RECONNECT_MAX_DELAY = 30000
+// 自动重连参数：首次连接不计入预算，失败后最多再建立 5 个实例。
+const MAX_RECONNECT_ATTEMPTS = 5
+const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000]
+// 连接和订阅就绪都必须有明确超时，避免握手或注册永久挂起。
+const HANDSHAKE_TIMEOUT = 10000
+const READY_TIMEOUT = 5000
+// ready 后恢复成功且连续健康 30 秒，才归还下一故障周期的重连预算。
+const STABLE_WINDOW = 30000
+// ready 后的业务恢复最多 5 轮（含首次），耗尽后停止自动恢复。
+const MAX_RECOVERY_ATTEMPTS = 5
 // 带 operation 标识但只用于展示或重新加载的事件，不参与 operation 锁定。
 const NON_LOCKING_SCOPED_EVENTS = new Set(['notice', 'error', 'generation.replayed'])
+
+export type SocketConnectionState =
+  'connecting' | 'ready' | 'retry_wait' | 'reconnecting' | 'exhausted' | 'stopped' | 'access_denied'
 
 export const useSocketStore = defineStore('socket', () => {
   const ws = shallowRef<WebSocket | null>(null)
@@ -26,7 +36,27 @@ export const useSocketStore = defineStore('socket', () => {
   const lastError = ref<string | null>(null)
   const queuedCount = ref(0)
   const currentConvId = ref<string | null>(null)
-  // 重连尝试次数（成功连接后重置）
+  const connectionState = ref<SocketConnectionState>('stopped')
+  const reconnectAttempt = ref(0)
+  const connectionError = ref<string | null>(null)
+  const maxReconnectAttempts = MAX_RECONNECT_ATTEMPTS
+  // 连接错误与生成错误分开：clearError / 新回合不能清掉“请刷新页面”的提示。
+  const writeBlocked = computed(
+    () => connectionState.value === 'exhausted' || connectionState.value === 'access_denied',
+  )
+  const terminal = computed(
+    () => connectionState.value === 'exhausted' || connectionState.value === 'access_denied',
+  )
+  const connectionNotice = computed(() => {
+    if (connectionState.value === 'exhausted')
+      return connectionError.value || '连接已中断，自动重连 5 次仍未成功，请刷新页面后重试。'
+    if (connectionState.value === 'access_denied') return connectionError.value
+    if (connectionState.value === 'retry_wait' || connectionState.value === 'reconnecting')
+      return `连接已断开，正在重新连接（${Math.max(1, reconnectAttempt.value)}/${MAX_RECONNECT_ATTEMPTS}）…`
+    if (connectionState.value === 'connecting' && !connected.value) return '正在连接对话…'
+    return null
+  })
+  // 重连尝试次数（连续健康 30 秒后才重置）
   let reconnectAttempts = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   const seenAgentEvents = new Set<string>()
@@ -39,6 +69,7 @@ export const useSocketStore = defineStore('socket', () => {
   // Campaign 正文先到达、快照后到达时，先缓冲正文，避免正文与侧栏处于不同版本。
   const pendingCampaignMessages = new Map<string, DisplayMessage[]>()
   let session = 0
+  let lifecycle = 0
   let ready = false
   let recovering = false
   let recoveryFlight: Promise<void> | null = null
@@ -47,12 +78,16 @@ export const useSocketStore = defineStore('socket', () => {
   let buffered: IncomingSocketEvent[] = []
   let bufferedBytes = 0
   let readyTimer: ReturnType<typeof setTimeout> | null = null
+  let handshakeTimer: ReturnType<typeof setTimeout> | null = null
+  let stableTimer: ReturnType<typeof setTimeout> | null = null
   let retryTimer: ReturnType<typeof setTimeout> | null = null
   let taskTimer: ReturnType<typeof setTimeout> | null = null
   let recoveryTimer: ReturnType<typeof setTimeout> | null = null
   let stopTaskWatch: (() => void) | null = null
   let retryDelay = 5000
   let taskDelay = 75000
+  let recoveryFailures = 0
+  let locateAttempted = false
   let targetVersion = 0
   let narrativeProgress = 0
   let memoryProgress = 0
@@ -60,6 +95,16 @@ export const useSocketStore = defineStore('socket', () => {
 
   const foreground = () => typeof document === 'undefined' || document.visibilityState !== 'hidden'
   const online = () => typeof navigator === 'undefined' || navigator.onLine !== false
+  const isTerminal = () =>
+    connectionState.value === 'exhausted' || connectionState.value === 'access_denied'
+
+  function clearConnectionTimers() {
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+    if (handshakeTimer) clearTimeout(handshakeTimer)
+    if (readyTimer) clearTimeout(readyTimer)
+    if (stableTimer) clearTimeout(stableTimer)
+    reconnectTimer = handshakeTimer = readyTimer = stableTimer = null
+  }
 
   function stopRecoveryTimers() {
     if (retryTimer) clearTimeout(retryTimer)
@@ -67,17 +112,57 @@ export const useSocketStore = defineStore('socket', () => {
     retryTimer = taskTimer = null
   }
 
+  function setState(state: SocketConnectionState) {
+    connectionState.value = state
+    reconnecting.value = state === 'retry_wait' || state === 'reconnecting'
+  }
+
+  function stopConnection(state: 'exhausted' | 'access_denied', message: string | null) {
+    session++
+    useContextStore().invalidateRequests()
+    useContextStore().setRecoverySuspended(true)
+    useConversationResources().suspend()
+    clearConnectionTimers()
+    stopRecoveryTimers()
+    if (recoveryTimer) clearTimeout(recoveryTimer)
+    recoveryTimer = null
+    ready = false
+    recovering = false
+    recoveryFlight = null
+    businessPending = false
+    activityPending = false
+    buffered = []
+    bufferedBytes = 0
+    stopTaskWatch?.()
+    stopTaskWatch = null
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', resume)
+      window.removeEventListener('offline', resume)
+      document.removeEventListener('visibilitychange', resume)
+    }
+    if (ws.value) {
+      ws.value.onclose = null
+      ws.value.onerror = null
+      ws.value.close()
+      ws.value = null
+    }
+    connected.value = false
+    reconnecting.value = false
+    connectionError.value = message
+    setState(state)
+  }
+
   function scheduleFallback(immediate = false) {
-    if (!currentConvId.value || retryTimer || !foreground() || !online()) return
+    if (!currentConvId.value || retryTimer || isTerminal() || !foreground() || !online()) return
     const epoch = session
     const wait = immediate ? 0 : retryDelay * (0.9 + Math.random() * 0.2)
     retryTimer = setTimeout(() => {
       retryTimer = null
-      if (epoch !== session || !currentConvId.value) return
+      if (epoch !== session || !currentConvId.value || isTerminal()) return
       void resyncConversation(currentConvId.value, true)
         .catch(() => {})
         .finally(() => {
-          if (epoch !== session) return
+          if (epoch !== session || isTerminal()) return
           retryDelay = retryDelay === 5000 ? 10000 : 30000
           if (!ready || businessPending || useContextStore().activityStale) scheduleFallback()
         })
@@ -87,7 +172,7 @@ export const useSocketStore = defineStore('socket', () => {
   function armTaskWatchdog() {
     if (taskTimer) clearTimeout(taskTimer)
     taskTimer = null
-    if (!ready || !currentConvId.value || !foreground() || !online()) return
+    if (!ready || !currentConvId.value || isTerminal() || !foreground() || !online()) return
     const activity = useContextStore().activity
     const generating = activity.is_processing || useChatStore().isGenerating
     const memoryBusy = activity.memory === 'queued' || activity.memory === 'running'
@@ -100,7 +185,7 @@ export const useSocketStore = defineStore('socket', () => {
     taskTimer = setTimeout(
       () => {
         taskTimer = null
-        if (epoch !== session || !currentConvId.value) return
+        if (epoch !== session || !currentConvId.value || isTerminal()) return
         const current = useContextStore().activity
         const narrativeDue =
           (current.is_processing || useChatStore().isGenerating) &&
@@ -125,10 +210,10 @@ export const useSocketStore = defineStore('socket', () => {
             }
           })
           .catch(() => {
-            if (epoch === session) scheduleFallback()
+            if (epoch === session && !isTerminal()) scheduleFallback()
           })
           .finally(() => {
-            if (epoch !== session) return
+            if (epoch !== session || isTerminal()) return
             taskDelay = Math.min(taskDelay * 2, 300000)
             narrativeProgress = memoryProgress = Date.now()
             armTaskWatchdog()
@@ -139,12 +224,21 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function resume() {
+    if (isTerminal()) return
     stopRecoveryTimers()
-    if (!currentConvId.value || !foreground() || !online()) return
+    if (!currentConvId.value || !foreground() || !online()) {
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      reconnectTimer = null
+      return
+    }
     retryDelay = 5000
-    useContextStore().invalidateInspector()
-    if (ready) void resyncConversation(currentConvId.value, true).catch(() => scheduleFallback())
-    else scheduleFallback(true)
+    if (ready) {
+      useContextStore().invalidateInspector()
+      void resyncConversation(currentConvId.value, true).catch(() => scheduleFallback())
+    } else if (!ws.value) {
+      scheduleFallback(true)
+      if (!reconnectTimer) scheduleReconnect()
+    }
   }
 
   function finishActiveOperation() {
@@ -159,11 +253,51 @@ export const useSocketStore = defineStore('socket', () => {
     activeOperationID = null
   }
 
+  // 首连失败时只做一次 REST 定位，用于区分“网络/订阅故障”和“401/403/404”。
+  // 成功定位的数据不视为订阅后的权威快照；ready 后仍由统一恢复重新读取。
+  function locateConversation(convId: string) {
+    if (locateAttempted || currentConvId.value !== convId) return
+    locateAttempted = true
+    const identity = lifecycle
+    void conversationsApi.get(convId).catch((error) => {
+      if (identity !== lifecycle || currentConvId.value !== convId || isTerminal()) return
+      if (!isRetryableReadError(error))
+        stopConnection('access_denied', '无法继续访问此对话，请重新登录或返回对话列表')
+    })
+  }
+
   // 切换对话时关闭旧连接并打开新连接（doc 05）。
   function connect(convId: string) {
+    // 同一对话的重复 connect 必须幂等，不能绕过 exhausted 预算。
+    if (
+      currentConvId.value === convId &&
+      ['connecting', 'ready', 'retry_wait', 'reconnecting', 'exhausted', 'access_denied'].includes(
+        connectionState.value,
+      )
+    )
+      return
     disconnect()
     currentConvId.value = convId
+    connectionError.value = null
+    reconnectAttempts = 0
+    recoveryFailures = 0
+    locateAttempted = false
+    reconnectAttempt.value = 0
+    setState('connecting')
     useContextStore().enter(convId)
+    useContextStore().setRecoverySuspended(false)
+    useConversationResources().enter(convId)
+    useConversationResources().setFailureHandler((error) => {
+      if (currentConvId.value !== convId || isTerminal()) return
+      if (!isRetryableReadError(error)) {
+        stopConnection('access_denied', '无法继续访问此对话，请重新登录或返回对话列表')
+        return
+      }
+      businessPending = true
+      if (stableTimer) clearTimeout(stableTimer)
+      stableTimer = null
+      scheduleFallback()
+    })
     narrativeProgress = memoryProgress = Date.now()
     if (typeof window !== 'undefined') {
       window.addEventListener('online', resume)
@@ -175,10 +309,13 @@ export const useSocketStore = defineStore('socket', () => {
         useChatStore().isGenerating,
         useContextStore().activity.memory,
         useContextStore().activity.is_processing,
+        useCampaignStore().snapshot,
       ],
-      armTaskWatchdog,
+      () => {
+        armTaskWatchdog()
+        if (currentConvId.value === convId && !isTerminal()) flushCampaignMessages(convId)
+      },
     )
-    scheduleFallback()
     openSocket(convId)
   }
 
@@ -193,7 +330,7 @@ export const useSocketStore = defineStore('socket', () => {
     minimumVersion = 0,
     readActivity = true,
   ): Promise<void> {
-    if (currentConvId.value !== convId) return Promise.resolve()
+    if (currentConvId.value !== convId || isTerminal()) return Promise.resolve()
     businessPending ||= full
     activityPending ||= readActivity
     targetVersion = Math.max(targetVersion, minimumVersion)
@@ -216,20 +353,22 @@ export const useSocketStore = defineStore('socket', () => {
           businessPending = false
           activityPending = false
           const before = context.activity
-          const results = await Promise.allSettled([
-            ...(activityRead ? [context.loadActivity(convId, targetVersion)] : []),
-            ...(business
-              ? [
-                  conv.load(convId),
-                  chat.load(convId),
-                  useStateStore().load(convId),
-                  useGuidanceStore().load(convId),
-                  conv.loadEndingState(convId),
-                  useRuntimeStore().load(convId),
-                  useRewardStore().load(),
-                ]
-              : []),
-          ])
+          const businessResources = [
+            'conversation',
+            'messages',
+            'state',
+            'guidance',
+            'endings',
+            'runtime',
+            'rewards',
+          ] as const
+          const tasks: Promise<unknown>[] = []
+          if (activityRead) tasks.push(context.loadActivity(convId, targetVersion))
+          if (business) {
+            const resources = useConversationResources()
+            for (const resource of businessResources) tasks.push(resources.load(resource))
+          }
+          const results = await Promise.allSettled(tasks)
           if (epoch !== session) return
           const failure = results.find((result) => result.status === 'rejected')
           if (failure?.status === 'rejected') throw failure.reason
@@ -244,11 +383,12 @@ export const useSocketStore = defineStore('socket', () => {
             businessPending = true
           }
           if (business) {
+            const resources = useConversationResources()
             if (context.inspectorVisible && context.inspectorDirty) {
-              void context.loadRuntimeInspector(convId)
+              void resources.load('inspector')
             }
             if (conv.current?.campaign_id) {
-              await campaign.load(conv.current.campaign_id)
+              await resources.load('campaign')
               if (epoch !== session) return
               const latest = [...chat.messages]
                 .reverse()
@@ -257,7 +397,7 @@ export const useSocketStore = defineStore('socket', () => {
                 latest &&
                 !campaign.matches(latest.campaign_revision, latest.campaign_state_hash)
               ) {
-                await campaign.load(conv.current.campaign_id)
+                await resources.load('campaign')
                 if (epoch !== session) return
               }
             }
@@ -282,10 +422,17 @@ export const useSocketStore = defineStore('socket', () => {
         }
         if (ready) retryDelay = 5000
       } catch (error: any) {
-        if (epoch === session) businessPending = true
-        if (epoch === session && !isRetryableReadError(error)) {
-          disconnect()
-          lastError.value = '无法继续访问此对话，请重新登录或返回对话列表'
+        if (epoch === session && !isTerminal()) {
+          if (stableTimer) clearTimeout(stableTimer)
+          stableTimer = null
+          businessPending = true
+          if (!isRetryableReadError(error)) {
+            stopConnection('access_denied', '无法继续访问此对话，请重新登录或返回对话列表')
+          } else if (ready) {
+            recoveryFailures++
+            if (recoveryFailures >= MAX_RECOVERY_ATTEMPTS)
+              stopConnection('exhausted', '连接恢复失败，自动重试已达到上限，请刷新页面后重试。')
+          }
         }
         throw error
       } finally {
@@ -320,6 +467,7 @@ export const useSocketStore = defineStore('socket', () => {
         if (epoch !== session || recoveryFlight !== request) return
         recoveryFlight = null
         if (businessPending || activityPending) scheduleFallback()
+        else if (!useContextStore().activityStale) armStableReset()
       })
       .catch(() => {})
     return request
@@ -331,27 +479,27 @@ export const useSocketStore = defineStore('socket', () => {
     recovering = false
     buffered = []
     bufferedBytes = 0
+    if (handshakeTimer) clearTimeout(handshakeTimer)
     if (readyTimer) clearTimeout(readyTimer)
+    handshakeTimer = readyTimer = null
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const socket = new WebSocket(`${proto}://${window.location.host}/ws/conversations/${convId}`)
     ws.value = socket
+    let settled = false
 
-    socket.onopen = () => {
-      if (ws.value !== socket || currentConvId.value !== convId) return
-      // 连接已恢复：清掉断线期间 onerror 留下的错误提示，避免横幅常驻不散
-      lastError.value = null
-      // Subscription readiness is required. A missing acknowledgement enters
-      // disconnected recovery instead of treating an unregistered socket as live.
-      readyTimer = setTimeout(() => {
-        readyTimer = null
-        if (ws.value !== socket || currentConvId.value !== convId || ready) return
-        socket.close()
-      }, 5000)
-    }
-    socket.onclose = () => {
-      if (ws.value !== socket) return
+    const fail = (message?: string) => {
+      if (settled || ws.value !== socket || currentConvId.value !== convId) return
+      settled = true
+      const wasReady = ready
+      if (message) lastError.value = message
+      if (handshakeTimer) clearTimeout(handshakeTimer)
+      if (readyTimer) clearTimeout(readyTimer)
+      if (stableTimer) clearTimeout(stableTimer)
+      handshakeTimer = readyTimer = stableTimer = null
+      if (isTerminal()) return
       session++
       useContextStore().invalidateRequests()
+      useConversationResources().resetInFlight()
       recoveryFlight = null
       recovering = false
       buffered = []
@@ -359,12 +507,43 @@ export const useSocketStore = defineStore('socket', () => {
       if (recoveryTimer) clearTimeout(recoveryTimer)
       recoveryTimer = null
       ready = false
-      if (readyTimer) clearTimeout(readyTimer)
-      readyTimer = null
       connected.value = false
       stopRecoveryTimers()
-      scheduleFallback()
+      // 先关闭旧实例并清空引用，避免 onclose 再结算一次。
+      socket.onclose = null
+      socket.onerror = null
+      socket.close()
+      if (ws.value === socket) ws.value = null
+      if (!wasReady) locateConversation(convId)
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        stopConnection('exhausted', '连接已中断，自动重连 5 次仍未成功，请刷新页面后重试。')
+        return
+      }
       scheduleReconnect()
+      scheduleFallback()
+    }
+
+    handshakeTimer = setTimeout(() => {
+      if (ws.value !== socket || currentConvId.value !== convId || ready) return
+      fail('WebSocket 连接超时')
+    }, HANDSHAKE_TIMEOUT)
+
+    socket.onopen = () => {
+      if (ws.value !== socket || currentConvId.value !== convId) return
+      if (handshakeTimer) clearTimeout(handshakeTimer)
+      handshakeTimer = null
+      // 连接已恢复：清掉断线期间 onerror 留下的错误提示，避免横幅常驻不散
+      lastError.value = null
+      // Subscription readiness is required. A missing acknowledgement enters
+      // disconnected recovery instead of treating an unregistered socket as live.
+      readyTimer = setTimeout(() => {
+        readyTimer = null
+        if (ws.value !== socket || currentConvId.value !== convId || ready) return
+        fail('WebSocket 订阅确认超时')
+      }, READY_TIMEOUT)
+    }
+    socket.onclose = () => {
+      fail()
     }
     socket.onerror = () => {
       if (ws.value !== socket) return
@@ -380,12 +559,15 @@ export const useSocketStore = defineStore('socket', () => {
           if (ready) return
           ready = true
           connected.value = true
-          reconnecting.value = false
-          reconnectAttempts = 0
+          connectionError.value = null
+          setState('ready')
+          if (handshakeTimer) clearTimeout(handshakeTimer)
           if (readyTimer) clearTimeout(readyTimer)
-          readyTimer = null
+          handshakeTimer = readyTimer = null
           stopRecoveryTimers()
-          void resyncConversation(convId).catch(() => scheduleFallback())
+          void resyncConversation(convId).catch(() => {
+            if (!isTerminal()) scheduleFallback()
+          })
         } else if (!ready || recovering) {
           buffered.push(event)
           bufferedBytes += typeof ev.data === 'string' ? ev.data.length * 2 : 0
@@ -397,21 +579,59 @@ export const useSocketStore = defineStore('socket', () => {
     }
   }
 
-  // 指数退避安排下一次重连。
+  // 第 1～5 次重连分别等待 1、2、4、8、16 秒；在真正建立连接时消耗一次预算。
   function scheduleReconnect() {
-    if (!currentConvId.value || reconnectTimer) return
-    reconnecting.value = true
-    const delay = Math.min(RECONNECT_BASE_DELAY * 2 ** reconnectAttempts, RECONNECT_MAX_DELAY)
-    reconnectAttempts++
+    if (!currentConvId.value || reconnectTimer || isTerminal()) return
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      stopConnection('exhausted', '连接已中断，自动重连 5 次仍未成功，请刷新页面后重试。')
+      return
+    }
+    const next = reconnectAttempts + 1
+    reconnectAttempt.value = next
+    setState('retry_wait')
+    // 离线或页面隐藏时暂停安排新连接，也不消耗次数；恢复后继续剩余预算。
+    if (!foreground() || !online()) return
+    const delay = RECONNECT_DELAYS[next - 1]
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
-      if (currentConvId.value) openSocket(currentConvId.value)
+      if (!currentConvId.value || isTerminal() || !foreground() || !online() || ws.value) return
+      reconnectAttempts = next
+      reconnectAttempt.value = next
+      setState('reconnecting')
+      openSocket(currentConvId.value)
     }, delay)
   }
 
+  function armStableReset() {
+    if (stableTimer) return
+    if (!ready || isTerminal()) return
+    const epoch = session
+    stableTimer = setTimeout(() => {
+      stableTimer = null
+      if (epoch !== session || !ready || isTerminal()) return
+      if (
+        recovering ||
+        recoveryFlight ||
+        businessPending ||
+        activityPending ||
+        useContextStore().activityStale
+      ) {
+        armStableReset()
+        return
+      }
+      reconnectAttempts = 0
+      reconnectAttempt.value = 0
+      recoveryFailures = 0
+      connectionError.value = null
+      setState('ready')
+    }, STABLE_WINDOW)
+  }
+
   function disconnect() {
+    lifecycle++
     session++
     useContextStore().invalidateRequests()
+    useContextStore().setRecoverySuspended(false)
     ready = false
     recovering = false
     recoveryFlight = null
@@ -421,9 +641,9 @@ export const useSocketStore = defineStore('socket', () => {
     bufferedBytes = 0
     terminalAttempts.clear()
     stopRecoveryTimers()
-    if (readyTimer) clearTimeout(readyTimer)
+    clearConnectionTimers()
     if (recoveryTimer) clearTimeout(recoveryTimer)
-    readyTimer = recoveryTimer = null
+    recoveryTimer = null
     stopTaskWatch?.()
     stopTaskWatch = null
     if (typeof window !== 'undefined') {
@@ -433,14 +653,16 @@ export const useSocketStore = defineStore('socket', () => {
     }
     retryDelay = 5000
     taskDelay = 75000
+    recoveryFailures = 0
+    locateAttempted = false
     targetVersion = 0
     // 主动断开：取消重连并清空状态
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
     reconnecting.value = false
     reconnectAttempts = 0
+    reconnectAttempt.value = 0
+    connectionError.value = null
+    setState('stopped')
+    useConversationResources().reset()
     currentConvId.value = null
     // 清掉旧连接遗留的错误提示，避免切换对话后带出上一个对话的报错
     lastError.value = null
@@ -453,6 +675,7 @@ export const useSocketStore = defineStore('socket', () => {
     queuedCount.value = 0
     if (ws.value) {
       ws.value.onclose = null
+      ws.value.onerror = null
       ws.value.close()
       ws.value = null
     }
@@ -508,9 +731,15 @@ export const useSocketStore = defineStore('socket', () => {
     const queued = pendingCampaignMessages.get(convId) || []
     queued.push(message)
     pendingCampaignMessages.set(convId, queued)
-    void campaign
-      .load(conv.current.campaign_id)
-      .then(() => flushCampaignMessages(convId))
+    const epoch = session
+    const resources = useConversationResources()
+    resources.invalidate('campaign')
+    void resources
+      .load('campaign')
+      .then(() => {
+        if (epoch === session && currentConvId.value === convId && !isTerminal())
+          flushCampaignMessages(convId)
+      })
       .catch(() => {})
   }
 
@@ -595,10 +824,9 @@ export const useSocketStore = defineStore('socket', () => {
     const state = useStateStore()
     const context = useContextStore()
     const conv = useConversationStore()
-    const rewards = useRewardStore()
     const campaign = useCampaignStore()
-    const runtime = useRuntimeStore()
     const guidance = useGuidanceStore()
+    const resources = useConversationResources()
     if (eventAttempt && ev.type.startsWith('agent.')) context.notePhaseAttempt(eventAttempt)
 
     switch (ev.type) {
@@ -636,33 +864,30 @@ export const useSocketStore = defineStore('socket', () => {
         if (ev.payload?.message_id) chat.resetStreamText(ev.payload.message_id)
         break
       case 'agent.turn.completed':
-        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.endStream(ev.payload.message_id)
-        rewards.load().catch(() => {})
+        resources.invalidateMany(['endings', 'rewards', 'actions'])
         context.invalidateInspector()
         finishActiveOperation()
         break
       case 'agent.turn.partial':
-        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         guidance.reset()
         context.setNarrative('idle')
         // partial 回合已经提交了可信事实，重新生成要消耗改写额度；
         // 这里不写死数量，交给平台能力和随后刷新的 inspector 决定。
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         lastError.value = ev.payload?.message || '动作已执行，但叙事未完成。请继续叙事。'
-        rewards.load().catch(() => {})
+        resources.invalidateMany(['endings', 'rewards', 'actions'])
         context.invalidateInspector()
         finishActiveOperation()
         break
       case 'agent.turn.failed':
       case 'agent.turn.cancelled':
-        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
         guidance.reset()
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         // 失败或取消后付费的重新生成会先退款，再推送终止事件；这里刷新余额。
-        rewards.load().catch(() => {})
+        resources.invalidateMany(['endings', 'rewards', 'actions'])
         context.invalidateInspector()
         finishActiveOperation()
         break
@@ -682,7 +907,7 @@ export const useSocketStore = defineStore('socket', () => {
       case 'branch.replaced':
         guidance.reset()
         chat.replaceBranch(ev.payload?.invalidated_message_ids ?? [], ev.message)
-        rewards.load().catch(() => {})
+        resources.invalidate('rewards')
         break
       case 'generation.replayed':
         if (currentConvId.value) {
@@ -691,26 +916,39 @@ export const useSocketStore = defineStore('socket', () => {
         }
         break
       case 'module.action_committed':
-        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
-        if (currentConvId.value) resyncConversation(currentConvId.value).catch(() => {})
+        resources.invalidateMany(
+          [
+            'conversation',
+            'messages',
+            'state',
+            'guidance',
+            'endings',
+            'runtime',
+            'rewards',
+            'campaign',
+          ],
+          true,
+        )
         break
       case 'state_update':
         guidance.reset()
-        if (currentConvId.value && !chat.isGenerating) guidance.load(currentConvId.value)
         if (ev.state) state.set(ev.state)
         // Guidance visibility is projected by the server against the latest
-        // player state.  Refresh the optional runtime presentation at this
-        // explicit state boundary so items hidden at initial load can become
-        // visible later without polling or per-delta recomputation.
-        if (currentConvId.value) runtime.load(currentConvId.value).catch(() => {})
+        // player state. Refresh the optional runtime/actions presentation at
+        // this explicit state boundary, coalesced by the resource scheduler.
+        if (currentConvId.value && !chat.isGenerating) resources.invalidate('guidance')
+        if (currentConvId.value) {
+          resources.invalidate('runtime')
+          resources.invalidate('actions')
+        }
         break
       case 'campaign_updated':
         guidance.reset()
-        if (currentConvId.value && !chat.isGenerating) guidance.load(currentConvId.value)
         if (ev.campaign) {
           campaign.applyCampaign(ev.campaign)
-          campaign.load(ev.campaign.id).catch(() => {})
+          resources.invalidate('campaign')
         }
+        if (currentConvId.value && !chat.isGenerating) resources.invalidate('guidance')
         break
       case 'context_built':
         // Context is constructed before the outcome is known. Only committed
@@ -724,12 +962,12 @@ export const useSocketStore = defineStore('socket', () => {
           void resyncConversation(currentConvId.value).catch(() => scheduleFallback())
         break
       case 'ending.proposed':
-        if (currentConvId.value) conv.loadEndingState(currentConvId.value).catch(() => {})
+        if (currentConvId.value) resources.invalidate('endings')
         break
       case 'challenge_completed':
         guidance.reset()
         if (ev.completion) conv.consumeCompletion(ev.completion)
-        rewards.load().catch(() => {})
+        resources.invalidate('rewards')
         chat.stopGenerating()
         context.setNarrative('idle')
         break
@@ -746,15 +984,16 @@ export const useSocketStore = defineStore('socket', () => {
         break
       case 'error':
         guidance.reset()
-        if (currentConvId.value) guidance.load(currentConvId.value)
+        if (currentConvId.value) resources.invalidate('guidance')
         lastError.value = ev.error || '生成出错'
         // 本轮生成已经终止：复位生成状态并闭合未完成的流式消息
         chat.stopGenerating()
         context.setNarrative('idle')
         chat.removeStaleTempUsers()
-        rewards.load().catch(() => {})
+        resources.invalidate('rewards')
         if (currentConvId.value) {
-          chat.load(currentConvId.value).catch(() => {})
+          resources.invalidate('messages')
+          resources.invalidate('actions')
           context.loadActivity(currentConvId.value).catch(() => {})
         }
         finishActiveOperation()
@@ -852,6 +1091,7 @@ export const useSocketStore = defineStore('socket', () => {
 
   // 通过 WebSocket 发送用户输入。
   function sendUserInput(content: string, requestId?: string) {
+    if (writeBlocked.value) return false
     if (ws.value && connected.value) {
       ws.value.send(JSON.stringify({ type: 'user_input', content, request_id: requestId }))
       return true
@@ -860,12 +1100,14 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function cancel() {
+    if (writeBlocked.value) return
     if (ws.value && connected.value) {
       ws.value.send(JSON.stringify({ type: 'cancel_generation' }))
     }
   }
 
   function steer(content: string, requestId?: string) {
+    if (writeBlocked.value) return false
     if (ws.value && connected.value && content.trim()) {
       ws.value.send(JSON.stringify({ type: 'steer_generation', content, request_id: requestId }))
       return true
@@ -874,6 +1116,7 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function followUp(content: string, requestId?: string) {
+    if (writeBlocked.value) return false
     if (ws.value && connected.value && content.trim()) {
       ws.value.send(JSON.stringify({ type: 'follow_up', content, request_id: requestId }))
       return true
@@ -882,6 +1125,7 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   function clearQueue() {
+    if (writeBlocked.value) return false
     if (ws.value && connected.value) {
       ws.value.send(JSON.stringify({ type: 'clear_generation_queue' }))
       return true
@@ -893,12 +1137,23 @@ export const useSocketStore = defineStore('socket', () => {
     lastError.value = null
   }
 
+  function refreshPage() {
+    if (typeof window !== 'undefined') window.location.reload()
+  }
+
   return {
     connected,
     reconnecting,
     lastError,
     queuedCount,
     currentConvId,
+    connectionState,
+    reconnectAttempt,
+    maxReconnectAttempts,
+    connectionError,
+    connectionNotice,
+    writeBlocked,
+    terminal,
     connect,
     disconnect,
     sendUserInput,
@@ -907,5 +1162,6 @@ export const useSocketStore = defineStore('socket', () => {
     followUp,
     clearQueue,
     clearError,
+    refreshPage,
   }
 })

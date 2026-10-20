@@ -17,6 +17,7 @@ import { useThemeStore } from '@/stores/theme'
 import { useRewardStore } from '@/stores/rewards'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import { useLlmRelayStore } from '@/stores/llmRelay'
 
 const route = useRoute()
@@ -25,6 +26,7 @@ const theme = useThemeStore()
 const rewards = useRewardStore()
 const auth = useAuthStore()
 const settings = useSettingsStore()
+const gameplayVersion = useGameplayVersionStore()
 const relay = useLlmRelayStore()
 
 // 主对话页使用全屏三栏布局，不显示顶部导航。
@@ -50,13 +52,17 @@ const navs = computed(() => [
 // 加载账号数据
 onMounted(() => {
   watch(
-    () => auth.user,
-    (user) => {
-      if (user) rewards.load().catch(() => {})
-      else rewards.reset()
+    () => auth.user?.id,
+    (userId) => {
+      rewards.reset()
+      // 对话页顶栏隐藏，奖励由订阅 ready 后的统一恢复读取，避免首屏重复。
+      if (userId && !isConversation.value) rewards.load().catch(() => {})
     },
     { immediate: true },
   )
+  watch(isConversation, (conversation) => {
+    if (!conversation && auth.user) rewards.load().catch(() => {})
+  })
   // Relay 连接按“已登录 && user_managed && llm_route==='client'”启停。
   // 按账号 id 监听：切换账号（含登出/会话过期）时先丢弃旧账号的设置与 Relay
   // 连接，再加载新账号设置，否则新账号会沿用旧账号的 base_url 与路由判断。
@@ -66,6 +72,7 @@ onMounted(() => {
     async (userId, prevUserId) => {
       if (userId === prevUserId && settings.settings) return
       settings.reset()
+      gameplayVersion.reset()
       relay.disconnect()
       if (userId) await settings.load().catch(() => {})
       relay.ensure()

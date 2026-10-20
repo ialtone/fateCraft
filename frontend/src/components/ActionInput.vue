@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { NAlert, NButton, NIcon, NInput, useDialog, useMessage } from 'naive-ui'
 import {
   ArrowUpOutline,
@@ -22,6 +22,7 @@ import { useCampaignStore } from '@/stores/campaign'
 import { useConversationStore } from '@/stores/conversations'
 import { usePlayerActionStore } from '@/stores/playerActions'
 import { useRewardStore } from '@/stores/rewards'
+import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import type { GuidanceItem } from '@/types'
 import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
 
@@ -35,9 +36,15 @@ const campaign = useCampaignStore()
 const conversations = useConversationStore()
 const playerActions = usePlayerActionStore()
 const rewards = useRewardStore()
+const gameplay = useGameplayVersionStore()
 const message = useMessage()
 const dialog = useDialog()
 const text = ref('')
+const checkingGameplay = ref(false)
+let inputEpoch = 0
+onBeforeUnmount(() => {
+  inputEpoch++
+})
 
 // 断线 REST 降级期间的"等待中"标记：WS 断开时后端 202 立即返回、
 // 生成进度只经 WS 广播（本端收不到），isGenerating 不会置真。
@@ -75,8 +82,12 @@ watch(
 watch(
   () => props.convId,
   () => {
+    inputEpoch++
+    checkingGameplay.value = false
+    actionPending.value = false
     awaitingRestGen.value = false
   },
+  { flush: 'sync' },
 )
 
 const isEmpty = computed(() => {
@@ -92,7 +103,8 @@ const canContinue = computed(() => {
     !chat.isGenerating &&
     !awaitingRestGen.value &&
     !actionPending.value &&
-    !props.disabled
+    !props.disabled &&
+    !socket.writeBlocked
   )
 })
 
@@ -108,7 +120,8 @@ const canRegenerate = computed(() => {
     !chat.isGenerating &&
     !awaitingRestGen.value &&
     !actionPending.value &&
-    !props.disabled
+    !props.disabled &&
+    !socket.writeBlocked
   )
 })
 
@@ -123,7 +136,13 @@ watch(
 )
 
 const canQueue = computed(() => {
-  return chat.isGenerating && !props.disabled && socket.connected && !!text.value.trim()
+  return (
+    chat.isGenerating &&
+    !props.disabled &&
+    !socket.writeBlocked &&
+    socket.connected &&
+    !!text.value.trim()
+  )
 })
 
 const generationLabel = computed(() => {
@@ -143,29 +162,82 @@ const generationLabel = computed(() => {
   return '叙事生成中'
 })
 
+async function ensureGameplayFresh(id = props.convId) {
+  if (
+    checkingGameplay.value ||
+    socket.writeBlocked ||
+    props.disabled ||
+    chat.isGenerating ||
+    awaitingRestGen.value ||
+    actionPending.value
+  )
+    return false
+  const epoch = inputEpoch
+  checkingGameplay.value = true
+  try {
+    const info = await gameplay.ensureFresh(id)
+    if (
+      epoch !== inputEpoch ||
+      props.convId !== id ||
+      socket.writeBlocked ||
+      props.disabled ||
+      chat.isGenerating ||
+      awaitingRestGen.value ||
+      actionPending.value
+    )
+      return false
+    if (!info.run_allowed) {
+      message.warning(info.reason || '当前玩法版本已暂停运行。')
+      return false
+    }
+    return true
+  } catch {
+    if (epoch === inputEpoch) message.error('玩法版本状态暂时无法读取，请稍后刷新后重试。')
+    return false
+  } finally {
+    if (epoch === inputEpoch) checkingGameplay.value = false
+  }
+}
+
 // 发送用户输入：优先走 WebSocket，未连接时回退到 REST。
 // REST 失败时提示错误并回滚乐观插入的消息。
-async function dispatchUserInput(content: string) {
+async function dispatchUserInput(content: string): Promise<boolean> {
+  if (socket.writeBlocked) return false
+  const id = props.convId
+  const epoch = inputEpoch
+  if (!(await ensureGameplayFresh(id))) return false
+  if (
+    epoch !== inputEpoch ||
+    props.convId !== id ||
+    socket.writeBlocked ||
+    props.disabled ||
+    chat.isGenerating
+  )
+    return false
   // 用户继续对话即视为已读上一轮错误，立即清掉提示横幅
   socket.clearError()
   const tempId = chat.addOptimisticUser(content)
   chat.markGenerating()
   const requestId = crypto.randomUUID()
-  if (socket.sendUserInput(content, requestId)) return
+  if (socket.sendUserInput(content, requestId)) return true
   // 走 REST 降级：标记"等待中"，避免断线期间对同一对话连点造成锁竞争
   awaitingRestGen.value = true
   try {
-    await messagesApi.send(props.convId, content, requestId)
+    await messagesApi.send(id, content, requestId)
+    return true
   } catch (err: any) {
+    if (epoch !== inputEpoch) return false
     chat.removeById(tempId)
     chat.stopGenerating()
     awaitingRestGen.value = false
     message.error(`发送失败：${err.message || '未知错误'}`)
+    return false
   }
 }
 
 function dispatchGuidanceMessage(content: string) {
   if (
+    socket.writeBlocked ||
     !content.trim() ||
     props.disabled ||
     chat.isGenerating ||
@@ -178,6 +250,7 @@ function dispatchGuidanceMessage(content: string) {
 
 function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
   if (
+    socket.writeBlocked ||
     item.mode !== 'action' ||
     !item.action_key ||
     props.disabled ||
@@ -203,7 +276,12 @@ function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown
     key: item.action_key,
     arguments: args as Record<string, string | number | boolean>,
   }
-  const run = () => playerActions.execute(conv.id, input)
+  const run = async () => {
+    if (socket.writeBlocked) return null
+    if (!(await ensureGameplayFresh(conv.id))) return null
+    if (socket.writeBlocked || props.convId !== conv.id) return null
+    return playerActions.execute(conv.id, input)
+  }
   const ending = conversations.endingState?.ending_capabilities.find(
     (cap) =>
       cap.key === item.action_key &&
@@ -223,7 +301,7 @@ function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown
   else void run()
 }
 
-function send() {
+async function send() {
   const content = text.value.trim()
   if (
     !content ||
@@ -233,12 +311,13 @@ function send() {
     actionPending.value
   )
     return
-  dispatchUserInput(content)
-  text.value = ''
+  const id = props.convId
+  if ((await dispatchUserInput(content)) && props.convId === id && text.value.trim() === content)
+    text.value = ''
 }
 
 function startJourney() {
-  dispatchUserInput('开始。')
+  void dispatchUserInput('开始。')
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -249,13 +328,26 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 async function submitRegenerate() {
+  if (socket.writeBlocked) return
+  const id = props.convId
+  const epoch = inputEpoch
+  if (!(await ensureGameplayFresh(id))) return
+  if (
+    epoch !== inputEpoch ||
+    props.convId !== id ||
+    socket.writeBlocked ||
+    props.disabled ||
+    chat.isGenerating
+  )
+    return
   socket.clearError()
   actionPending.value = true
   chat.markGenerating()
   const requestId = crypto.randomUUID()
   try {
-    await messagesApi.regenerate(props.convId, requestId)
+    await messagesApi.regenerate(id, requestId)
   } catch (err: any) {
+    if (epoch !== inputEpoch) return
     chat.stopGenerating()
     message.error(`重新生成失败：${err.message || '未知错误'}`)
   }
@@ -299,14 +391,26 @@ async function regenerate() {
   })
 }
 async function continueGen() {
-  if (!canContinue.value) return
+  if (!canContinue.value || socket.writeBlocked) return
+  const id = props.convId
+  const epoch = inputEpoch
+  if (!(await ensureGameplayFresh(id))) return
+  if (
+    epoch !== inputEpoch ||
+    props.convId !== id ||
+    socket.writeBlocked ||
+    props.disabled ||
+    chat.isGenerating
+  )
+    return
   socket.clearError()
   actionPending.value = true
   chat.markGenerating()
   const requestId = crypto.randomUUID()
   try {
-    await messagesApi.continue(props.convId, requestId)
+    await messagesApi.continue(id, requestId)
   } catch (err: any) {
+    if (epoch !== inputEpoch) return
     chat.stopGenerating()
     message.error(`继续生成失败：${err.message || '未知错误'}`)
   }
@@ -331,15 +435,18 @@ function cancel() {
 
 <template>
   <div class="input-area">
-    <!-- 断线/重连提示横幅 -->
+    <!-- 断线/重连/耗尽提示横幅 -->
     <NAlert
-      v-if="!disabled && !socket.connected"
-      :type="socket.reconnecting ? 'warning' : 'error'"
+      v-if="socket.connectionNotice && (!props.disabled || socket.terminal)"
+      :type="socket.terminal ? 'error' : 'warning'"
       style="margin-bottom: 10px"
     >
-      {{
-        socket.reconnecting ? '连接已断开，正在尝试重连…' : '连接已断开，消息将通过普通请求发送。'
-      }}
+      <div class="connection-notice">
+        <span>{{ socket.connectionNotice }}</span>
+        <NButton v-if="socket.terminal" size="tiny" @click="socket.refreshPage()">
+          刷新页面
+        </NButton>
+      </div>
     </NAlert>
 
     <NAlert
@@ -358,7 +465,12 @@ function cancel() {
         <div class="hint-icon">◆</div>
         <div class="hint-text">夜色渐深，风雨欲来。前方是一扇半掩的木门...</div>
       </div>
-      <NButton type="primary" size="large" @click="startJourney">
+      <NButton
+        type="primary"
+        size="large"
+        :disabled="disabled || socket.writeBlocked || checkingGameplay"
+        @click="startJourney"
+      >
         <template #icon><NIcon :component="ArrowUpOutline" /></template>
         推开木门，开始旅程
       </NButton>
@@ -410,12 +522,20 @@ function cancel() {
             size="tiny"
             title="清空排队"
             aria-label="清空排队"
+            :disabled="socket.writeBlocked"
             @click="socket.clearQueue"
           >
             <template #icon><NIcon :component="TrashOutline" /></template>
           </NButton>
         </template>
-        <NButton v-if="chat.isGenerating" quaternary size="tiny" type="error" @click="cancel">
+        <NButton
+          v-if="chat.isGenerating"
+          quaternary
+          size="tiny"
+          type="error"
+          :disabled="socket.writeBlocked"
+          @click="cancel"
+        >
           <template #icon><NIcon :component="StopOutline" /></template>
           停止
         </NButton>
@@ -451,7 +571,13 @@ function cancel() {
           type="primary"
           class="send"
           :disabled="
-            disabled || chat.isGenerating || awaitingRestGen || actionPending || !text.trim()
+            disabled ||
+            socket.writeBlocked ||
+            checkingGameplay ||
+            chat.isGenerating ||
+            awaitingRestGen ||
+            actionPending ||
+            !text.trim()
           "
           @click="send"
         >
@@ -469,6 +595,13 @@ function cancel() {
   background: var(--bg-soft);
   padding: 10px 20px 16px;
   flex-shrink: 0;
+}
+
+.connection-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .start-container {

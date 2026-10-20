@@ -3,9 +3,11 @@ import { nextTick, ref, watch } from 'vue'
 import { NAlert, NButton, NIcon, NInput, NPopconfirm, NSpin, NTag, NTooltip } from 'naive-ui'
 import { CloseCircleOutline, SendOutline, TrashOutline } from '@vicons/ionicons5'
 import { useInquiryStore } from '@/stores/inquiry'
+import { useSocketStore } from '@/stores/socket'
 
 const props = defineProps<{ convId: string }>()
 const inquiry = useInquiryStore()
+const socket = useSocketStore()
 const question = ref('')
 const timeline = ref<HTMLElement | null>(null)
 
@@ -18,6 +20,7 @@ watch(
 )
 
 async function submit() {
+  if (socket.writeBlocked) return
   const content = question.value.trim()
   if (!content || inquiry.asking) return
   question.value = ''
@@ -68,7 +71,7 @@ async function submit() {
         :autosize="{ minRows: 2, maxRows: 5 }"
         maxlength="1000"
         placeholder="询问当前状态、任务或已发生事件"
-        :disabled="inquiry.asking"
+        :disabled="inquiry.asking || socket.writeBlocked"
         @keydown.enter.exact.prevent="submit"
       />
       <div class="composer-actions">
@@ -85,7 +88,7 @@ async function submit() {
                   circle
                   size="small"
                   aria-label="清空询问记录"
-                  :disabled="!inquiry.messages.length || inquiry.asking"
+                  :disabled="!inquiry.messages.length || inquiry.asking || socket.writeBlocked"
                 >
                   <template #icon><NIcon :component="TrashOutline" /></template>
                 </NButton>
@@ -104,6 +107,7 @@ async function submit() {
                 size="small"
                 aria-label="取消询问"
                 :loading="inquiry.cancelling"
+                :disabled="socket.writeBlocked"
                 @click="inquiry.cancel(convId)"
               >
                 <template #icon><NIcon :component="CloseCircleOutline" /></template>
@@ -119,7 +123,7 @@ async function submit() {
                 size="small"
                 aria-label="发送询问"
                 :loading="inquiry.asking"
-                :disabled="!question.trim()"
+                :disabled="!question.trim() || socket.writeBlocked"
                 @click="submit"
               >
                 <template #icon><NIcon :component="SendOutline" /></template>

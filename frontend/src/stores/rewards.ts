@@ -7,6 +7,8 @@ export const useRewardStore = defineStore('rewards', () => {
   const items = ref<PlayerReward[]>([])
   const loading = ref(false)
   const loaded = ref(false)
+  let inFlight: Promise<PlayerReward[]> | null = null
+  let generation = 0
 
   function balanceFor(key?: string) {
     if (!key) return 0
@@ -14,19 +16,36 @@ export const useRewardStore = defineStore('rewards', () => {
   }
 
   async function load() {
+    if (inFlight) return inFlight
+    const epoch = generation
     loading.value = true
+    const request = rewardsApi.list()
+    inFlight = request
     try {
-      items.value = await rewardsApi.list()
-      loaded.value = true
+      const next = await request
+      if (epoch === generation) {
+        items.value = next
+        loaded.value = true
+      }
+      return next
     } finally {
-      loading.value = false
+      if (inFlight === request) inFlight = null
+      if (epoch === generation) loading.value = false
     }
   }
 
   function reset() {
+    invalidateRequests()
     items.value = []
     loaded.value = false
+    loading.value = false
   }
 
-  return { items, loading, loaded, balanceFor, load, reset }
+  function invalidateRequests() {
+    generation++
+    inFlight = null
+    loading.value = false
+  }
+
+  return { items, loading, loaded, balanceFor, load, reset, invalidateRequests }
 })

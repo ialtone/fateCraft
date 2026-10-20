@@ -182,6 +182,11 @@ export const useConversationStore = defineStore('conversation', () => {
     completion.value = null
   }
 
+  function invalidateRequests() {
+    loadGeneration++
+    endingGeneration++
+  }
+
   return {
     list,
     current,
@@ -205,5 +210,6 @@ export const useConversationStore = defineStore('conversation', () => {
     dismissProposal,
     clearEnding,
     clearCurrent,
+    invalidateRequests,
   }
 })

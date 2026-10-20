@@ -8,11 +8,13 @@ import InquiryPanel from '@/components/InquiryPanel.vue'
 import ModuleActionPanel from '@/components/ModuleActionPanel.vue'
 import { useInquiryStore } from '@/stores/inquiry'
 import { useRuntimeStore } from '@/stores/runtime'
+import { useSocketStore } from '@/stores/socket'
 
 const props = defineProps<{ convId: string; campaign: boolean }>()
 const active = ref<'state' | 'inquiry' | 'actions'>('state')
 const inquiry = useInquiryStore()
 const runtime = useRuntimeStore()
+const socket = useSocketStore()
 watch(
   () => props.convId,
   () => {
@@ -23,7 +25,7 @@ watch(
 watch(
   [active, () => props.convId],
   ([value]) => {
-    if (value === 'inquiry' && !inquiry.thread && !inquiry.loading) {
+    if (value === 'inquiry' && !socket.writeBlocked && !inquiry.thread && !inquiry.loading) {
       inquiry.load(props.convId).catch(() => {})
     }
   },
@@ -66,6 +68,7 @@ watch(
       v-show="active === 'actions'"
       class="sidebar-content"
       :conv-id="convId"
+      :visible="active === 'actions'"
     />
   </aside>
 </template>

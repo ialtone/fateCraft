@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { inquiriesApi } from '@/api'
+import { useSocketStore } from './socket'
 import type { CharacterInquiryMessage, CharacterInquiryThread } from '@/types'
 
 export const useInquiryStore = defineStore('inquiry', () => {
@@ -14,6 +15,7 @@ export const useInquiryStore = defineStore('inquiry', () => {
   const error = ref('')
 
   async function load(conversationId: string) {
+    if (useSocketStore().writeBlocked) return
     loading.value = true
     error.value = ''
     try {
@@ -29,6 +31,7 @@ export const useInquiryStore = defineStore('inquiry', () => {
   }
 
   async function ask(conversationId: string, question: string) {
+    if (useSocketStore().writeBlocked) return
     const content = question.trim()
     if (!content || asking.value) return
     asking.value = true
@@ -69,6 +72,7 @@ export const useInquiryStore = defineStore('inquiry', () => {
   }
 
   async function cancel(conversationId: string) {
+    if (useSocketStore().writeBlocked) return
     if (!asking.value || cancelling.value) return
     cancelling.value = true
     cancelRequested.value = true
@@ -83,6 +87,7 @@ export const useInquiryStore = defineStore('inquiry', () => {
   }
 
   async function clear(conversationId: string) {
+    if (useSocketStore().writeBlocked) return
     error.value = ''
     try {
       await inquiriesApi.clear(conversationId)

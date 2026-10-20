@@ -14,16 +14,16 @@ export const useGuidanceStore = defineStore('guidance', () => {
 
   async function load(convId: string) {
     const requestVersion = ++version
-    try {
-      const value = await guidanceApi.get(convId)
-      if (version === requestVersion) active.value = value
-    } catch {
-      if (version === requestVersion) active.value = null
-    }
+    const value = await guidanceApi.get(convId)
+    if (version === requestVersion) active.value = value
   }
 
   function reset() {
     set(null)
   }
-  return { active, set, load, reset }
+  function invalidateRequests() {
+    version++
+  }
+
+  return { active, set, load, reset, invalidateRequests }
 })

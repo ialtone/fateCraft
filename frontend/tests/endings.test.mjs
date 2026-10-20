@@ -12,6 +12,7 @@ test('abandon confirmation accepts null metadata and executes only after confirm
   const end = source.indexOf('async function endConversation()', start)
   const compiled = ts.transpile(source.slice(start, end), { target: ts.ScriptTarget.ESNext })
   let popup
+  let gameplayAllowed = true
   const calls = []
   const actions = { pending: null, acting: false, execute: (...args) => calls.push(args) }
   const snapshot = {
@@ -28,18 +29,22 @@ test('abandon confirmation accepts null metadata and executes only after confirm
     'chat',
     'message',
     'dialog',
+    'socket',
+    'gameplay',
     `${compiled}; return confirmEnding`,
   )(
     actions,
     { value: 'a' },
     { endingState: snapshot },
     { isGenerating: false },
-    { warning: () => {} },
+    { warning: () => {}, error: () => {} },
     {
       error: (options) => {
         popup = options
       },
     },
+    { writeBlocked: false },
+    { ensureFresh: async () => ({ run_allowed: gameplayAllowed }) },
   )
 
   assert.equal(confirm('campaign.abandon', {}, '中止本局', 'p'), true)
@@ -54,6 +59,13 @@ test('abandon confirmation accepts null metadata and executes only after confirm
   assert.equal(calls[0][0], 'a')
   assert.equal(calls[0][1].key, 'campaign.abandon')
   assert.equal(calls[0][1].expected_revision, 3)
+
+  gameplayAllowed = false
+  assert.equal(confirm('campaign.abandon', {}, '中止本局', 'p'), true)
+  await popup.onPositiveClick()
+  assert.equal(calls.length, 1)
+  gameplayAllowed = true
+
   actions.pending = { request_id: 'pending' }
   assert.equal(confirm('campaign.abandon', {}, '中止本局', 'p'), false)
 })
@@ -63,7 +75,7 @@ before(async () => {
   server = await createServer({
     root: fileURLToPath(new URL('..', import.meta.url)),
     optimizeDeps: { noDiscovery: true, include: [] },
-    server: { middlewareMode: true, watch: null, hmr: false },
+    server: { middlewareMode: true, watch: null, hmr: false, ws: false },
   })
   api = await server.ssrLoadModule('/src/api/index.ts')
   ;({ useConversationStore } = await server.ssrLoadModule('/src/stores/conversations.ts'))

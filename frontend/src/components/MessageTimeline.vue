@@ -6,6 +6,8 @@ import MessageItem from './MessageItem.vue'
 import { CHAT_CONTENT_CHANGED_EVENT, useChatStore } from '@/stores/chat'
 import { useRewardStore } from '@/stores/rewards'
 import { useRuntimeStore } from '@/stores/runtime'
+import { useSocketStore } from '@/stores/socket'
+import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import { messagesApi } from '@/api'
 import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
 
@@ -13,6 +15,9 @@ const props = defineProps<{ editable: boolean }>()
 const chat = useChatStore()
 const rewards = useRewardStore()
 const runtime = useRuntimeStore()
+const socket = useSocketStore()
+const gameplay = useGameplayVersionStore()
+const checkingRewrite = ref(false)
 const dialog = useDialog()
 const message = useMessage()
 const route = useRoute()
@@ -110,7 +115,8 @@ async function loadEarlier() {
 }
 
 async function onEdit(id: string, content: string) {
-  if (!rewriteEnabled.value) return
+  if (!rewriteEnabled.value || socket.writeBlocked || chat.isGenerating) return
+  const convId = route.params.id as string
   const capability = rewrite.value!
   const cost = capability.cost_quantity ?? 0
   const balance = rewards.balanceFor(capability.cost_reward_key)
@@ -129,14 +135,44 @@ async function onEdit(id: string, content: string) {
     positiveText: '确认改写',
     negativeText: '取消',
     onPositiveClick: async () => {
+      if (
+        checkingRewrite.value ||
+        socket.writeBlocked ||
+        chat.isGenerating ||
+        !rewriteEnabled.value ||
+        route.params.id !== convId
+      )
+        return false
+      checkingRewrite.value = true
+      try {
+        const info = await gameplay.ensureFresh(convId)
+        if (!info.run_allowed) {
+          message.warning(info.reason || '当前玩法版本已暂停运行。')
+          return false
+        }
+      } catch {
+        message.error('玩法版本状态暂时无法读取，请刷新后重试。')
+        return false
+      } finally {
+        checkingRewrite.value = false
+      }
+      if (
+        socket.writeBlocked ||
+        chat.isGenerating ||
+        !rewriteEnabled.value ||
+        route.params.id !== convId
+      )
+        return false
       const edited = chat.messages.find((m) => m.id === id)
       if (edited && edited.type === 'user') {
         chat.markGenerating()
         const requestId = crypto.randomUUID()
         try {
           await messagesApi.editAndRegenerate(id, content, requestId)
-          await rewards.load().catch(() => {})
+          if (!socket.writeBlocked && route.params.id === convId)
+            await rewards.load().catch(() => {})
         } catch (err: any) {
+          if (route.params.id !== convId) return false
           chat.stopGenerating()
           const status = err.response?.status
           if (status === 409 || status === 400) {
@@ -144,7 +180,7 @@ async function onEdit(id: string, content: string) {
           } else {
             message.error(`编辑消息失败：${err.message || '未知错误'}`)
           }
-          await rewards.load().catch(() => {})
+          if (!socket.writeBlocked) await rewards.load().catch(() => {})
         }
       }
     },

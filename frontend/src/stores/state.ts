@@ -23,5 +23,9 @@ export const useStateStore = defineStore('state', () => {
     state.value = {}
   }
 
-  return { state, load, set, reset }
+  function invalidateRequests() {
+    requestVersion++
+  }
+
+  return { state, load, set, reset, invalidateRequests }
 })

@@ -11,6 +11,8 @@
     "test:play-readiness": "node --experimental-strip-types --test tests/play-readiness.test.mjs",
     "test:admin-tabs": "node --experimental-strip-types --test tests/admin-tabs.test.mjs",
     "test:player-rewards": "node --experimental-strip-types --test tests/player-rewards.test.mjs",
+    "test:resources": "node --test tests/conversation-resources.test.mjs",
+    "test:dedupe": "node --test tests/request-dedupe.test.mjs",
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",

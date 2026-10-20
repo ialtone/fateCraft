@@ -110,6 +110,7 @@ function browserSetup() {
     businessReads++
     return conv.current
   }
+  api.conversationsApi.get = async () => ({ conversation: conv.current })
   conv.loadEndingState = async () => {}
   chat.load = async () => {
     chat.messages = []
@@ -462,15 +463,14 @@ test('reconnect refreshes a visible inspector after missed terminal events', asy
   assert.equal(fixture.context.inspectorDirty, false)
 })
 
-test('subscription registration failures retain exponential reconnect backoff', async (t) => {
+test('subscription registration failures stop after five reconnect attempts', async (t) => {
   const fixture = browserSetup()
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
   fixture.socket.connect('a')
-  for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
-    const transport = sockets.at(-1)
-    transport.open()
-    assert.equal(fixture.socket.connected, false)
-    transport.close()
+  const initial = sockets.at(-1)
+  initial.open()
+  initial.close()
+  for (const delay of [1000, 2000, 4000, 8000, 16000]) {
     const count = sockets.length
     t.mock.timers.tick(delay - 1)
     await settle()
@@ -479,18 +479,56 @@ test('subscription registration failures retain exponential reconnect backoff', 
     await settle()
     assert.equal(sockets.length, count + 1)
     assert.equal(fixture.socket.reconnecting, true)
+    const transport = sockets.at(-1)
+    transport.open()
+    assert.equal(fixture.socket.connected, false)
+    transport.close()
+    await settle()
   }
-  const healthy = sockets.at(-1)
-  healthy.open()
-  assert.equal(fixture.socket.reconnecting, true)
-  healthy.receive({ type: 'subscription.ready', conversation_id: 'a' })
-  await settle()
-  assert.equal(fixture.socket.reconnecting, false)
-  healthy.close()
+  assert.equal(sockets.length, 6)
+  assert.equal(fixture.socket.connectionState, 'exhausted')
+  assert.equal(fixture.socket.writeBlocked, true)
+  assert.match(fixture.socket.connectionNotice, /刷新页面/)
+  assert.equal(fixture.socket.sendUserInput('blocked'), false)
+  assert.equal(fixture.socket.steer('blocked'), false)
+  assert.equal(fixture.socket.followUp('blocked'), false)
+  assert.equal(fixture.socket.clearQueue(), false)
   const count = sockets.length
-  t.mock.timers.tick(1000)
+  t.mock.timers.tick(60000)
   await settle()
-  assert.equal(sockets.length, count + 1)
+  assert.equal(sockets.length, count)
+})
+
+test('the fifth reconnect can succeed and later restores its budget after stability', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  fixture.socket.connect('a')
+  sockets.at(-1).open()
+  sockets.at(-1).close()
+  for (const delay of [1000, 2000, 4000, 8000]) {
+    t.mock.timers.tick(delay)
+    await settle()
+    sockets.at(-1).open()
+    sockets.at(-1).close()
+    await settle()
+  }
+  t.mock.timers.tick(16000)
+  await settle()
+  assert.equal(sockets.length, 6)
+  const fifth = sockets.at(-1)
+  fifth.open()
+  fifth.receive({ type: 'subscription.ready', conversation_id: 'a' })
+  await settle()
+  assert.equal(fixture.socket.connected, true)
+  assert.equal(fixture.socket.connectionState, 'ready')
+  assert.equal(fixture.socket.reconnectAttempt, 5)
+  t.mock.timers.tick(29999)
+  await settle()
+  assert.equal(fixture.socket.reconnectAttempt, 5)
+  t.mock.timers.tick(1)
+  await settle()
+  assert.equal(fixture.socket.reconnectAttempt, 0)
+  assert.equal(fixture.socket.connectionState, 'ready')
 })
 
 test('foreign ready cannot reset registration backoff or start recovery', async () => {
@@ -520,7 +558,10 @@ test('permanent read failures stop recovery while transient failures remain retr
       throw { response: { status } }
     }
     await ready(fixture)
-    assert.equal(fixture.socket.currentConvId, null)
+    assert.equal(fixture.socket.currentConvId, 'a')
+    assert.equal(fixture.socket.connectionState, 'access_denied')
+    assert.equal(fixture.socket.connected, false)
+    assert.equal(fixture.socket.writeBlocked, true)
     assert.equal(fixture.socket.reconnecting, false)
     const count = sockets.length
     const reads = fixture.reads()
@@ -530,4 +571,205 @@ test('permanent read failures stop recovery while transient failures remain retr
     assert.equal(fixture.reads(), reads)
     fixture.socket.disconnect()
   }
+})
+
+test('hiding or going offline cancels queued retries without spending the budget', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  fixture.socket.connect('a')
+  sockets.at(-1).close()
+  for (const offline of [false, true]) {
+    if (offline) navigator.onLine = false
+    else document.visibilityState = 'hidden'
+    ;(offline ? window : document).dispatchEvent(
+      new Event(offline ? 'offline' : 'visibilitychange'),
+    )
+    t.mock.timers.tick(1000)
+    await settle()
+    assert.equal(sockets.length, 1)
+    if (offline) navigator.onLine = true
+    else document.visibilityState = 'visible'
+    ;(offline ? window : document).dispatchEvent(new Event(offline ? 'online' : 'visibilitychange'))
+    await settle()
+  }
+  t.mock.timers.tick(1000)
+  await settle()
+  assert.equal(sockets.length, 2)
+  sockets.at(-1).close()
+  t.mock.timers.tick(1999)
+  await settle()
+  assert.equal(sockets.length, 2)
+  t.mock.timers.tick(1)
+  await settle()
+  assert.equal(sockets.length, 3)
+})
+
+test('visibility and online events cannot create another socket during handshake or registration', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  fixture.socket.connect('a')
+  for (const opened of [false, true]) {
+    if (opened) sockets.at(-1).open()
+    window.dispatchEvent(new Event('online'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    t.mock.timers.tick(1000)
+    await settle()
+    assert.equal(sockets.length, 1)
+  }
+})
+
+test('a late access denial from an old conversation probe cannot stop the new connection', async () => {
+  const fixture = browserSetup()
+  const old = deferred()
+  api.conversationsApi.get = () => old.promise
+  fixture.socket.connect('a')
+  sockets.at(-1).close()
+  fixture.socket.connect('b')
+  const transport = sockets.at(-1)
+  transport.open()
+  api.activityApi.get = async () => snapshot(1, { conversation_id: 'b' })
+  transport.receive({ type: 'subscription.ready', conversation_id: 'b' })
+  await settle()
+  old.reject({ response: { status: 404 } })
+  await settle()
+  assert.equal(fixture.socket.currentConvId, 'b')
+  assert.equal(fixture.socket.connectionState, 'ready')
+  assert.equal(fixture.socket.writeBlocked, false)
+})
+
+test('inspector invalidation while its old request is in flight schedules one newer read', async (t) => {
+  const { context } = setup()
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const first = deferred()
+  let reads = 0
+  api.runtimeInspectorApi.get = async () => {
+    reads++
+    return reads === 1 ? first.promise : { activity: snapshot(2) }
+  }
+  context.setInspectorVisible(true)
+  context.invalidateInspector()
+  t.mock.timers.tick(50)
+  await settle()
+  assert.equal(reads, 1)
+  first.resolve({ activity: snapshot(1) })
+  await settle()
+  t.mock.timers.tick(50)
+  await settle()
+  assert.equal(reads, 2)
+  assert.equal(context.inspectorDirty, false)
+})
+
+test('a transient first recovery failure still returns the budget after a successful fallback and stability', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const original = fixture.conv.load
+  let reads = 0
+  fixture.conv.load = async (...args) => {
+    if (++reads === 1) throw Error('offline')
+    return original(...args)
+  }
+  fixture.socket.connect('a')
+  sockets.at(-1).close()
+  t.mock.timers.tick(1000)
+  await settle()
+  sockets.at(-1).open()
+  sockets.at(-1).receive({ type: 'subscription.ready', conversation_id: 'a' })
+  await settle()
+  assert.equal(fixture.socket.reconnectAttempt, 1)
+  t.mock.timers.tick(5501)
+  await settle()
+  assert.equal(reads, 2)
+  t.mock.timers.tick(30000)
+  await settle()
+  assert.equal(fixture.socket.reconnectAttempt, 0)
+})
+
+test('repeated business recovery failures exhaust their budget and stop all automatic reads', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  let reads = 0
+  fixture.conv.load = async () => {
+    reads++
+    throw Error('offline')
+  }
+  await ready(fixture)
+  for (let attempt = 1; attempt < 5; attempt++) {
+    t.mock.timers.tick(attempt === 1 ? 5501 : attempt === 2 ? 11001 : 33001)
+    await settle()
+  }
+  assert.equal(reads, 5)
+  assert.equal(fixture.socket.connectionState, 'exhausted')
+  const before = fixture.reads()
+  t.mock.timers.tick(600000)
+  await settle()
+  assert.equal(fixture.reads(), before)
+})
+
+test('failed event resource refresh enters bounded recovery instead of losing the invalidation', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const transport = await ready(fixture)
+  let reads = 0
+  useRuntimeStore().load = async () => {
+    if (++reads === 1) throw Error('offline')
+  }
+  transport.receive({ type: 'state_update', state: { changed: true } })
+  t.mock.timers.tick(50)
+  await settle()
+  assert.equal(reads, 1)
+  t.mock.timers.tick(5501)
+  await settle()
+  assert.equal(reads, 2)
+  assert.equal(fixture.socket.connectionState, 'ready')
+})
+
+test('campaign messages arriving during a snapshot read survive the coalesced follow-up', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const transport = await ready(fixture)
+  fixture.conv.current.campaign_id = 'world'
+  const campaign = useCampaignStore()
+  campaign.snapshot = { campaign: { id: 'world', revision: 1, state_hash: 'one' } }
+  const first = deferred()
+  let reads = 0
+  campaign.load = async () => {
+    reads++
+    if (reads === 1) await first.promise
+    campaign.snapshot = {
+      campaign: {
+        id: 'world',
+        revision: reads === 1 ? 1 : 2,
+        state_hash: reads === 1 ? 'one' : 'two',
+      },
+    }
+  }
+  // 已有的旧读尚未返回，随后到达的新正文必须促成一次更新的快照读取。
+  const { useConversationResources } = await server.ssrLoadModule(
+    '/src/stores/conversationResources.ts',
+  )
+  const old = useConversationResources().load('campaign')
+  await settle()
+  transport.receive({
+    type: 'message_created',
+    message: {
+      id: 'new-message',
+      conversation_id: 'a',
+      type: 'assistant',
+      markdown: 'new narrative',
+      campaign_revision: 2,
+      campaign_state_hash: 'two',
+      metadata: {},
+      created_at: 'now',
+    },
+  })
+  await settle()
+  assert.equal(reads, 1)
+  assert.equal(fixture.chat.messages.length, 0)
+  first.resolve()
+  await old
+  await settle()
+  t.mock.timers.tick(50)
+  await settle()
+  assert.equal(reads, 2)
+  assert.equal(fixture.chat.messages[0]?.id, 'new-message')
 })

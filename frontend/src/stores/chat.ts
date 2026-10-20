@@ -74,6 +74,11 @@ export const useChatStore = defineStore('chat', () => {
     loadingEarlier.value = false
   }
 
+  function invalidateRequests() {
+    loadGeneration++
+    loadingEarlier.value = false
+  }
+
   // 发送前在时间线乐观插入用户消息，返回临时 ID 便于失败时回滚。
   function addOptimisticUser(content: string): string {
     const id = `temp-${++tempSeq}`
@@ -247,6 +252,7 @@ export const useChatStore = defineStore('chat', () => {
     load,
     loadEarlier,
     reset,
+    invalidateRequests,
     addOptimisticUser,
     removeById,
     removeStaleTempUsers,

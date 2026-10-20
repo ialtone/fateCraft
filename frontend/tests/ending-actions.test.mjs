@@ -8,7 +8,7 @@ before(async () => {
   server = await createServer({
     root: fileURLToPath(new URL('..', import.meta.url)),
     optimizeDeps: { noDiscovery: true, include: [] },
-    server: { middlewareMode: true, watch: null, hmr: false },
+    server: { middlewareMode: true, watch: null, hmr: false, ws: false },
   })
   ;({ collectEndingEntries } = await server.ssrLoadModule('/src/lib/ending-actions.ts'))
 })

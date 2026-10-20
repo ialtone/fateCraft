@@ -1,64 +1,57 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
-import http from '@/api'
+import { useGameplayVersionStore } from '@/stores/gameplayVersion'
+import { useSocketStore } from '@/stores/socket'
 const props = defineProps<{ conversationId: string }>()
 const emit = defineEmits<{ allowed: [value: boolean] }>()
 const router = useRouter()
-interface VersionInfo {
-  pack_name: string
-  pack_slug: string
-  version: string
-  current_version?: string
-  new_start_available: boolean
-  run_allowed: boolean
-  reason?: string
-}
-const info = ref<VersionInfo>(),
-  error = ref('')
-let sequence = 0,
-  disposed = false,
-  pending = false
-async function load() {
-  if (pending || disposed) return
-  pending = true
-  const id = props.conversationId,
-    token = sequence
+const store = useGameplayVersionStore()
+const socket = useSocketStore()
+const info = computed(() => store.versions[props.conversationId])
+const error = computed(() => store.errors[props.conversationId] ?? '')
+watch([info, error], () => emit('allowed', !!info.value?.run_allowed && !error.value))
+let disposed = false
+
+async function refresh(force = false) {
+  if (socket.writeBlocked) return
+  const id = props.conversationId
   try {
-    const { data } = await http.get<VersionInfo>(`/conversations/${id}/gameplay-version`)
-    if (!disposed && token === sequence) {
-      info.value = data
-      error.value = ''
-      emit('allowed', data.run_allowed)
-    }
+    const next = await store.load(id, force)
+    if (!disposed && id === props.conversationId) emit('allowed', next.run_allowed)
   } catch {
-    if (!disposed && token === sequence) error.value = '玩法版本状态暂时无法读取，请稍后刷新。'
-  } finally {
-    pending = false
+    if (!disposed && id === props.conversationId) emit('allowed', false)
   }
 }
+
 watch(
   () => props.conversationId,
   () => {
-    sequence++
-    info.value = undefined
-    error.value = ''
     emit('allowed', false)
-    void load()
+    void refresh(true)
   },
   { immediate: true },
 )
-const timer = setInterval(load, 15000)
+
+// 取消周期轮询：只在重新可见且缓存超过 60 秒时刷新。
+function visibleAgain() {
+  if (disposed || document.visibilityState === 'hidden') return
+  if (!store.fresh(props.conversationId)) void refresh()
+}
+onMounted(() => {
+  document.addEventListener('visibilitychange', visibleAgain)
+  window.addEventListener('focus', visibleAgain)
+})
 onBeforeUnmount(() => {
   disposed = true
-  sequence++
-  clearInterval(timer)
+  document.removeEventListener('visibilitychange', visibleAgain)
+  window.removeEventListener('focus', visibleAgain)
 })
 </script>
 <template>
   <span class="saved-version" v-if="info || error">
-    <span v-if="error" class="version-tag version-error">版本状态读取失败</span>
+    <span v-if="error && !info" class="version-tag version-error">版本状态读取失败</span>
     <template v-if="info">
       <span
         class="version-tag"

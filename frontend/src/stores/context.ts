@@ -18,6 +18,7 @@ export const useContextStore = defineStore('context', () => {
   const runtimeInspector = ref<RuntimeInspector | null>(null)
   const inspectorVisible = ref(false)
   const inspectorDirty = ref(true)
+  const recoverySuspended = ref(false)
   let conversationId: string | null = null
   let generation = 0
   let phaseRevision = 0
@@ -26,6 +27,12 @@ export const useContextStore = defineStore('context', () => {
   let inFlight: Promise<ConversationActivity | null> | null = null
   let inspectorFlight: Promise<void> | null = null
   let inspectorRevision = 0
+  let inspectorTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearInspectorTimer() {
+    if (inspectorTimer) clearTimeout(inspectorTimer)
+    inspectorTimer = null
+  }
 
   function enter(convId: string) {
     if (conversationId === convId) return
@@ -98,6 +105,7 @@ export const useContextStore = defineStore('context', () => {
   // All triggers share one request. A newer invalidation during the read raises
   // the target; it cannot be accidentally satisfied by an older in-flight result.
   function loadActivity(convId: string, minimumVersion = 0): Promise<ConversationActivity | null> {
+    if (recoverySuspended.value) return Promise.resolve(null)
     enter(convId)
     targetVersion = Math.max(targetVersion, minimumVersion)
     if (inFlight) return inFlight
@@ -148,12 +156,19 @@ export const useContextStore = defineStore('context', () => {
     generation++
     inFlight = null
     inspectorFlight = null
+    clearInspectorTimer()
     inspectorRevision++
     inspectorDirty.value = true
     activityStale.value = true
   }
 
+  function setRecoverySuspended(value: boolean) {
+    recoverySuspended.value = value
+    if (value) clearInspectorTimer()
+  }
+
   function loadRuntimeInspector(convId: string): Promise<void> {
+    if (recoverySuspended.value) return Promise.resolve()
     if (inspectorFlight) return inspectorFlight
     const epoch = generation
     const revision = inspectorRevision
@@ -173,7 +188,10 @@ export const useContextStore = defineStore('context', () => {
     inspectorFlight = request
     void request
       .finally(() => {
-        if (epoch === generation && inspectorFlight === request) inspectorFlight = null
+        if (epoch !== generation || inspectorFlight !== request) return
+        inspectorFlight = null
+        // 在途请求之后收到的新失效不能被一次旧读取消费。
+        if (inspectorRevision !== revision && inspectorDirty.value) scheduleInspector()
       })
       .catch(() => {})
     return request
@@ -182,21 +200,33 @@ export const useContextStore = defineStore('context', () => {
   function invalidateInspector() {
     inspectorRevision++
     inspectorDirty.value = true
-    // One coalesced read at a low frequency boundary, never a phase event.
-    if (inspectorVisible.value && conversationId) {
-      const id = conversationId
-      const epoch = generation
-      void loadRuntimeInspector(id).then(() => {
-        if (epoch === generation && inspectorDirty.value && inspectorVisible.value) {
-          void loadRuntimeInspector(id)
-        }
-      })
-    }
+    scheduleInspector()
+  }
+
+  function scheduleInspector() {
+    // Agent 终态和 activity 终态可能在同一 tick 各调用一次；合并成一次读取。
+    if (recoverySuspended.value || !inspectorVisible.value || !conversationId) return
+    const id = conversationId
+    const epoch = generation
+    clearInspectorTimer()
+    inspectorTimer = setTimeout(() => {
+      inspectorTimer = null
+      if (epoch !== generation || !inspectorVisible.value || conversationId !== id) return
+      if (!inspectorDirty.value) return
+      void loadRuntimeInspector(id)
+    }, 50)
   }
 
   function setInspectorVisible(visible: boolean) {
     inspectorVisible.value = visible
-    if (visible && inspectorDirty.value && conversationId) void loadRuntimeInspector(conversationId)
+    if (!visible) {
+      clearInspectorTimer()
+      return
+    }
+    if (!recoverySuspended.value && inspectorDirty.value && conversationId) {
+      clearInspectorTimer()
+      void loadRuntimeInspector(conversationId)
+    }
   }
 
   function reset() {
@@ -206,6 +236,7 @@ export const useContextStore = defineStore('context', () => {
     targetVersion = 0
     inFlight = null
     inspectorFlight = null
+    clearInspectorTimer()
     conversationId = null
     inspectorRevision++
     inspectorDirty.value = true
@@ -232,6 +263,7 @@ export const useContextStore = defineStore('context', () => {
     loadRuntimeInspector,
     invalidateInspector,
     setInspectorVisible,
+    setRecoverySuspended,
     setNarrative,
     reset,
   }

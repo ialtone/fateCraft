@@ -28,12 +28,11 @@ import { useStateStore } from '@/stores/state'
 import { useContextStore } from '@/stores/context'
 import { useSocketStore } from '@/stores/socket'
 import { useRuntimeStore } from '@/stores/runtime'
-import { useRewardStore } from '@/stores/rewards'
 import { usePlayerActionStore } from '@/stores/playerActions'
 import { useCampaignStore } from '@/stores/campaign'
 import { useInquiryStore } from '@/stores/inquiry'
+import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import type { CompletionInfo } from '@/stores/conversations'
-import { isRetryableReadError } from '@/utils/recovery'
 
 const ConversationShareDialog = defineAsyncComponent(
   () => import('@/components/ConversationShareDialog.vue'),
@@ -50,10 +49,10 @@ const context = useContextStore()
 const socket = useSocketStore()
 const runtime = useRuntimeStore()
 const guidance = useGuidanceStore()
-const rewards = useRewardStore()
 const campaign = useCampaignStore()
 const playerActions = usePlayerActionStore()
 const inquiry = useInquiryStore()
+const gameplay = useGameplayVersionStore()
 const settings = useSettingsStore()
 const relay = useLlmRelayStore()
 const forking = ref(false)
@@ -63,7 +62,9 @@ const showInspector = ref(true)
 const mobilePane = ref<'state' | 'chat' | 'context'>('chat')
 const convId = computed(() => route.params.id as string)
 const gameplayAllowed = ref(false)
-const editable = computed(() => convStore.current?.status === 'active' && gameplayAllowed.value)
+const editable = computed(
+  () => convStore.current?.status === 'active' && gameplayAllowed.value && !socket.writeBlocked,
+)
 // 路由不匹配：对话固化路由 ≠ 当前有效路由时禁用全部生成入口。
 // 设置未加载完成前不误判，后端闸门兜底。
 const routeMismatch = computed(() => {
@@ -204,7 +205,7 @@ function stale(id: string) {
   return disposed || id !== convId.value
 }
 
-async function open(id: string) {
+function open(id: string) {
   // 切换对话时清空所有缓存（doc 05）。
   playerActions.enter(id)
   convStore.clearCurrent()
@@ -217,28 +218,18 @@ async function open(id: string) {
   inquiry.reset()
   socket.disconnect()
 
-  try {
-    await convStore.load(id)
-  } catch (err: any) {
-    if (!stale(id)) {
-      message.error(`加载对话失败：${err?.message || '未知错误'}`)
-      if (isRetryableReadError(err)) socket.connect(id)
-    }
-    return
-  }
-  if (stale(id)) return
-  // 订阅就绪后的统一恢复负责首屏快照、消息和生成状态。
-  if (convStore.current?.is_processing) chat.markGenerating()
+  // 先让 WebSocket 完成鉴权与 subscription.ready，再由统一恢复流程读取
+  // 对话、消息、状态等权威快照；避免首屏先读一次对话、ready 后再读一次。
+  // 握手失败时 socket 会在首次失败后做一次受预算约束的 REST 定位。
   socket.connect(id)
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('resize', updateInspectorVisibility)
   document.addEventListener('visibilitychange', updateInspectorVisibility)
-  await rewards.load().catch(() => {})
-  // 设置决定路由匹配判断与直连徽标；失败时不阻断页面，后端闸门兜底。
-  await settings.load().catch(() => {})
-  await open(convId.value)
+  // 设置决定路由匹配判断与直连徽标；账号内缓存复用，失败时不阻断页面。
+  void settings.load().catch(() => {})
+  open(convId.value)
 })
 
 function updateInspectorVisibility() {
@@ -285,6 +276,7 @@ function confirmEnding(
   label: string,
   proposalId?: string,
 ): boolean {
+  if (socket.writeBlocked) return false
   if (playerActions.pending || playerActions.acting) return false
   const id = convId.value
   const snapshot = convStore.endingState
@@ -326,7 +318,21 @@ function confirmEnding(
       .join('\n\n'),
     positiveText: abandoning ? '确认放弃' : '确认结局',
     negativeText: '继续游玩',
-    onPositiveClick: () => playerActions.execute(id, request),
+    onPositiveClick: async () => {
+      if (socket.writeBlocked) return false
+      try {
+        const info = await gameplay.ensureFresh(id)
+        if (!info.run_allowed) {
+          message.warning(info.reason || '当前玩法版本已暂停运行。')
+          return false
+        }
+      } catch {
+        message.error('玩法版本状态暂时无法读取，请刷新后重试。')
+        return false
+      }
+      if (socket.writeBlocked || convId.value !== id) return false
+      return playerActions.execute(id, request)
+    },
     onNegativeClick: () => {
       if (proposalId) convStore.dismissProposal(proposalId)
     },
@@ -335,6 +341,7 @@ function confirmEnding(
 }
 
 async function endConversation() {
+  if (socket.writeBlocked) return
   const id = convId.value
   if (playerActions.pending) {
     await playerActions.execute(convId.value)
@@ -356,8 +363,21 @@ async function endConversation() {
       content: '结束后无法继续生成。',
       positiveText: '结束',
       negativeText: '取消',
-      onPositiveClick: () => {
-        if (!stale(id)) return convStore.end(id)
+      onPositiveClick: async () => {
+        if (stale(id)) return false
+        if (socket.writeBlocked) return false
+        try {
+          const info = await gameplay.ensureFresh(id)
+          if (!info.run_allowed) {
+            message.warning(info.reason || '当前玩法版本已暂停运行。')
+            return false
+          }
+        } catch {
+          message.error('玩法版本状态暂时无法读取，请刷新后重试。')
+          return false
+        }
+        if (stale(id) || socket.writeBlocked) return false
+        return convStore.end(id)
       },
     })
   } catch (cause: any) {
@@ -519,6 +539,7 @@ async function forkConversation() {
         v-if="playerActions.pending"
         size="small"
         :loading="playerActions.acting"
+        :disabled="socket.writeBlocked"
         @click="playerActions.execute(convId)"
         >查询原请求</NButton
       >

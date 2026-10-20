@@ -68,11 +68,11 @@ const canCreate = computed(
     !creating.value,
 )
 
-async function checkConfiguration() {
+async function checkConfiguration(force = false) {
   checkingConfiguration.value = true
   configurationChecked.value = false
   try {
-    configurationIssue.value = await settings.checkPlayReadiness()
+    configurationIssue.value = await settings.checkPlayReadiness(force)
     configurationChecked.value = true
     return !configurationIssue.value
   } finally {
@@ -81,7 +81,7 @@ async function checkConfiguration() {
 }
 
 async function reset() {
-  const configurationCheck = checkConfiguration()
+  const configurationCheck = checkConfiguration(false)
   if (!challenges.list.length) {
     try {
       await challenges.load()
@@ -120,7 +120,7 @@ async function submit() {
   if (!canCreate.value) return
   creating.value = true
   try {
-    if (!(await checkConfiguration())) return
+    if (!(await checkConfiguration(true))) return
     const body: CreateConversationInput = {
       challenge_slug: form.value.challenge_slug,
       persona_slug: form.value.persona_slug,
@@ -158,7 +158,7 @@ async function submit() {
           {{ configurationIssue }}
           <div class="configuration-actions">
             <RouterLink to="/settings" @click="emit('update:show', false)">前往设置</RouterLink>
-            <NButton text :disabled="checkingConfiguration" @click="checkConfiguration">
+            <NButton text :disabled="checkingConfiguration" @click="checkConfiguration()">
               重新检查
             </NButton>
           </div>

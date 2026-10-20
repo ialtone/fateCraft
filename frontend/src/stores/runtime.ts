@@ -39,5 +39,19 @@ export const useRuntimeStore = defineStore('runtime', () => {
     loading.value = false
   }
 
-  return { runtime, presentation, loading, load, capability, platformCapability, reset }
+  function invalidateRequests() {
+    latestRequest++
+    loading.value = false
+  }
+
+  return {
+    runtime,
+    presentation,
+    loading,
+    load,
+    capability,
+    platformCapability,
+    reset,
+    invalidateRequests,
+  }
 })
