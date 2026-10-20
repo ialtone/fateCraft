@@ -4,6 +4,7 @@
 *.test
 /.gocache/
 /backend/cmd/dbquery_tmp/
+/release-build/
 
 # 环境变量
 .env

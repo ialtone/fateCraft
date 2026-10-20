@@ -75,8 +75,10 @@ docker compose --env-file .env -f docker-compose.prod.yml restart fatecraft
 
 ## 镜像发布
 
-推送 `vX.Y.Z` 标签后，GitHub Actions 先运行验证，再构建并发布一个多架构镜像 `ghcr.io/ialtone/fatecraft`，随后使用同一标签创建 GitHub Release；Release 标题显示标签名。镜像包含 `vX.Y.Z`、`X.Y.Z` 和 `latest`。首次发布后需在 GitHub Packages 确认该镜像为公开，用户才可匿名拉取。
+推送 `vX.Y.Z` 标签后，GitHub Actions 先运行验证，再构建并发布一个多架构镜像 `ghcr.io/ialtone/fatecraft`，同时生成 Linux `amd64`/`arm64` 二进制部署包和 SHA-256 校验和，随后使用同一标签创建 GitHub Release；Release 标题显示标签名，Assets 中包含两个部署包和 `checksums.txt`。镜像包含 `vX.Y.Z`、`X.Y.Z` 和 `latest`。首次发布后需在 GitHub Packages 确认该镜像为公开，用户才可匿名拉取。
 
 镜像支持 `linux/amd64` 和 `linux/arm64`。容器内 Nginx 托管 SPA，并将 `/api`、`/s` 和 `/ws` 反代到同容器后端。Nginx 请求体上限为 `33m`，与后端挑战版本保存的 32 MiB 上限对齐。
+
+Release 中的 Linux 部署包面向已有 PostgreSQL 和 Nginx 的服务器，包含后端二进制、前端静态文件、内置数据和部署说明；下载后请先用 `checksums.txt` 校验文件完整性。
 
 应用访问日志会脱敏分享 token；若使用 CDN、WAF 或额外负载均衡，也应对 `/s/*`、`/shared/*`、`/api/public/conversation-shares/*` 禁止记录完整路径或作等价脱敏。日志保留、容量与诊断说明见[日志与诊断](../docs/design/23-logging-and-diagnostics.md)。
