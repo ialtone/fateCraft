@@ -1126,6 +1126,13 @@ CREATE TABLE system_settings (
     public_llm_memory_reasoning_effort VARCHAR(32) NOT NULL DEFAULT '',
     public_llm_inquiry_reasoning_effort VARCHAR(32) NOT NULL DEFAULT '',
     public_llm_settings_revision BIGINT NOT NULL DEFAULT 1 CHECK (public_llm_settings_revision > 0),
+    -- LLM 服务端出站代理：仅影响后端模型请求，不影响浏览器、数据库、SMTP 等其他流量。
+    llm_proxy_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    llm_proxy_url VARCHAR(2048) NOT NULL DEFAULT '',
+    llm_proxy_username VARCHAR(256) NOT NULL DEFAULT '',
+    llm_proxy_password_encrypted TEXT NOT NULL DEFAULT '',
+    llm_proxy_ca_pem TEXT NOT NULL DEFAULT '',
+    llm_proxy_revision BIGINT NOT NULL DEFAULT 0 CHECK (llm_proxy_revision >= 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 INSERT INTO system_settings (id) VALUES (1);
@@ -1498,6 +1505,12 @@ COMMENT ON COLUMN system_settings.installation_completed_at IS '首次安装向�
 COMMENT ON COLUMN llm_settings.api_key_encrypted IS '玩家模型 API Key 的 AES-GCM 密文，明文只存在于单次服务端调用内存';
 COMMENT ON COLUMN llm_settings.reasoning_effort IS '叙事思考强度；空串表示跟随供应商默认，非空时原样透传（如 low/medium/high/ultra）；记忆与问答分别使用 memory/inquiry_reasoning_effort，互相独立';
 COMMENT ON COLUMN system_settings.public_llm_api_key_encrypted IS '平台公共模型 API Key 的 AES-GCM 密文，永不通过 API 返回';
+COMMENT ON COLUMN system_settings.llm_proxy_enabled IS '是否让后端 LLM 请求显式使用保存的 HTTP/HTTPS 出站代理；关闭时显式直连且忽略环境代理变量';
+COMMENT ON COLUMN system_settings.llm_proxy_url IS 'LLM 出站代理地址，仅 http/https、主机和端口，不含 userinfo、query、fragment 或业务路径';
+COMMENT ON COLUMN system_settings.llm_proxy_username IS '代理 Basic Auth 用户名；与密码均可留空，任一非空时发送 Proxy-Authorization';
+COMMENT ON COLUMN system_settings.llm_proxy_password_encrypted IS '代理 Basic Auth 密码的 AES-GCM 密文，永不通过 API 返回';
+COMMENT ON COLUMN system_settings.llm_proxy_ca_pem IS '仅追加给 LLM 专用客户端的额外可信 CA PEM；同时影响代理端和目标端 TLS 校验，不影响系统根证书池';
+COMMENT ON COLUMN system_settings.llm_proxy_revision IS 'LLM 出站代理配置修订号；每次代理分组成功保存递增，独立于用户和公共模型设置修订';
 COMMENT ON COLUMN reward_ledger.idempotency_key IS '调用方生成的唯一业务幂等键，防止重复授予或消费';
 
 

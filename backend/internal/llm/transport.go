@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/ialtone/fatecraft/internal/llmoutbound"
 	"github.com/ialtone/fatecraft/internal/logging"
 )
 
@@ -24,12 +25,18 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 		return nil, fmt.Errorf("未配置 LLM API Key")
 	}
 	requestURL := EndpointURL(p.BaseURL, endpoint)
+	// One logical model call fixes its exit snapshot here. All bounded transport
+	// retries below share it; a proxy save mid-call cannot switch exits halfway.
+	httpClient := c.http
+	if p.Relay == nil && c.outbound != nil {
+		httpClient = c.outbound.Snapshot().Client()
+	}
 	policy := effectiveRetryPolicy(p.RetryPolicy)
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
 		if call := auditCall(ctx); call != nil {
 			call.attempts.Store(int32(attempt))
 		}
-		resp, err := c.roundTrip(ctx, p, requestURL, endpoint, body, stream)
+		resp, err := c.roundTrip(ctx, httpClient, p, requestURL, endpoint, body, stream)
 		if err == nil && !retryableStatus(resp.StatusCode) {
 			// 响应头已到达;后续读取由空闲看门狗与调用方 ctx 共同约束,
 			// 不再有覆盖整个流的固定总超时。
@@ -80,7 +87,7 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 // roundTrip 执行一次 HTTP 调用：Relay 为空时直连，
 // 非空时把已构建的请求交给浏览器执行并返回原始响应。
 // Relay 模式下不设置 Authorization（APIKey 本来为空）。
-func (c *Client) roundTrip(ctx context.Context, p Params, requestURL, endpoint string, body []byte, stream bool) (*http.Response, error) {
+func (c *Client) roundTrip(ctx context.Context, httpClient *http.Client, p Params, requestURL, endpoint string, body []byte, stream bool) (*http.Response, error) {
 	if p.Relay != nil {
 		var conversationID uuid.UUID
 		if parsed, err := uuid.Parse(p.ConversationID); err == nil {
@@ -100,7 +107,7 @@ func (c *Client) roundTrip(ctx context.Context, p Params, requestURL, endpoint s
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")
 	}
-	return c.http.Do(req)
+	return httpClient.Do(req)
 }
 
 func effectiveRetryPolicy(policy *RetryPolicy) RetryPolicy {
@@ -149,6 +156,14 @@ func retryableTransportError(err error, resp *http.Response) bool {
 	}
 	if errors.Is(err, ErrRelayLost) || errors.Is(err, ErrRelayNetwork) || errors.Is(err, ErrRelayNoKey) {
 		return false
+	}
+	var outbound *llmoutbound.Error
+	if errors.As(err, &outbound) {
+		switch outbound.Code {
+		case llmoutbound.CodeProxyAuthFailed, llmoutbound.CodeTLSCertificate,
+			llmoutbound.CodeConfigInvalid:
+			return false
+		}
 	}
 	return true
 }

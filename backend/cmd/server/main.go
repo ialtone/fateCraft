@@ -27,6 +27,8 @@ import (
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/inquiry"
 	"github.com/ialtone/fatecraft/internal/llm"
+	"github.com/ialtone/fatecraft/internal/llmoutbound"
+	"github.com/ialtone/fatecraft/internal/llmproxy"
 	"github.com/ialtone/fatecraft/internal/llmrelay"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/logging"
@@ -127,7 +129,15 @@ func main() {
 
 	// 基础组件。
 	counter := tokenizer.NewHeuristic()
+	// LLM 出站管理器在接收请求前加载持久化代理配置。已启用但无法解密或构建时
+	// 明确终止启动，绝不静默回退直连。
+	outboundManager := llmoutbound.NewManager()
+	llmProxySvc := llmproxy.New(systemSettingsRepo, outboundManager, cfg.AuthDataEncryptionKey)
+	if err := llmProxySvc.Reload(context.Background()); err != nil {
+		logger.Fatal("加载 LLM 出站代理配置失败", zap.Error(err))
+	}
 	llmClient := llm.NewClient()
+	llmClient.SetOutbound(outboundManager)
 	llmSettingsSvc := llmsettings.New(settingsRepo, systemSettingsRepo, cfg.AuthDataEncryptionKey)
 	capabilitySvc := modelcapability.New(llmClient)
 	// Relay 注册表：client 路由的模型请求经浏览器执行；准入要求有效路由为 client。
@@ -269,7 +279,8 @@ func main() {
 		Diagnostics: func() any {
 			return map[string]any{"instance_id": cfg.InstanceID, "writer": auditWriter.Status(), "cleanup": diagnosticLogRepo.Status()}
 		},
-		Hub: hub, LLMClient: llmClient, Capabilities: capabilitySvc, Shares: shareSvc, Relays: relayRegistry, Counter: counter,
+		Hub: hub, LLMClient: llmClient, Outbound: outboundManager, LLMProxy: llmProxySvc,
+		Capabilities: capabilitySvc, Shares: shareSvc, Relays: relayRegistry, Counter: counter,
 		Identity: requestIdentity, Auth: authSvc, CookieSecure: cfg.AuthCookieSecure,
 	})
 

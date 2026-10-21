@@ -65,6 +65,15 @@ Chat Completions 按 `tool_calls[].index` 汇总，各调用的参数增量独�
 
 提供工具时省略可选的 `tool_choice`，使用 OpenAI 协议规定的默认 `auto` 语义，使生产调用与显式诊断保持同一种请求形态，并兼容会拒绝显式 `tool_choice` 的思考模式网关。Chat Completions 和 Responses 都设置 `parallel_tool_calls=false`，但兼容网关可能忽略该参数；服务端必须保留自己的批次校验和执行策略，不能只依赖供应商限制。
 
+## 服务端出口快照与重试
+
+`server` 路由的 Agent 请求使用 `internal/llmoutbound` 管理的不可变出口快照。每次逻辑模型调用在第一次传输尝试前取得一份快照，`doRaw` 的全部有限重试共用它；owner 在调用中途保存新代理设置不会让同一次调用换出口。Agent 的后续模型步骤属于新的逻辑调用，会取得最新快照，因此多步骤回合可以跨代理切换继续，但不重放已提交工具。
+
+- 停用时 Transport 显式直连并忽略环境代理；启用时只使用保存的 HTTP/HTTPS 代理，不因 `NO_PROXY` 绕过，也不在失败后回退直连。
+- 代理认证拒绝、明确 TLS 证书错误和配置错误不重试；连接失败、超时和 429/502/503/504 仍使用原有有限退避策略，不会无限重试或自动重放生成。
+- 保留响应头等待、流式空闲看门狗、正文上限、调用方 ctx 与取消语义；模型列表的 10 秒专用超时不套在长叙事流上。
+- `client` 路由仍由浏览器 Relay 执行，不读取服务端快照。底层出站错误统一归类为固定安全代码，日志不记录代理地址、凭据或 CONNECT 细节。
+
 ## 输出通道解析
 
 部分兼容服务商会在同一步同时返回文本和工具。模型层按完整归一化结果决定通道，协调器则把实时展示和可信持久化分开：
@@ -227,6 +236,8 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 | --- | --- |
 | Provider Profile 与协议选择 | `backend/internal/llm/profile.go`、`backend/internal/llm/protocol_adapter.go` |
 | HTTP/SSE 与审计传输 | `backend/internal/llm/transport.go` |
+| 服务端出口快照与代理 Transport | `backend/internal/llmoutbound` |
+| 代理配置保存与发布 | `backend/internal/llmproxy` |
 | Agent 协议归一化 | `backend/internal/llm/agent.go` |
 | JSON Schema 传输 | `backend/internal/llm/structured.go` |
 | 主协调器 | `backend/internal/orchestration/agent_pipeline.go` |

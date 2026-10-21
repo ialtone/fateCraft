@@ -914,7 +914,14 @@ type SystemSettings struct {
 	PublicLLMMemoryReasoningEffort  string    `gorm:"column:public_llm_memory_reasoning_effort" json:"public_llm_memory_reasoning_effort"`
 	PublicLLMInquiryReasoningEffort string    `gorm:"column:public_llm_inquiry_reasoning_effort" json:"public_llm_inquiry_reasoning_effort"`
 	PublicLLMSettingsRevision       int64     `gorm:"column:public_llm_settings_revision;not null;default:1" json:"public_llm_settings_revision"`
-	UpdatedAt                       time.Time `gorm:"column:updated_at" json:"updated_at"`
+	// LLM 出站代理只通过 owner 专属接口读写，通用系统设置响应不得暴露地址、用户名或 CA。
+	LLMProxyEnabled           bool      `gorm:"column:llm_proxy_enabled;not null" json:"-"`
+	LLMProxyURL               string    `gorm:"column:llm_proxy_url;not null" json:"-"`
+	LLMProxyUsername          string    `gorm:"column:llm_proxy_username;not null" json:"-"`
+	LLMProxyPasswordEncrypted string    `gorm:"column:llm_proxy_password_encrypted;not null" json:"-"`
+	LLMProxyCAPEM             string    `gorm:"column:llm_proxy_ca_pem;not null" json:"-"`
+	LLMProxyRevision          int64     `gorm:"column:llm_proxy_revision;not null" json:"-"`
+	UpdatedAt                 time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (SystemSettings) TableName() string { return "system_settings" }
@@ -949,6 +956,7 @@ func DefaultSystemSettings() *SystemSettings {
 		LLMAccessMode:    "user_managed", PublicLLMProtocol: DefaultLLMProtocol,
 		PublicLLMMaxContextTokens: DefaultLLMMaxContextTokens, PublicLLMMaxResponseTokens: DefaultLLMMaxResponseTokens,
 		PublicLLMTemperature: 0.8, PublicLLMTopP: 1, PublicLLMStreamEnabled: true, PublicLLMSettingsRevision: 1,
+		LLMProxyEnabled: false, LLMProxyRevision: 0,
 	}
 }
 

@@ -69,7 +69,7 @@ function tabGroups(file) {
 test('sub-tabs belong to their management area and retain mounted drafts', () => {
   const groups = tabGroups('../src/views/AdminView.vue')
   for (const [owner, names] of Object.entries({
-    settings: ['gameplay', 'llm'],
+    settings: ['gameplay', 'llm', 'proxy'],
     auth: ['login', 'smtp', 'verification', 'invitations'],
     challenges: ['catalog', 'versions', 'upload', 'imports', 'editor'],
     sharing: ['shares', 'reports'],

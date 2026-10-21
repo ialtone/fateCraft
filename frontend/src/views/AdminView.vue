@@ -46,6 +46,7 @@ import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
 import AdminUsersPanel from '@/components/AdminUsersPanel.vue'
 import AdminRewardsPanel from '@/components/AdminRewardsPanel.vue'
+import AdminLLMProxyPanel from '@/components/AdminLLMProxyPanel.vue'
 import type {
   AdminBuiltinChallenge,
   AdminAuthSettings,
@@ -92,6 +93,7 @@ function managePack(id: string) {
 const settingsTabLabels: Record<SettingsGroup, string> = {
   gameplay: '判定规则',
   llm: '模型服务',
+  proxy: 'LLM 出站代理',
   logs: '日志策略',
 }
 const authTabLabels = { login: '登录与注册', smtp: '发信邮箱', verification: '验证码邮件' }
@@ -286,6 +288,7 @@ async function loadSettings() {
 
 async function saveSettings(group: SettingsGroup = settingsTab.value) {
   if (!settings.value || savingSettings.value) return
+  if (group === 'proxy') return
   if (group === 'llm' && !auth.isOwner) return
   if (
     group === 'logs' &&
@@ -1281,8 +1284,16 @@ watch(
                   </NCollapseItem>
                 </NCollapse></section
             ></NTabPane>
+            <NTabPane
+              v-if="auth.isOwner"
+              name="proxy"
+              tab="LLM 出站代理"
+              display-directive="show:lazy"
+            >
+              <AdminLLMProxyPanel />
+            </NTabPane>
           </NTabs>
-          <div v-if="settings" class="actions">
+          <div v-if="settings && settingsTab !== 'proxy'" class="actions">
             <NButton
               type="primary"
               :loading="savingSettings"

@@ -26,6 +26,18 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d
 
 升级时将 `.env` 中的 `FATECRAFT_VERSION` 改为目标版本，再执行 `pull` 和 `up -d`。容器启动后会先等待 PostgreSQL 就绪、执行待运行的数据库迁移，再启动后端提供服务。空数据库会从镜像中的内置数据初始化玩法。
 
+### LLM 出站代理
+
+服务端 LLM 代理由 owner 在“全局设置 → LLM 出站代理”保存，不使用 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量。默认停用时，后端模型请求显式直连并忽略这些环境变量；启用后固定使用保存的代理，不因 `NO_PROXY` 绕过，也不会在失败时自动改走直连或环境代理。其他网站 HTTP、WebSocket、PostgreSQL、SMTP 和 OAuth 流量不使用该代理。
+
+代理地址必须从**后端容器内部**可达：
+
+- Docker Desktop 可使用 `host.docker.internal` 指向宿主机；Linux 通常使用 `docker0` 网桥网关（常见为 `172.17.0.1`，以实际配置为准），或让代理与 fateCraft 加入同一 Compose 网络后使用服务名。
+- 容器内 `127.0.0.1` 是 fateCraft 容器自身，不是宿主机。
+- 不要为了代理把宿主机代理端口公开到公网；仅允许容器网络访问即可。
+- 若代理或模型目标使用内部 CA，把该 CA 填入后台的“额外可信 CA”。它只追加到 LLM 专用客户端并同时校验证书链和主机名，不会关闭 TLS 校验，也不影响镜像中的系统根证书或其他客户端。
+- 代理密码使用 `AUTH_DATA_ENCRYPTION_KEY` 加密保存；备份数据库时必须同时保留稳定密钥，否则恢复后代理密码无法解密。
+
 ## 数据与迁移
 
 权威数据库结构位于 `backend/migrations/*.sql`。迁移版本记录在 `goose_db_version`；启动迁移失败时后端不会开始服务。

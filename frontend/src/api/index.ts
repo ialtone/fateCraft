@@ -9,6 +9,9 @@ import type {
   InvitationCode,
   CreatedInvitation,
   AdminSystemSettings,
+  AdminLLMProxySettings,
+  AdminLLMProxyUpdateInput,
+  AdminLLMProxyTestResult,
   AdminLLMRequestLogSummary,
   AdminLLMRequestLog,
   AdminContextBuildLogSummary,
@@ -371,6 +374,18 @@ export const adminApi = {
   fetchPublicModels: (body: { base_url: string; api_key?: string }) =>
     http
       .post<{ models: string[] }>('/admin/system-settings/fetch-models', body)
+      .then((r) => r.data),
+  getLLMProxy: () =>
+    http.get<AdminLLMProxySettings>('/admin/system-settings/llm-proxy').then((r) => r.data),
+  updateLLMProxy: (body: AdminLLMProxyUpdateInput) =>
+    http.patch<AdminLLMProxySettings>('/admin/system-settings/llm-proxy', body).then((r) => r.data),
+  testLLMProxy: (url: string) =>
+    http
+      .post<AdminLLMProxyTestResult>(
+        '/admin/system-settings/llm-proxy/test',
+        { url },
+        { timeout: 15000 },
+      )
       .then((r) => r.data),
   // 公共 LLM 能力检测（owner-only）：直接使用平台配置，与调用者本人的路由无关。
   checkPublicCapabilities: (role: LLMCapabilityRole) =>

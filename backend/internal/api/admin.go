@@ -317,7 +317,7 @@ func (s *Server) fetchAdminPublicModels(c *gin.Context) {
 			return
 		}
 	}
-	models, err := fetchUpstreamModels(c, baseURL, key)
+	models, err := fetchUpstreamModels(c, s.outboundHTTPClient(), baseURL, key)
 	if err != nil {
 		upstreamFailure(c, err)
 		return
@@ -325,8 +325,10 @@ func (s *Server) fetchAdminPublicModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"models": models})
 }
 
-func fetchUpstreamModels(c *gin.Context, baseURL, apiKey string) ([]string, error) {
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, strings.TrimRight(baseURL, "/")+"/models", nil)
+func fetchUpstreamModels(c *gin.Context, client *http.Client, baseURL, apiKey string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -334,7 +336,7 @@ func fetchUpstreamModels(c *gin.Context, baseURL, apiKey string) ([]string, erro
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}

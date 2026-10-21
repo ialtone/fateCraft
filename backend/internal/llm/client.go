@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ialtone/fatecraft/internal/llmoutbound"
 )
 
 // ErrTruncated reports that the provider stopped generating because the
@@ -39,6 +41,7 @@ func (*providerMessageError) SafeLogMessage() string { return "模型响应报�
 // HTTP 客户端。协议由 Params.Protocol 选择，空值按 Responses 处理。
 type Client struct {
 	http         *http.Client
+	outbound     *llmoutbound.Manager
 	auditWriter  RequestAuditWriter
 	auditEnabled func(context.Context, Params) bool
 }
@@ -49,10 +52,20 @@ const responseHeaderTimeout = 2 * time.Minute
 
 func NewClient() *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// LLM 专用客户端保持显式直连，不继承环境代理变量；生产装配会用
+	// llmoutbound 快照覆盖它。
+	transport.Proxy = nil
 	transport.ResponseHeaderTimeout = responseHeaderTimeout
 	// 不设置 http.Client.Timeout:它覆盖整个正文读取,会把长叙事/深度思考
 	// 在固定时刻切断。总时长完全由调用方 ctx(attempt / 记忆 / 问答)控制。
 	return &Client{http: &http.Client{Transport: transport}}
+}
+
+// SetOutbound injects the shared server-side exit manager. Every logical call
+// captures one immutable snapshot before its first transport attempt, so all
+// retries use the same proxy pool even if settings change mid-call.
+func (c *Client) SetOutbound(manager *llmoutbound.Manager) {
+	c.outbound = manager
 }
 
 // SetRequestAudit 安装调用摘要写入器。enabled 只控制是否采集详细正文。

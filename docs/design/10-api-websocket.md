@@ -352,7 +352,37 @@ POST /api/admin/challenge-versions/:id/publish
 
 认证设置响应不包含 SMTP 密码，只包含 `has_smtp_password`。`PATCH /api/admin/auth-settings` 仅更新提供的字段，未提供或为 `null` 的普通配置字段保留原值，显式 `false` 或空字符串按实际值校验；合并当前配置后执行完整校验和事务审计。后台登录、SMTP、验证码分组可以独立保存，不会覆盖其他页草稿。`smtp_password` 为空表示保留原值，`clear_smtp_password=true` 表示清除。邀请码创建响应是唯一返回完整 `code` 的时机，后续列表只返回尾号、状态、用量和有效期。
 
-`PATCH /api/admin/system-settings` 维护判定与诊断策略等设置。模型摘要始终提交，`detailed_llm_logging_enabled` 仅控制默认关闭的正文采集；正文按字段预算脱敏、截断，不能称为完整可重放请求。诊断清理默认开启、保留 30 天，仅处理模型和上下文日志。管理员配置审计与更新原子提交；过时并发写入返回 `409/settings_conflict`。
+`PATCH /api/admin/system-settings` 维护判定与诊断策略等设置。模型摘要始终提交，`detailed_llm_logging_enabled` 仅控制默认关闭的正文采集；正文按字段预算脱敏、截断，不能称为完整可重放请求。诊断清理默认开启、保留 30 天，仅处理模型和上下文日志。管理员配置审计与更新原子提交；过时并发写入返回 `409/settings_conflict`。该通用接口和响应不包含 LLM 出站代理地址、用户名、CA 或密码状态。
+
+### LLM 出站代理（owner）
+
+```text
+GET   /api/admin/system-settings/llm-proxy
+PATCH /api/admin/system-settings/llm-proxy
+POST  /api/admin/system-settings/llm-proxy/test
+```
+
+三个接口都要求 `owner`，普通 `admin` 和用户直接请求返回 403。GET 返回 `{enabled,url,username,has_password,ca_pem,revision}`，不返回明文密码或密文；`has_password` 只表示是否已保存密码。PATCH 接受：
+
+```json
+{
+  "expected_revision": 3,
+  "enabled": true,
+  "url": "http://proxy.internal:3128",
+  "username": "optional-user",
+  "password": "optional-new-password",
+  "clear_password": false,
+  "ca_pem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+}
+```
+
+省略字段保留原值；`password` 非空表示替换，空或省略表示保留；`clear_password=true` 表示清除，不能与新的非空密码同时提交。`expected_revision` 必须显式提供非负整数，省略、null 或负数返回 400；与当前 `llm_proxy_revision` 不一致返回 `409/settings_conflict`。URL 只接受 http/https、明确主机和端口，拒绝 userinfo、query、fragment、业务路径、CR/LF 和超长值；CA 必须是可解析的证书 PEM，不能包含私钥。配置无效返回 `400` 与 `code=llm_proxy_invalid`；需要使用密码时，缺少加密密钥或已保存密文无法解密返回 `503` 与 `code=llm_proxy_encryption_unavailable`。成功响应与 GET 相同，修订号加 1。仅停用代理无需解密旧密码，原密文保留；再次启用仍须能解密，或显式替换/清除密码。
+
+测试接口接受可空 `{"url":"https://target.example"}`。URL 留空时从已保存平台公共 Base URL 提取 origin；无法提取时返回 `400` 与 `code=llm_proxy_test_url_required`。检测 URL 必须是 HTTPS，拒绝 userinfo、query、fragment 和 CR/LF。代理未启用返回 `409` 与 `code=llm_proxy_disabled`。
+
+测试使用已保存配置和运行快照，发送一次不带供应商 API Key、Cookie、Prompt 的 `HEAD`，不跟随重定向、不自动重试，整次截止时间 10 秒，并且不改变业务 Base URL。响应为 `{ok,code,error,target_status,elapsed_ms,checked_at,revision,stale}`；目标返回 401/403/405 只说明网络通路可达，`ok=true`，仍不代表模型授权或协议通过。网络失败 `ok=false`，`code` 使用 `proxy_unreachable`、`proxy_auth_failed`、`target_unreachable`、`tls_certificate_failed`、`timeout`、`outbound_error` 等固定分类；检测期间配置被并发修改时 `stale=true`，结果属于响应中的旧 `revision`。
+
+### 诊断策略与其他管理接口
 
 详细正文范围由 `detailed_llm_logging_scope`（`all/user/conversation`，默认 `all`）与 `detailed_llm_logging_target_id` 控制。GET 的目标为 UUID 字符串或 `null`；PATCH 省略字段保留原值，目标传空字符串表示清空。切换范围类型会清除旧目标，指定范围须在同一请求提供有效非零 UUID；`all` 不能携带目标。新目标和重新开启时检查用户存在或对话存在且未删除，参数/目标无效返回 400。只关闭开关会保留范围，不设自动关闭时间。
 

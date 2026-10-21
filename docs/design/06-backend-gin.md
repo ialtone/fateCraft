@@ -37,6 +37,8 @@ internal/orchestration   主叙事 Agent 协调器、工具目录、执行与事
 internal/realtime        WebSocket 连接与事件广播
 internal/storage         GORM 模型与 PostgreSQL 仓储
 internal/llm             Chat/Responses 文本、Tool Call、JSON Schema 与流式适配
+internal/llmoutbound     不可变 LLM 出站快照、直连/代理 Transport、CA、旧池回收与安全错误分类
+internal/llmproxy        出站代理配置合并、加密保存、启动加载、运行快照发布与连通性检测
 internal/modelcapability 用户显式触发的无副作用模型诊断
 ```
 
@@ -60,6 +62,21 @@ internal/modelcapability 用户显式触发的无副作用模型诊断
 模型 HTTP 传输只在收到响应体之前对连接错误、429、502、503、504 和明确的临时不可用执行有限指数退避重试，并尊重 `Retry-After`。收到 2xx 流后由解析器负责一次性消费；正文、工具调用或结构化结果已经开始后不重放 Agent 步骤，避免重复领域副作用。所有 SSE JSON 解析错误、提前 EOF 和缺少协议终止事件均为失败，不得把临时文本当作最终结果。
 
 模型边界按字节限制：完整响应/累积正文最多 32 MiB，单条 SSE 行最多 1 MiB，HTTP 错误体最多 64 KiB，诊断请求 JSON/预览和原始响应各最多 512 KiB、合并文本最多 256 KiB、整条估算载荷最多 2 MiB（先脱敏，JSON 预览保持合法；不改变真实解析结果），工具参数最多 16 KiB。普通 HTTP JSON body 默认 4 MiB，挑战版本 PUT 明确放宽到 32 MiB；WebSocket 客户端帧最多 64 KiB、生成排队最多 64 条。PostgreSQL 连接池默认限制为 10 个打开连接、3 个空闲连接，连接生命周期默认 30 分钟、空闲回收默认 5 分钟；四项均可通过 `DB_*` 环境变量按实例配置，多实例部署必须汇总连接预算。
+
+### LLM 出站代理与连接生命周期
+
+`internal/llmoutbound.Manager` 持有一个原子发布的不可变出口快照；`internal/llmproxy.Service` 负责把持久化配置合并、校验、加密、事务保存并发布快照。组合根在接收 LLM 请求前完成启动加载：已启用代理无法解密或构建时明确失败，不静默直连；停用时发布显式直连快照，但仍可应用已保存的额外 CA。
+
+- 停用快照把 `Transport.Proxy` 固定为 `nil`，不读取 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`；启用快照使用 `http.ProxyURL`，`NO_PROXY` 不能绕过。代理失败只返回错误，不做直连兜底。
+- `llm.Client.doRaw` 在每次逻辑调用的第一次传输尝试前取得一份快照，全部有限重试共用该快照；保存配置不会让同一次调用中途换出口。Relay 分支不读取服务端快照，仍由浏览器执行。
+- 额外 CA 只克隆到 LLM 专用 `tls.Config.RootCAs`，同时作用于代理端和目标端，不修改 `http.DefaultTransport` 或系统根证书池；证书链和主机名校验仍开启。
+- 新快照发布后旧 Transport 立即关闭空闲连接；旧活动响应继续完成，结束后再次清理其空闲连接。每个快照复用连接池，不在发送路径查询数据库或重复解密。
+- 响应头上限为 1 MiB；不可用的出口快照直接报配置错误，不改用默认客户端；正文读取期间的网络错误也经过安全分类。
+- 模型列表通过同一快照客户端发送，但额外使用 10 秒 `context` 总超时；叙事长流不设置客户端总超时，继续由响应头等待、空闲看门狗和调用方 `ctx` 控制。
+- 代理认证拒绝、TLS 证书错误和配置错误不重试；临时网络故障继续沿用原有有限重试。底层 `url.Error` 由 `llmoutbound.Error` 归类为固定代码，日志和用户提示不暴露代理地址、凭据或 CONNECT 细节。
+- 代理分组通过 `SystemSettingsRepo.SaveLLMProxy` 在行锁事务内校验 `expected_revision`、只更新代理列并写入脱敏审计；普通系统设置保存不更新代理列，避免两个分组互相覆盖。保存成功后才发布候选快照，冲突或失败不改变运行出口。普通设置保存时也从锁定行保留代理字段，再刷新缓存，避免数据库正确而内存仍回退旧值。
+
+当前单实例内保存立即生效；不提供跨进程配置推送，多实例不承诺同步热更新。
 
 领域服务依赖消费端定义的小接口或专用仓储，API handler 不直接拼装 SQL。组合根在 `cmd/server/main.go` 创建仓储、服务、生成器和 Hub。
 
@@ -228,7 +245,7 @@ API 从认证上下文取用户/操作者，管理写入再次校验权限；玩
 
 ## 日志与可观测性
 
-Gin 请求、panic、GORM 慢查询和业务异常统一进入 zap。HTTP、WebSocket 命令和后台任务使用独立 `trace_id`，与业务幂等 `request_id` 分开。未知 500 返回通用提示和 trace；普通访问使用路由模板，成功健康检查不记录；常规模型/工具性能事件降为 Debug，慢步骤保留 Warn。重要日志应带 `conversation_id`、`challenge_version_id` 或用户 ID，但不得包含密码、会话明文、LinuxDo Secret、LLM API Key 和完整数据库 URL。
+Gin 请求、panic、GORM 慢查询和业务异常统一进入 zap。HTTP、WebSocket 命令和后台任务使用独立 `trace_id`，与业务幂等 `request_id` 分开。未知 500 返回通用提示和 trace；普通访问使用路由模板，成功健康检查不记录；常规模型/工具性能事件降为 Debug，慢步骤保留 Warn。重要日志应带 `conversation_id`、`challenge_version_id` 或用户 ID，但不得包含密码、会话明文、LinuxDo Secret、LLM API Key、代理密码、`Proxy-Authorization` 和完整数据库 URL。LLM 出站网络错误由 `llmoutbound.Error` 输出固定安全代码，底层 `url.Error` 只作为不落日志的 `Unwrap` 原因保留；代理配置变更写入 `llm_proxy_change` 事务审计，密码只记录设置/替换/清除，CA 只记录是否配置和指纹。
 
 生成和结算日志按语义分级：
 

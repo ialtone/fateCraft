@@ -118,7 +118,9 @@ LinuxDo OAuth 授权过程的一次性 state、purpose（登录/绑定）、绑�
 
 `llm_settings` 保存用户模式下每个用户自己的 OpenAI 兼容端点、协议、模型和生成参数；`api_key_encrypted` 只保存 AES-GCM 密文。该表没有 provider 列，端点能力档位只由服务端按 `base_url` 识别。`system_settings` 是主键固定为 1 的管理员单例，同时保存 `installation_completed_at`（首次安装向导完成时间）、判定/诊断设置、诊断日志清理开关与保留天数，以及平台模式公共 LLM 配置（公共配置没有 `public_llm_provider` 列）；`llm_access_mode` 为 `user_managed`（默认）或 `platform_managed`，平台模式不删除用户行。`client_llm_route_enabled`（默认 TRUE）决定是否在服务端选项之外额外给用户“客户端直连”选项，与 `llm_access_mode` 相互独立，由 owner 管理。修改初始默认值不会覆盖已有实例保存的开关状态。新设置默认使用 128000 上下文和 16384 最大输出 Token，应用层校验窗口、回复预留和格式余量的关系；用户和平台各自的 settings revision 用于审计。读取接口只返回 `has_api_key`/`public_llm_has_api_key`。
 
-`admin_audit_logs` 保存首次安装、角色变更、账号状态变更、全局/平台/认证配置更新等操作的脱敏记录；trace_id 独立于业务 request_id，配置审计与更新在同一事务，密钥/私有端点仅记录 set/replace/clear，不保存密码、Cookie、Authorization、初始化凭证或 LLM Key。奖励操作也在此保存审计，使用请求唯一部分索引、(created_at,id) 奖励分页索引和 record_id 表达式索引。
+同一单例还保存服务端 LLM 出站代理组：`llm_proxy_enabled`（默认 FALSE，即显式直连）、`llm_proxy_url`、`llm_proxy_username`、`llm_proxy_password_encrypted`、`llm_proxy_ca_pem` 和独立的 `llm_proxy_revision`。代理密码只保存 AES-GCM 密文；URL 只允许 http/https 明确主机和端口，不含 userinfo、query、fragment 或业务路径。`llm_proxy_revision` 从 0 开始，每次代理分组保存递增，不跟随用户/公共模型 settings revision。普通系统设置保存不更新这些列，代理 PATCH 也不覆盖其他设置列；两者通过同一仓储和事务边界避免分组互相覆盖。通用 `GET /api/admin/system-settings` 不返回代理地址、用户名、CA 或密码状态，owner 专属投影另见 [10 API](10-api-websocket.md)。
+
+`admin_audit_logs` 保存首次安装、角色变更、账号状态变更、全局/平台/认证配置更新等操作的脱敏记录；trace_id 独立于业务 request_id，配置审计与更新在同一事务，密钥/私有端点仅记录 set/replace/clear，不保存密码、Cookie、Authorization、初始化凭证或 LLM Key。LLM 出站代理保存写入 `llm_proxy_change`：记录修订、启用、地址、用户名、密码设置/替换/清除，以及 CA 是否配置和指纹；不记录密码密文或完整 CA PEM。奖励操作也在此保存审计，使用请求唯一部分索引、(created_at,id) 奖励分页索引和 record_id 表达式索引。
 
 平台不持久化模型能力评分或健康状态。用户显式点击检测时执行一次无副作用请求，结果只返回当前页面，不改变生产调用路径。
 

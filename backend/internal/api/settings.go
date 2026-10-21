@@ -357,7 +357,10 @@ func (s *Server) fetchModels(c *gin.Context) {
 	}
 	url += "models"
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
+	// 模型列表是独立的短请求：使用同一出站快照，但保留 10 秒专用总超时。
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		fail(c, err)
 		return
@@ -368,9 +371,7 @@ func (s *Server) fetchModels(c *gin.Context) {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	// 发送请求
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.outboundHTTPClient().Do(req)
 	if err != nil {
 		upstreamFailure(c, err)
 		return

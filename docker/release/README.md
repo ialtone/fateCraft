@@ -68,7 +68,16 @@ sudoedit .env
 - `SHARE_LINK_SIGNING_KEY`：另外生成一个不同的随机值
 - 使用 HTTPS 时设置 `AUTH_COOKIE_SECURE=true`
 
-`AUTH_DATA_ENCRYPTION_KEY` 和 `SHARE_LINK_SIGNING_KEY` 发布后不要随意更换，否则已有密文或分享链接可能无法解密/校验。
+`AUTH_DATA_ENCRYPTION_KEY` 和 `SHARE_LINK_SIGNING_KEY` 发布后不要随意更换，否则已有密文或分享链接可能无法解密/校验。`AUTH_DATA_ENCRYPTION_KEY` 也用于加密后台保存的 LLM 出站代理密码，数据库备份必须同时保留稳定密钥。
+
+### 3.1 LLM 出站代理（可选）
+
+owner 可在安装完成后的“全局设置 → LLM 出站代理”启用 HTTP/HTTPS 代理。默认停用时，后端 LLM 请求严格直连并忽略 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`；启用后固定使用保存的配置，不因 `NO_PROXY` 绕过，也不会在失败时回退直连或环境代理。
+
+- 地址必须从运行 `fatecraft` 的系统用户和网络命名空间可达；若服务运行在容器或沙箱中，`127.0.0.1` 可能指向错误位置，应使用该环境可访问的宿主机/网桥地址。
+- 代理协议指连接代理本身使用 `http://` 或 `https://`，不是模型目标的协议；必须明确主机和端口，不能包含 URL userinfo、查询参数、片段或业务路径。
+- 可选代理 Basic Auth 密码加密保存；可选额外 CA 只追加到 LLM 专用客户端的信任池，同时影响代理端和目标端 TLS，仍需校验证书链和主机名。
+- 该代理只覆盖服务端模型请求；浏览器 Relay/客户端直连、网站 API、WebSocket、PostgreSQL、SMTP 和 OAuth 不受影响。
 
 ```bash
 sudo chown -R fatecraft:fatecraft /opt/fatecraft

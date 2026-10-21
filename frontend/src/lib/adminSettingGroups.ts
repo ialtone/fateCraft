@@ -46,7 +46,7 @@ export const authSettingFields = {
   ],
 } as const satisfies Record<string, readonly (keyof AdminAuthSettings)[]>
 
-export type SystemSettingsTab = keyof typeof systemSettingFields
+export type SystemSettingsTab = keyof typeof systemSettingFields | 'proxy'
 export type AuthSettingsTab = keyof typeof authSettingFields
 
 export function pickSettings<T extends object, K extends keyof T>(

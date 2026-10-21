@@ -930,6 +930,38 @@ export interface AdminSystemSettings {
   updated_at: string
 }
 
+/** owner 专属的 LLM 服务端出站代理设置。密码只以 has_password 表示。 */
+export interface AdminLLMProxySettings {
+  enabled: boolean
+  url: string
+  username: string
+  has_password: boolean
+  ca_pem: string
+  revision: number
+}
+
+export interface AdminLLMProxyUpdateInput {
+  expected_revision: number
+  enabled?: boolean
+  url?: string
+  username?: string
+  /** 留空或省略表示保留；非空表示替换 */
+  password?: string
+  clear_password?: boolean
+  ca_pem?: string
+}
+
+export interface AdminLLMProxyTestResult {
+  ok: boolean
+  code?: string
+  error?: string
+  target_status?: number
+  elapsed_ms: number
+  checked_at: string
+  revision: number
+  stale: boolean
+}
+
 export interface AdminLLMRequestLogSummary {
   started_at: string
   trace_id?: string

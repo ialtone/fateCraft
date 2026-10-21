@@ -17,6 +17,8 @@ import (
 	"github.com/ialtone/fatecraft/internal/identity"
 	"github.com/ialtone/fatecraft/internal/inquiry"
 	"github.com/ialtone/fatecraft/internal/llm"
+	"github.com/ialtone/fatecraft/internal/llmoutbound"
+	"github.com/ialtone/fatecraft/internal/llmproxy"
 	"github.com/ialtone/fatecraft/internal/llmrelay"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/logging"
@@ -56,6 +58,8 @@ type Server struct {
 	llmRequestLogs *storage.LLMRequestLogRepo
 	hub            *realtime.Hub
 	llmClient      *llm.Client
+	outbound       *llmoutbound.Manager
+	llmProxy       *llmproxy.Service
 	capabilities   *modelcapability.Service
 	shares         *shareapp.Service
 	relays         relayRegistry
@@ -88,6 +92,8 @@ type Deps struct {
 	LLMRequestLogs *storage.LLMRequestLogRepo
 	Hub            *realtime.Hub
 	LLMClient      *llm.Client
+	Outbound       *llmoutbound.Manager
+	LLMProxy       *llmproxy.Service
 	Capabilities   *modelcapability.Service
 	Shares         *shareapp.Service
 	Relays         *llmrelay.Registry
@@ -125,12 +131,18 @@ func RequestBodyLimit(maxBytes int64, overrides ...BodyLimitOverride) gin.Handle
 }
 
 func NewServer(d Deps) *Server {
+	if d.Outbound == nil {
+		// Never fall back to http.DefaultTransport: a disabled proxy must mean an
+		// explicit direct connection even when the process has *_PROXY set.
+		d.Outbound = llmoutbound.NewManager()
+	}
 	return &Server{
 		conv: d.Conv, campaigns: d.Campaigns, chat: d.Chat, state: d.State, challenges: d.Challenges, builtins: d.Builtins,
 		memory: d.Memory, inquiries: d.Inquiries,
 		settings: d.Settings, llmSettings: d.LLMSettings, system: d.System, ctxLogs: d.CtxLogs, messages: d.Messages, agents: d.Agents, rewards: d.Rewards,
 		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns, activity: d.Activity,
-		llmClient: d.LLMClient, capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
+		llmClient: d.LLMClient, outbound: d.Outbound, llmProxy: d.LLMProxy,
+		capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
 		auth: d.Auth, cookieSecure: d.CookieSecure, diagnostics: d.Diagnostics,
 	}
 }
@@ -246,6 +258,9 @@ func (s *Server) Router(r *gin.Engine) {
 	// 管理员全局玩法设置
 	protected.GET("/admin/system-settings", s.requireAdmin, s.getAdminSystemSettings)
 	protected.PATCH("/admin/system-settings", s.requireAdmin, s.updateAdminSystemSettings)
+	protected.GET("/admin/system-settings/llm-proxy", s.requireOwner, s.getAdminLLMProxy)
+	protected.PATCH("/admin/system-settings/llm-proxy", s.requireOwner, s.updateAdminLLMProxy)
+	protected.POST("/admin/system-settings/llm-proxy/test", s.requireOwner, s.testAdminLLMProxy)
 	protected.POST("/admin/system-settings/fetch-models", s.requireOwner, s.fetchAdminPublicModels)
 	protected.POST("/admin/system-settings/capabilities/check", s.requireOwner, s.checkAdminPublicCapability)
 	protected.GET("/admin/llm-request-logs", s.requireAdmin, s.listAdminLLMRequestLogs)
@@ -309,6 +324,19 @@ func (s *Server) Router(r *gin.Engine) {
 }
 
 // --- 通用辅助 ---
+
+// outboundHTTPClient returns the current LLM exit snapshot. Model-list callers
+// add their own 10-second context so the long-stream client stays timeout-free.
+func (s *Server) outboundHTTPClient() *http.Client {
+	if s.outbound != nil {
+		if snapshot := s.outbound.Snapshot(); snapshot != nil {
+			return snapshot.Client()
+		}
+	}
+	// A missing runtime snapshot must fail closed, never inherit environment
+	// proxy settings or silently bypass an enabled proxy.
+	return (*llmoutbound.Snapshot)(nil).Client()
+}
 
 func paramUUID(c *gin.Context, key string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param(key))

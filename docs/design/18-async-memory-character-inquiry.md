@@ -167,6 +167,8 @@ DELETE /api/conversations/:id/inquiries
 
 LLM 调用统一经过 `llmsettings.Service` 解析。管理员可选择 `user_managed` 或 `platform_managed`；平台模式下 Memory 与 Inquiry 也使用 `system_settings` 公共配置，用户原配置只读保留。有效设置包含统一的 `protocol`、叙事 `model`、可空的 `memory_model` 与 `inquiry_model`，后两者为空时继承叙事模型。Memory 始终使用低温非流式严格调用；Inquiry 的上游传输模式跟随 `stream_enabled`，但无论是否流式都必须在服务端收齐并校验完整 JSON 后才落库和返回。API Key 仅在服务端单次调用内存中解密，日志带来源和修订号但不含密钥。
 
+`server` 路由的 Memory 与 Inquiry 使用服务端共享的 LLM 出站快照。owner 启用出站代理后，两者和叙事、Agent、能力检测一样经该代理；停用时显式直连并忽略环境代理。`client` 路由仍在浏览器执行，不经过服务器出站代理。每次逻辑调用在开始时固定出口快照，有限传输重试不换出口；后台 Memory 的临时网络失败可继续按持久任务策略退避，但代理认证失败、TLS 证书错误和配置错误不重试。用户和日志只看到脱敏的模型服务错误或固定出站错误码，不包含代理地址、认证用户名、密码、CA 原文或 CONNECT 细节。
+
 Memory 使用 `memory_archive_v1`，Inquiry 使用 `character_inquiry_v1`，两者各自传递原生 JSON Schema 并执行 payload validator。生产请求不会依赖预先能力探测，也不会在失败后切换协议或输出模式。
 
 设置页允许用户分别点击 narrative、memory 或 character_inquiry 的“检测”。Memory/Inquiry 检测只对当前保存的对应模型发出一次小型 JSON Schema 请求，结果同步返回且不入库；失败只说明本次诊断结论，不改变生产请求。通用模型协议见 [19-agent-tool-loop.md](19-agent-tool-loop.md)。
@@ -186,6 +188,7 @@ Memory 使用 `memory_archive_v1`，Inquiry 使用 `character_inquiry_v1`，两�
 | 完整回合预算与 lag | `backend/internal/contextbuilder`、`orchestration` |
 | Inquiry 快照、契约与服务 | `backend/internal/inquiry`、`storage/repo_inquiry.go` |
 | Inquiry HTTP | `backend/internal/api/inquiries.go` |
+| 服务端 LLM 出口快照 | `backend/internal/llmoutbound`、`backend/internal/llmproxy` |
 | 左栏 UI | `frontend/src/components/CharacterSidebar.vue`、`InquiryPanel.vue` |
 | 权威表结构 | `backend/migrations/*.sql`，由 `cmd/migrate` 执行 |
 

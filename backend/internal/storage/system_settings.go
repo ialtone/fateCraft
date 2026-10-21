@@ -60,6 +60,14 @@ func (r *SystemSettingsRepo) Save(ctx context.Context, settings *SystemSettings)
 		if configActor(ctx) != nil && !previous.UpdatedAt.Equal(expected) {
 			return ErrSettingsConflict
 		}
+		// This save owns only the general settings group. Preserve the locked
+		// proxy values in both the insert struct and the post-commit cache.
+		settings.LLMProxyEnabled = previous.LLMProxyEnabled
+		settings.LLMProxyURL = previous.LLMProxyURL
+		settings.LLMProxyUsername = previous.LLMProxyUsername
+		settings.LLMProxyPasswordEncrypted = previous.LLMProxyPasswordEncrypted
+		settings.LLMProxyCAPEM = previous.LLMProxyCAPEM
+		settings.LLMProxyRevision = previous.LLMProxyRevision
 		// Validate new targets and re-enabling in this transaction. A deleted target
 		// must not prevent an administrator from turning capture off.
 		if err := validateDetailedLLMLoggingTarget(tx, &previous, settings); err != nil {

@@ -127,6 +127,22 @@ Campaign 叙事校验的诊断写入 `display_messages.validation_detail`，包�
 
 新项目的 schema 修改仅在 `backend/migrations/00001_init.sql`。已执行旧版基线的库不会因为修改文件而更新；使用测试工具自动创建的独立 schema 验证完整基线，禁止篡改 Goose 记录或自动清库。
 
+## LLM 出站代理诊断
+
+代理配置与 `llm_proxy_change` 审计在同一事务保存，记录操作者、时间、修订、启用状态、地址、用户名及密码设置/替换/清除。密码值、密文和 `Proxy-Authorization` 永不记录；CA 只记录是否配置和 SHA-256 指纹，不写完整 PEM。保存失败或修订冲突不发布运行快照，也不产生误导性成功审计。
+
+- 普通玩家的 HTTP/WS/问答/Memory 错误统一脱敏：不出现代理地址、用户名、密码、CA 原文或底层 CONNECT 文本。模型列表失败仍是 `502/upstream_error`；未知 500 仍返回 trace。
+- 服务端出站错误由 `llmoutbound.Error` 归类为固定代码：`proxy_unreachable`、`proxy_auth_failed`、`target_unreachable`、`tls_certificate_failed`、`timeout`、`config_invalid`、`outbound_error`。`SafeLogMessage` 只输出 `llm_outbound <code>`；底层 `url.Error` 仅保留为错误链原因，不进入日志正文。
+- 代理认证拒绝、明确证书错误和配置错误不重试；临时不可达/超时继续使用原有有限传输重试。Memory 任务对临时出站故障可后台退避，对认证、TLS、配置错误不重试。
+- “测试连接”只使用已保存配置，不调生成接口、不带供应商凭据，不跟随重定向，10 秒截止，发送一次 `HEAD`。目标返回 401/403/405 仍显示网络通路可达和目标状态码；网络失败返回结构化错误码。结果带配置修订，保存并发变化时标记 `stale`，不会冒充当前配置已验证。
+
+2026-10-21 本地功能验证：
+
+- 后端 `go test ./...`、`go vet ./...` 通过；前端 `node --experimental-strip-types --test tests/*.test.mjs` 的 79 项测试及 `npm run build`（含类型检查）通过；本次变更文件的 Prettier 检查和 `git diff --check` 通过。全项目 `npm run format:check` 另报四处既有格式问题：`src/stores/auth.ts`、`src/types/auth.ts`、`src/views/LoginView.vue`、`src/views/SettingsView.vue`，本次未修改它们。
+- 本机模拟代理/模型覆盖：直连忽略环境代理、Basic Auth、HTTP/HTTPS 代理、HTTPS CONNECT 与 407 分类、CA、凭据不传给目标、`NO_PROXY` 不绕过、两协议的流式/非流式 Agent、两处模型列表、活动流完成后清理旧池、同一调用重试固定出口及下一次调用切换出口。
+- 保存与权限覆盖：密码保留/替换/清除、清除可撤销、保存失败不发布、并发修订冲突、损坏密文启动失败、无需解密旧密码即可停用代理、owner 权限、必填修订号、通用配置 JSON 脱敏、Memory 临时/永久错误退避边界；前端验证初次读取失败重试、防重复提交和卸载后忽略迟到结果。
+- PostgreSQL 事务测试已编写，包含代理与普通设置互不覆盖（数据库和同仓储缓存）、修订冲突及审计脱敏；本机未配置 `FATECRAFT_TEST_DATABASE_URL`，数据库集成测试实际跳过，不能算作已验证。未做性能测试、真实供应商请求或外部代理/容器验收；部署仍需确认容器内代理可达、CA 可用且 `AUTH_DATA_ENCRYPTION_KEY` 稳定。
+
 ## Docker 日志
 
 两个 Compose 文件的所有服务均使用 `json-file`，`max-size=10m`、`max-file=3`。这是每容器约 30 MiB 的轮转预算，多服务/副本须合计；不限制数据库和备份文件。备份 cron 输出到容器 stdout/stderr，由 Docker 轮转，不再追加 `backups/backup.log`；已有历史文件不会自动删除。

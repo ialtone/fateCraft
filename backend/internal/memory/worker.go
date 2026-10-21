@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ialtone/fatecraft/internal/llm"
+	"github.com/ialtone/fatecraft/internal/llmoutbound"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/tokenizer"
@@ -411,6 +412,10 @@ func classifyLLMError(err error) string {
 	case errors.As(err, &httpErr):
 		return fmt.Sprintf("upstream_%d", httpErr.StatusCode)
 	default:
+		var outbound *llmoutbound.Error
+		if errors.As(err, &outbound) {
+			return "outbound_" + outbound.Code
+		}
 		return "upstream_error"
 	}
 }
@@ -432,6 +437,15 @@ func isRetryableLLMError(err error) bool {
 	var httpErr *llm.HTTPError
 	if errors.As(err, &httpErr) {
 		return httpErr.StatusCode == http.StatusTooManyRequests || httpErr.StatusCode >= 500
+	}
+	var outbound *llmoutbound.Error
+	if errors.As(err, &outbound) {
+		switch outbound.Code {
+		case llmoutbound.CodeProxyUnreachable, llmoutbound.CodeTargetUnreachable, llmoutbound.CodeTimeout, llmoutbound.CodeOutboundFailed:
+			return true
+		default:
+			return false
+		}
 	}
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "timeout") || strings.Contains(message, "connection") || strings.Contains(message, "eof")
