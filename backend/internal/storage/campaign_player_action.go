@@ -17,6 +17,12 @@ func (r *CampaignRepository) CommitPlayerCampaignAction(ctx context.Context, in 
 	if err != nil {
 		return nil, err
 	}
+	if len(conversations) == 0 {
+		// A campaign may be abandoned before its first conversation exists, or
+		// after the only conversation was deleted. There is no turn journal to
+		// bind in that case, so commit directly against campaign state.
+		return execute(ctx, r, NewRollHistoryRepo(r.db))
+	}
 	if len(conversations) != 1 {
 		return nil, ErrNotFound
 	}

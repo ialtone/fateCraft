@@ -117,10 +117,10 @@ func (OAuthLoginFlow) TableName() string { return "oauth_login_flows" }
 // AuthSettings 是管理员维护的站点认证策略与发信配置，整站只有 id=1 一行。
 type AuthSettings struct {
 	ID                         int       `gorm:"column:id;primaryKey" json:"id"`
-	EmailAuthEnabled           bool      `gorm:"column:email_auth_enabled;not null;default:true" json:"email_auth_enabled"`
-	LinuxDOLoginEnabled        bool      `gorm:"column:linuxdo_login_enabled;not null;default:true" json:"linuxdo_login_enabled"`
+	EmailAuthEnabled           bool      `gorm:"column:email_auth_enabled;not null" json:"email_auth_enabled"`
+	LinuxDOLoginEnabled        bool      `gorm:"column:linuxdo_login_enabled;not null" json:"linuxdo_login_enabled"`
 	EmailRegistrationEnabled   bool      `gorm:"column:email_registration_enabled;not null;default:false" json:"email_registration_enabled"`
-	EmailVerificationEnabled   bool      `gorm:"column:email_verification_enabled;not null;default:true" json:"email_verification_enabled"`
+	EmailVerificationEnabled   bool      `gorm:"column:email_verification_enabled;not null" json:"email_verification_enabled"`
 	InvitationRequired         bool      `gorm:"column:invitation_required;not null;default:false" json:"invitation_required"`
 	SMTPHost                   string    `gorm:"column:smtp_host;not null;default:''" json:"smtp_host"`
 	SMTPPort                   int       `gorm:"column:smtp_port;not null;default:587" json:"smtp_port"`

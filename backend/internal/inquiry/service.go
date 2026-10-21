@@ -69,7 +69,7 @@ type Service struct {
 	llm         *llm.Client
 	counter     tokenizer.Counter
 	mu          sync.Mutex
-	processing  map[uuid.UUID]activeInquiry
+	processing  map[uuid.UUID]*activeInquiry
 	activeUsers map[uuid.UUID]int
 	slots       chan struct{}
 	// relayFor 返回该玩家的 Relay 传输；阶段 3 注入。client 路由的问答经它执行，
@@ -78,8 +78,10 @@ type Service struct {
 }
 
 type activeInquiry struct {
-	playerID uuid.UUID
-	cancel   context.CancelFunc
+	conversationID uuid.UUID
+	playerID       uuid.UUID
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
 type Source struct {
@@ -112,7 +114,7 @@ func NewService(repo repository, campaigns campaignSnapshotter, states playerSta
 	return &Service{
 		repo: repo, campaigns: campaigns, states: states, settings: settings, identity: ident,
 		llm: client, counter: counter,
-		processing: map[uuid.UUID]activeInquiry{}, activeUsers: map[uuid.UUID]int{}, slots: make(chan struct{}, maxConcurrentInquiries),
+		processing: map[uuid.UUID]*activeInquiry{}, activeUsers: map[uuid.UUID]int{}, slots: make(chan struct{}, maxConcurrentInquiries),
 	}
 }
 
@@ -154,11 +156,13 @@ func (s *Service) Clear(ctx context.Context, conversationID uuid.UUID) error {
 		return err
 	}
 	clearCtx, cancelClear := context.WithCancel(ctx)
-	if !s.begin(conversationID, playerID, cancelClear) {
+	active := s.begin(clearCtx, conversationID, playerID, cancelClear)
+	if active == nil {
 		cancelClear()
 		return ErrBusy
 	}
-	defer s.end(conversationID, playerID)
+	defer cancelClear()
+	defer s.end(active)
 	thread, err := s.repo.Thread(clearCtx, conversationID, playerID)
 	if err != nil {
 		return err
@@ -193,11 +197,13 @@ func (s *Service) Ask(ctx context.Context, conversationID uuid.UUID, question st
 		return nil, err
 	}
 	runCtx, cancelRun := context.WithCancel(ctx)
-	if !s.begin(conversationID, playerID, cancelRun) {
+	active := s.begin(runCtx, conversationID, playerID, cancelRun)
+	if active == nil {
 		cancelRun()
 		return nil, ErrBusy
 	}
-	defer s.end(conversationID, playerID)
+	defer cancelRun()
+	defer s.end(active)
 	ctx = runCtx
 	settings, err := s.settings.Get(ctx, playerID.String())
 	if err != nil {
@@ -601,7 +607,7 @@ func referencedSources(ids []string, sources []Source) []map[string]string {
 	for _, id := range ids {
 		wanted[id] = struct{}{}
 	}
-	var refs []map[string]string
+	refs := make([]map[string]string, 0, len(sources))
 	for _, source := range sources {
 		if _, ok := wanted[source.ID]; ok {
 			refs = append(refs, map[string]string{"source_id": source.ID, "category": source.Category, "title": source.Title})
@@ -630,37 +636,55 @@ func (s *Service) playerID(ctx context.Context) (uuid.UUID, error) {
 	return id, nil
 }
 
-func (s *Service) begin(conversationID, playerID uuid.UUID, cancel context.CancelFunc) bool {
+// begin acquires the per-conversation and per-player inquiry slot. Entries
+// whose request context has already been canceled are abandoned by their HTTP
+// handler but may still be unwinding; reclaim them immediately so a retry after
+// a client timeout is not rejected as busy until the old goroutine exits.
+func (s *Service) begin(ctx context.Context, conversationID, playerID uuid.UUID, cancel context.CancelFunc) *activeInquiry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for id, active := range s.processing {
+		if active.ctx.Err() != nil {
+			s.releaseLocked(id, active)
+		}
+	}
 	if _, ok := s.processing[conversationID]; ok {
-		return false
+		return nil
 	}
 	if s.activeUsers[playerID] > 0 {
-		return false
+		return nil
 	}
 	select {
 	case s.slots <- struct{}{}:
 	default:
-		return false
+		return nil
 	}
-	s.processing[conversationID] = activeInquiry{playerID: playerID, cancel: cancel}
+	active := &activeInquiry{conversationID: conversationID, playerID: playerID, ctx: ctx, cancel: cancel}
+	s.processing[conversationID] = active
 	s.activeUsers[playerID]++
-	return true
+	return active
 }
 
-func (s *Service) end(conversationID, playerID uuid.UUID) {
-	s.mu.Lock()
-	if _, ok := s.processing[conversationID]; ok {
-		delete(s.processing, conversationID)
-		if s.activeUsers[playerID] <= 1 {
-			delete(s.activeUsers, playerID)
-		} else {
-			s.activeUsers[playerID]--
-		}
-		<-s.slots
+func (s *Service) end(active *activeInquiry) {
+	if active == nil {
+		return
 	}
-	s.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.processing[active.conversationID] == active {
+		s.releaseLocked(active.conversationID, active)
+	}
+}
+
+// releaseLocked releases resources owned by active. The caller must hold s.mu.
+func (s *Service) releaseLocked(conversationID uuid.UUID, active *activeInquiry) {
+	delete(s.processing, conversationID)
+	if s.activeUsers[active.playerID] <= 1 {
+		delete(s.activeUsers, active.playerID)
+	} else {
+		s.activeUsers[active.playerID]--
+	}
+	<-s.slots
 }
 
 func minPositive(value, cap int) int {

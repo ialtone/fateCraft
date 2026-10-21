@@ -404,13 +404,13 @@ func (s *Service) Archive(ctx context.Context, id uuid.UUID) (*storage.Conversat
 	return s.repo.Get(ctx, id)
 }
 
-// Restore 只将未结算的归档对话恢复为 active；已结束对话不可恢复。
+// Restore 将归档或已删除的未结算对话恢复为 active；已结束对话不可恢复。
 func (s *Service) Restore(ctx context.Context, id uuid.UUID) (*storage.Conversation, error) {
 	conv, err := s.GetOwned(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if conv.Status != storage.StatusArchived {
+	if conv.Status != storage.StatusArchived && conv.Status != storage.StatusDeleted {
 		return nil, ErrNotActive
 	}
 	if s.challenge != nil {
@@ -420,7 +420,7 @@ func (s *Service) Restore(ctx context.Context, id uuid.UUID) (*storage.Conversat
 	}
 	now := time.Now()
 	if err := s.repo.TransitionLifecycle(ctx, id, storage.StatusActive, map[string]any{
-		"archived_at": nil, "ended_at": nil, "updated_at": now,
+		"archived_at": nil, "ended_at": nil, "deleted_at": nil, "updated_at": now,
 	}); err != nil {
 		return nil, err
 	}

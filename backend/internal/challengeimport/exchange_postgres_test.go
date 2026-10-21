@@ -73,6 +73,12 @@ func TestPostgresExchangeAtomicDraftReplayAndConflict(t *testing.T) {
 	if err != nil || version.Status != storage.ChallengeVersionDraft {
 		t.Fatalf("import published: %+v %v", version, err)
 	}
+	if _, _, err := importer.ExportVersion(ctx, version.ID, "json"); err != nil {
+		t.Fatalf("export imported draft: %v", err)
+	}
+	if _, _, err := importer.ExportVersion(ctx, version.ID, "zip"); err != nil {
+		t.Fatalf("export imported draft as zip: %v", err)
+	}
 	again, err := importer.PreviewUpload(ctx, actor, "test.json", raw, PreviewOptions{})
 	if err != nil {
 		t.Fatal(err)

@@ -583,7 +583,9 @@ func (s *Service) executeAction(
 			if receiptErr != nil {
 				return storage.CampaignActionOutcome{}, receiptErr
 			}
-			outcome.Result["completion"] = receipt
+			if receipt != nil {
+				outcome.Result["completion"] = receipt
+			}
 		}
 		outcome.Result["narrative_feedback"] = feedback
 		return outcome, nil

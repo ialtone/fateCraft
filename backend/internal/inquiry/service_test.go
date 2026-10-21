@@ -2,6 +2,7 @@ package inquiry
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -32,6 +33,17 @@ func TestParseAnswerRequiresExactContractAndKnownSources(t *testing.T) {
 	}
 }
 
+func TestUnanswerableWithoutCitationsSerializesAsArray(t *testing.T) {
+	refs := referencedSources(nil, []Source{{ID: "source-1", Category: "character", Title: "状态"}})
+	encoded, err := json.Marshal(refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("empty source references = %s, want []", encoded)
+	}
+}
+
 func TestPublicHistoryKeepsNewestCompletedMessagesWithinBudget(t *testing.T) {
 	rows := []storage.CharacterInquiryMessage{
 		{Role: storage.RoleUser, Content: strings.Repeat("旧", 2000), Status: "completed"},
@@ -47,26 +59,57 @@ func TestPublicHistoryKeepsNewestCompletedMessagesWithinBudget(t *testing.T) {
 
 func TestInquiryConcurrencyLimitsConversationAndPlayer(t *testing.T) {
 	service := &Service{
-		processing: map[uuid.UUID]activeInquiry{}, activeUsers: map[uuid.UUID]int{},
+		processing: map[uuid.UUID]*activeInquiry{}, activeUsers: map[uuid.UUID]int{},
 		slots: make(chan struct{}, maxConcurrentInquiries),
 	}
 	playerID := uuid.New()
 	conversationID := uuid.New()
-	_, cancel := context.WithCancel(context.Background())
-	if !service.begin(conversationID, playerID, cancel) {
+	firstCtx, cancel := context.WithCancel(context.Background())
+	first := service.begin(firstCtx, conversationID, playerID, cancel)
+	if first == nil {
 		t.Fatal("first inquiry should acquire a slot")
 	}
-	_, duplicateCancel := context.WithCancel(context.Background())
-	if service.begin(conversationID, uuid.New(), duplicateCancel) {
+	duplicateCtx, duplicateCancel := context.WithCancel(context.Background())
+	if service.begin(duplicateCtx, conversationID, uuid.New(), duplicateCancel) != nil {
 		t.Fatal("same conversation acquired twice")
 	}
 	duplicateCancel()
-	_, userCancel := context.WithCancel(context.Background())
-	if service.begin(uuid.New(), playerID, userCancel) {
+	userCtx, userCancel := context.WithCancel(context.Background())
+	if service.begin(userCtx, uuid.New(), playerID, userCancel) != nil {
 		t.Fatal("same player acquired two inquiry slots")
 	}
 	userCancel()
-	service.end(conversationID, playerID)
+	service.end(first)
+	if len(service.slots) != 0 || len(service.processing) != 0 || len(service.activeUsers) != 0 {
+		t.Fatalf("resources were not released: slots=%d processing=%d users=%d", len(service.slots), len(service.processing), len(service.activeUsers))
+	}
+}
+
+func TestCanceledInquiryCanBeRetriedBeforeOldHandlerExits(t *testing.T) {
+	service := &Service{
+		processing: map[uuid.UUID]*activeInquiry{}, activeUsers: map[uuid.UUID]int{},
+		slots: make(chan struct{}, maxConcurrentInquiries),
+	}
+	playerID := uuid.New()
+	conversationID := uuid.New()
+	oldCtx, oldCancel := context.WithCancel(context.Background())
+	old := service.begin(oldCtx, conversationID, playerID, oldCancel)
+	if old == nil {
+		t.Fatal("first inquiry should acquire a slot")
+	}
+	oldCancel()
+	retryCtx, retryCancel := context.WithCancel(context.Background())
+	retry := service.begin(retryCtx, conversationID, playerID, retryCancel)
+	if retry == nil {
+		t.Fatal("retry after client cancellation was rejected while the old handler was still unwinding")
+	}
+	// The old handler finishing later must not release the retry's slot.
+	service.end(old)
+	if service.processing[conversationID] != retry {
+		t.Fatal("old handler removed the retry's processing entry")
+	}
+	service.end(retry)
+	retryCancel()
 	if len(service.slots) != 0 || len(service.processing) != 0 || len(service.activeUsers) != 0 {
 		t.Fatalf("resources were not released: slots=%d processing=%d users=%d", len(service.slots), len(service.processing), len(service.activeUsers))
 	}

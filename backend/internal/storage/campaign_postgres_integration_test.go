@@ -84,6 +84,41 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	); !errors.Is(err, ErrCampaignHasConversation) {
 		t.Fatalf("second campaign conversation error = %v", err)
 	}
+	if err := db.Model(&Conversation{}).Where("id = ?", conversation.ID).
+		Updates(map[string]any{"status": StatusDeleted, "deleted_at": now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if conversations, err := repository.ListConversations(context.Background(), campaignID); err != nil || len(conversations) != 0 {
+		t.Fatalf("deleted campaign conversation remained listed: %+v err=%v", conversations, err)
+	}
+	// Deleting the only conversation frees the campaign slot; the replacement
+	// is a new row and keeps the deleted one available for explicit restore.
+	secondConversation = &Conversation{
+		ID: uuid.New(), PlayerID: playerID.String(), Title: "另一个对话",
+		Status: StatusActive, ChallengeVersionID: versionID, ChallengeHash: hash,
+		CampaignID: &campaignID, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateConversation(
+		context.Background(), playerID, secondConversation, JSONMap{}, 1,
+	); err != nil {
+		t.Fatalf("create replacement campaign conversation: %v", err)
+	}
+	if err := NewConversationRepo(db).TransitionLifecycle(
+		context.Background(), conversation.ID, StatusActive,
+		map[string]any{"deleted_at": nil, "archived_at": nil, "ended_at": nil, "updated_at": now},
+	); !errors.Is(err, ErrCampaignHasConversation) {
+		t.Fatalf("restore alongside active campaign conversation error = %v", err)
+	}
+	if err := db.Model(&Conversation{}).Where("id = ?", secondConversation.ID).
+		Updates(map[string]any{"status": StatusDeleted, "deleted_at": now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := NewConversationRepo(db).TransitionLifecycle(
+		context.Background(), conversation.ID, StatusActive,
+		map[string]any{"deleted_at": nil, "archived_at": nil, "ended_at": nil, "updated_at": now},
+	); err != nil {
+		t.Fatalf("restore deleted campaign conversation: %v", err)
+	}
 	var detailedLoggingEnabled bool
 	if err := db.Raw("SELECT detailed_llm_logging_enabled FROM system_settings WHERE id = 1").Scan(&detailedLoggingEnabled).Error; err != nil {
 		t.Fatal(err)
@@ -376,5 +411,38 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	}
 	if outcomeLedgerCount != 1 {
 		t.Fatalf("campaign outcome ledger count = %d, want 1", outcomeLedgerCount)
+	}
+}
+
+func TestPostgresPlayerCampaignActionWithoutConversation(t *testing.T) {
+	db := testdb.Open(t, "campaign_no_conversation")
+	playerID, packID, versionID, campaignID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	hash := strings.Repeat("0", 64)
+	if err := db.Exec(`INSERT INTO users (id, username, display_name) VALUES (?, 'no-conversation-player', 'Player')`, playerID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO challenge_packs (id, slug, name) VALUES (?, 'no-conversation-pack', 'Pack')`, packID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO challenge_versions
+		(id, challenge_pack_id, version, status, manifest, content_hash, published_at)
+		VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, versionID, packID, hash).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO campaigns
+		(id, player_id, title, challenge_version_id, challenge_hash, current_location_key, random_seed, llm_route)
+		VALUES (?, ?, 'Before first conversation', ?, ?, 'world.start', 1, 'server')`, campaignID, playerID, versionID, hash).Error; err != nil {
+		t.Fatal(err)
+	}
+	repository := NewCampaignRepository(db)
+	called := false
+	result, err := repository.CommitPlayerCampaignAction(context.Background(), CommitCampaignActionInput{
+		CampaignID: campaignID, PlayerID: playerID, IdempotencyKey: "abandon-before-start", ActionKey: "core.abandon",
+	}, "Abandon", JSONMap{}, func(context.Context, *CampaignRepository, *RollHistoryRepo) (*CampaignActionResult, error) {
+		called = true
+		return &CampaignActionResult{}, nil
+	})
+	if err != nil || !called || result == nil {
+		t.Fatalf("action without a conversation did not execute directly: result=%+v called=%t err=%v", result, called, err)
 	}
 }

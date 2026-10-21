@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // CompletionView is a durable, public receipt, shared by both gameplay modes.
@@ -100,7 +102,12 @@ func (r *ChallengeRepository) Completion(ctx context.Context, conv Conversation)
 // CampaignCompletion is invoked inside the existing action transaction.
 func (s *CampaignActionStore) CampaignCompletion(ctx context.Context, row Campaign, actionID string) (*CompletionView, error) {
 	var conv Conversation
-	if err := s.tx.WithContext(ctx).First(&conv, "campaign_id = ?", row.ID).Error; err != nil {
+	if err := s.tx.WithContext(ctx).First(&conv, "campaign_id = ? AND status <> ?", row.ID, StatusDeleted).Error; err != nil {
+		// A campaign can end before its first conversation exists, or after the
+		// only conversation was deleted. There is no conversation receipt to show.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	var outcome ChallengeOutcomeRule

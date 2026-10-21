@@ -380,13 +380,32 @@ func (r *ConversationRepo) TransitionLifecycle(ctx context.Context, id uuid.UUID
 			}
 			return err
 		}
-		// 源状态必须在行锁内按状态机校验：已删除对话一律视为不存在；ended/archived
-		// 只能来自 active，恢复只能来自 archived。锁外的检查只是快速失败。
-		if conversation.Status == StatusDeleted {
+		// 源状态必须在行锁内按状态机校验：已删除对话只能用于显式恢复；
+		// ended/archived 只能来自 active，恢复可以来自 archived 或 deleted。
+		// 锁外的检查只是快速失败。
+		if conversation.Status == StatusDeleted && status != StatusActive {
 			return ErrNotFound
 		}
 		if !lifecycleTransitionAllowed(conversation.Status, status) {
 			return ErrConversationNotActive
+		}
+		if status == StatusActive && conversation.CampaignID != nil {
+			// Serialize with CreateConversation, which holds the same campaign
+			// row lock while checking and inserting the active conversation.
+			var campaign Campaign
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").
+				First(&campaign, "id = ?", *conversation.CampaignID).Error; err != nil {
+				return err
+			}
+			var occupied int64
+			if err := tx.Model(&Conversation{}).
+				Where("campaign_id = ? AND id <> ? AND status <> ?", *conversation.CampaignID, id, StatusDeleted).
+				Count(&occupied).Error; err != nil {
+				return err
+			}
+			if occupied > 0 {
+				return ErrCampaignHasConversation
+			}
 		}
 		var activeCount int64
 		if err := tx.Model(&ConversationGenerationRun{}).
@@ -430,13 +449,14 @@ func activeGenerationRunStatuses() []string {
 }
 
 // lifecycleTransitionAllowed 定义对话生命周期状态机：ended 与 archived 只能从
-// active 进入，恢复只能从 archived 回到 active，删除可以来自任何未删除状态。
+// active 进入，恢复可以从 archived 或 deleted 回到 active，删除可以来自任何
+// 未删除状态。
 func lifecycleTransitionAllowed(from, to string) bool {
 	switch to {
 	case StatusEnded, StatusArchived:
 		return from == StatusActive
 	case StatusActive:
-		return from == StatusArchived
+		return from == StatusArchived || from == StatusDeleted
 	case StatusDeleted:
 		return from != StatusDeleted
 	default:

@@ -140,7 +140,7 @@ CREATE TABLE challenge_versions (
     version VARCHAR(64) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'retired')),
     manifest JSONB NOT NULL,
-    content_hash CHAR(64) NOT NULL DEFAULT '',
+    content_hash VARCHAR(64) NOT NULL DEFAULT '',
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
     published_by UUID REFERENCES users(id) ON DELETE SET NULL,
     published_at TIMESTAMPTZ,
@@ -559,7 +559,7 @@ CREATE TABLE conversations (
     is_processing BOOLEAN NOT NULL DEFAULT FALSE,
     challenge_version_id UUID NOT NULL REFERENCES challenge_versions(id) ON DELETE RESTRICT,
     challenge_hash CHAR(64) NOT NULL,
-    campaign_id UUID UNIQUE,
+    campaign_id UUID,
     character_asset_id UUID,
     persona_asset_id UUID,
     scenario_asset_id UUID,
@@ -592,6 +592,10 @@ CREATE INDEX idx_conversations_status ON conversations(status);
 CREATE INDEX idx_conversations_player_updated ON conversations(player_id, updated_at DESC);
 CREATE INDEX idx_conversations_challenge_version ON conversations(challenge_version_id);
 CREATE INDEX idx_conversations_title_trgm ON conversations USING GIN (title public.gin_trgm_ops);
+-- 已删除会话保留用于恢复，但不再占用 Campaign 的唯一活动会话槽位。
+CREATE UNIQUE INDEX idx_conversations_campaign_one_active
+    ON conversations(campaign_id)
+    WHERE campaign_id IS NOT NULL AND status <> 'deleted';
 
 -- 每次可写生成都有独立的 durable owner。活动状态的部分唯一索引
 -- 与 conversation 行锁共同保证同一对话最多一个生成任务。

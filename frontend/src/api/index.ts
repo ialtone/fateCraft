@@ -290,7 +290,7 @@ export const inquiriesApi = {
       .post<CharacterInquiryAnswer>(
         `/conversations/${convId}/inquiries`,
         { question },
-        { timeout: 130000 },
+        { timeout: 145000 },
       )
       .then((response) => response.data),
   cancel: (convId: string) =>

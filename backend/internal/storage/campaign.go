@@ -199,7 +199,7 @@ func (r *CampaignRepository) RecentEvents(
 
 func (r *CampaignRepository) ListConversations(ctx context.Context, campaignID uuid.UUID) ([]Conversation, error) {
 	var rows []Conversation
-	err := r.db.WithContext(ctx).Where("campaign_id = ?", campaignID).
+	err := r.db.WithContext(ctx).Where("campaign_id = ? AND status <> ?", campaignID, StatusDeleted).
 		Order("created_at ASC, id ASC").Limit(100).Find(&rows).Error
 	return rows, err
 }
@@ -237,7 +237,7 @@ func (r *CampaignRepository) CreateConversation(
 
 		var conversationCount int64
 		if err := tx.Model(&Conversation{}).
-			Where("campaign_id = ?", campaign.ID).
+			Where("campaign_id = ? AND status <> ?", campaign.ID, StatusDeleted).
 			Count(&conversationCount).Error; err != nil {
 			return err
 		}
