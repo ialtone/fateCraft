@@ -34,7 +34,7 @@ func TestPostgresSaveLLMProxyIsIsolatedRevisionedAndAudited(t *testing.T) {
 	actorID := uuid.New()
 	if err := db.Exec(
 		`INSERT INTO users (id, username, display_name) VALUES (?, ?, ?)`,
-		actorID, "llm-proxy-"+actorID.String(), "LLM Proxy Test",
+		actorID, "llm-proxy-test", "LLM Proxy Test",
 	).Error; err != nil {
 		t.Fatalf("seed audit actor: %v", err)
 	}

@@ -96,7 +96,7 @@ func TestPostgresCampaignRevisionIdempotencyAndInventoryConstraints(t *testing.T
 	secondConversation = &Conversation{
 		ID: uuid.New(), PlayerID: playerID.String(), Title: "另一个对话",
 		Status: StatusActive, ChallengeVersionID: versionID, ChallengeHash: hash,
-		CampaignID: &campaignID, CreatedAt: now, UpdatedAt: now,
+		CampaignID: &campaignID, LLMRoute: LLMRouteServer, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := repository.CreateConversation(
 		context.Background(), playerID, secondConversation, JSONMap{}, 1,
@@ -427,6 +427,9 @@ func TestPostgresPlayerCampaignActionWithoutConversation(t *testing.T) {
 	if err := db.Exec(`INSERT INTO challenge_versions
 		(id, challenge_pack_id, version, status, manifest, content_hash, published_at)
 		VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, versionID, packID, hash).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`UPDATE challenge_packs SET current_version_id=?,status='active' WHERE id=?`, versionID, packID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO campaigns
