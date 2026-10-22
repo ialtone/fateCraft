@@ -417,12 +417,11 @@ func (r *CampaignRepository) CommitAction(
 			return ErrCampaignRevisionConflict
 		}
 		if campaign.Status != CampaignStatusActive {
+			// 存档可能在创建首个对话前就被放弃，此时没有 active 对话需要结束。
+			// 部分唯一索引保证每个存档最多只有一个非删除对话，因此 0 或 1 行都是合法结果。
 			closed := tx.Model(&Conversation{}).Where("campaign_id = ? AND status = ?", campaign.ID, StatusActive).Updates(map[string]any{"status": StatusEnded, "ended_at": now, "updated_at": now})
 			if closed.Error != nil {
 				return closed.Error
-			}
-			if closed.RowsAffected != 1 {
-				return ErrConversationNotActive
 			}
 		}
 		publicResult := outcome.Result

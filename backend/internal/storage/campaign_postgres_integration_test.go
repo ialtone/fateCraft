@@ -440,12 +440,39 @@ func TestPostgresPlayerCampaignActionWithoutConversation(t *testing.T) {
 	repository := NewCampaignRepository(db)
 	called := false
 	result, err := repository.CommitPlayerCampaignAction(context.Background(), CommitCampaignActionInput{
-		CampaignID: campaignID, PlayerID: playerID, IdempotencyKey: "abandon-before-start", ActionKey: "core.abandon",
-	}, "Abandon", JSONMap{}, func(context.Context, *CampaignRepository, *RollHistoryRepo) (*CampaignActionResult, error) {
+		CampaignID: campaignID, PlayerID: playerID, IdempotencyKey: "noop-before-start", ActionKey: "core.noop",
+	}, "Noop", JSONMap{}, func(context.Context, *CampaignRepository, *RollHistoryRepo) (*CampaignActionResult, error) {
 		called = true
 		return &CampaignActionResult{}, nil
 	})
 	if err != nil || !called || result == nil {
 		t.Fatalf("action without a conversation did not execute directly: result=%+v called=%t err=%v", result, called, err)
+	}
+	status, outcomeKey := CampaignStatusAbandoned, "abandoned"
+	committed, err := repository.CommitAction(context.Background(), CommitCampaignActionInput{
+		CampaignID: campaignID, PlayerID: playerID, ExpectedRevision: 0, IdempotencyKey: "abandon-before-start",
+		ActionKey: "core.abandon", ActorType: "player",
+	}, func(*CampaignActionStore, Campaign) (CampaignActionOutcome, error) {
+		return CampaignActionOutcome{
+			Events: []CampaignEventDraft{{
+				EventType:  "campaign.abandoned",
+				Visibility: CampaignVisibilityPlayer,
+			}},
+			Status:     &status,
+			OutcomeKey: &outcomeKey,
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("abandon without a conversation: %v", err)
+	}
+	if committed.Campaign.Status != CampaignStatusAbandoned {
+		t.Fatalf("campaign status = %q, want abandoned", committed.Campaign.Status)
+	}
+	var conversations int64
+	if err := db.Model(&Conversation{}).Where("campaign_id = ?", campaignID).Count(&conversations).Error; err != nil {
+		t.Fatal(err)
+	}
+	if conversations != 0 {
+		t.Fatalf("abandon before first conversation created %d conversations", conversations)
 	}
 }
