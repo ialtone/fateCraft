@@ -1,5 +1,27 @@
 import type { RewardExchangeOrder, RewardExchangeRequest } from '@/types/rewards'
 
+export function maxExchangeUnits(
+  offer: {
+    cost_quantity: number
+    reward_quantity: number
+    remaining_units?: number | null
+  },
+  balance: number,
+  pending: boolean,
+): number {
+  const limits = [
+    Math.floor(Number.MAX_SAFE_INTEGER / offer.cost_quantity),
+    Math.floor(Number.MAX_SAFE_INTEGER / offer.reward_quantity),
+  ]
+  if (!pending && offer.remaining_units !== null && offer.remaining_units !== undefined) {
+    limits.push(Math.max(0, offer.remaining_units))
+  }
+  // A pending request must stay retryable even if its first attempt already
+  // succeeded and the latest balance and quota reflect the deduction.
+  if (!pending) limits.push(Math.floor(Math.max(0, balance) / offer.cost_quantity))
+  return Math.min(...limits)
+}
+
 // An old order lookup must never resolve a different in-flight exchange.
 export function confirmsPendingExchange(
   pending: RewardExchangeRequest | undefined,

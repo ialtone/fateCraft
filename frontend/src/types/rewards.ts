@@ -20,11 +20,14 @@ export interface RewardExchangeOffer {
   description: string
   cost_quantity: number
   reward_quantity: number
+  max_redemptions_per_user: number
   enabled: boolean
   revision: number
   sort_order: number
   created_at: string
   updated_at: string
+  redeemed_units?: number
+  remaining_units?: number | null
 }
 export interface RewardExchangeRequest {
   request_id: string

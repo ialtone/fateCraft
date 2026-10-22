@@ -1535,6 +1535,7 @@ CREATE TABLE reward_exchange_offers (
     description TEXT NOT NULL DEFAULT '',
     cost_quantity BIGINT NOT NULL CHECK (cost_quantity BETWEEN 1 AND 9007199254740991),
     reward_quantity BIGINT NOT NULL CHECK (reward_quantity BETWEEN 1 AND 9007199254740991),
+    max_redemptions_per_user BIGINT NOT NULL DEFAULT 0 CHECK (max_redemptions_per_user BETWEEN 0 AND 9007199254740991),
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
     revision BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -1549,8 +1550,8 @@ CREATE TABLE reward_exchange_revisions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (offer_id, revision)
 );
-INSERT INTO reward_exchange_offers(id,name,description,cost_quantity,reward_quantity,enabled,sort_order)
-VALUES ('00000000-0000-0000-0000-000000000001','剧情改写 1 次','使用积分兑换剧情改写次数。',100,1,TRUE,0);
+INSERT INTO reward_exchange_offers(id,name,description,cost_quantity,reward_quantity,max_redemptions_per_user,enabled,sort_order)
+VALUES ('00000000-0000-0000-0000-000000000001','剧情改写 1 次','使用积分兑换剧情改写次数。',100,1,0,TRUE,0);
 INSERT INTO reward_exchange_revisions(offer_id,revision,snapshot,actor_id)
 SELECT id,revision,to_jsonb(reward_exchange_offers),NULL FROM reward_exchange_offers;
 
@@ -1570,6 +1571,7 @@ CREATE TABLE reward_exchange_orders (
     FOREIGN KEY (offer_id, offer_revision) REFERENCES reward_exchange_revisions(offer_id, revision) ON DELETE RESTRICT
 );
 CREATE INDEX reward_exchange_orders_player_page ON reward_exchange_orders(player_id, created_at DESC, id DESC);
+CREATE INDEX reward_exchange_orders_player_offer ON reward_exchange_orders(player_id, offer_id) INCLUDE (units);
 CREATE INDEX reward_exchange_orders_offer_page ON reward_exchange_orders(offer_id, created_at DESC, id DESC);
 CREATE INDEX reward_exchange_orders_admin_page ON reward_exchange_orders(created_at DESC, id DESC);
 CREATE INDEX reward_audit_page ON admin_audit_logs(created_at DESC, id DESC) WHERE action LIKE 'reward_%';

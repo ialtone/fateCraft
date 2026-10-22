@@ -59,13 +59,22 @@ export const rewardExchangeApi = {
       .get<{ offers: RewardExchangeOffer[] }>(`${admin ? '/admin' : '/me'}/reward-exchange/offers`)
       .then((r) => r.data.offers),
   save: (offer: RewardExchangeOffer) => {
-    const { name, description, cost_quantity, reward_quantity, enabled, sort_order, revision } =
-      offer
+    const {
+      name,
+      description,
+      cost_quantity,
+      reward_quantity,
+      max_redemptions_per_user,
+      enabled,
+      sort_order,
+      revision,
+    } = offer
     const body = {
       name,
       description,
       cost_quantity,
       reward_quantity,
+      max_redemptions_per_user,
       enabled,
       sort_order,
       revision,

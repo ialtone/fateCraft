@@ -110,6 +110,7 @@ func assertBaselineObjects(t *testing.T, db interface {
 	t.Helper()
 	ctx := context.Background()
 	var functions, triggers, indexes, seedRows, rewardTables, registrationSeeds, rewardTriggers int
+	var limitColumn, limitCheck, limitSnapshot int
 	queries := []struct {
 		name   string
 		query  string
@@ -123,6 +124,9 @@ func assertBaselineObjects(t *testing.T, db interface {
 		{"reward tables with comments", `SELECT count(*) FROM pg_class WHERE relnamespace=current_schema()::regnamespace AND relname IN ('registration_reward_rules','reward_exchange_offers','reward_exchange_revisions','reward_exchange_orders') AND obj_description(oid,'pg_class') IS NOT NULL`, &rewardTables, 4},
 		{"registration rule seed", `SELECT count(*) FROM registration_reward_rules WHERE points=0 AND rewrite_credits=10`, &registrationSeeds, 1},
 		{"immutable reward objects", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('registration_reward_rules'::regclass,'reward_exchange_orders'::regclass,'reward_exchange_revisions'::regclass)`, &rewardTriggers, 3},
+		{"exchange limit column", `SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='reward_exchange_offers' AND column_name='max_redemptions_per_user' AND column_default='0' AND is_nullable='NO'`, &limitColumn, 1},
+		{"exchange limit check", `SELECT count(*) FROM pg_constraint WHERE conrelid='reward_exchange_offers'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%max_redemptions_per_user%'`, &limitCheck, 1},
+		{"exchange limit seed snapshot", `SELECT count(*) FROM reward_exchange_revisions WHERE offer_id='00000000-0000-0000-0000-000000000001' AND revision=1 AND snapshot->>'max_redemptions_per_user'='0'`, &limitSnapshot, 1},
 	}
 	for _, check := range queries {
 		if err := db.QueryRowContext(ctx, check.query).Scan(check.target); err != nil {

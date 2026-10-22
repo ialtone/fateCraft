@@ -8,6 +8,8 @@ import {
   NInput,
   NInputNumber,
   NModal,
+  NRadio,
+  NRadioGroup,
   NSwitch,
   NTag,
   useMessage,
@@ -25,14 +27,19 @@ const offers = ref<RewardExchangeOffer[]>([]),
   formError = ref(''),
   revisions = ref<RewardExchangeRevision[]>([]),
   historyOpen = ref(false),
-  historyError = ref('')
+  historyError = ref(''),
+  unlimited = ref(true)
 const valid = computed(
   () =>
     !!form.value?.name.trim() &&
     Number.isSafeInteger(form.value.cost_quantity) &&
     form.value.cost_quantity > 0 &&
     Number.isSafeInteger(form.value.reward_quantity) &&
-    form.value.reward_quantity > 0,
+    form.value.reward_quantity > 0 &&
+    (unlimited.value ||
+      (Number.isSafeInteger(form.value.max_redemptions_per_user) &&
+        form.value.max_redemptions_per_user > 0 &&
+        form.value.max_redemptions_per_user <= Number.MAX_SAFE_INTEGER)),
 )
 async function load() {
   loading.value = true
@@ -54,12 +61,14 @@ function edit(offer?: RewardExchangeOffer) {
         description: '',
         cost_quantity: 1,
         reward_quantity: 1,
+        max_redemptions_per_user: 0,
         enabled: false,
         revision: 0,
         sort_order: 0,
         created_at: '',
         updated_at: '',
       }
+  unlimited.value = form.value.max_redemptions_per_user === 0
   formError.value = ''
   open.value = true
 }
@@ -68,7 +77,10 @@ async function save() {
   busy.value = true
   formError.value = ''
   try {
-    await api.save(form.value)
+    await api.save({
+      ...form.value,
+      max_redemptions_per_user: unlimited.value ? 0 : form.value.max_redemptions_per_user,
+    })
     open.value = false
     message.success('兑换商品已保存')
     await load()
@@ -109,6 +121,13 @@ onMounted(load)
         <p>
           {{ offer.cost_quantity }} 积分 → {{ offer.reward_quantity }}
           次剧情改写
+        </p>
+        <p>
+          {{
+            offer.max_redemptions_per_user > 0
+              ? `每人最多 ${offer.max_redemptions_per_user} 份`
+              : '每人兑换不限'
+          }}
         </p>
         <NTag :type="offer.enabled ? 'success' : 'default'">{{
           offer.enabled ? '已上架' : '已下架'
@@ -151,6 +170,17 @@ onMounted(load)
               :min="1"
               :max="Number.MAX_SAFE_INTEGER"
               :precision="0" /></NFormItem
+          ><NFormItem label="每人兑换上限"
+            ><NRadioGroup v-model:value="unlimited"
+              ><NRadio :value="true">不限</NRadio
+              ><NRadio :value="false">限制份数</NRadio></NRadioGroup
+            ></NFormItem
+          ><NFormItem v-if="!unlimited" label="每人最多兑换份数"
+            ><NInputNumber
+              v-model:value="form.max_redemptions_per_user"
+              :min="1"
+              :max="Number.MAX_SAFE_INTEGER"
+              :precision="0" /></NFormItem
           ><NFormItem label="上架"><NSwitch v-model:value="form.enabled" /></NFormItem
           ><NFormItem label="排序（较小靠前）"
             ><NInputNumber
@@ -183,6 +213,14 @@ onMounted(load)
             revision.snapshot.reward_quantity
           }}
           次剧情改写
+        </p>
+        <p>
+          每人兑换：
+          {{
+            revision.snapshot.max_redemptions_per_user > 0
+              ? `最多 ${revision.snapshot.max_redemptions_per_user} 份`
+              : '不限'
+          }}
         </p>
         <small>操作者 {{ revision.actor_id || '系统初始化' }}</small>
       </div></NModal

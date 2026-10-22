@@ -222,11 +222,11 @@ GET  /api/me/reward-exchange/orders?limit=30&cursor=...
 GET  /api/me/reward-exchange/by-request/:request_id
 ~~~
 
-本人身份来自认证，不能用 user_id 选择他人。余额返回 {rewards}，固定两项 {asset:{key,name,unit,icon},balance}；收支返回 {entries,next_cursor}，商品返回 {offers}，订单返回 {orders,next_cursor}。游标按 (created_at,id) 倒序，limit 为 1–200。
+本人身份来自认证，不能用 user_id 选择他人。余额返回 {rewards}，固定两项 {asset:{key,name,unit,icon},balance}；收支返回 {entries,next_cursor}，商品返回 {offers}，订单返回 {orders,next_cursor}。游标按 (created_at,id) 倒序，limit 为 1–200。玩家商品额外返回当前 `max_redemptions_per_user`、本人累计 `redeemed_units` 和 `remaining_units`；不限时 `remaining_units` 为 null，有限时为 `max(0, max_redemptions_per_user - redeemed_units)`。管理端商品列表只返回商品配置，不附带任何玩家的额度统计。
 
 收支支持 reward_key、source_type、created_from/created_to（RFC3339）筛选。玩家响应不含内部原因、操作者、管理请求 ID/指纹或 metadata。余额缺行返回 0。
 
-兑换请求为 {request_id,offer_id,revision,units}，全部数量为正安全整数。revision 对应页面确认价格，服务端复核价格与状态，扣积分、加改写次数、两条账本与订单同事务。响应保存成交快照及 cost_ledger_id、reward_ledger_id。相同请求重试返回原结果，换参数返回 409；响应丢失应查询或原样重试。
+兑换请求为 {request_id,offer_id,revision,units}，全部数量为正安全整数。revision 对应页面确认价格，服务端复核价格、状态和每人剩余额度，扣积分、加改写次数、两条账本与订单同事务。超额整笔拒绝并返回 409 `exchange_limit_reached`，不拆单、不部分成交。响应保存成交快照及 cost_ledger_id、reward_ledger_id。相同请求重试返回原结果（即使之后达到上限或商品下架），换参数返回 409；响应丢失应查询或原样重试。
 
 ## 奖励管理接口
 
@@ -263,7 +263,7 @@ reward_key 只允许积分和改写次数；数量为 1–9007199254740991 整�
 
 撤回请求为 {request_id,reason}，只支持原管理员发放整笔扣回，余额不足或已撤回拒绝，返回反向账本。没有通用领取、资产 CRUD、任意余额调整或兑换退款接口。
 
-注册 PUT 使用 {id,points,rewrite_credits}，id 为当前配置修订，两项允许 0；成功返回新修订，旧 id 返回冲突。商品 POST/PUT 使用 {name,description,cost_quantity,reward_quantity,enabled,sort_order,revision}；cost_quantity 固定为积分单价，reward_quantity 固定为改写次数。创建 revision=1，编辑需匹配当前 revision；修订历史返回 {revisions}，系统初始化 actor_id 为空。
+注册 PUT 使用 {id,points,rewrite_credits}，id 为当前配置修订，两项允许 0；成功返回新修订，旧 id 返回冲突。商品 POST/PUT 使用 {name,description,cost_quantity,reward_quantity,max_redemptions_per_user,enabled,sort_order,revision}；cost_quantity 固定为积分单价，reward_quantity 固定为改写次数，max_redemptions_per_user 为 0（不限）或 1–9007199254740991，缺省按 0 处理。创建 revision=1，编辑需匹配当前 revision；修订历史返回 {revisions}，其 snapshot 包含限额，系统初始化 actor_id 为空。
 
 奖励写接口拒绝未知字段，旧资产 ID、purpose、delivery_mode 等不能被静默忽略。
 
@@ -283,6 +283,7 @@ reward_key 只允许积分和改写次数；数量为 1–9007199254740991 整�
 | exchange_changed | 409 | 商品修订已变，须刷新确认 |
 | exchange_owned | 409 | 已拥有非叠加目标，未扣分 |
 | exchange_unavailable | 400 | 商品下架或兑换配置无效 |
+| exchange_limit_reached | 409 | 本次请求份数超过该商品每人剩余额度 |
 
 无新奖励 WebSocket 事件；管理和兑换操作通过 REST 响应及重新读取余额/记录确认。完整语义与当前验证范围见 [22-reward-management-and-exchange.md](22-reward-management-and-exchange.md)。
 

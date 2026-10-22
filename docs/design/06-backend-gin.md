@@ -226,7 +226,9 @@ Campaign 生产与经济动作使用同一可信入口。`craft.learn_recipe`、
 
 `RewardRepository.GrantInCurrentTx` 复用挑战、Campaign 和注册原事务；AdminGrant/ReverseAdminGrant 封装管理发放和整笔撤回，mutateCurrentTx 统一维护两项固定余额及 grant/consume/refund/reverse 账本。来源、幂等键与请求 ID 分别约束防重，金额和累计值均防溢出。
 
-SaveRegistrationRule、SaveExchangeOffer 在配置锁内核对当前修订并追加审计，审计失败整体回滚。内置导入仍使用预览 token 和确认流程，预览展示结局积分。Exchange 核对用户、商品、价格修订，再按固定 key 顺序锁余额，将支付、所得与订单同事务提交。
+SaveRegistrationRule、SaveExchangeOffer 在配置锁内核对当前修订并追加审计，审计失败整体回滚。内置导入仍使用预览 token 和确认流程，预览展示结局积分。Exchange 核对用户、商品、价格修订和每人限额，再按固定 key 顺序锁余额，将支付、所得与订单同事务提交。
+
+每人限额按 `reward_exchange_orders` 中该玩家该商品的成功订单 `SUM(units)` 计算，跨越所有历史修订。Exchange 在持有玩家行锁后读取累计份数，同账号不同请求因此串行校验；限额检查失败在扣积分、发次数和写订单前返回。提高、取消或降低上限都不改写历史订单；降低到已兑换数以下时剩余额度为 0。相同 request_id 的重放先返回原订单，不重复占用额度。
 
 注册无论赠送数量是否为 0，均保存用户实际采用的规则修订，防止重复赠送和套用新配置。管理发放按用户 ID 顺序锁定操作者和目标，自己给自己发放也使用同一顺序。改写失败仅关联实际原消费返还一次；兑换不允许单边退款。
 

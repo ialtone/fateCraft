@@ -10,7 +10,7 @@ import type {
   RewardExchangeOrder,
   RewardExchangeRequest,
 } from '@/types/rewards'
-import { confirmsPendingExchange } from '@/lib/rewardExchangeState'
+import { confirmsPendingExchange, maxExchangeUnits } from '@/lib/rewardExchangeState'
 const props = defineProps<{ active: boolean }>()
 const emit = defineEmits<{ changed: []; pendingChange: [pending: boolean]; viewOrders: [] }>(),
   message = useMessage(),
@@ -40,13 +40,9 @@ watch(pending, (value) => {
     /* Result lookup remains available if browser storage is disabled. */
   }
 })
+const balance = computed(() => rewards.balanceFor(POINTS))
 const maxUnits = computed(() =>
-  selected.value
-    ? Math.min(
-        Math.floor(Number.MAX_SAFE_INTEGER / selected.value.cost_quantity),
-        Math.floor(Number.MAX_SAFE_INTEGER / selected.value.reward_quantity),
-      )
-    : 1,
+  selected.value ? maxExchangeUnits(selected.value, balance.value, !!pending.value) : 1,
 )
 const valid = computed(
   () =>
@@ -56,21 +52,45 @@ const valid = computed(
     units.value >= 1 &&
     units.value <= maxUnits.value,
 )
-const balance = computed(() => rewards.balanceFor(POINTS))
-async function load() {
-  if (loading.value) return
+function exhausted(offer: RewardExchangeOffer) {
+  return offer.remaining_units === 0
+}
+function limitText(offer: RewardExchangeOffer) {
+  if (!offer.max_redemptions_per_user) return '每人兑换不限'
+  const redeemed = offer.redeemed_units ?? 0
+  const remaining = offer.remaining_units ?? Math.max(0, offer.max_redemptions_per_user - redeemed)
+  return `已兑换 ${redeemed} / ${offer.max_redemptions_per_user} 份，剩余 ${remaining} 份`
+}
+let loadPromise: Promise<boolean> | undefined
+function load(): Promise<boolean> {
+  if (loadPromise) return loadPromise
   loading.value = true
   error.value = ''
-  try {
-    offers.value = await api.offers()
-    loaded.value = true
-  } catch (err) {
-    error.value = rewardError(err)
-  } finally {
-    loading.value = false
-  }
+  loadPromise = (async () => {
+    try {
+      offers.value = await api.offers()
+      // Unresolved requests retain their original confirmation snapshot.
+      if (selected.value && !pending.value)
+        selected.value = offers.value.find((offer) => offer.id === selected.value?.id)
+      loaded.value = true
+      return true
+    } catch (err) {
+      error.value = rewardError(err)
+      return false
+    } finally {
+      loading.value = false
+      loadPromise = undefined
+    }
+  })()
+  return loadPromise
+}
+async function refreshAfterExchange() {
+  // An already-running read may precede the committed order.
+  if (loadPromise) await loadPromise
+  await load()
 }
 function choose(offer: RewardExchangeOffer) {
+  if (exhausted(offer)) return
   if (pending.value) {
     open.value = true
     return
@@ -90,6 +110,7 @@ async function completed(order: RewardExchangeOrder) {
   pending.value = undefined
   message.success('兑换完成，奖励已到账')
   emit('changed')
+  void refreshAfterExchange()
 }
 async function submit() {
   if (busy.value || !selected.value || !valid.value) return
@@ -111,7 +132,14 @@ async function submit() {
     } catch {
       error.value = rewardError(err)
       const status = (err as { response?: { status: number } }).response?.status
+      const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code
       if (status && [400, 401, 403, 404, 409, 422].includes(status)) pending.value = undefined
+      if (code === 'exchange_limit_reached') {
+        const refreshed = await refreshPrice()
+        error.value = refreshed
+          ? '本次兑换份数超过剩余额度，请根据最新额度重新确认。'
+          : '本次兑换份数超过剩余额度，刷新失败：' + error.value
+      }
     }
   } finally {
     busy.value = false
@@ -137,6 +165,7 @@ function acceptConfirmedOrder(order: RewardExchangeOrder) {
   result.value = order
   pending.value = undefined
   error.value = ''
+  void refreshAfterExchange()
 }
 function viewOrders() {
   open.value = false
@@ -152,11 +181,10 @@ watch(
   { immediate: true },
 )
 async function refreshPrice() {
-  if (pending.value || loading.value) return
-  const id = selected.value?.id
-  await load()
-  selected.value = offers.value.find((o) => o.id === id)
+  if (pending.value) return false
+  if (!(await load())) return false
   units.value = 1
+  return true
 }
 onMounted(() => {
   try {
@@ -186,8 +214,11 @@ onMounted(() => {
         <article v-for="offer in offers" :key="offer.id">
           <h3>{{ offer.name }}</h3>
           <p>{{ offer.description }}</p>
-          <strong>{{ offer.cost_quantity }} 积分 → {{ offer.reward_quantity }} 次剧情改写</strong
-          ><NButton type="primary" @click="choose(offer)">兑换</NButton>
+          <strong>{{ offer.cost_quantity }} 积分 → {{ offer.reward_quantity }} 次剧情改写</strong>
+          <p>{{ limitText(offer) }}</p>
+          <NButton type="primary" :disabled="exhausted(offer)" @click="choose(offer)">{{
+            exhausted(offer) ? '已达上限' : '兑换'
+          }}</NButton>
         </article>
       </div>
       <NEmpty v-if="!loading && !error && !offers.length" description="暂无可兑换商品"
@@ -218,11 +249,15 @@ onMounted(() => {
         <p>{{ selected.description }}</p>
         <p v-if="valid">兑换后预计积分：{{ balance - selected.cost_quantity * (units ?? 1) }}</p>
         <p>当前余额：{{ balance }} 积分</p>
+        <p v-if="selected.max_redemptions_per_user > 0">
+          {{ limitText(selected) }}
+        </p>
+        <p v-else>每人兑换不限</p>
         <NInputNumber
           v-model:value="units"
-          :disabled="busy || !!pending"
+          :disabled="busy || !!pending || maxUnits === 0"
           :min="1"
-          :max="maxUnits"
+          :max="Math.max(1, maxUnits)"
           :precision="0"
           aria-label="兑换份数"
         />

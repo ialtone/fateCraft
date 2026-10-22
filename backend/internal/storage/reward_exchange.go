@@ -13,21 +13,23 @@ import (
 )
 
 var (
-	ErrExchangeChanged     = errors.New("兑换商品已变更，请刷新后重新确认")
-	ErrExchangeUnavailable = errors.New("兑换商品当前不可用")
+	ErrExchangeChanged      = errors.New("兑换商品已变更，请刷新后重新确认")
+	ErrExchangeUnavailable  = errors.New("兑换商品当前不可用")
+	ErrExchangeLimitReached = errors.New("本次兑换份数超过该商品每人剩余额度")
 )
 
 type RewardExchangeOffer struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	CostQuantity   int64     `json:"cost_quantity"`
-	RewardQuantity int64     `json:"reward_quantity"`
-	Enabled        bool      `json:"enabled"`
-	Revision       int64     `json:"revision"`
-	SortOrder      int       `json:"sort_order"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                    uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Name                  string    `json:"name"`
+	Description           string    `json:"description"`
+	CostQuantity          int64     `json:"cost_quantity"`
+	RewardQuantity        int64     `json:"reward_quantity"`
+	MaxRedemptionsPerUser int64     `json:"max_redemptions_per_user"`
+	Enabled               bool      `json:"enabled"`
+	Revision              int64     `json:"revision"`
+	SortOrder             int       `json:"sort_order"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 type RewardExchangeRevision struct {
@@ -70,11 +72,45 @@ func (r *RewardRepository) ListExchangeOffers(ctx context.Context, admin bool) (
 	return rows, err
 }
 
+// ExchangeUsage 返回玩家在每个商品上的累计已兑换份数；统计跨越商品所有历史修订。
+func (r *RewardRepository) ExchangeUsage(ctx context.Context, player uuid.UUID) (map[uuid.UUID]int64, error) {
+	rows := []struct {
+		OfferID uuid.UUID
+		Units   int64
+	}{}
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT offer_id, LEAST(COALESCE(SUM(units), 0), ?)::bigint AS units FROM reward_exchange_orders WHERE player_id = ? GROUP BY offer_id`,
+		MaxRewardQuantity+1, player,
+	).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	usage := make(map[uuid.UUID]int64, len(rows))
+	for _, row := range rows {
+		usage[row.OfferID] = row.Units
+	}
+	return usage, nil
+}
+
+// exchangeRedeemed 在事务内统计玩家对某商品的已成功兑换份数。
+// 结果最多截断到 MaxRewardQuantity+1，既避免 SUM 溢出，也足以判定超出任何合法上限。
+func (r *RewardRepository) exchangeRedeemed(ctx context.Context, player, offer uuid.UUID) (int64, error) {
+	var redeemed int64
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT LEAST(COALESCE(SUM(units), 0), ?)::bigint FROM reward_exchange_orders WHERE player_id = ? AND offer_id = ?`,
+		MaxRewardQuantity+1, player, offer,
+	).Scan(&redeemed).Error
+	return redeemed, err
+}
+
 func (r *RewardRepository) SaveExchangeOffer(ctx context.Context, actor uuid.UUID, id uuid.UUID, wanted RewardExchangeOffer) (*RewardExchangeOffer, error) {
 	if strings.TrimSpace(wanted.Name) == "" || len(wanted.Name) > 128 || len(wanted.Description) > 4000 || wanted.SortOrder < -2147483648 || wanted.SortOrder > 2147483647 {
 		return nil, ErrExchangeUnavailable
 	}
 	if wanted.CostQuantity < 1 || wanted.CostQuantity > MaxRewardQuantity || wanted.RewardQuantity < 1 || wanted.RewardQuantity > MaxRewardQuantity {
+		return nil, ErrRewardQuantity
+	}
+	if wanted.MaxRedemptionsPerUser < 0 || wanted.MaxRedemptionsPerUser > MaxRewardQuantity {
 		return nil, ErrRewardQuantity
 	}
 	err := r.WithTx(ctx, func(tx *RewardRepository) error {
@@ -162,6 +198,19 @@ func (r *RewardRepository) Exchange(ctx context.Context, player uuid.UUID, in Re
 		}
 		if offer.CostQuantity < 1 || offer.RewardQuantity < 1 || in.Units > MaxRewardQuantity/offer.CostQuantity || in.Units > MaxRewardQuantity/offer.RewardQuantity {
 			return ErrRewardQuantity
+		}
+		if offer.MaxRedemptionsPerUser < 0 || offer.MaxRedemptionsPerUser > MaxRewardQuantity {
+			return ErrExchangeUnavailable
+		}
+		if offer.MaxRedemptionsPerUser > 0 {
+			// 玩家行锁已覆盖同一账号的并发兑换，这里读到的是该账号最新已提交的成功订单。
+			redeemed, err := tx.exchangeRedeemed(ctx, player, offer.ID)
+			if err != nil {
+				return err
+			}
+			if redeemed < 0 || redeemed > offer.MaxRedemptionsPerUser || in.Units > offer.MaxRedemptionsPerUser-redeemed {
+				return ErrExchangeLimitReached
+			}
 		}
 		if err := tx.LockBalances(ctx, player, []string{PointsKey, MessageRewriteCreditKey}); err != nil {
 			return err

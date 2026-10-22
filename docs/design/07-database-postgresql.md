@@ -277,7 +277,7 @@ Campaign 来源为 `campaign_outcome`，source_id 为 Campaign ID，metadata 保
 
 `registration_reward_rules` 只追加两项赠送数量的修订，最新 ID 生效，初始为 0 积分/10 次。`users.registration_reward_revision` 引用注册实际采用的规则，即使两项为 0 也保存，用于防止重试套用新规则。
 
-`reward_exchange_offers` 固定积分支付、改写次数所得，保存当前配置和 revision。`reward_exchange_revisions` 保存不可变配置与操作者，初始商品为 100 积分兑换 1 次，系统初始化 actor_id 为空。`reward_exchange_orders` 引用商品修订、支付和所得两条 ledger，保存单价、份数和合计快照，request_id 唯一。注册修订、商品修订、订单都拒绝 UPDATE/DELETE。扣积分、加次数与订单同事务；没有兑换退款接口。
+`reward_exchange_offers` 固定积分支付、改写次数所得，保存当前配置、每人兑换上限和 revision。`max_redemptions_per_user` 非空，默认 0 表示不限，CHECK 限制为 0–9007199254740991。`reward_exchange_revisions` 保存不可变配置与操作者，快照包含该字段；初始商品为 100 积分兑换 1 次、每人兑换不限，系统初始化 actor_id 为空。`reward_exchange_orders` 引用商品修订、支付和所得两条 ledger，保存单价、份数和合计快照，request_id 唯一。额度直接汇总该玩家该商品成功订单的 `units`，不维护可漂移的计数器；`(player_id, offer_id) INCLUDE (units)` 支撑额度查询。注册修订、商品修订、订单都拒绝 UPDATE/DELETE。扣积分、加次数与订单同事务；没有兑换退款接口。
 
 账本、订单和管理审计按 (created_at,id) 游标分页。账本可筛选用户、项目、来源和时间；用户搜索保持字面匹配与分页索引。数字业务上限为 9007199254740991。详见 [22 奖励管理](22-reward-management-and-exchange.md)。
 

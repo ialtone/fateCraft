@@ -20,6 +20,8 @@ func TestRewardRequestValidationBeforeDatabase(t *testing.T) {
 	}{
 		{"decimal exchange", `{"units":1.5}`, s.exchangeReward},
 		{"overflow exchange", `{"units":999999999999999999999}`, s.exchangeReward},
+		{"decimal exchange limit", `{"max_redemptions_per_user":1.5}`, s.saveExchangeOffer},
+		{"overflow exchange limit", `{"max_redemptions_per_user":999999999999999999999}`, s.saveExchangeOffer},
 		{"old asset field", `{"cost_definition_id":"old"}`, s.saveExchangeOffer},
 		{"old claim field", `{"delivery_mode":"claim"}`, s.createAdminRewardGrant},
 		{"decimal grant", `{"quantity":1.5}`, s.createAdminRewardGrant},
@@ -46,7 +48,7 @@ func TestRewardErrorsExposeStableCodes(t *testing.T) {
 	}{
 		{storage.ErrExchangeChanged, "exchange_changed", 409}, {storage.ErrRewardKey, "invalid_reward_key", 400},
 		{storage.ErrExchangeUnavailable, "exchange_unavailable", 400}, {storage.ErrInsufficientReward, "insufficient_balance", 400},
-		{storage.ErrRewardRequestConflict, "request_conflict", 409}, {storage.ErrRewardAdminRequired, "admin_required", 403},
+		{storage.ErrExchangeLimitReached, "exchange_limit_reached", 409}, {storage.ErrRewardRequestConflict, "request_conflict", 409}, {storage.ErrRewardAdminRequired, "admin_required", 403},
 	} {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)

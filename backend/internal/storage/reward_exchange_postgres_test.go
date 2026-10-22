@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -126,4 +127,204 @@ func TestPostgresExchangeOrderFailureRollsBackBothBalances(t *testing.T) {
 	}
 	checkRewardBalance(t, db, player.ID, PointsKey, 100)
 	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 0)
+}
+
+func saveExchangeLimit(t *testing.T, repo *RewardRepository, actor User, offer RewardExchangeOffer, limit int64) *RewardExchangeOffer {
+	t.Helper()
+	offer.MaxRedemptionsPerUser = limit
+	saved, err := repo.SaveExchangeOffer(context.Background(), actor.ID, offer.ID, offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return saved
+}
+
+func TestPostgresExchangePerUserLimitCountsUnitsAcrossRevisions(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	ctx := context.Background()
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 1000)); err != nil {
+		t.Fatal(err)
+	}
+	offers, err := repo.ListExchangeOffers(ctx, false)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("seed offer: %+v %v", offers, err)
+	}
+	if offers[0].MaxRedemptionsPerUser != 0 {
+		t.Fatalf("seed limit = %d, want unlimited", offers[0].MaxRedemptionsPerUser)
+	}
+	offer := saveExchangeLimit(t, repo, actor, offers[0], 3)
+	first := RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 2}
+	order, err := repo.Exchange(ctx, player.ID, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 2}); !errors.Is(err, ErrExchangeLimitReached) {
+		t.Fatalf("over-limit exchange: %v", err)
+	}
+	checkRewardBalance(t, db, player.ID, PointsKey, 800)
+	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 2)
+	replay, err := repo.Exchange(ctx, player.ID, first)
+	if err != nil || replay.ID != order.ID {
+		t.Fatalf("replay after limit: %+v %v", replay, err)
+	}
+	if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 1}); err != nil {
+		t.Fatal(err)
+	}
+	var orders int64
+	if err := db.Model(&RewardExchangeOrder{}).Where("player_id = ?", player.ID).Count(&orders).Error; err != nil {
+		t.Fatal(err)
+	}
+	if orders != 2 {
+		t.Fatalf("orders=%d, want 2", orders)
+	}
+	offer = saveExchangeLimit(t, repo, actor, *offer, 2)
+	if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 1}); !errors.Is(err, ErrExchangeLimitReached) {
+		t.Fatalf("lowered limit below redeemed: %v", err)
+	}
+	offer = saveExchangeLimit(t, repo, actor, *offer, 0)
+	if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 1}); err != nil {
+		t.Fatalf("unlimited after raised config: %v", err)
+	}
+	usage, err := repo.ExchangeUsage(ctx, player.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage[offer.ID] != 4 {
+		t.Fatalf("redeemed units = %d, want 4", usage[offer.ID])
+	}
+	checkRewardBalance(t, db, player.ID, PointsKey, 600)
+	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 4)
+}
+
+func TestPostgresExchangePerUserLimitIsolatedByOfferAndPlayer(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	ctx := context.Background()
+	other := User{ID: uuid.New(), Username: "other", DisplayName: "另一玩家", Role: UserRoleUser, Status: UserStatusActive}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, user := range []User{player, other} {
+		if _, err := repo.AdminGrant(ctx, actor.ID, user.ID, grantRequest(PointsKey, 1000)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	offers, err := repo.ListExchangeOffers(ctx, false)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("seed offer: %+v %v", offers, err)
+	}
+	first := saveExchangeLimit(t, repo, actor, offers[0], 1)
+	second, err := repo.SaveExchangeOffer(ctx, actor.ID, uuid.Nil, RewardExchangeOffer{
+		Name: "第二个商品", Description: "", CostQuantity: 100, RewardQuantity: 1,
+		MaxRedemptionsPerUser: 1, Enabled: true, SortOrder: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, offer := range []RewardExchangeOffer{*first, *second} {
+		if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: first.ID, Revision: first.Revision, Units: 1}); !errors.Is(err, ErrExchangeLimitReached) {
+		t.Fatalf("same offer exceeded: %v", err)
+	}
+	if _, err := repo.Exchange(ctx, other.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: first.ID, Revision: first.Revision, Units: 1}); err != nil {
+		t.Fatalf("other player quota should be independent: %v", err)
+	}
+	usage, err := repo.ExchangeUsage(ctx, player.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage[first.ID] != 1 || usage[second.ID] != 1 {
+		t.Fatalf("player usage = %+v", usage)
+	}
+	otherUsage, err := repo.ExchangeUsage(ctx, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if otherUsage[first.ID] != 1 || otherUsage[second.ID] != 0 {
+		t.Fatalf("other usage = %+v", otherUsage)
+	}
+}
+
+func TestPostgresExchangePerUserLimitConcurrentLastUnit(t *testing.T) {
+	db, repo, actor, player := rewardFixture(t)
+	ctx := context.Background()
+	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 1000)); err != nil {
+		t.Fatal(err)
+	}
+	offers, err := repo.ListExchangeOffers(ctx, false)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("seed offer: %+v %v", offers, err)
+	}
+	offer := saveExchangeLimit(t, repo, actor, offers[0], 1)
+	var success, limited atomic.Int64
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 1})
+			switch {
+			case err == nil:
+				success.Add(1)
+			case errors.Is(err, ErrExchangeLimitReached):
+				limited.Add(1)
+			default:
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if success.Load() != 1 || limited.Load() != 1 {
+		t.Fatalf("success=%d limited=%d, want 1/1", success.Load(), limited.Load())
+	}
+	checkRewardBalance(t, db, player.ID, PointsKey, 900)
+	checkRewardBalance(t, db, player.ID, MessageRewriteCreditKey, 1)
+	var orders int64
+	if err := db.Model(&RewardExchangeOrder{}).Where("player_id = ?", player.ID).Count(&orders).Error; err != nil {
+		t.Fatal(err)
+	}
+	if orders != 1 {
+		t.Fatalf("orders=%d, want 1", orders)
+	}
+}
+
+func TestPostgresExchangeOfferLimitValidationAndRevision(t *testing.T) {
+	_, repo, actor, _ := rewardFixture(t)
+	ctx := context.Background()
+	offers, err := repo.ListExchangeOffers(ctx, true)
+	if err != nil || len(offers) != 1 {
+		t.Fatalf("seed offer: %+v %v", offers, err)
+	}
+	offer := offers[0]
+	for _, invalid := range []int64{-1, MaxRewardQuantity + 1} {
+		candidate := offer
+		candidate.MaxRedemptionsPerUser = invalid
+		if _, err := repo.SaveExchangeOffer(ctx, actor.ID, offer.ID, candidate); !errors.Is(err, ErrRewardQuantity) {
+			t.Fatalf("limit %d accepted: %v", invalid, err)
+		}
+	}
+	saved := saveExchangeLimit(t, repo, actor, offer, 5)
+	revisions, err := repo.ExchangeRevisions(ctx, saved.ID)
+	if err != nil || len(revisions) != 2 {
+		t.Fatalf("revisions=%d err=%v", len(revisions), err)
+	}
+	if got, ok := revisions[0].Snapshot["max_redemptions_per_user"].(float64); !ok || int64(got) != 5 {
+		t.Fatalf("saved snapshot limit = %v", revisions[0].Snapshot["max_redemptions_per_user"])
+	}
+	if got, ok := revisions[1].Snapshot["max_redemptions_per_user"].(float64); !ok || int64(got) != 0 {
+		t.Fatalf("seed snapshot limit = %v", revisions[1].Snapshot["max_redemptions_per_user"])
+	}
+	stale := *saved
+	stale.Revision--
+	stale.MaxRedemptionsPerUser = 6
+	if _, err := repo.SaveExchangeOffer(ctx, actor.ID, saved.ID, stale); !errors.Is(err, ErrExchangeChanged) {
+		t.Fatalf("stale revision accepted: %v", err)
+	}
 }

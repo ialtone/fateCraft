@@ -21,6 +21,8 @@ func rewardFail(c *gin.Context, err error) {
 		status, code = http.StatusConflict, "exchange_changed"
 	case errors.Is(err, storage.ErrExchangeUnavailable):
 		code = "exchange_unavailable"
+	case errors.Is(err, storage.ErrExchangeLimitReached):
+		status, code = http.StatusConflict, "exchange_limit_reached"
 	case errors.Is(err, storage.ErrRewardRequestConflict):
 		status, code = http.StatusConflict, "request_conflict"
 	case errors.Is(err, storage.ErrRewardState):
