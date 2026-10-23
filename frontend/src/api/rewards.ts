@@ -5,6 +5,10 @@ import type {
   RewardExchangeRequest,
   RewardExchangeOrder,
   RewardExchangeRevision,
+  RewardExchangeStock,
+  RewardExchangeTicket,
+  PointsCDKBatch,
+  PointsCDK,
   RewardRuleCatalogEntry,
   RewardGrantRequest,
   RegistrationRewardRule,
@@ -62,6 +66,8 @@ export const rewardExchangeApi = {
     const {
       name,
       description,
+      kind,
+      tutorial,
       cost_quantity,
       reward_quantity,
       max_redemptions_per_user,
@@ -72,6 +78,8 @@ export const rewardExchangeApi = {
     const body = {
       name,
       description,
+      kind,
+      tutorial,
       cost_quantity,
       reward_quantity,
       max_redemptions_per_user,
@@ -100,4 +108,58 @@ export const rewardExchangeApi = {
     http
       .get<{ revisions: RewardExchangeRevision[] }>(`/admin/reward-exchange/offers/${id}/revisions`)
       .then((r) => r.data.revisions),
+  stock: (id: string, params: { status?: string; code?: string; offset?: number }) =>
+    http
+      .get<{ stock: RewardExchangeStock[]; has_more: boolean }>(
+        `/admin/reward-exchange/offers/${id}/stock`,
+        { params: { ...params, limit: 100 } },
+      )
+      .then((r) => r.data),
+  addStock: (id: string, body: { codes?: string; quantity?: number }) =>
+    http
+      .post<{ added: number }>(`/admin/reward-exchange/offers/${id}/stock`, body)
+      .then((r) => r.data.added),
+  removeStock: (id: string, ids: string[]) =>
+    http
+      .post<{ removed: number }>(`/admin/reward-exchange/offers/${id}/stock/remove`, { ids })
+      .then((r) => r.data.removed),
+  tickets: (admin = false, status?: string) =>
+    http
+      .get<{ tickets: RewardExchangeTicket[]; tickets_enabled: boolean }>(
+        `${admin ? '/admin' : '/me'}/reward-exchange/tickets`,
+        { params: { status: status || undefined, limit: 100 } },
+      )
+      .then((r) => r.data),
+  openTicket: (orderID: string, body: string) =>
+    http
+      .post<RewardExchangeTicket>(`/me/reward-exchange/orders/${orderID}/ticket`, { body })
+      .then((r) => r.data),
+  resolveTicket: (id: string, approve: boolean, reason: string) =>
+    http
+      .post<RewardExchangeTicket>(`/admin/reward-exchange/tickets/${id}/resolve`, {
+        approve,
+        reason,
+      })
+      .then((r) => r.data),
+  setTicketsEnabled: (enabled: boolean) =>
+    http.put('/admin/reward-exchange/tickets-enabled', { enabled }),
+}
+
+export const pointsCDKApi = {
+  redeem: (code: string) =>
+    http.post<{ points: number }>('/me/points-cdk/redeem', { code }).then((r) => r.data.points),
+  batches: () =>
+    http
+      .get<{ batches: PointsCDKBatch[]; expiry_days: number[] }>('/admin/points-cdk/batches', {
+        params: { limit: 100 },
+      })
+      .then((r) => r.data),
+  generate: (body: { name: string; points: number; quantity: number; days: number }) =>
+    http
+      .post<{ batch: PointsCDKBatch; codes: PointsCDK[] }>('/admin/points-cdk/batches', body)
+      .then((r) => r.data),
+  codes: (id: string) =>
+    http
+      .get<{ codes: PointsCDK[] }>(`/admin/points-cdk/batches/${id}/codes`)
+      .then((r) => r.data.codes),
 }

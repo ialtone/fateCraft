@@ -496,7 +496,10 @@ export const authApi = {
 }
 
 export const setupApi = {
-  status: () => http.get<{ initialized: boolean }>('/setup/status').then((r) => r.data),
+  status: () =>
+    http
+      .get<{ initialized: boolean; installable: boolean; reason?: string }>('/setup/status')
+      .then((r) => r.data),
   initialize: (body: { email: string; password: string; username: string; confirm: boolean }) =>
     http
       .post<{ initialized: boolean; user: AuthUser }>('/setup/initialize', body)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,6 +13,7 @@ import (
 func TestPostgresDifferentExchangeRequestsCannotOverspend(t *testing.T) {
 	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
+	addStock(t, db, seedOfferID, 50)
 	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 100)); err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +42,7 @@ func TestPostgresDifferentExchangeRequestsCannotOverspend(t *testing.T) {
 func TestPostgresExchangeAtomicIdentityAndPrice(t *testing.T) {
 	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
+	addStock(t, db, seedOfferID, 50)
 	offers, err := repo.ListExchangeOffers(ctx, false)
 	if err != nil || len(offers) != 1 {
 		t.Fatalf("seed offer: %+v %v", offers, err)
@@ -89,7 +92,7 @@ func TestPostgresExchangeAtomicIdentityAndPrice(t *testing.T) {
 	if _, err := repo.Exchange(ctx, player.ID, in); err != nil {
 		t.Fatalf("original replay: %v", err)
 	}
-	if _, err := repo.ReverseAdminGrant(ctx, actor.ID, order.RewardLedgerID, uuid.New(), "不能单边撤回"); !errors.Is(err, ErrRewardReversal) {
+	if _, err := repo.ReverseAdminGrant(ctx, actor.ID, *order.RewardLedgerID, uuid.New(), "不能单边撤回"); !errors.Is(err, ErrRewardReversal) {
 		t.Fatal(err)
 	}
 	var payment RewardLedgerEntry
@@ -112,6 +115,7 @@ func TestPostgresExchangeAtomicIdentityAndPrice(t *testing.T) {
 func TestPostgresExchangeOrderFailureRollsBackBothBalances(t *testing.T) {
 	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
+	addStock(t, db, seedOfferID, 50)
 	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 100)); err != nil {
 		t.Fatal(err)
 	}
@@ -142,6 +146,7 @@ func saveExchangeLimit(t *testing.T, repo *RewardRepository, actor User, offer R
 func TestPostgresExchangePerUserLimitCountsUnitsAcrossRevisions(t *testing.T) {
 	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
+	addStock(t, db, seedOfferID, 50)
 	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 1000)); err != nil {
 		t.Fatal(err)
 	}
@@ -199,6 +204,7 @@ func TestPostgresExchangePerUserLimitCountsUnitsAcrossRevisions(t *testing.T) {
 func TestPostgresExchangePerUserLimitIsolatedByOfferAndPlayer(t *testing.T) {
 	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
+	addStock(t, db, seedOfferID, 50)
 	other := User{ID: uuid.New(), Username: "other", DisplayName: "另一玩家", Role: UserRoleUser, Status: UserStatusActive}
 	if err := db.Create(&other).Error; err != nil {
 		t.Fatal(err)
@@ -214,12 +220,13 @@ func TestPostgresExchangePerUserLimitIsolatedByOfferAndPlayer(t *testing.T) {
 	}
 	first := saveExchangeLimit(t, repo, actor, offers[0], 1)
 	second, err := repo.SaveExchangeOffer(ctx, actor.ID, uuid.Nil, RewardExchangeOffer{
-		Name: "第二个商品", Description: "", CostQuantity: 100, RewardQuantity: 1,
+		Name: "第二个商品", Description: "", Kind: ExchangeKindReward, CostQuantity: 100, RewardQuantity: 1,
 		MaxRedemptionsPerUser: 1, Enabled: true, SortOrder: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	addStock(t, db, second.ID, 5)
 	for _, offer := range []RewardExchangeOffer{*first, *second} {
 		if _, err := repo.Exchange(ctx, player.ID, RewardExchangeRequest{RequestID: uuid.New(), OfferID: offer.ID, Revision: offer.Revision, Units: 1}); err != nil {
 			t.Fatal(err)
@@ -250,6 +257,7 @@ func TestPostgresExchangePerUserLimitIsolatedByOfferAndPlayer(t *testing.T) {
 func TestPostgresExchangePerUserLimitConcurrentLastUnit(t *testing.T) {
 	db, repo, actor, player := rewardFixture(t)
 	ctx := context.Background()
+	addStock(t, db, seedOfferID, 50)
 	if _, err := repo.AdminGrant(ctx, actor.ID, player.ID, grantRequest(PointsKey, 1000)); err != nil {
 		t.Fatal(err)
 	}
@@ -326,5 +334,14 @@ func TestPostgresExchangeOfferLimitValidationAndRevision(t *testing.T) {
 	stale.MaxRedemptionsPerUser = 6
 	if _, err := repo.SaveExchangeOffer(ctx, actor.ID, saved.ID, stale); !errors.Is(err, ErrExchangeChanged) {
 		t.Fatalf("stale revision accepted: %v", err)
+	}
+}
+
+var seedOfferID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+func addStock(t *testing.T, db *gorm.DB, offer uuid.UUID, n int) {
+	t.Helper()
+	if err := db.Exec(`INSERT INTO reward_exchange_stock (id, offer_id, code) SELECT gen_random_uuid(), ?, CASE WHEN o.kind = 'cdk' THEN 'CDK-' || g ELSE '' END FROM generate_series(1, ?) g, reward_exchange_offers o WHERE o.id = ?`, offer, n, offer).Error; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -40,7 +40,7 @@ const (
 
 var (
 	ErrUnauthenticated           = errors.New("未登录")
-	ErrEmailAuthDisabled         = errors.New("邮箱登录未启用")
+	ErrEmailAuthDisabled         = errors.New("管理员已关闭本地密码登录，请使用 LinuxDo 登录")
 	ErrEmailRegistrationDisabled = errors.New("邮箱注册未启用")
 	ErrEmailVerificationDisabled = errors.New("邮箱验证码未启用")
 	ErrInvalidVerificationCode   = errors.New("邮箱验证码无效或已失效")
@@ -91,6 +91,7 @@ type Repository interface {
 	CreateInvitationCode(context.Context, *storage.InvitationCode) error
 	UpdateInvitationCode(context.Context, *storage.InvitationCode) error
 	InstallationComplete(context.Context) (bool, error)
+	SetupBlocker(context.Context) error
 	InitializeOwner(context.Context, *storage.User) (*storage.User, error)
 	ListUsers(context.Context, int, int, string) ([]storage.User, error)
 	UpdateUserRole(context.Context, uuid.UUID, uuid.UUID, string) (*storage.User, error)
@@ -510,6 +511,10 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (*storage.U
 
 func (s *Service) InstallationComplete(ctx context.Context) (bool, error) {
 	return s.repo.InstallationComplete(ctx)
+}
+
+func (s *Service) SetupBlocker(ctx context.Context) error {
+	return s.repo.SetupBlocker(ctx)
 }
 
 // InitializeOwner 在空库上创建第一个本地账号并使其成为唯一 owner。

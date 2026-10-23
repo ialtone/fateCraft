@@ -9,13 +9,6 @@ export interface ChatMessage extends DisplayMessage {
   reasoningExpanded?: boolean
 }
 
-// 时间线使用事件驱动跟随流式内容，避免对整个 messages 数组建立持续 watch。
-export const CHAT_CONTENT_CHANGED_EVENT = 'fatecraft:chat-content-changed'
-
-function notifyContentChanged() {
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CHAT_CONTENT_CHANGED_EVENT))
-}
-
 let tempSeq = 0
 
 // 单页拉取数量；首页与向前翻页共用。返回满页即认为可能还有更早的历史。
@@ -38,7 +31,6 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = loaded
     hasEarlier.value = loaded.length >= PAGE_SIZE
     loadingEarlier.value = false
-    notifyContentChanged()
   }
 
   // 向前加载一页更早的历史并插入列表头部；滚动锚定由时间线组件负责。
@@ -90,14 +82,12 @@ export const useChatStore = defineStore('chat', () => {
       metadata: {},
       created_at: new Date().toISOString(),
     })
-    notifyContentChanged()
     return id
   }
 
   // 发送失败时移除乐观插入的消息。
   function removeById(id: string) {
     messages.value = messages.value.filter((m) => m.id !== id)
-    notifyContentChanged()
   }
 
   // 清理所有未被服务端认领的乐观用户消息（收到 error 事件时调用）。
@@ -108,7 +98,6 @@ export const useChatStore = defineStore('chat', () => {
   // 占位）再进入生成/报错，error 到达时仍是 temp- 前缀的用户消息必然已被拒绝。
   function removeStaleTempUsers() {
     messages.value = messages.value.filter((m) => !(m.id.startsWith('temp-') && m.type === 'user'))
-    notifyContentChanged()
   }
 
   // upsert 一条服务端持久化消息；用户消息会认领最早的乐观占位。
@@ -116,7 +105,6 @@ export const useChatStore = defineStore('chat', () => {
     const idx = messages.value.findIndex((m) => m.id === msg.id)
     if (idx >= 0) {
       messages.value[idx] = { ...msg }
-      notifyContentChanged()
       return
     }
     if (msg.type === 'user') {
@@ -125,12 +113,10 @@ export const useChatStore = defineStore('chat', () => {
       const tempIdx = messages.value.findIndex((m) => m.id.startsWith('temp-') && m.type === 'user')
       if (tempIdx >= 0) {
         messages.value[tempIdx] = { ...msg }
-        notifyContentChanged()
         return
       }
     }
     messages.value.push({ ...msg })
-    notifyContentChanged()
   }
 
   function beginStream(id: string) {
@@ -148,7 +134,6 @@ export const useChatStore = defineStore('chat', () => {
         reasoningExpanded: false,
       })
     }
-    notifyContentChanged()
   }
 
   function replaceBranch(invalidatedIds: string[], updated?: DisplayMessage) {
@@ -159,7 +144,6 @@ export const useChatStore = defineStore('chat', () => {
       if (index >= 0) messages.value[index] = { ...updated }
       else messages.value.push({ ...updated })
     }
-    notifyContentChanged()
   }
 
   // 增量到达时若找不到对应占位（重连 resync 整表重载冲掉、或错过了
@@ -177,7 +161,6 @@ export const useChatStore = defineStore('chat', () => {
     const msg = ensureStreamingMessage(id)
     if (msg) {
       msg.markdown += delta
-      notifyContentChanged()
     }
   }
 
@@ -187,7 +170,6 @@ export const useChatStore = defineStore('chat', () => {
     const msg = messages.value.find((m) => m.id === id)
     if (!msg || !msg.streaming) return
     msg.markdown = ''
-    notifyContentChanged()
   }
 
   // 思考输出期间保持展开；正文首个增量到达时由 collapseReasoning 收起。
@@ -200,7 +182,6 @@ export const useChatStore = defineStore('chat', () => {
     // 部分兼容网关只在终止响应事件中提供可读 reasoning。正文已经开始时
     // 保持折叠，避免 late reasoning 事件重新打开面板。
     msg.reasoningExpanded = !textAlreadyStarted
-    notifyContentChanged()
   }
 
   function collapseReasoning(id: string) {

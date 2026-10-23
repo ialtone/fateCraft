@@ -20,8 +20,19 @@ func (s *Server) getSetupStatus(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	// installable 与 InitializeOwner 同一判定：未写安装标记但已有用户时不可安装，并给出原因。
+	status := gin.H{"initialized": complete, "installable": false}
+	switch blocker := s.auth.SetupBlocker(c.Request.Context()); {
+	case blocker == nil:
+		status["installable"] = true
+	case errors.Is(blocker, storage.ErrInstallationHasUsers):
+		status["reason"] = blocker.Error() + "。数据库中已有账号但未记录安装完成，请清空数据库后重新安装，或由运维修复安装标记。"
+	case !errors.Is(blocker, storage.ErrInstallationComplete):
+		fail(c, blocker)
+		return
+	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(http.StatusOK, gin.H{"initialized": complete})
+	c.JSON(http.StatusOK, status)
 }
 
 // initializeSetup 是公开接口，但存储层事务只接受完全空的数据库且只能成功一次：

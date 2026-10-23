@@ -22,6 +22,7 @@ export const useAuthStore = defineStore('auth', () => {
   const config = ref<AuthConfig>({ ...defaultConfig })
   const initialized = ref(false)
   const installationInitialized = ref<boolean | null>(null)
+  const setupBlockedReason = ref('')
   const loading = ref(false)
   let initialization: Promise<void> | null = null
 
@@ -37,8 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
       .then(([configResult, userResult, setupResult]) => {
         if (configResult.status === 'fulfilled') config.value = configResult.value
         if (userResult.status === 'fulfilled') user.value = userResult.value
-        if (setupResult.status === 'fulfilled')
-          installationInitialized.value = setupResult.value.initialized
+        if (setupResult.status === 'fulfilled') applySetupStatus(setupResult.value)
       })
       .finally(() => {
         initialized.value = true
@@ -57,7 +57,17 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function refreshInstallation() {
-    installationInitialized.value = (await setupApi.status()).initialized
+    applySetupStatus(await setupApi.status())
+  }
+
+  function applySetupStatus(status: {
+    initialized: boolean
+    installable: boolean
+    reason?: string
+  }) {
+    installationInitialized.value = status.initialized
+    setupBlockedReason.value =
+      status.initialized || status.installable ? '' : status.reason || '当前实例不可安装'
   }
 
   async function refreshUser() {
@@ -124,6 +134,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     config,
     initialized,
+    setupBlockedReason,
     installationInitialized,
     loading,
     authenticated,

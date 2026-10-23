@@ -426,7 +426,9 @@ func authFail(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, authservice.ErrUnauthenticated), errors.Is(err, authservice.ErrInvalidCredentials):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-	case errors.Is(err, authservice.ErrEmailAuthDisabled), errors.Is(err, authservice.ErrEmailRegistrationDisabled), errors.Is(err, authservice.ErrEmailVerificationDisabled):
+	case errors.Is(err, authservice.ErrEmailAuthDisabled):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, authservice.ErrEmailRegistrationDisabled), errors.Is(err, authservice.ErrEmailVerificationDisabled):
 		c.JSON(http.StatusNotFound, gin.H{"error": "资源不存在"})
 	case errors.Is(err, authservice.ErrEmailInUse):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})

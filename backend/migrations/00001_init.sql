@@ -1097,6 +1097,7 @@ CREATE TABLE system_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     installation_completed_at TIMESTAMPTZ,
     roll_system_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    exchange_tickets_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     roll_difficulty_mode VARCHAR(10) NOT NULL DEFAULT 'normal' CHECK (roll_difficulty_mode IN ('easy', 'normal', 'hard')),
     detailed_llm_logging_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     detailed_llm_logging_scope VARCHAR(16) NOT NULL DEFAULT 'all' CHECK (detailed_llm_logging_scope IN ('all', 'user', 'conversation')),
@@ -1351,8 +1352,11 @@ BEGIN
  IF NOT FOUND OR original.player_id <> NEW.player_id OR original.reward_key <> NEW.reward_key OR original.quantity_delta <> -NEW.quantity_delta THEN
   RAISE EXCEPTION 'related reward entry mismatch';
  END IF;
+ IF NEW.operation = 'refund' AND original.operation = 'consume' AND original.source_type = 'reward_exchange' AND original.reward_key = 'fatecraft.points' AND NEW.source_type = 'reward_exchange_refund' THEN
+  RETURN NEW;
+ END IF;
  IF NEW.operation = 'refund' AND (original.operation <> 'consume' OR original.source_type NOT IN ('message_rewrite','message_regenerate') OR original.reward_key <> 'fatecraft.message-rewrite-credit' OR NEW.source_type <> 'message_rewrite_refund') THEN
-  RAISE EXCEPTION 'only rewrite consumption can be refunded';
+  RAISE EXCEPTION 'only rewrite or exchange consumption can be refunded';
  END IF;
  IF NEW.operation = 'reverse' AND (original.operation <> 'grant' OR original.source_type <> 'admin_grant' OR NEW.source_type <> 'admin_reversal') THEN
   RAISE EXCEPTION 'only admin grant can be reversed';
@@ -1533,6 +1537,8 @@ CREATE TABLE reward_exchange_offers (
     id UUID PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    kind VARCHAR(16) NOT NULL DEFAULT 'reward' CHECK (kind IN ('cdk', 'reward')),
+    tutorial TEXT NOT NULL DEFAULT '' CHECK (length(tutorial) <= 20000),
     cost_quantity BIGINT NOT NULL CHECK (cost_quantity BETWEEN 1 AND 9007199254740991),
     reward_quantity BIGINT NOT NULL CHECK (reward_quantity BETWEEN 1 AND 9007199254740991),
     max_redemptions_per_user BIGINT NOT NULL DEFAULT 0 CHECK (max_redemptions_per_user BETWEEN 0 AND 9007199254740991),
@@ -1566,7 +1572,7 @@ CREATE TABLE reward_exchange_orders (
     reward_quantity BIGINT NOT NULL CHECK (reward_quantity BETWEEN 1 AND 9007199254740991),
     snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot) = 'object'),
     cost_ledger_id UUID NOT NULL UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
-    reward_ledger_id UUID NOT NULL UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
+    reward_ledger_id UUID UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (offer_id, offer_revision) REFERENCES reward_exchange_revisions(offer_id, revision) ON DELETE RESTRICT
 );
@@ -1574,15 +1580,82 @@ CREATE INDEX reward_exchange_orders_player_page ON reward_exchange_orders(player
 CREATE INDEX reward_exchange_orders_player_offer ON reward_exchange_orders(player_id, offer_id) INCLUDE (units);
 CREATE INDEX reward_exchange_orders_offer_page ON reward_exchange_orders(offer_id, created_at DESC, id DESC);
 CREATE INDEX reward_exchange_orders_admin_page ON reward_exchange_orders(created_at DESC, id DESC);
+-- 每条库存记录对应一份商品；总量 = available + redeemed，剩余 = available，实时聚合不设计数器。
+CREATE TABLE reward_exchange_stock (
+    id UUID PRIMARY KEY,
+    offer_id UUID NOT NULL REFERENCES reward_exchange_offers(id) ON DELETE RESTRICT,
+    code VARCHAR(512) NOT NULL DEFAULT '',
+    status VARCHAR(16) NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'redeemed', 'removed', 'voided')),
+    order_id UUID REFERENCES reward_exchange_orders(id) ON DELETE RESTRICT,
+    player_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((status IN ('redeemed', 'voided')) = (order_id IS NOT NULL AND player_id IS NOT NULL))
+);
+CREATE UNIQUE INDEX reward_exchange_stock_code ON reward_exchange_stock(offer_id, code) WHERE code <> '';
+CREATE INDEX reward_exchange_stock_pick ON reward_exchange_stock(offer_id, status, created_at, id);
+CREATE INDEX reward_exchange_stock_player ON reward_exchange_stock(player_id, offer_id) WHERE status = 'redeemed';
+CREATE INDEX reward_exchange_stock_order ON reward_exchange_stock(order_id);
+
+-- 工单：每个 CDK 订单最多一条，被拒后再次发起追加到同一工单的记录中。
+CREATE TABLE reward_exchange_tickets (
+    id UUID PRIMARY KEY,
+    order_id UUID NOT NULL UNIQUE REFERENCES reward_exchange_orders(id) ON DELETE RESTRICT,
+    player_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    status VARCHAR(16) NOT NULL CHECK (status IN ('open', 'rejected', 'refunded')),
+    refund_ledger_id UUID UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((status = 'refunded') = (refund_ledger_id IS NOT NULL))
+);
+CREATE INDEX reward_exchange_tickets_page ON reward_exchange_tickets(updated_at DESC, id DESC);
+CREATE TABLE reward_exchange_ticket_entries (
+    id UUID PRIMARY KEY,
+    ticket_id UUID NOT NULL REFERENCES reward_exchange_tickets(id) ON DELETE RESTRICT,
+    kind VARCHAR(16) NOT NULL CHECK (kind IN ('request', 'reject', 'refund')),
+    actor_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    body TEXT NOT NULL CHECK (length(body) <= 20000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX reward_exchange_ticket_entries_ticket ON reward_exchange_ticket_entries(ticket_id, created_at, id);
+
+-- 积分 CDK：按批次生成，码只能用一次，同一账号同一批次只能兑换一次。
+CREATE TABLE points_cdk_batches (
+    id UUID PRIMARY KEY,
+    name VARCHAR(128) NOT NULL DEFAULT '',
+    points BIGINT NOT NULL CHECK (points BETWEEN 1 AND 9007199254740991),
+    quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 1000),
+    expires_at TIMESTAMPTZ NOT NULL,
+    actor_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE points_cdks (
+    code CHAR(32) PRIMARY KEY,
+    batch_id UUID NOT NULL REFERENCES points_cdk_batches(id) ON DELETE RESTRICT,
+    redeemed_by UUID REFERENCES users(id) ON DELETE RESTRICT,
+    redeemed_at TIMESTAMPTZ,
+    ledger_id UUID UNIQUE REFERENCES reward_ledger(id) ON DELETE RESTRICT,
+    UNIQUE (batch_id, redeemed_by),
+    CHECK ((redeemed_by IS NULL) = (redeemed_at IS NULL) AND (redeemed_by IS NULL) = (ledger_id IS NULL))
+);
+CREATE INDEX points_cdks_batch ON points_cdks(batch_id);
+
 CREATE INDEX reward_audit_page ON admin_audit_logs(created_at DESC, id DESC) WHERE action LIKE 'reward_%';
 CREATE INDEX reward_audit_ledger ON admin_audit_logs((metadata->>'ledger_id'), created_at, id) WHERE metadata ? 'ledger_id';
 
 COMMENT ON TABLE registration_reward_rules IS '只追加注册赠送规则修订，新账号使用最新修订';
 COMMENT ON TABLE reward_exchange_offers IS '管理员配置的账号积分兑换商品与当前修订';
 COMMENT ON TABLE reward_exchange_revisions IS '只追加兑换商品修订快照与操作者';
-COMMENT ON TABLE reward_exchange_orders IS '只追加兑换订单，支付与所得账本在同一事务提交';
+COMMENT ON TABLE reward_exchange_orders IS '只追加兑换订单，支付与所得账本在同一事务提交；CDK 商品无所得账本';
+COMMENT ON TABLE reward_exchange_stock IS '兑换商品逐份库存：CDK 明文或站内奖励份额，状态 available/redeemed/removed/voided';
+COMMENT ON TABLE reward_exchange_tickets IS 'CDK 订单工单，一单一条；同意即全额退分、CDK 作废、额度退还';
+COMMENT ON TABLE reward_exchange_ticket_entries IS '工单只追加的发起、拒绝与退款记录';
+COMMENT ON TABLE points_cdk_batches IS '管理员批量生成的积分 CDK 批次';
+COMMENT ON TABLE points_cdks IS '积分 CDK 码，单次使用，同批次每账号一次';
+COMMENT ON COLUMN system_settings.exchange_tickets_enabled IS '是否允许玩家发起兑换工单；关闭后已有工单仍可见、管理员仍可处理';
 
 CREATE TRIGGER reward_exchange_order_immutable BEFORE UPDATE OR DELETE ON reward_exchange_orders FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
+CREATE TRIGGER reward_exchange_ticket_entry_immutable BEFORE UPDATE OR DELETE ON reward_exchange_ticket_entries FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER reward_exchange_revision_immutable BEFORE UPDATE OR DELETE ON reward_exchange_revisions FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER registration_reward_revision_immutable BEFORE UPDATE OR DELETE ON registration_reward_rules FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 

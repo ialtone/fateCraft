@@ -16,12 +16,20 @@ var (
 	ErrExchangeChanged      = errors.New("兑换商品已变更，请刷新后重新确认")
 	ErrExchangeUnavailable  = errors.New("兑换商品当前不可用")
 	ErrExchangeLimitReached = errors.New("本次兑换份数超过该商品每人剩余额度")
+	ErrExchangeStock        = errors.New("库存不足，请刷新后重试")
+)
+
+const (
+	ExchangeKindCDK    = "cdk"
+	ExchangeKindReward = "reward"
 )
 
 type RewardExchangeOffer struct {
 	ID                    uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
 	Name                  string    `json:"name"`
 	Description           string    `json:"description"`
+	Kind                  string    `json:"kind"`
+	Tutorial              string    `json:"tutorial"`
 	CostQuantity          int64     `json:"cost_quantity"`
 	RewardQuantity        int64     `json:"reward_quantity"`
 	MaxRedemptionsPerUser int64     `json:"max_redemptions_per_user"`
@@ -48,18 +56,20 @@ type RewardExchangeRequest struct {
 }
 
 type RewardExchangeOrder struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	RequestID      uuid.UUID `gorm:"type:uuid" json:"request_id"`
-	PlayerID       uuid.UUID `gorm:"type:uuid" json:"user_id"`
-	OfferID        uuid.UUID `gorm:"type:uuid" json:"offer_id"`
-	OfferRevision  int64     `json:"offer_revision"`
-	Units          int64     `json:"units"`
-	CostQuantity   int64     `json:"cost_quantity"`
-	RewardQuantity int64     `json:"reward_quantity"`
-	Snapshot       JSONMap   `gorm:"type:jsonb" json:"snapshot"`
-	CostLedgerID   uuid.UUID `gorm:"type:uuid" json:"cost_ledger_id"`
-	RewardLedgerID uuid.UUID `gorm:"type:uuid" json:"reward_ledger_id"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	RequestID      uuid.UUID  `gorm:"type:uuid" json:"request_id"`
+	PlayerID       uuid.UUID  `gorm:"type:uuid" json:"user_id"`
+	OfferID        uuid.UUID  `gorm:"type:uuid" json:"offer_id"`
+	OfferRevision  int64      `json:"offer_revision"`
+	Units          int64      `json:"units"`
+	CostQuantity   int64      `json:"cost_quantity"`
+	RewardQuantity int64      `json:"reward_quantity"`
+	Snapshot       JSONMap    `gorm:"type:jsonb" json:"snapshot"`
+	CostLedgerID   uuid.UUID  `gorm:"type:uuid" json:"cost_ledger_id"`
+	RewardLedgerID *uuid.UUID `gorm:"type:uuid" json:"reward_ledger_id"`
+	CreatedAt      time.Time  `json:"created_at"`
+	TicketStatus   string     `gorm:"->;-:migration" json:"ticket_status"`
+	Username       string     `gorm:"->;-:migration" json:"username,omitempty"`
 }
 
 func (r *RewardRepository) ListExchangeOffers(ctx context.Context, admin bool) ([]RewardExchangeOffer, error) {
@@ -72,15 +82,15 @@ func (r *RewardRepository) ListExchangeOffers(ctx context.Context, admin bool) (
 	return rows, err
 }
 
-// ExchangeUsage 返回玩家在每个商品上的累计已兑换份数；统计跨越商品所有历史修订。
+// ExchangeUsage 返回玩家在每个商品上仍有效的已兑换份数；退款作废的份数不计入，额度随之退还。
 func (r *RewardRepository) ExchangeUsage(ctx context.Context, player uuid.UUID) (map[uuid.UUID]int64, error) {
 	rows := []struct {
 		OfferID uuid.UUID
 		Units   int64
 	}{}
 	err := r.db.WithContext(ctx).Raw(
-		`SELECT offer_id, LEAST(COALESCE(SUM(units), 0), ?)::bigint AS units FROM reward_exchange_orders WHERE player_id = ? GROUP BY offer_id`,
-		MaxRewardQuantity+1, player,
+		`SELECT offer_id, count(*) AS units FROM reward_exchange_stock WHERE player_id = ? AND status = 'redeemed' GROUP BY offer_id`,
+		player,
 	).Scan(&rows).Error
 	if err != nil {
 		return nil, err
@@ -92,19 +102,17 @@ func (r *RewardRepository) ExchangeUsage(ctx context.Context, player uuid.UUID) 
 	return usage, nil
 }
 
-// exchangeRedeemed 在事务内统计玩家对某商品的已成功兑换份数。
-// 结果最多截断到 MaxRewardQuantity+1，既避免 SUM 溢出，也足以判定超出任何合法上限。
+// exchangeRedeemed 在事务内统计玩家对某商品仍有效的已兑换份数。
 func (r *RewardRepository) exchangeRedeemed(ctx context.Context, player, offer uuid.UUID) (int64, error) {
 	var redeemed int64
 	err := r.db.WithContext(ctx).Raw(
-		`SELECT LEAST(COALESCE(SUM(units), 0), ?)::bigint FROM reward_exchange_orders WHERE player_id = ? AND offer_id = ?`,
-		MaxRewardQuantity+1, player, offer,
+		`SELECT count(*) FROM reward_exchange_stock WHERE player_id = ? AND offer_id = ? AND status = 'redeemed'`, player, offer,
 	).Scan(&redeemed).Error
 	return redeemed, err
 }
 
 func (r *RewardRepository) SaveExchangeOffer(ctx context.Context, actor uuid.UUID, id uuid.UUID, wanted RewardExchangeOffer) (*RewardExchangeOffer, error) {
-	if strings.TrimSpace(wanted.Name) == "" || len(wanted.Name) > 128 || len(wanted.Description) > 4000 || wanted.SortOrder < -2147483648 || wanted.SortOrder > 2147483647 {
+	if strings.TrimSpace(wanted.Name) == "" || len(wanted.Name) > 128 || len(wanted.Description) > 4000 || len(wanted.Tutorial) > 20000 || (wanted.Kind != "" && wanted.Kind != ExchangeKindCDK && wanted.Kind != ExchangeKindReward) || wanted.SortOrder < -2147483648 || wanted.SortOrder > 2147483647 {
 		return nil, ErrExchangeUnavailable
 	}
 	if wanted.CostQuantity < 1 || wanted.CostQuantity > MaxRewardQuantity || wanted.RewardQuantity < 1 || wanted.RewardQuantity > MaxRewardQuantity {
@@ -128,12 +136,16 @@ func (r *RewardRepository) SaveExchangeOffer(ctx context.Context, actor uuid.UUI
 			if before.Revision != wanted.Revision {
 				return ErrExchangeChanged
 			}
+			wanted.Kind = before.Kind // 商品类型决定库存形态，创建后不可修改
 			wanted.ID = id
 			wanted.CreatedAt = before.CreatedAt
 			wanted.Revision = before.Revision + 1
 		} else {
 			wanted.ID = uuid.New()
 			wanted.CreatedAt = time.Now()
+			if wanted.Kind == "" {
+				wanted.Kind = ExchangeKindReward
+			}
 			wanted.Revision = 1
 		}
 		wanted.UpdatedAt = time.Now()
@@ -215,20 +227,39 @@ func (r *RewardRepository) Exchange(ctx context.Context, player uuid.UUID, in Re
 		if err := tx.LockBalances(ctx, player, []string{PointsKey, MessageRewriteCreditKey}); err != nil {
 			return err
 		}
+		// 并发兑换跳过他人已锁定的份额；不足 n 份整单拒绝，不部分成交。
+		var stock []RewardExchangeStock
+		if err := tx.db.Raw(`SELECT id, code FROM reward_exchange_stock WHERE offer_id = ? AND status = 'available' ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED`, offer.ID, in.Units).Scan(&stock).Error; err != nil {
+			return err
+		}
+		if int64(len(stock)) < in.Units {
+			return ErrExchangeStock
+		}
+		ids, codes := make([]uuid.UUID, len(stock)), []string{}
+		for i, row := range stock {
+			ids[i] = row.ID
+			if offer.Kind == ExchangeKindCDK {
+				codes = append(codes, row.Code)
+			}
+		}
 		order = RewardExchangeOrder{ID: uuid.New(), RequestID: in.RequestID, PlayerID: player, OfferID: offer.ID, OfferRevision: offer.Revision, Units: in.Units, CostQuantity: offer.CostQuantity * in.Units, RewardQuantity: offer.RewardQuantity * in.Units,
-			Snapshot: JSONMap{"name": offer.Name, "description": offer.Description, "cost_per_unit": offer.CostQuantity, "reward_per_unit": offer.RewardQuantity}, CreatedAt: time.Now()}
+			Snapshot: JSONMap{"name": offer.Name, "description": offer.Description, "kind": offer.Kind, "tutorial": offer.Tutorial, "codes": codes, "cost_per_unit": offer.CostQuantity, "reward_per_unit": offer.RewardQuantity}, CreatedAt: time.Now()}
 		paid, err := tx.ConsumeInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: PointsKey, Quantity: order.CostQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:cost:" + order.ID.String()})
 		if err != nil {
 			return err
 		}
-		awardKey := "exchange:reward:" + order.ID.String()
-		awarded, err := tx.GrantInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: MessageRewriteCreditKey, Quantity: order.RewardQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: awardKey, Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision}})
-		if err != nil {
+		order.CostLedgerID = paid.Ledger.ID
+		if offer.Kind == ExchangeKindReward {
+			awarded, err := tx.GrantInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: MessageRewriteCreditKey, Quantity: order.RewardQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:reward:" + order.ID.String(), Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision}})
+			if err != nil {
+				return err
+			}
+			order.RewardLedgerID = &awarded.Ledger.ID
+		}
+		if err := tx.db.Create(&order).Error; err != nil {
 			return err
 		}
-		order.CostLedgerID = paid.Ledger.ID
-		order.RewardLedgerID = awarded.Ledger.ID
-		return tx.db.Create(&order).Error
+		return tx.db.Exec(`UPDATE reward_exchange_stock SET status = 'redeemed', order_id = ?, player_id = ?, updated_at = now() WHERE id IN ?`, order.ID, player, ids).Error
 	})
 	return &order, err
 }
@@ -251,7 +282,7 @@ func (r *RewardRepository) ExchangeOrders(ctx context.Context, player *uuid.UUID
 		q = q.Where("(created_at,id)<(?,?)", cursor.Time, cursor.ID)
 	}
 	rows := []RewardExchangeOrder{}
-	err := q.Order("created_at DESC,id DESC").Limit(limit).Find(&rows).Error
+	err := q.Select("reward_exchange_orders.*, COALESCE((SELECT status FROM reward_exchange_tickets t WHERE t.order_id = reward_exchange_orders.id), '') AS ticket_status, " + usernameOf("reward_exchange_orders.player_id")).Order("created_at DESC,id DESC").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 

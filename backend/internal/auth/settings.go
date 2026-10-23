@@ -131,8 +131,11 @@ func (s *Service) UpdateAdminSettings(ctx context.Context, actorID uuid.UUID, in
 	if current.EmailRegistrationEnabled && !current.EmailAuthEnabled {
 		return nil, fmt.Errorf("%w: 开启邮箱注册时必须同时开启邮箱登录", ErrInvalidAuthSettings)
 	}
-	// 仅当 LinuxDo 登录保持开启时才检查：双关全灭是管理员的明确选择，不做控制。
-	if !current.EmailAuthEnabled && current.LinuxDOLoginEnabled {
+	// 关闭本地密码登录后 owner 只能经 LinuxDo 登录，因此必须保留一条可用路径，不允许双关锁死实例。
+	if !current.EmailAuthEnabled {
+		if !current.LinuxDOLoginEnabled {
+			return nil, fmt.Errorf("%w: 本地密码登录与 LinuxDo 登录不能同时关闭，否则所有账号都将无法登录", ErrInvalidAuthSettings)
+		}
 		if !s.cfg.LinuxDOEnabled() {
 			return nil, fmt.Errorf("%w: LinuxDo 登录尚未配置，关闭密码登录后所有账号都将无法登录", ErrInvalidAuthSettings)
 		}

@@ -512,26 +512,38 @@ func (r *AuthRepository) InstallationComplete(ctx context.Context) (bool, error)
 	return row.CompletedAt != nil, err
 }
 
+// SetupBlocker 返回首次安装被拒绝的原因；nil 表示可以安装。安装状态与 InitializeOwner 共用同一判定。
+func (r *AuthRepository) SetupBlocker(ctx context.Context) error {
+	return setupBlocker(r.db.WithContext(ctx), "")
+}
+
+func setupBlocker(db *gorm.DB, lock string) error {
+	var settings struct {
+		InstallationCompletedAt *time.Time `gorm:"column:installation_completed_at"`
+	}
+	if err := db.Raw("SELECT installation_completed_at FROM system_settings WHERE id = 1" + lock).Scan(&settings).Error; err != nil {
+		return err
+	}
+	if settings.InstallationCompletedAt != nil {
+		return ErrInstallationComplete
+	}
+	var count int64
+	if err := db.Model(&User{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != 0 {
+		return ErrInstallationHasUsers
+	}
+	return nil
+}
+
 // InitializeOwner 在一个事务中创建第一个本地账号并完成首次安装。
 // 它只接受完全空的数据库，因此未认证的安装请求既不能提权已有用户，也不能劫持已安装实例。
 func (r *AuthRepository) InitializeOwner(ctx context.Context, user *User) (*User, error) {
 	var created User
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var settings struct {
-			InstallationCompletedAt *time.Time `gorm:"column:installation_completed_at"`
-		}
-		if err := tx.Raw("SELECT installation_completed_at FROM system_settings WHERE id = 1 FOR UPDATE").Scan(&settings).Error; err != nil {
+		if err := setupBlocker(tx, " FOR UPDATE"); err != nil {
 			return err
-		}
-		if settings.InstallationCompletedAt != nil {
-			return ErrInstallationComplete
-		}
-		var count int64
-		if err := tx.Model(&User{}).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != 0 {
-			return ErrInstallationHasUsers
 		}
 		user.Role = UserRoleOwner
 		user.Status = UserStatusActive

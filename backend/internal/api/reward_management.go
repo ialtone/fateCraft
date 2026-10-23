@@ -16,11 +16,29 @@ import (
 
 func rewardFail(c *gin.Context, err error) {
 	status, code := http.StatusBadRequest, "invalid_reward_request"
+	var duplicate *storage.ExchangeDuplicateError
 	switch {
 	case errors.Is(err, storage.ErrExchangeChanged):
-		status, code = http.StatusConflict, "exchange_changed"
+		status, code = http.StatusConflict, "exchange_revision_conflict"
 	case errors.Is(err, storage.ErrExchangeUnavailable):
-		code = "exchange_unavailable"
+		code = "exchange_offer_disabled"
+	case errors.Is(err, storage.ErrExchangeStock):
+		status, code = http.StatusConflict, "exchange_stock_insufficient"
+	case errors.As(err, &duplicate):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "exchange_cdk_duplicate", "duplicates": duplicate.Codes})
+		return
+	case errors.Is(err, storage.ErrTicketsDisabled):
+		status, code = http.StatusForbidden, "exchange_tickets_disabled"
+	case errors.Is(err, storage.ErrTicketState), errors.Is(err, storage.ErrTicketKind):
+		status, code = http.StatusConflict, "exchange_ticket_state"
+	case errors.Is(err, storage.ErrPointsCDKUnknown):
+		status, code = http.StatusNotFound, "points_cdk_unknown"
+	case errors.Is(err, storage.ErrPointsCDKUsed):
+		status, code = http.StatusConflict, "points_cdk_used"
+	case errors.Is(err, storage.ErrPointsCDKExpired):
+		status, code = http.StatusConflict, "points_cdk_expired"
+	case errors.Is(err, storage.ErrPointsCDKSameBatch):
+		status, code = http.StatusConflict, "points_cdk_batch_redeemed"
 	case errors.Is(err, storage.ErrExchangeLimitReached):
 		status, code = http.StatusConflict, "exchange_limit_reached"
 	case errors.Is(err, storage.ErrRewardRequestConflict):

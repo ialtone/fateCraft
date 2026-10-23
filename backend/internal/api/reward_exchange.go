@@ -9,11 +9,17 @@ import (
 func (s *Server) listExchangeOffers(c *gin.Context)      { s.exchangeOffers(c, false) }
 func (s *Server) listAdminExchangeOffers(c *gin.Context) { s.exchangeOffers(c, true) }
 
-// exchangeOfferView 在玩家商品列表上附加当前账号的额度；管理端列表不带任何玩家统计。
+// exchangeOfferView 附加实时库存；玩家列表另附当前账号的额度，管理端列表不带玩家统计。
 type exchangeOfferView struct {
 	storage.RewardExchangeOffer
+	storage.ExchangeStockCount
 	RedeemedUnits  int64  `json:"redeemed_units"`
 	RemainingUnits *int64 `json:"remaining_units"`
+}
+
+type adminExchangeOfferView struct {
+	storage.RewardExchangeOffer
+	storage.ExchangeStockCount
 }
 
 func (s *Server) exchangeOffers(c *gin.Context, admin bool) {
@@ -23,8 +29,22 @@ func (s *Server) exchangeOffers(c *gin.Context, admin bool) {
 		rewardFail(c, err)
 		return
 	}
+	stock, err := s.rewards.ExchangeStockCounts(ctx)
+	if err != nil {
+		rewardFail(c, err)
+		return
+	}
+	tickets, err := s.rewards.TicketsEnabled(ctx)
+	if err != nil {
+		rewardFail(c, err)
+		return
+	}
 	if admin {
-		c.JSON(200, gin.H{"offers": rows})
+		views := make([]adminExchangeOfferView, 0, len(rows))
+		for _, offer := range rows {
+			views = append(views, adminExchangeOfferView{offer, stock[offer.ID]})
+		}
+		c.JSON(200, gin.H{"offers": views, "tickets_enabled": tickets})
 		return
 	}
 	usage, err := s.rewards.ExchangeUsage(ctx, rewardActor(c))
@@ -34,7 +54,7 @@ func (s *Server) exchangeOffers(c *gin.Context, admin bool) {
 	}
 	views := make([]exchangeOfferView, 0, len(rows))
 	for _, offer := range rows {
-		view := exchangeOfferView{RewardExchangeOffer: offer, RedeemedUnits: usage[offer.ID]}
+		view := exchangeOfferView{RewardExchangeOffer: offer, ExchangeStockCount: stock[offer.ID], RedeemedUnits: usage[offer.ID]}
 		if offer.MaxRedemptionsPerUser > 0 {
 			remaining := offer.MaxRedemptionsPerUser - view.RedeemedUnits
 			if remaining < 0 {
@@ -44,7 +64,7 @@ func (s *Server) exchangeOffers(c *gin.Context, admin bool) {
 		}
 		views = append(views, view)
 	}
-	c.JSON(200, gin.H{"offers": views})
+	c.JSON(200, gin.H{"offers": views, "tickets_enabled": tickets})
 }
 
 func (s *Server) saveExchangeOffer(c *gin.Context) {
@@ -59,6 +79,8 @@ func (s *Server) saveExchangeOffer(c *gin.Context) {
 	var body struct {
 		Name                  string `json:"name"`
 		Description           string `json:"description"`
+		Kind                  string `json:"kind"`
+		Tutorial              string `json:"tutorial"`
 		CostQuantity          int64  `json:"cost_quantity"`
 		RewardQuantity        int64  `json:"reward_quantity"`
 		MaxRedemptionsPerUser int64  `json:"max_redemptions_per_user"`
@@ -71,7 +93,7 @@ func (s *Server) saveExchangeOffer(c *gin.Context) {
 		return
 	}
 	row, err := s.rewards.SaveExchangeOffer(c.Request.Context(), rewardActor(c), id, storage.RewardExchangeOffer{
-		Name: body.Name, Description: body.Description, CostQuantity: body.CostQuantity,
+		Name: body.Name, Description: body.Description, Kind: body.Kind, Tutorial: body.Tutorial, CostQuantity: body.CostQuantity,
 		RewardQuantity: body.RewardQuantity, MaxRedemptionsPerUser: body.MaxRedemptionsPerUser,
 		Enabled: body.Enabled, SortOrder: body.SortOrder, Revision: body.Revision,
 	})

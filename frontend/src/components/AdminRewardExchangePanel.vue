@@ -4,12 +4,14 @@ import {
   NAlert,
   NButton,
   NEmpty,
+  NForm,
   NFormItem,
   NInput,
   NInputNumber,
   NModal,
   NRadio,
   NRadioGroup,
+  NSelect,
   NSwitch,
   NTag,
   useMessage,
@@ -17,6 +19,8 @@ import {
 import { rewardExchangeApi as api } from '@/api/rewards'
 import { rewardError } from '@/lib/rewards'
 import type { RewardExchangeOffer, RewardExchangeRevision } from '@/types/rewards'
+import MarkdownEditor from './MarkdownEditor.vue'
+import AdminExchangeStock from './AdminExchangeStock.vue'
 const message = useMessage()
 const offers = ref<RewardExchangeOffer[]>([]),
   form = ref<RewardExchangeOffer>(),
@@ -28,7 +32,12 @@ const offers = ref<RewardExchangeOffer[]>([]),
   revisions = ref<RewardExchangeRevision[]>([]),
   historyOpen = ref(false),
   historyError = ref(''),
-  unlimited = ref(true)
+  unlimited = ref(true),
+  stockOffer = ref<RewardExchangeOffer>()
+const kindOptions = [
+  { label: 'CDK 商品', value: 'cdk' },
+  { label: '站内奖励（剧情改写次数）', value: 'reward' },
+]
 const valid = computed(
   () =>
     !!form.value?.name.trim() &&
@@ -59,6 +68,8 @@ function edit(offer?: RewardExchangeOffer) {
         id: '',
         name: '',
         description: '',
+        kind: 'cdk',
+        tutorial: '',
         cost_quantity: 1,
         reward_quantity: 1,
         max_redemptions_per_user: 0,
@@ -71,6 +82,11 @@ function edit(offer?: RewardExchangeOffer) {
   unlimited.value = form.value.max_redemptions_per_user === 0
   formError.value = ''
   open.value = true
+}
+// 切换到“限制份数”时给出可保存的默认值，避免 0 低于最小值。
+function limitChanged(value: boolean) {
+  if (!value && form.value && form.value.max_redemptions_per_user < 1)
+    form.value.max_redemptions_per_user = 1
 }
 async function save() {
   if (!form.value || !valid.value) return
@@ -107,7 +123,7 @@ onMounted(load)
     <div class="toolbar">
       <div>
         <h3>兑换商品</h3>
-        <p>设置积分价格和所得剧情改写次数；上架后玩家可在“我的奖励”兑换。</p>
+        <p>配置 CDK 或站内奖励商品并管理库存；商品只能下架，不能删除。</p>
       </div>
       <div class="buttons">
         <NButton :loading="loading" @click="load">刷新</NButton
@@ -119,8 +135,10 @@ onMounted(load)
       <div>
         <strong>{{ offer.name }}</strong>
         <p>
-          {{ offer.cost_quantity }} 积分 → {{ offer.reward_quantity }}
-          次剧情改写
+          {{ offer.kind === 'cdk' ? 'CDK' : '站内奖励' }} · {{ offer.cost_quantity }} 积分{{
+            offer.kind === 'reward' ? ` → ${offer.reward_quantity} 次剧情改写` : ' / 份'
+          }}
+          · 剩余 {{ offer.stock_remaining }} / {{ offer.stock_total }}
         </p>
         <p>
           {{
@@ -135,7 +153,8 @@ onMounted(load)
         ><small>修订 {{ offer.revision }}</small>
       </div>
       <div class="buttons">
-        <NButton @click="history(offer)">修订记录</NButton
+        <NButton @click="stockOffer = offer">库存</NButton
+        ><NButton @click="history(offer)">修订记录</NButton
         ><NButton @click="edit(offer)">编辑 / 上下架</NButton>
       </div>
     </article>
@@ -153,49 +172,103 @@ onMounted(load)
           >{{ formError }}
           <p>若商品已被其他管理员修改，请关闭后刷新，再重新编辑。</p></NAlert
         >
-        <NFormItem label="商品名称"><NInput v-model:value="form.name" :maxlength="128" /></NFormItem
-        ><NFormItem label="说明"
-          ><NInput v-model:value="form.description" type="textarea" :maxlength="2000"
-        /></NFormItem>
-        <div class="form-grid">
-          <NFormItem label="每份积分价格"
-            ><NInputNumber
-              v-model:value="form.cost_quantity"
-              :min="1"
-              :max="Number.MAX_SAFE_INTEGER"
-              :precision="0" /></NFormItem
-          ><NFormItem label="每份改写次数"
-            ><NInputNumber
-              v-model:value="form.reward_quantity"
-              :min="1"
-              :max="Number.MAX_SAFE_INTEGER"
-              :precision="0" /></NFormItem
-          ><NFormItem label="每人兑换上限"
-            ><NRadioGroup v-model:value="unlimited"
-              ><NRadio :value="true">不限</NRadio
-              ><NRadio :value="false">限制份数</NRadio></NRadioGroup
-            ></NFormItem
-          ><NFormItem v-if="!unlimited" label="每人最多兑换份数"
-            ><NInputNumber
-              v-model:value="form.max_redemptions_per_user"
-              :min="1"
-              :max="Number.MAX_SAFE_INTEGER"
-              :precision="0" /></NFormItem
-          ><NFormItem label="上架"><NSwitch v-model:value="form.enabled" /></NFormItem
-          ><NFormItem label="排序（较小靠前）"
-            ><NInputNumber
-              v-model:value="form.sort_order"
-              :min="-2147483648"
-              :max="2147483647"
-              :precision="0"
-          /></NFormItem>
-        </div>
-        <p>保存会新增一份配置修订，已有订单保留当时的价格和奖励。</p>
-        <NButton type="primary" :disabled="!valid" :loading="busy" @click="save"
-          >保存商品</NButton
-        ></template
+        <NForm label-placement="top" :show-feedback="false" class="offer-form">
+          <fieldset>
+            <legend>基本信息</legend>
+            <div class="form-grid">
+              <NFormItem label="商品类型"
+                ><NSelect
+                  v-model:value="form.kind"
+                  :options="kindOptions"
+                  :disabled="!!form.id"
+                  placeholder="创建后不可修改"
+              /></NFormItem>
+              <NFormItem label="商品名称"
+                ><NInput v-model:value="form.name" :maxlength="128" placeholder="必填"
+              /></NFormItem>
+            </div>
+            <NFormItem label="说明"
+              ><NInput v-model:value="form.description" type="textarea" :rows="2" :maxlength="2000"
+            /></NFormItem>
+          </fieldset>
+          <fieldset>
+            <legend>价格与额度</legend>
+            <div class="form-grid">
+              <NFormItem label="每份积分价格"
+                ><NInputNumber
+                  v-model:value="form.cost_quantity"
+                  :min="1"
+                  :max="Number.MAX_SAFE_INTEGER"
+                  :precision="0"
+                  update-value-on-input
+                  class="number" /></NFormItem
+              ><NFormItem v-if="form.kind === 'reward'" label="每份改写次数"
+                ><NInputNumber
+                  v-model:value="form.reward_quantity"
+                  :min="1"
+                  :max="Number.MAX_SAFE_INTEGER"
+                  :precision="0"
+                  update-value-on-input
+                  class="number"
+              /></NFormItem>
+            </div>
+            <div class="form-grid">
+              <NFormItem label="每人兑换上限"
+                ><NRadioGroup v-model:value="unlimited" @update:value="limitChanged"
+                  ><NRadio :value="true">不限</NRadio
+                  ><NRadio :value="false">限制份数</NRadio></NRadioGroup
+                ></NFormItem
+              ><NFormItem v-if="!unlimited" label="每人最多兑换份数"
+                ><NInputNumber
+                  v-model:value="form.max_redemptions_per_user"
+                  :min="1"
+                  :max="Number.MAX_SAFE_INTEGER"
+                  :precision="0"
+                  update-value-on-input
+                  class="number"
+              /></NFormItem>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>上架</legend>
+            <div class="form-grid">
+              <NFormItem label="上架状态"
+                ><NSwitch v-model:value="form.enabled"
+                  ><template #checked>已上架</template
+                  ><template #unchecked>已下架</template></NSwitch
+                ></NFormItem
+              ><NFormItem label="排序（较小靠前）"
+                ><NInputNumber
+                  v-model:value="form.sort_order"
+                  :min="-2147483648"
+                  :max="2147483647"
+                  :precision="0"
+                  update-value-on-input
+                  class="number"
+              /></NFormItem>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>兑换成功后展示的使用教程（留空不展示）</legend>
+            <MarkdownEditor v-model="form.tutorial" :maxlength="20000" />
+          </fieldset>
+        </NForm>
+        <div class="form-footer">
+          <p>保存会新增一份配置修订，已有订单保留当时的价格和奖励。</p>
+          <NButton type="primary" :disabled="!valid" :loading="busy" @click="save"
+            >保存商品</NButton
+          >
+        </div></template
       ></NModal
     >
+    <NModal
+      :show="!!stockOffer"
+      preset="card"
+      :title="`库存 · ${stockOffer?.name ?? ''}`"
+      style="width: min(900px, 96vw)"
+      @update:show="(show: boolean) => !show && ((stockOffer = undefined), load())"
+      ><AdminExchangeStock v-if="stockOffer" :offer="stockOffer"
+    /></NModal>
     <NModal
       v-model:show="historyOpen"
       preset="card"
@@ -256,10 +329,42 @@ small {
 small {
   margin-left: 8px;
 }
+.offer-form {
+  display: grid;
+  gap: 16px;
+}
+fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  align-items: start;
+}
+.number {
+  width: 100%;
+}
+.form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
+  margin-top: 16px;
+}
+.form-footer p {
+  margin: 0;
+  font-size: 13px;
 }
 @media (max-width: 640px) {
   .toolbar,

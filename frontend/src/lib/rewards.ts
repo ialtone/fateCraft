@@ -19,6 +19,8 @@ export function rewardSource(source: string) {
         admin_grant: '管理员发放',
         admin_reversal: '撤回管理员发放',
         reward_exchange: '积分兑换',
+        reward_exchange_refund: '工单退款',
+        points_cdk: '积分 CDK',
         message_rewrite: '剧情改写',
         message_regenerate: '重新生成',
         message_rewrite_refund: '改写失败返还',

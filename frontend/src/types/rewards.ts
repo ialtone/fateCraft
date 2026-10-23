@@ -18,6 +18,8 @@ export interface RewardExchangeOffer {
   id: string
   name: string
   description: string
+  kind: RewardExchangeKind
+  tutorial: string
   cost_quantity: number
   reward_quantity: number
   max_redemptions_per_user: number
@@ -28,6 +30,55 @@ export interface RewardExchangeOffer {
   updated_at: string
   redeemed_units?: number
   remaining_units?: number | null
+  stock_total?: number
+  stock_remaining?: number
+}
+export type RewardExchangeKind = 'cdk' | 'reward'
+export type RewardExchangeStockStatus = 'available' | 'redeemed' | 'removed' | 'voided'
+export interface RewardExchangeStock {
+  id: string
+  offer_id: string
+  code: string
+  status: RewardExchangeStockStatus
+  order_id: string | null
+  user_id: string | null
+  username?: string
+  created_at: string
+  updated_at: string
+}
+export type RewardExchangeTicketStatus = 'open' | 'rejected' | 'refunded'
+export interface RewardExchangeTicket {
+  id: string
+  order_id: string
+  user_id: string
+  username?: string
+  status: RewardExchangeTicketStatus
+  created_at: string
+  updated_at: string
+  entries: {
+    id: string
+    kind: 'request' | 'reject' | 'refund'
+    actor_id: string
+    body: string
+    created_at: string
+  }[]
+  order?: RewardExchangeOrder
+}
+export interface PointsCDKBatch {
+  id: string
+  name: string
+  points: number
+  quantity: number
+  expires_at: string
+  created_at: string
+  redeemed: number
+}
+export interface PointsCDK {
+  code: string
+  batch_id: string
+  redeemed_by: string | null
+  redeemed_at: string | null
+  username?: string
 }
 export interface RewardExchangeRequest {
   request_id: string
@@ -39,15 +90,25 @@ export interface RewardExchangeOrder {
   id: string
   request_id: string
   user_id: string
+  username?: string
   offer_id: string
   offer_revision: number
   units: number
   cost_quantity: number
   reward_quantity: number
   cost_ledger_id: string
-  reward_ledger_id: string
+  reward_ledger_id: string | null
   created_at: string
-  snapshot: { name: string; description: string; cost_per_unit: number; reward_per_unit: number }
+  ticket_status?: RewardExchangeTicketStatus | ''
+  snapshot: {
+    name: string
+    description: string
+    kind?: RewardExchangeKind
+    tutorial?: string
+    codes?: string[]
+    cost_per_unit: number
+    reward_per_unit: number
+  }
 }
 export interface RewardExchangeRevision {
   offer_id: string

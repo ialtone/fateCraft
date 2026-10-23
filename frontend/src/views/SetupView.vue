@@ -58,7 +58,10 @@ async function complete() {
   <div class="setup-page">
     <NCard class="setup-card" title="首次安装">
       <NSpin :show="loading">
-        <template v-if="auth.installationInitialized === false">
+        <NAlert v-if="auth.setupBlockedReason" type="error" title="无法完成首次安装">
+          {{ auth.setupBlockedReason }}
+        </NAlert>
+        <template v-else-if="auth.installationInitialized === false">
           <p class="lead">当前实例还没有平台拥有者。</p>
           <p>
             请创建第一个本地账号。这个账号会成为唯一的

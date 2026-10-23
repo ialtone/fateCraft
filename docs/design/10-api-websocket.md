@@ -220,13 +220,16 @@ GET  /api/me/reward-exchange/offers
 POST /api/me/reward-exchange/orders
 GET  /api/me/reward-exchange/orders?limit=30&cursor=...
 GET  /api/me/reward-exchange/by-request/:request_id
+GET  /api/me/reward-exchange/tickets
+POST /api/me/reward-exchange/orders/:id/ticket
+POST /api/me/points-cdk/redeem
 ~~~
 
 本人身份来自认证，不能用 user_id 选择他人。余额返回 {rewards}，固定两项 {asset:{key,name,unit,icon},balance}；收支返回 {entries,next_cursor}，商品返回 {offers}，订单返回 {orders,next_cursor}。游标按 (created_at,id) 倒序，limit 为 1–200。玩家商品额外返回当前 `max_redemptions_per_user`、本人累计 `redeemed_units` 和 `remaining_units`；不限时 `remaining_units` 为 null，有限时为 `max(0, max_redemptions_per_user - redeemed_units)`。管理端商品列表只返回商品配置，不附带任何玩家的额度统计。
 
 收支支持 reward_key、source_type、created_from/created_to（RFC3339）筛选。玩家响应不含内部原因、操作者、管理请求 ID/指纹或 metadata。余额缺行返回 0。
 
-兑换请求为 {request_id,offer_id,revision,units}，全部数量为正安全整数。revision 对应页面确认价格，服务端复核价格、状态和每人剩余额度，扣积分、加改写次数、两条账本与订单同事务。超额整笔拒绝并返回 409 `exchange_limit_reached`，不拆单、不部分成交。响应保存成交快照及 cost_ledger_id、reward_ledger_id。相同请求重试返回原结果（即使之后达到上限或商品下架），换参数返回 409；响应丢失应查询或原样重试。
+兑换请求为 {request_id,offer_id,revision,units}，全部数量为正安全整数。revision 对应页面确认价格，服务端复核价格、状态和每人剩余额度，扣积分、加改写次数、两条账本与订单同事务。超额整笔拒绝并返回 409 `exchange_limit_reached`，库存不足返回 409 `exchange_stock_insufficient`，不拆单、不部分成交。商品附带 `stock_total/stock_remaining`；CDK 商品订单快照含 `codes` 与 `tutorial`。库存、工单与积分 CDK 语义见 [22](22-reward-management-and-exchange.md)。响应保存成交快照及 cost_ledger_id、reward_ledger_id。相同请求重试返回原结果（即使之后达到上限或商品下架），换参数返回 409；响应丢失应查询或原样重试。
 
 ## 奖励管理接口
 
@@ -249,6 +252,15 @@ POST /api/admin/reward-exchange/offers
 PUT  /api/admin/reward-exchange/offers/:id
 GET  /api/admin/reward-exchange/offers/:id/revisions
 GET  /api/admin/reward-exchange/orders?user_id=...&cursor=...
+GET  /api/admin/reward-exchange/offers/:id/stock?status=&code=&offset=
+POST /api/admin/reward-exchange/offers/:id/stock
+POST /api/admin/reward-exchange/offers/:id/stock/remove
+GET  /api/admin/reward-exchange/tickets?status=
+POST /api/admin/reward-exchange/tickets/:id/resolve
+PUT  /api/admin/reward-exchange/tickets-enabled
+GET  /api/admin/points-cdk/batches
+POST /api/admin/points-cdk/batches
+GET  /api/admin/points-cdk/batches/:id/codes
 ~~~
 
 用户余额返回 {user,rewards}；规则返回 {rules,has_more}，附玩法、版本、当前标记、结局和 reward_points。审计返回 {audits,next_cursor}。管理账本扩展 user_id、operator_id、request_id、reason，并通过 reversal_id 标记原发放是否已撤回。

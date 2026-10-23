@@ -19,6 +19,8 @@ import type { RegistrationRewardRule, RewardRuleCatalogEntry } from '@/types/rew
 import RewardUserSearch from './RewardUserSearch.vue'
 import AdminRewardUserPanel from './AdminRewardUserPanel.vue'
 import AdminRewardExchangePanel from './AdminRewardExchangePanel.vue'
+import AdminExchangeTickets from './AdminExchangeTickets.vue'
+import AdminPointsCDK from './AdminPointsCDK.vue'
 import RewardExchangeOrders from './RewardExchangeOrders.vue'
 import RewardLedgerPanel from './RewardLedgerPanel.vue'
 const emit = defineEmits<{ openVersion: [id: string] }>()
@@ -129,6 +131,12 @@ function auditLabel(action: string) {
         reward_reverse: '撤回发放',
         reward_registration_rule: '修改注册赠送',
         reward_exchange_offer: '修改兑换商品',
+        reward_exchange_stock_add: '添加商品库存',
+        reward_exchange_stock_remove: '移除商品库存',
+        reward_exchange_ticket_refund: '工单退款',
+        reward_exchange_ticket_reject: '驳回工单',
+        reward_exchange_tickets_toggle: '切换工单开关',
+        points_cdk_generate: '生成积分 CDK',
         reward_builtin_import: '导入玩法',
       } as Record<string, string>
     )[action] || action
@@ -217,6 +225,12 @@ void loadRules()
       >
       <NTabPane name="exchange" tab="兑换商品" display-directive="show:lazy"
         ><AdminRewardExchangePanel
+      /></NTabPane>
+      <NTabPane name="tickets" tab="工单" display-directive="show:lazy"
+        ><AdminExchangeTickets
+      /></NTabPane>
+      <NTabPane name="points-cdk" tab="积分 CDK" display-directive="show:lazy"
+        ><AdminPointsCDK
       /></NTabPane>
       <NTabPane name="records" tab="用户与记录" display-directive="show:lazy"
         ><NTabs

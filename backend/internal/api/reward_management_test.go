@@ -46,8 +46,8 @@ func TestRewardErrorsExposeStableCodes(t *testing.T) {
 		code   string
 		status int
 	}{
-		{storage.ErrExchangeChanged, "exchange_changed", 409}, {storage.ErrRewardKey, "invalid_reward_key", 400},
-		{storage.ErrExchangeUnavailable, "exchange_unavailable", 400}, {storage.ErrInsufficientReward, "insufficient_balance", 400},
+		{storage.ErrExchangeChanged, "exchange_revision_conflict", 409}, {storage.ErrRewardKey, "invalid_reward_key", 400},
+		{storage.ErrExchangeUnavailable, "exchange_offer_disabled", 400}, {storage.ErrExchangeStock, "exchange_stock_insufficient", 409}, {storage.ErrPointsCDKSameBatch, "points_cdk_batch_redeemed", 409}, {storage.ErrInsufficientReward, "insufficient_balance", 400},
 		{storage.ErrExchangeLimitReached, "exchange_limit_reached", 409}, {storage.ErrRewardRequestConflict, "request_conflict", 409}, {storage.ErrRewardAdminRequired, "admin_required", 403},
 	} {
 		w := httptest.NewRecorder()
@@ -75,5 +75,18 @@ func TestRewardPrivateFieldsOnlyInAdminView(t *testing.T) {
 	admin, _ := json.Marshal(row.AdminView())
 	if !strings.Contains(string(admin), "private_reason") || !strings.Contains(string(admin), "operator_id") {
 		t.Fatal("admin response missing trace fields")
+	}
+}
+
+func TestRewardDuplicateCDKListsCodes(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	rewardFail(c, &storage.ExchangeDuplicateError{Codes: []string{"A", "B"}})
+	var body struct {
+		Code       string   `json:"code"`
+		Duplicates []string `json:"duplicates"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || w.Code != 400 || body.Code != "exchange_cdk_duplicate" || len(body.Duplicates) != 2 {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 }

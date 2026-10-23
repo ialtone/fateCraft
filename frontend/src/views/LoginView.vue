@@ -78,10 +78,6 @@ async function submitEmail() {
     message.warning('管理员尚未开放邮箱注册')
     return
   }
-  if (mode.value === 'login' && !auth.config.email_auth_enabled) {
-    message.warning('管理员尚未开放邮箱登录')
-    return
-  }
 
   submitting.value = true
   error.value = ''

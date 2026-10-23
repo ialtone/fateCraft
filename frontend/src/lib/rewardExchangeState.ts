@@ -5,6 +5,7 @@ export function maxExchangeUnits(
     cost_quantity: number
     reward_quantity: number
     remaining_units?: number | null
+    stock_remaining?: number
   },
   balance: number,
   pending: boolean,
@@ -16,6 +17,7 @@ export function maxExchangeUnits(
   if (!pending && offer.remaining_units !== null && offer.remaining_units !== undefined) {
     limits.push(Math.max(0, offer.remaining_units))
   }
+  if (!pending) limits.push(Math.max(0, offer.stock_remaining ?? 0))
   // A pending request must stay retryable even if its first attempt already
   // succeeded and the latest balance and quota reflect the deduction.
   if (!pending) limits.push(Math.floor(Math.max(0, balance) / offer.cost_quantity))

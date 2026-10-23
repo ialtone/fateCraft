@@ -168,6 +168,7 @@ func (f *fakeRepository) UpdateInvitationCode(_ context.Context, invitation *sto
 	return nil
 }
 func (f *fakeRepository) InstallationComplete(context.Context) (bool, error) { return true, nil }
+func (f *fakeRepository) SetupBlocker(context.Context) error                 { return storage.ErrInstallationComplete }
 func (f *fakeRepository) InitializeOwner(_ context.Context, user *storage.User) (*storage.User, error) {
 	f.user = user
 	f.user.Role = storage.UserRoleOwner
@@ -769,7 +770,7 @@ func TestSMTPPasswordIsEncryptedAndNeverReturned(t *testing.T) {
 }
 
 // 关闭密码登录前（且 LinuxDo 登录保持开启时），owner 必须已绑定可用的 LinuxDo 身份，
-// 否则会把 owner 锁在站外。双关全灭是允许的，不在这里控制。
+// 否则会把 owner 锁在站外。
 func TestUpdateAdminSettingsPreventsOwnerLockout(t *testing.T) {
 	owner := uuid.New()
 	linuxDOIdentity := []storage.ExternalIdentitySummary{{ID: uuid.New(), Provider: linuxDOProvider, ProviderUserID: "linuxdo-42"}}
@@ -807,7 +808,7 @@ func TestUpdateAdminSettingsPreventsOwnerLockout(t *testing.T) {
 	}
 }
 
-// 关 LinuxDo 登录时密码登录开着：合法，直接保存；双关全灭是允许的明确选择，不做控制。
+// 关 LinuxDo 登录时密码登录开着：合法，直接保存；双关全灭会锁死实例，拒绝保存。
 func TestUpdateAdminSettingsLinuxDOToggle(t *testing.T) {
 	repo := &fakeRepository{settings: storage.DefaultAuthSettings()}
 	svc := NewService(repo, linuxDOTestConfig(nil))
@@ -824,14 +825,13 @@ func TestUpdateAdminSettingsLinuxDOToggle(t *testing.T) {
 		t.Fatal("linuxdo login should be disabled")
 	}
 
-	// 双关全灭：允许保存（之后无人能再登录），不检查 owner 绑定。
 	input = validSettingsInput(false)
 	input.LinuxDOLoginEnabled = authSettingPointer(false)
-	if _, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input); err != nil {
-		t.Fatalf("disabling both logins error = %v, want nil", err)
+	if _, err := svc.UpdateAdminSettings(context.Background(), uuid.New(), input); !errors.Is(err, ErrInvalidAuthSettings) {
+		t.Fatalf("disabling both logins error = %v, want ErrInvalidAuthSettings", err)
 	}
-	if repo.settings.EmailAuthEnabled || repo.settings.LinuxDOLoginEnabled {
-		t.Fatalf("both logins should be disabled: %+v", repo.settings)
+	if !repo.settings.EmailAuthEnabled {
+		t.Fatal("rejected update must keep password login")
 	}
 }
 

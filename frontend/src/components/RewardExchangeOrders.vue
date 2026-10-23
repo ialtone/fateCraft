@@ -2,7 +2,10 @@
 import { ref, watch } from 'vue'
 import { NAlert, NButton, NEmpty, NInput, NModal, NSpin } from 'naive-ui'
 import { rewardExchangeApi as api } from '@/api/rewards'
-import type { RewardExchangeOrder } from '@/types/rewards'
+import type { RewardExchangeOrder, RewardExchangeTicket } from '@/types/rewards'
+import ExchangeResult from './ExchangeResult.vue'
+import MarkdownEditor from './MarkdownEditor.vue'
+import ExchangeTicketThread from './ExchangeTicketThread.vue'
 import { rewardError } from '@/lib/rewards'
 import { validExchangeRequestID } from '@/lib/rewardExchangeState'
 const props = defineProps<{ admin?: boolean; refreshKey?: number }>()
@@ -47,9 +50,39 @@ watch(
   () => load(),
   { immediate: true },
 )
-function showOrder(row: RewardExchangeOrder) {
+const ticket = ref<RewardExchangeTicket>(),
+  ticketsEnabled = ref(false),
+  ticketBody = ref(''),
+  ticketBusy = ref(false),
+  ticketError = ref('')
+const ticketLabels = { open: '工单处理中', rejected: '工单已驳回', refunded: '已退款' }
+async function showOrder(row: RewardExchangeOrder) {
   detail.value = row
   open.value = true
+  ticket.value = undefined
+  ticketBody.value = ticketError.value = ''
+  if (props.admin || row.snapshot.kind !== 'cdk') return
+  try {
+    const result = await api.tickets()
+    ticketsEnabled.value = result.tickets_enabled
+    ticket.value = result.tickets.find((t) => t.order_id === row.id)
+  } catch (err) {
+    ticketError.value = rewardError(err)
+  }
+}
+async function submitTicket() {
+  if (!detail.value || !ticketBody.value.trim()) return
+  ticketBusy.value = true
+  ticketError.value = ''
+  try {
+    ticket.value = await api.openTicket(detail.value.id, ticketBody.value.trim())
+    detail.value.ticket_status = ticket.value.status
+    ticketBody.value = ''
+  } catch (err) {
+    ticketError.value = rewardError(err)
+  } finally {
+    ticketBusy.value = false
+  }
 }
 async function lookup() {
   if (props.admin || lookupBusy.value) return
@@ -103,10 +136,16 @@ function viewLookupDetail() {
       <article v-for="row in rows" :key="row.id">
         <div>
           <strong>{{ row.snapshot.name }} × {{ row.units }}</strong>
-          <p>支付 {{ row.cost_quantity }} 积分 → 获得 {{ row.reward_quantity }} 次剧情改写</p>
+          <p>
+            支付 {{ row.cost_quantity }} 积分<template v-if="row.snapshot.kind !== 'cdk'">
+              → 获得 {{ row.reward_quantity }} 次剧情改写</template
+            >
+          </p>
           <small
-            >{{ new Date(row.created_at).toLocaleString() }} · 已完成<span v-if="admin">
-              · 用户 {{ row.user_id }}</span
+            >{{ new Date(row.created_at).toLocaleString() }} · 已完成<span v-if="row.ticket_status">
+              · {{ ticketLabels[row.ticket_status] }}</span
+            ><span v-if="admin" class="user">
+              · 用户 @{{ row.username || row.user_id }}</span
             ></small
           >
         </div>
@@ -120,8 +159,27 @@ function viewLookupDetail() {
       ><div v-if="detail" class="detail">
         <h3>{{ detail.snapshot.name }} × {{ detail.units }}</h3>
         <p>{{ detail.snapshot.description }}</p>
-        <p>支付 {{ detail.cost_quantity }} 积分；获得 {{ detail.reward_quantity }} 次剧情改写</p>
+        <p>
+          支付 {{ detail.cost_quantity }} 积分<template v-if="detail.snapshot.kind !== 'cdk'"
+            >；获得 {{ detail.reward_quantity }} 次剧情改写</template
+          >
+        </p>
         <p>兑换时间：{{ new Date(detail.created_at).toLocaleString() }}</p>
+        <ExchangeResult :order="detail" />
+        <section v-if="!admin && detail.snapshot.kind === 'cdk'" class="ticket">
+          <h4>售后工单{{ ticket ? ` · ${ticketLabels[ticket.status]}` : '' }}</h4>
+          <ExchangeTicketThread v-if="ticket" :ticket="ticket" />
+          <template v-if="ticketsEnabled && (!ticket || ticket.status === 'rejected')">
+            <MarkdownEditor
+              v-model="ticketBody"
+              :maxlength="2000"
+              placeholder="CDK 无法使用？请描述问题（支持 Markdown）"
+            /><NButton :loading="ticketBusy" :disabled="!ticketBody.trim()" @click="submitTicket">{{
+              ticket ? '补充说明并重新提交' : '提交工单'
+            }}</NButton>
+          </template>
+          <NAlert v-if="ticketError" type="error">{{ ticketError }}</NAlert>
+        </section>
         <details>
           <summary>交易编号</summary>
           <p>订单：{{ detail.id }}</p>
@@ -218,8 +276,16 @@ p,
 small {
   color: var(--text-dim);
 }
+.user {
+  font-size: 14px;
+}
 .detail {
   overflow-wrap: anywhere;
+}
+.ticket {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
 }
 h3 {
   margin: 0;

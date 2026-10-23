@@ -102,6 +102,8 @@ test('reward, user, and challenge panels separate independent workflows', () => 
   assert.deepEqual(tabGroups('../src/components/AdminRewardsPanel.vue')[0].names, [
     'rules',
     'exchange',
+    'tickets',
+    'points-cdk',
     'records',
   ])
   assert.deepEqual(tabGroups('../src/components/AdminUsersPanel.vue')[0].names, ['users', 'audit'])

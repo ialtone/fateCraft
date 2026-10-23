@@ -60,6 +60,9 @@ func TestPostgresExchangeOfferLimitViewsAndErrors(t *testing.T) {
 	}
 
 	offerID := uuid.MustParse(limited["id"].(string))
+	if _, err := repo.AddExchangeStock(ctx, actor.ID, offerID, nil, 5); err != nil {
+		t.Fatal(err)
+	}
 	revision := int64(limited["revision"].(float64))
 	requestID := uuid.New()
 	exchange := func(request uuid.UUID, units int64) (int, map[string]any) {
@@ -100,7 +103,7 @@ func TestPostgresExchangeOfferLimitViewsAndErrors(t *testing.T) {
 	for _, offer := range playerView {
 		switch offer.ID {
 		case offerID:
-			if offer.MaxRedemptionsPerUser != 2 || offer.RedeemedUnits != 2 || offer.RemainingUnits == nil || *offer.RemainingUnits != 0 {
+			if offer.MaxRedemptionsPerUser != 2 || offer.RedeemedUnits != 2 || offer.RemainingUnits == nil || *offer.RemainingUnits != 0 || offer.StockTotal != 5 || offer.StockRemaining != 3 {
 				t.Fatalf("limited view = %+v", offer)
 			}
 		default:
@@ -116,7 +119,7 @@ func TestPostgresExchangeOfferLimitViewsAndErrors(t *testing.T) {
 			t.Fatalf("admin list leaked player field %s: %s", field, adminResponse)
 		}
 	}
-	if !strings.Contains(adminResponse, "max_redemptions_per_user") {
+	if !strings.Contains(adminResponse, "max_redemptions_per_user") || !strings.Contains(adminResponse, `"stock_remaining":3`) {
 		t.Fatalf("admin list missing limit: %s", adminResponse)
 	}
 }
@@ -126,6 +129,8 @@ type exchangeOfferViewTest struct {
 	MaxRedemptionsPerUser int64     `json:"max_redemptions_per_user"`
 	RedeemedUnits         int64     `json:"redeemed_units"`
 	RemainingUnits        *int64    `json:"remaining_units"`
+	StockTotal            int64     `json:"stock_total"`
+	StockRemaining        int64     `json:"stock_remaining"`
 }
 
 func offerViews(t *testing.T, server *Server, user *storage.User, admin bool) []exchangeOfferViewTest {

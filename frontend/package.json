@@ -18,7 +18,8 @@
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,vue}\"",
     "format:check": "prettier --check \"src/**/*.{ts,vue}\"",
-    "test:endings": "node --test tests/endings.test.mjs"
+    "test:endings": "node --test tests/endings.test.mjs",
+    "test:scroll-pin": "node --experimental-strip-types --test tests/scroll-pin.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",

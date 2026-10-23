@@ -43,14 +43,16 @@ test('looking up an old order cannot resolve another pending exchange', () => {
   }
 })
 
-test('exchange quantity respects balance and quota but preserves pending retries', () => {
-  const offer = { cost_quantity: 25, reward_quantity: 2, remaining_units: 5 }
+test('exchange quantity respects balance, quota, and stock but preserves pending retries', () => {
+  const offer = { cost_quantity: 25, reward_quantity: 2, remaining_units: 5, stock_remaining: 100 }
   assert.equal(maxExchangeUnits(offer, 74, false), 2)
   assert.equal(maxExchangeUnits(offer, 1000, false), 5)
   assert.equal(maxExchangeUnits({ ...offer, remaining_units: null }, 49, false), 1)
   assert.equal(maxExchangeUnits(offer, 0, true), Math.floor(Number.MAX_SAFE_INTEGER / 25))
   assert.ok(maxExchangeUnits({ ...offer, remaining_units: 0 }, 0, true) >= 1)
   assert.equal(maxExchangeUnits({ ...offer, remaining_units: 0 }, 1000, false), 0)
+  assert.equal(maxExchangeUnits({ ...offer, stock_remaining: 3 }, 1000, false), 3)
+  assert.equal(maxExchangeUnits({ ...offer, stock_remaining: 0 }, 1000, false), 0)
 })
 
 function exchangePanel(t, api, saved) {
@@ -102,6 +104,8 @@ const savedOffer = {
   max_redemptions_per_user: 2,
   redeemed_units: 0,
   remaining_units: 2,
+  stock_remaining: 10,
+  stock_total: 10,
 }
 const savedRequest = { request_id: requestA, offer_id: 'offer', revision: 3, units: 2 }
 const confirmed = { ...savedRequest, offer_revision: 3, id: 'order' }
@@ -180,6 +184,31 @@ test('failed quota refresh reports failure instead of claiming success', async (
   assert.match(panel.error.value, /刷新失败.*offline/)
 })
 
+test('insufficient stock refreshes the catalogue and asks the player to retry', async (t) => {
+  let reads = 0
+  const panel = exchangePanel(
+    t,
+    {
+      exchange: async () => {
+        throw { response: { status: 409, data: { code: 'exchange_stock_insufficient' } } }
+      },
+      request: async () => {
+        throw new Error('not found')
+      },
+      offers: async () => {
+        reads++
+        return [{ ...savedOffer, stock_remaining: 1 }]
+      },
+    },
+    null,
+  )
+  panel.choose(savedOffer)
+  await panel.submit()
+  assert.equal(reads, 1)
+  assert.equal(panel.pending.value, undefined)
+  assert.equal(panel.error.value, '库存不足，请刷新后重试')
+})
+
 function template(file) {
   const { descriptor, errors } = parse(fs.readFileSync(new URL(file, import.meta.url), 'utf8'))
   assert.deepEqual(errors, [])
@@ -222,7 +251,7 @@ test('admin and player exchange surfaces expose per-user limits', () => {
           prop.type === 7 &&
           prop.name === 'bind' &&
           prop.arg?.content === 'disabled' &&
-          prop.exp?.content === 'exhausted(offer)',
+          prop.exp?.content === '!!blockReason(offer)',
       ),
     ),
     'player purchase must disable at the limit',
