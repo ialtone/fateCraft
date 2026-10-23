@@ -124,6 +124,9 @@ func (s *Server) executeCampaignAction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if !s.allowPlayerAction(c) {
+		return
+	}
 	result, err := s.campaigns.ExecutePlayerAction(c.Request.Context(), id, in)
 	if err != nil {
 		fail(c, err)

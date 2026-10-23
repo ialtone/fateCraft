@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -143,6 +144,10 @@ func (s *Server) postMessage(c *gin.Context) {
 	var body postMessageBody
 	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Content) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content 不能为空"})
+		return
+	}
+	if !realtime.UserContentWithinLimit(body.Content) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("消息内容不能超过 %d 字", realtime.MaxUserContentRunes), "code": "content_too_long"})
 		return
 	}
 	if !s.requireLLMRoute(c, id) {

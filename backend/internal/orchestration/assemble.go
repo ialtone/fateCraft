@@ -175,6 +175,10 @@ func (g *Generator) assembleInputWithCache(
 		delete(in.State, "gameplay")
 		in.CampaignProjection = projection
 		in.CampaignProjectionPriority = []string{"gameplay"}
+		// Challenge mode has no campaign revision binding, but the narrative
+		// still goes through the deterministic L0/L1 gate (no persisted binding
+		// is created because CampaignID is empty).
+		in.NarrativeContext = &gameplay.TurnNarrativeContext{}
 	}
 
 	// 世界书激活（attempt 内固定，见 attemptAssembleCache）。

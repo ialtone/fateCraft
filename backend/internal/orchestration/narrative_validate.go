@@ -59,6 +59,49 @@ func ValidateNarrative(text string, narrative *gameplay.TurnNarrativeContext) (s
 	return status, detail
 }
 
+// ValidateTurnNarrative extends ValidateNarrative with the "unbacked claim"
+// gate: when the turn committed no state-changing action and the narrative
+// context carries no pending action results, any claim of a realm
+// breakthrough, healing or acquired items/currency cannot be true and is
+// reported as a violation so the RepairNarrative / fallback flow applies.
+func ValidateTurnNarrative(text string, narrative *gameplay.TurnNarrativeContext, committedThisTurn bool) (string, storage.JSONMap) {
+	status, detail := ValidateNarrative(text, narrative)
+	if committedThisTurn || (narrative != nil && len(narrative.Actions) > 0) {
+		return status, detail
+	}
+	extra := unbackedStateClaims(text)
+	if len(extra) == 0 {
+		return status, detail
+	}
+	violations, _ := detail["violations"].([]narrativeViolation)
+	detail["violations"] = append(violations, extra...)
+	return "failed", detail
+}
+
+var unbackedClaimPatterns = []struct {
+	code    string
+	path    string
+	pattern *regexp.Regexp
+}{
+	{"unbacked_realm_change", "character.realm_name", regexp.MustCompile(`突破[^。！？\n]{0,12}成功|成功[^。！？\n]{0,12}突破|晋升成功|破境成功|境界(?:提升|突破|跃升)|一举突破`)},
+	{"unbacked_healing", "character.health", regexp.MustCompile(`伤势?[^。！？\n]{0,8}(痊愈|愈合|全消|尽复)|伤愈|气血[^。！？\n]{0,8}(回满|尽复|全满)|恢复如初`)},
+	{"unbacked_item_gain", "inventory", regexp.MustCompile(`(?:获得|得到|拾取|收获|到手|赚得|赚到|赚了)[^。！？\n]{0,8}?(?:\d+|[一二两三四五六七八九十百千万几数]+)\s*(?:块|枚|株|份|件|瓶|张|颗|粒|两|贯|文|个|把|本)`)},
+	{"unbacked_currency_gain", "currency", regexp.MustCompile(`(?:灵石|银两|银子|金币|铜钱|钱财)[^。！？\n]{0,4}(?:增加|大增|入账|翻倍)`)},
+}
+
+func unbackedStateClaims(text string) []narrativeViolation {
+	out := make([]narrativeViolation, 0)
+	for _, rule := range unbackedClaimPatterns {
+		if match := rule.pattern.FindString(text); match != "" && !negated(text, rule.pattern) {
+			out = append(out, narrativeViolation{
+				Code: rule.code, Path: rule.path, Claim: match,
+				Expected: "本回合无已提交动作", Actual: "正文宣称状态变化",
+			})
+		}
+	}
+	return out
+}
+
 func validateNarrativeFacts(text string, narrative gameplay.TurnNarrativeContext) []narrativeViolation {
 	changes := map[string]gameplay.FactChange{}
 	facts := map[string]any{}

@@ -866,7 +866,8 @@ export const useSocketStore = defineStore('socket', () => {
       case 'agent.turn.completed':
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.endStream(ev.payload.message_id)
-        resources.invalidateMany(['endings', 'rewards', 'actions'])
+        // 回合内工具可能已改写玩家状态/存档；终止事件统一作为状态边界刷新。
+        resources.invalidateMany(['state', 'campaign', 'endings', 'rewards', 'actions'])
         context.invalidateInspector()
         finishActiveOperation()
         break
@@ -877,7 +878,8 @@ export const useSocketStore = defineStore('socket', () => {
         // 这里不写死数量，交给平台能力和随后刷新的 inspector 决定。
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         lastError.value = ev.payload?.message || '动作已执行，但叙事未完成。请继续叙事。'
-        resources.invalidateMany(['endings', 'rewards', 'actions'])
+        // 回合内工具可能已改写玩家状态/存档；终止事件统一作为状态边界刷新。
+        resources.invalidateMany(['state', 'campaign', 'endings', 'rewards', 'actions'])
         context.invalidateInspector()
         finishActiveOperation()
         break
@@ -887,7 +889,8 @@ export const useSocketStore = defineStore('socket', () => {
         context.setNarrative('idle')
         if (ev.payload?.message_id) chat.abortStream(ev.payload.message_id)
         // 失败或取消后付费的重新生成会先退款，再推送终止事件；这里刷新余额。
-        resources.invalidateMany(['endings', 'rewards', 'actions'])
+        // 回合内工具可能已改写玩家状态/存档；终止事件统一作为状态边界刷新。
+        resources.invalidateMany(['state', 'campaign', 'endings', 'rewards', 'actions'])
         context.invalidateInspector()
         finishActiveOperation()
         break
@@ -933,6 +936,8 @@ export const useSocketStore = defineStore('socket', () => {
       case 'state_update':
         guidance.reset()
         if (ev.state) state.set(ev.state)
+        // 服务端提交后读取状态失败时只下发 refresh_required，由客户端重新拉取。
+        else if (ev.refresh_required && currentConvId.value) resources.invalidate('state', true)
         // Guidance visibility is projected by the server against the latest
         // player state. Refresh the optional runtime/actions presentation at
         // this explicit state boundary, coalesced by the resource scheduler.

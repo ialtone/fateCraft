@@ -1725,6 +1725,9 @@ export interface StateUpdateEvent extends SocketEventBase {
   type: 'state_update'
   /** 更新后的完整状态对象 */
   state?: Record<string, any>
+  /** 服务端未能读取最新状态时为 true，客户端需重新拉取 */
+  refresh_required?: boolean
+  reason?: string
 }
 
 export interface CampaignUpdatedEvent extends SocketEventBase {

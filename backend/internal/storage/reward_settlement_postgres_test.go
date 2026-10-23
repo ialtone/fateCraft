@@ -108,3 +108,75 @@ func TestPostgresFixedPointsSettlementIsAtomicAndOnce(t *testing.T) {
 	}
 	checkRewardBalance(t, db, player.ID, PointsKey, 100)
 }
+
+func TestPostgresEndingRewardCapPerPlayerPackAndOutcome(t *testing.T) {
+	db, _, _, player := rewardFixture(t)
+	ctx := context.Background()
+	pack, v1, v2 := uuid.New(), uuid.New(), uuid.New()
+	rules := map[string]uuid.UUID{"v1:end": uuid.New(), "v1:other": uuid.New(), "v2:end": uuid.New()}
+	hash := strings.Repeat("0", 64)
+	for _, statement := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO challenge_packs(id,slug,name) VALUES (?, 'cap-test', 'Cap')`, []any{pack}},
+		{`INSERT INTO challenge_versions(id,challenge_pack_id,version,status,manifest,content_hash,published_at) VALUES (?,?,'1.0.0','published','{}',?,CURRENT_TIMESTAMP)`, []any{v1, pack, hash}},
+		{`INSERT INTO challenge_versions(id,challenge_pack_id,version,status,manifest,content_hash,published_at) VALUES (?,?,'1.0.1','published','{}',?,CURRENT_TIMESTAMP)`, []any{v2, pack, hash}},
+		{`UPDATE challenge_packs SET current_version_id = ?, status = 'active' WHERE id = ?`, []any{v1, pack}},
+		{`INSERT INTO challenge_outcome_rules(id,challenge_version_id,outcome_key,category,title,verifier_key,verifier_config,reward_points) VALUES (?,?,'end','success','End','core.always','{}',100)`, []any{rules["v1:end"], v1}},
+		{`INSERT INTO challenge_outcome_rules(id,challenge_version_id,outcome_key,category,title,verifier_key,verifier_config,reward_points) VALUES (?,?,'other','success','Other','core.always','{}',100)`, []any{rules["v1:other"], v1}},
+		{`INSERT INTO challenge_outcome_rules(id,challenge_version_id,outcome_key,category,title,verifier_key,verifier_config,reward_points) VALUES (?,?,'end','success','End','core.always','{}',100)`, []any{rules["v2:end"], v2}},
+	} {
+		if err := db.Exec(statement.sql, statement.args...).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	settle := func(version uuid.UUID, outcomeKey string) []ChallengeRunReward {
+		outcome := rules["v1:"+outcomeKey]
+		if version == v2 {
+			outcome = rules["v2:"+outcomeKey]
+		}
+		t.Helper()
+		id := uuid.New()
+		if err := db.Exec(`INSERT INTO conversations(id,player_id,title,challenge_version_id,challenge_hash,llm_route) VALUES (?,?,'Cap',?,?,?)`, id, player.ID, version, hash, LLMRouteServer).Error; err != nil {
+			t.Fatal(err)
+		}
+		var rewards []ChallengeRunReward
+		err := NewChallengeRepository(db).WithTx(ctx, func(tx *ChallengeRepository) error {
+			conv, err := tx.LockConversation(ctx, id)
+			if err != nil {
+				return err
+			}
+			run := ChallengeRun{ID: uuid.New(), ConversationID: id, PlayerID: player.ID, ChallengeVersionID: version, OutcomeRuleID: outcome, OutcomeKey: outcomeKey, Category: "success", TitleSnapshot: "End", Summary: "done", SettlementDetail: JSONMap{"reward_points": 100}, SettledAt: time.Now()}
+			rewards, err = tx.CompleteRun(ctx, conv, &run, 100)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rewards
+	}
+	if got := settle(v1, "end"); len(got) != 1 {
+		t.Fatalf("first clear must be rewarded: %+v", got)
+	}
+	if got := settle(v1, "end"); len(got) != 0 {
+		t.Fatalf("repeat clear must not be rewarded: %+v", got)
+	}
+	if err := db.Exec(`UPDATE challenge_packs SET current_version_id = ? WHERE id = ?`, v2, pack).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := settle(v2, "end"); len(got) != 0 {
+		t.Fatalf("new version of the same pack must share the cap: %+v", got)
+	}
+	if err := db.Exec(`UPDATE challenge_packs SET current_version_id = ? WHERE id = ?`, v1, pack).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := settle(v1, "other"); len(got) != 1 {
+		t.Fatalf("a different ending is capped separately: %+v", got)
+	}
+	checkRewardBalance(t, db, player.ID, PointsKey, 200)
+	var capped int64
+	if err := db.Model(&ChallengeRun{}).Where("player_id = ? AND settlement_detail->>'reward_points' = '0'", player.ID).Count(&capped).Error; err != nil || capped != 2 {
+		t.Fatalf("capped runs = %d err=%v", capped, err)
+	}
+}

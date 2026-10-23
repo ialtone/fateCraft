@@ -50,6 +50,9 @@ func (s *Server) executeModuleAction(c *gin.Context) {
 		fail(c, storage.ErrNotFound)
 		return
 	}
+	if !s.allowPlayerAction(c) {
+		return
+	}
 	result, err := s.challenges.ExecuteModulePlayerAction(c.Request.Context(), id, playerID, input)
 	if err != nil {
 		var violation *gameplay.RuleViolation

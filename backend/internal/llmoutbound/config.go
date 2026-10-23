@@ -211,6 +211,9 @@ func Build(c Config, revision int64) (*Snapshot, error) {
 		}
 	}
 	managed := &managedTransport{base: transport, proxyAddr: proxyAddr, proxied: c.Enabled}
+	if !c.Enabled {
+		managed.guarded = guardedTransport(transport)
+	}
 	return &Snapshot{
 		revision:  revision,
 		enabled:   c.Enabled,

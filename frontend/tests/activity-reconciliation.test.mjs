@@ -773,3 +773,50 @@ test('campaign messages arriving during a snapshot read survive the coalesced fo
   assert.equal(reads, 2)
   assert.equal(fixture.chat.messages[0]?.id, 'new-message')
 })
+
+test('state_update with refresh_required reloads player state instead of keeping stale data', async (t) => {
+  const fixture = browserSetup()
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const transport = await ready(fixture)
+  let reads = 0
+  useStateStore().load = async () => {
+    reads++
+  }
+  transport.receive({ type: 'state_update', conversation_id: 'a', refresh_required: true })
+  t.mock.timers.tick(50)
+  await settle()
+  assert.equal(reads, 1)
+})
+
+for (const type of [
+  'agent.turn.completed',
+  'agent.turn.partial',
+  'agent.turn.failed',
+  'agent.turn.cancelled',
+]) {
+  test(`${type} refreshes player state and campaign`, async (t) => {
+    const fixture = browserSetup()
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+    const transport = await ready(fixture)
+    fixture.conv.current.campaign_id = 'world'
+    let stateReads = 0,
+      campaignReads = 0
+    useStateStore().load = async () => {
+      stateReads++
+    }
+    useCampaignStore().load = async () => {
+      campaignReads++
+    }
+    transport.receive({
+      type,
+      conversation_id: 'a',
+      attempt_id: 'attempt-x',
+      sequence: 1,
+      payload: {},
+    })
+    t.mock.timers.tick(50)
+    await settle()
+    assert.ok(stateReads >= 1, 'state reloaded')
+    assert.ok(campaignReads >= 1, 'campaign reloaded')
+  })
+}

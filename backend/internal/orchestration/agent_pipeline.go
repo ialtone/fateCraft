@@ -384,12 +384,12 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			validationStatus := "not_applicable"
 			validationDetail := storage.JSONMap{}
 			if in.NarrativeContext != nil {
-				validationStatus, validationDetail = ValidateNarrative(text, in.NarrativeContext)
+				validationStatus, validationDetail = ValidateTurnNarrative(text, in.NarrativeContext, mutatingCount > 0)
 				if validationStatus != "passed" {
 					validationDetail["original_status"] = validationStatus
 					originalDetail := validationDetail
 					if repaired := RepairNarrative(text, originalDetail); repaired != "" {
-						if repairedStatus, repairedDetail := ValidateNarrative(repaired, in.NarrativeContext); repairedStatus == "passed" {
+						if repairedStatus, repairedDetail := ValidateTurnNarrative(repaired, in.NarrativeContext, mutatingCount > 0); repairedStatus == "passed" {
 							text = repaired
 							validationStatus = "repaired"
 							validationDetail = repairedDetail
@@ -686,6 +686,16 @@ func (g *Generator) processAgentToolCall(
 			if toolMayChangeConversationState(binding.Kind) {
 				if playerState, stateErr := g.stateSvc.GetPlayer(context.WithoutCancel(ctx), conv.ID); stateErr == nil {
 					emit(decorateGenerationEvent(ctx, realtime.Event{Type: realtime.TypeStateUpdate, ConversationID: conv.ID.String(), State: playerState}))
+				} else {
+					// 工具已提交但状态读取失败：记录并让客户端主动重新拉取，避免停留在旧状态。
+					logging.FromContext(ctx, "orchestration").Warn("工具提交后读取玩家状态失败",
+						zap.String("conversation_id", conv.ID.String()), zap.Error(stateErr))
+					if emit != nil {
+						emit(decorateGenerationEvent(ctx, realtime.Event{
+							Type: realtime.TypeStateUpdate, ConversationID: conv.ID.String(),
+							RefreshRequired: true, Reason: "state_read_failed",
+						}))
+					}
 				}
 			}
 		}

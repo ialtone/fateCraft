@@ -161,3 +161,15 @@ func TestReplaceRequestHashBindsOldShare(t *testing.T) {
 		t.Fatal("replace request hash did not bind the old share")
 	}
 }
+
+func TestProjectMessagesNormalizesTimestampsToUTC(t *testing.T) {
+	local := time.Date(2026, 10, 23, 20, 0, 0, 0, time.FixedZone("UTC+8", 8*3600))
+	projected, err := projectMessages([]storage.DisplayMessage{{Type: "user", Markdown: "hi", CreatedAt: local}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := projected[0].CreatedAt
+	if got.Location() != time.UTC || !got.Equal(local) {
+		t.Fatalf("created_at = %v, want UTC instant %v", got, local.UTC())
+	}
+}

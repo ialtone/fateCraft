@@ -31,6 +31,8 @@ const (
 	wsDeltaMaxBytes       = 4 * 1024
 	wsMaxClientFrameBytes = 64 * 1024
 	maxClientContentBytes = 32 * 1024
+	// MaxUserContentRunes 是单条玩家消息的字符上限，REST 与 WebSocket 入口共用。
+	MaxUserContentRunes = 4000
 	// A client can explicitly queue follow-up/steer requests, but an
 	// unbounded queue would turn a disconnected or abusive client into a
 	// memory growth vector.
@@ -537,6 +539,12 @@ func (h *Hub) writePump(c *conn) {
 	}
 }
 
+// UserContentWithinLimit 报告玩家消息是否为合法 UTF-8 且未超出字节/字符上限。
+func UserContentWithinLimit(content string) bool {
+	return len(content) <= maxClientContentBytes && utf8.ValidString(content) &&
+		utf8.RuneCountInString(content) <= MaxUserContentRunes
+}
+
 func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 	defer c.ws.Close()
 	// 死连接检测：初始读期限 + pong 刷新（配合 writePump 的周期 ping）。
@@ -564,7 +572,7 @@ func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 				c.notice(convID, "消息内容不能为空")
 				continue
 			}
-			if len(msg.Content) > maxClientContentBytes || !utf8.ValidString(msg.Content) {
+			if !UserContentWithinLimit(msg.Content) {
 				c.notice(convID, "消息内容超过大小限制")
 				continue
 			}
@@ -587,7 +595,7 @@ func (h *Hub) readPump(baseCtx context.Context, convID uuid.UUID, c *conn) {
 				c.notice(convID, "排队消息内容不能为空")
 				continue
 			}
-			if len(msg.Content) > maxClientContentBytes || !utf8.ValidString(msg.Content) {
+			if !UserContentWithinLimit(msg.Content) {
 				c.notice(convID, "排队消息超过大小限制")
 				continue
 			}

@@ -238,6 +238,10 @@ func (s *Server) sendRegistrationCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
 		return
 	}
+	if s.limits.count("code:"+c.ClientIP(), time.Hour, true) > 10 {
+		tooManyRequests(c, "验证码请求过于频繁，请稍后再试")
+		return
+	}
 	if err := s.auth.SendRegistrationCode(c.Request.Context(), body.Email); err != nil {
 		authFail(c, err)
 		return
@@ -254,11 +258,19 @@ func (s *Server) registerEmail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
 		return
 	}
+	verifyKey := "verify:" + strings.ToLower(strings.TrimSpace(body.Email))
+	if s.limits.count(verifyKey, 15*time.Minute, false) >= 5 {
+		tooManyRequests(c, "验证码错误次数过多，请稍后再试")
+		return
+	}
 	result, err := s.auth.RegisterEmail(
 		c.Request.Context(), body.Email, body.Username, body.Password, body.DisplayName,
 		body.VerificationCode, body.InvitationCode,
 	)
 	if err != nil {
+		if errors.Is(err, authservice.ErrInvalidVerificationCode) {
+			s.limits.count(verifyKey, 15*time.Minute, true)
+		}
 		authFail(c, err)
 		return
 	}
@@ -276,8 +288,18 @@ func (s *Server) loginEmail(c *gin.Context) {
 	if identifier == "" {
 		identifier = body.Email
 	}
+	// 失败计数：同一账号 15 分钟 5 次、同一 IP 15 分钟 20 次，超出返回 429。
+	accountKey, ipKey := "login:"+strings.ToLower(strings.TrimSpace(identifier)), "login-ip:"+c.ClientIP()
+	if s.limits.count(accountKey, 15*time.Minute, false) >= 5 || s.limits.count(ipKey, 15*time.Minute, false) >= 20 {
+		tooManyRequests(c, "登录失败次数过多，请稍后再试")
+		return
+	}
 	result, err := s.auth.LoginEmail(c.Request.Context(), identifier, body.Password)
 	if err != nil {
+		if errors.Is(err, authservice.ErrInvalidCredentials) {
+			s.limits.count(accountKey, 15*time.Minute, true)
+			s.limits.count(ipKey, 15*time.Minute, true)
+		}
 		authFail(c, err)
 		return
 	}

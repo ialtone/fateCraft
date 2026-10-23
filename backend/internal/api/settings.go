@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ialtone/fatecraft/internal/contextbuilder"
 	"github.com/ialtone/fatecraft/internal/llm"
+	"github.com/ialtone/fatecraft/internal/llmoutbound"
 	"github.com/ialtone/fatecraft/internal/llmsettings"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/modelcapability"
@@ -358,7 +360,7 @@ func (s *Server) fetchModels(c *gin.Context) {
 	url += "models"
 
 	// 模型列表是独立的短请求：使用同一出站快照，但保留 10 秒专用总超时。
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(llmoutbound.WithUserSuppliedTarget(c.Request.Context()), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -411,5 +413,9 @@ func (s *Server) fetchModels(c *gin.Context) {
 
 func upstreamFailure(c *gin.Context, err error) {
 	_ = c.Error(err)
+	if errors.Is(err, llmoutbound.ErrPrivateTarget) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": llmoutbound.ErrPrivateTarget.Error(), "code": "target_forbidden"})
+		return
+	}
 	c.JSON(http.StatusBadGateway, gin.H{"error": "模型服务暂时不可用", "code": "upstream_error", "trace_id": logging.TraceID(c.Request.Context())})
 }

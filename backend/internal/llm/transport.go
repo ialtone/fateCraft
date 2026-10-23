@@ -31,6 +31,11 @@ func (c *Client) doRaw(ctx context.Context, p Params, endpoint string, body []by
 	if p.Relay == nil && c.outbound != nil {
 		httpClient = c.outbound.Snapshot().Client()
 	}
+	if p.Relay == nil && p.SettingsSource != "platform" {
+		// User-supplied base_url: enforce the private-network target policy
+		// at dial time. Platform-managed endpoints are operator-trusted.
+		ctx = llmoutbound.WithUserSuppliedTarget(ctx)
+	}
 	policy := effectiveRetryPolicy(p.RetryPolicy)
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
 		if call := auditCall(ctx); call != nil {

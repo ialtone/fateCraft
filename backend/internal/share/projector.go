@@ -30,7 +30,7 @@ func projectMessages(messages []storage.DisplayMessage) ([]MessageSnapshot, erro
 		}
 		out = append(out, MessageSnapshot{
 			Position: i + 1, Type: message.Type, Markdown: message.Markdown,
-			Metadata: metadata, CreatedAt: message.CreatedAt,
+			Metadata: metadata, CreatedAt: message.CreatedAt.UTC(), // 快照内时间统一为 UTC，与 Snapshot.CreatedAt 一致
 		})
 	}
 	return out, nil

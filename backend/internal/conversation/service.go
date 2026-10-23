@@ -3,7 +3,9 @@ package conversation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -25,6 +27,22 @@ var ErrCampaignRequired = errors.New("该玩法必须先创建长期存档")
 
 // ErrForkCampaign 表示长期存档对话不能走普通对话的版本分叉流程。
 // Campaign 有独立的领域存档和动作提交协议，必须通过 Campaign 入口处理。
+// ErrTrustedEndRequired 表示该玩法只能通过可信结束动作结算，不能直接结束对话。
+var ErrTrustedEndRequired = errors.New("此玩法必须通过可信结束动作结算，请使用玩法结束确认")
+
+// MaxTitleRunes 与 conversations.title VARCHAR(256) 对齐。
+const MaxTitleRunes = 256
+
+// ErrTitleTooLong 表示对话标题超过长度上限。
+var ErrTitleTooLong = fmt.Errorf("标题不能超过 %d 个字符", MaxTitleRunes)
+
+func validateTitle(title string) error {
+	if utf8.RuneCountInString(title) > MaxTitleRunes {
+		return ErrTitleTooLong
+	}
+	return nil
+}
+
 var ErrForkCampaign = errors.New("长期存档对话不能通过普通对话分叉")
 
 // ErrGenerationInProgress indicates that another durable generation run still
@@ -100,6 +118,9 @@ type CreateInput struct {
 // Create 新建对话并固定已发布挑战版本及其内容哈希。
 // 路由取当前有效路由固化，不接受请求体传入，之后不可修改。
 func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversation, error) {
+	if err := validateTitle(in.Title); err != nil {
+		return nil, err
+	}
 	playerID, err := uuid.Parse(s.identity.CurrentPlayerID(ctx))
 	if err != nil {
 		return nil, storage.ErrNotFound
@@ -164,6 +185,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversa
 // migration. If a persona was removed in the new version, Create falls back
 // to that version's recommended persona.
 func (s *Service) Fork(ctx context.Context, sourceID uuid.UUID, title string) (*storage.Conversation, error) {
+	if err := validateTitle(title); err != nil {
+		return nil, err
+	}
 	source, err := s.GetOwned(ctx, sourceID)
 	if err != nil {
 		return nil, err
@@ -341,6 +365,9 @@ func (s *Service) EnsureActive(ctx context.Context, id uuid.UUID) (*storage.Conv
 
 // UpdateTitle 更新普通用户唯一可编辑的对话元数据。
 func (s *Service) UpdateTitle(ctx context.Context, id uuid.UUID, title string) (*storage.Conversation, error) {
+	if err := validateTitle(title); err != nil {
+		return nil, err
+	}
 	if _, err := s.GetOwned(ctx, id); err != nil {
 		return nil, err
 	}
@@ -374,7 +401,7 @@ func (s *Service) End(ctx context.Context, id uuid.UUID) (*storage.Conversation,
 			return nil, runtimeErr
 		}
 		if runtime != nil && (conv.CampaignID != nil || len(runtime.Actions.Domain) > 0) {
-			return nil, errors.New("此玩法必须通过可信结束动作结算，请使用玩法结束确认")
+			return nil, ErrTrustedEndRequired
 		}
 	}
 	now := time.Now()

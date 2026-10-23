@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -68,6 +70,7 @@ type Server struct {
 	auth           *authservice.Service
 	cookieSecure   bool
 	diagnostics    func() any
+	limits         *fixedWindow
 }
 
 // Deps 是构造 Server 所需的依赖集合。
@@ -144,6 +147,7 @@ func NewServer(d Deps) *Server {
 		llmClient: d.LLMClient, outbound: d.Outbound, llmProxy: d.LLMProxy,
 		capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
 		auth: d.Auth, cookieSecure: d.CookieSecure, diagnostics: d.Diagnostics,
+		limits: newFixedWindow(),
 	}
 }
 
@@ -414,7 +418,7 @@ func fail(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "llm_route_mismatch"})
 	case errors.Is(err, llm.ErrRelayUnavailable):
 		c.JSON(http.StatusConflict, gin.H{"error": "客户端直连未就绪，请保持页面打开并检查网络后重试", "code": "llm_relay_unavailable"})
-	case errors.Is(err, conversation.ErrForkCampaign):
+	case errors.Is(err, conversation.ErrForkCampaign), errors.Is(err, conversation.ErrTrustedEndRequired):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, inquiry.ErrBusy):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -439,7 +443,7 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, storage.ErrCampaignCheckpointMissing),
 		errors.Is(err, campaign.ErrActionRejected):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, conversation.ErrCampaignRequired), errors.Is(err, campaign.ErrCampaignModeRequired),
+	case errors.Is(err, conversation.ErrCampaignRequired), errors.Is(err, conversation.ErrTitleTooLong), errors.Is(err, campaign.ErrCampaignModeRequired),
 		errors.Is(err, campaign.ErrInvalidInput), errors.Is(err, campaign.ErrInvalidAction), errors.Is(err, campaign.ErrUnknownAction):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, challenge.ErrEntryRequirementNotMet):
@@ -451,4 +455,57 @@ func fail(c *gin.Context, err error) {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务暂时不可用", "code": "internal_error", "trace_id": logging.TraceID(c.Request.Context())})
 	}
+}
+
+// fixedWindow 是进程内固定窗口计数器，用于登录、验证码与直接动作限流。
+// 多副本部署时每个副本独立计数。
+type fixedWindow struct {
+	mu   sync.Mutex
+	hits map[string]windowHit
+}
+
+type windowHit struct {
+	start time.Time
+	n     int
+}
+
+func newFixedWindow() *fixedWindow { return &fixedWindow{hits: map[string]windowHit{}} }
+
+// count 返回 key 在当前窗口内的计数；add 为 true 时先计一次。
+func (w *fixedWindow) count(key string, period time.Duration, add bool) int {
+	if w == nil {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	now := time.Now()
+	h := w.hits[key]
+	if now.Sub(h.start) >= period {
+		h = windowHit{start: now}
+	}
+	if add {
+		h.n++
+		if len(w.hits) > 10000 {
+			w.hits = map[string]windowHit{}
+		}
+		w.hits[key] = h
+	}
+	return h.n
+}
+
+func tooManyRequests(c *gin.Context, message string) {
+	c.JSON(http.StatusTooManyRequests, gin.H{"error": message, "code": "rate_limited"})
+}
+
+// allowPlayerAction 限制每名玩家每分钟的直接玩法动作次数，防止脚本刷取结局奖励。
+func (s *Server) allowPlayerAction(c *gin.Context) bool {
+	key := "action:" + c.ClientIP()
+	if s.identity != nil {
+		key = "action:" + s.identity.CurrentPlayerID(c.Request.Context())
+	}
+	if s.limits.count(key, time.Minute, true) > 30 {
+		tooManyRequests(c, "操作过于频繁，请稍后再试")
+		return false
+	}
+	return true
 }

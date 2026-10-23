@@ -722,6 +722,9 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 	if outcome.RewardPoints == 0 {
 		return []CampaignOutcomeReward{}, nil
 	}
+	if capped, err := endingRewardCapped(ctx, s.tx, campaign.PlayerID, campaign.ChallengeVersionID, outcomeKey, campaign.ID.String()); err != nil || capped {
+		return []CampaignOutcomeReward{}, err
+	}
 	_, err := NewRewardRepository(s.tx).GrantInCurrentTx(ctx, RewardMutation{PlayerID: campaign.PlayerID, RewardKey: PointsKey, Quantity: outcome.RewardPoints, SourceType: "campaign_outcome", SourceID: campaign.ID.String(), IdempotencyKey: "campaign:" + campaign.ID.String() + ":points", Metadata: JSONMap{"outcome_key": outcomeKey, "challenge_version_id": campaign.ChallengeVersionID}})
 	if err != nil {
 		return nil, err

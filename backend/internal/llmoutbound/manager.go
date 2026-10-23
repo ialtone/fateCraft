@@ -167,6 +167,7 @@ func (s *Snapshot) Close() {
 
 type managedTransport struct {
 	base      *http.Transport
+	guarded   *http.Transport // 直连且目标由用户提供时使用
 	proxyAddr string
 	proxied   bool
 
@@ -187,7 +188,11 @@ func (t *managedTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	t.active++
 	t.mu.Unlock()
 
-	resp, err := t.base.RoundTrip(req)
+	transport := t.base
+	if t.guarded != nil && userSuppliedTarget(req.Context()) {
+		transport = t.guarded
+	}
+	resp, err := transport.RoundTrip(req)
 	if err != nil {
 		t.finish()
 		return nil, wrapTransportError(err, t.proxied, t.proxyAddr)
@@ -208,8 +213,15 @@ func (t *managedTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 func (t *managedTransport) Retire() {
 	t.mu.Lock()
 	t.retired = true
-	t.base.CloseIdleConnections()
+	t.closeIdle()
 	t.mu.Unlock()
+}
+
+func (t *managedTransport) closeIdle() {
+	t.base.CloseIdleConnections()
+	if t.guarded != nil {
+		t.guarded.CloseIdleConnections()
+	}
 }
 
 func (t *managedTransport) finish() {
@@ -218,7 +230,7 @@ func (t *managedTransport) finish() {
 		t.active--
 	}
 	if t.retired && t.active == 0 {
-		t.base.CloseIdleConnections()
+		t.closeIdle()
 	}
 	t.mu.Unlock()
 }
