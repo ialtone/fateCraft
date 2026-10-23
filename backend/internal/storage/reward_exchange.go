@@ -259,7 +259,7 @@ func (r *RewardRepository) Exchange(ctx context.Context, player uuid.UUID, in Re
 		if err := tx.db.Create(&order).Error; err != nil {
 			return err
 		}
-		return tx.db.Exec(`UPDATE reward_exchange_stock SET status = 'redeemed', order_id = ?, player_id = ?, updated_at = now() WHERE id IN ?`, order.ID, player, ids).Error
+		return tx.db.Exec(`UPDATE reward_exchange_stock SET status = 'redeemed', order_id = ?, player_id = ?, redeemed_at = now(), updated_at = now() WHERE id IN ?`, order.ID, player, ids).Error
 	})
 	return &order, err
 }
@@ -267,6 +267,15 @@ func (r *RewardRepository) Exchange(ctx context.Context, player uuid.UUID, in Re
 func (r *RewardRepository) ExchangeByRequest(ctx context.Context, player uuid.UUID, id uuid.UUID) (*RewardExchangeOrder, error) {
 	var row RewardExchangeOrder
 	err := r.db.WithContext(ctx).First(&row, "player_id = ? AND request_id = ?", player, id).Error
+	return &row, asNotFound(err)
+}
+
+// ExchangeOrder 返回管理员按库存追溯时查看的单笔订单，附带用户与工单状态。
+func (r *RewardRepository) ExchangeOrder(ctx context.Context, id uuid.UUID) (*RewardExchangeOrder, error) {
+	var row RewardExchangeOrder
+	err := r.db.WithContext(ctx).
+		Select("reward_exchange_orders.*, COALESCE((SELECT status FROM reward_exchange_tickets t WHERE t.order_id = reward_exchange_orders.id), '') AS ticket_status, "+usernameOf("reward_exchange_orders.player_id")).
+		First(&row, "id = ?", id).Error
 	return &row, asNotFound(err)
 }
 

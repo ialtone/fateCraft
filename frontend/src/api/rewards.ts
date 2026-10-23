@@ -97,6 +97,8 @@ export const rewardExchangeApi = {
     http.post<RewardExchangeOrder>('/me/reward-exchange/orders', body).then((r) => r.data),
   request: (id: string) =>
     http.get<RewardExchangeOrder>(`/me/reward-exchange/by-request/${id}`).then((r) => r.data),
+  adminOrder: (id: string) =>
+    http.get<RewardExchangeOrder>(`/admin/reward-exchange/orders/${id}`).then((r) => r.data),
   orders: (admin = false, cursor?: string, user_id?: string) =>
     http
       .get<{ orders: RewardExchangeOrder[]; next_cursor: string }>(

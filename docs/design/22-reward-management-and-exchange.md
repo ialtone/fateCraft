@@ -76,7 +76,7 @@
 
 ## 库存、工单与积分 CDK
 
-每个商品的库存逐份保存在 `reward_exchange_stock`，状态为 `available / redeemed / removed / voided`。CDK 商品每行一个 code，`(offer_id, code)` 唯一，粘贴内重复或与已有库存重复时整批拒绝并返回 `duplicates`；站内奖励按数量生成空 code 行。展示口径：总数 = available + redeemed，剩余 = available；已移除、已作废不计入。每人已兑换份数按该玩家 `redeemed` 库存计算，因此退款作废后额度自动恢复。
+每个商品的库存逐份保存在 `reward_exchange_stock`，状态为 `available / redeemed / removed / voided`。CDK 商品每行一个 code，`(offer_id, code)` 唯一，粘贴内重复或与已有库存重复时整批拒绝并返回 `duplicates`；站内奖励按数量生成空 code 行。展示口径：总数 = available + redeemed，剩余 = available；已移除、已作废不计入。每人已兑换份数按该玩家 `redeemed` 库存计算，因此退款作废后额度自动恢复。兑换成功时库存同时写入 `order_id`、`player_id` 和 `redeemed_at`；作废只改状态与 `updated_at`，保留原兑换时间。库存明细展示兑换时间与订单号，并可据此打开订单详情，实现库存到订单的双向追溯。
 
 兑换在同一事务内用 `FOR UPDATE SKIP LOCKED` 取所需份数的可用库存，不足整笔返回 409 `exchange_stock_insufficient`（“库存不足，请刷新后重试”），不部分成交；之后扣积分、站内奖励发放次数、写订单并把库存标记为 `redeemed`。订单快照保存 kind、教程和发放的 CDK，CDK 商品订单 `reward_ledger_id` 为空。错误码：`exchange_limit_reached`、`exchange_stock_insufficient`、`exchange_offer_disabled`、`exchange_revision_conflict`。
 

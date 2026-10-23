@@ -121,6 +121,21 @@ func TestPostgresExchangeTicketRefundRestoresQuota(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var stock RewardExchangeStock
+	if err := db.First(&stock, "order_id = ?", order.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stock.Status != "redeemed" || stock.RedeemedAt == nil || stock.PlayerID == nil || *stock.PlayerID != player.ID {
+		t.Fatalf("redeemed stock = %+v", stock)
+	}
+	redeemedAt := *stock.RedeemedAt
+	traced, err := repo.ExchangeOrder(ctx, order.ID)
+	if err != nil || traced.ID != order.ID || traced.PlayerID != player.ID || traced.Username != player.Username {
+		t.Fatalf("traced order = %+v, err = %v", traced, err)
+	}
+	if _, err := repo.ExchangeOrder(ctx, uuid.New()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing order: %v", err)
+	}
 	if _, err := repo.OpenTicket(ctx, actor.ID, order.ID, "不是我的订单"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign ticket: %v", err)
 	}
@@ -159,6 +174,12 @@ func TestPostgresExchangeTicketRefundRestoresQuota(t *testing.T) {
 	}
 	if _, err := repo.ResolveTicket(ctx, actor.ID, ticket.ID, true, ""); !errors.Is(err, ErrTicketState) {
 		t.Fatalf("double approve: %v", err)
+	}
+	if err := db.First(&stock, "id = ?", stock.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stock.Status != "voided" || stock.OrderID == nil || *stock.OrderID != order.ID || stock.RedeemedAt == nil || !stock.RedeemedAt.Equal(redeemedAt) {
+		t.Fatalf("voided stock lost trace = %+v", stock)
 	}
 	checkRewardBalance(t, db, player.ID, PointsKey, 100)
 	if got := stockCount(t, repo, offer.ID); got.Total != 1 || got.Remaining != 1 {

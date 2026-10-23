@@ -1588,9 +1588,10 @@ CREATE TABLE reward_exchange_stock (
     status VARCHAR(16) NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'redeemed', 'removed', 'voided')),
     order_id UUID REFERENCES reward_exchange_orders(id) ON DELETE RESTRICT,
     player_id UUID REFERENCES users(id) ON DELETE RESTRICT,
+    redeemed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((status IN ('redeemed', 'voided')) = (order_id IS NOT NULL AND player_id IS NOT NULL))
+    CHECK ((status IN ('redeemed', 'voided')) = (order_id IS NOT NULL AND player_id IS NOT NULL AND redeemed_at IS NOT NULL))
 );
 CREATE UNIQUE INDEX reward_exchange_stock_code ON reward_exchange_stock(offer_id, code) WHERE code <> '';
 CREATE INDEX reward_exchange_stock_pick ON reward_exchange_stock(offer_id, status, created_at, id);

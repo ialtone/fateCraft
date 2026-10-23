@@ -252,6 +252,7 @@ POST /api/admin/reward-exchange/offers
 PUT  /api/admin/reward-exchange/offers/:id
 GET  /api/admin/reward-exchange/offers/:id/revisions
 GET  /api/admin/reward-exchange/orders?user_id=...&cursor=...
+GET  /api/admin/reward-exchange/orders/:id
 GET  /api/admin/reward-exchange/offers/:id/stock?status=&code=&offset=
 POST /api/admin/reward-exchange/offers/:id/stock
 POST /api/admin/reward-exchange/offers/:id/stock/remove
@@ -276,6 +277,8 @@ reward_key 只允许积分和改写次数；数量为 1–9007199254740991 整�
 撤回请求为 {request_id,reason}，只支持原管理员发放整笔扣回，余额不足或已撤回拒绝，返回反向账本。没有通用领取、资产 CRUD、任意余额调整或兑换退款接口。
 
 注册 PUT 使用 {id,points,rewrite_credits}，id 为当前配置修订，两项允许 0；成功返回新修订，旧 id 返回冲突。商品 POST/PUT 使用 {name,description,cost_quantity,reward_quantity,max_redemptions_per_user,enabled,sort_order,revision}；cost_quantity 固定为积分单价，reward_quantity 固定为改写次数，max_redemptions_per_user 为 0（不限）或 1–9007199254740991，缺省按 0 处理。创建 revision=1，编辑需匹配当前 revision；修订历史返回 {revisions}，其 snapshot 包含限额，系统初始化 actor_id 为空。
+
+库存列表返回 {stock,has_more}，每行含 id、offer_id、code、status、order_id、user_id、username、redeemed_at、created_at、updated_at。已兑换或作废行带订单号与兑换时间，管理员可用 `GET /api/admin/reward-exchange/orders/:id` 追溯订单详情。
 
 奖励写接口拒绝未知字段，旧资产 ID、purpose、delivery_mode 等不能被静默忽略。
 

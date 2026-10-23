@@ -43,6 +43,7 @@ export interface RewardExchangeStock {
   order_id: string | null
   user_id: string | null
   username?: string
+  redeemed_at: string | null
   created_at: string
   updated_at: string
 }

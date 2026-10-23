@@ -7,12 +7,15 @@ import {
   NEmpty,
   NInput,
   NInputNumber,
+  NModal,
   NSelect,
+  NSpin,
   useMessage,
 } from 'naive-ui'
 import { rewardExchangeApi as api } from '@/api/rewards'
 import { rewardError } from '@/lib/rewards'
-import type { RewardExchangeOffer, RewardExchangeStock } from '@/types/rewards'
+import type { RewardExchangeOffer, RewardExchangeOrder, RewardExchangeStock } from '@/types/rewards'
+import ExchangeResult from './ExchangeResult.vue'
 const props = defineProps<{ offer: RewardExchangeOffer }>()
 const message = useMessage()
 const statusLabels: Record<string, string> = {
@@ -33,7 +36,27 @@ const rows = ref<RewardExchangeStock[]>([]),
   selected = ref<string[]>([]),
   duplicates = ref<string[]>([]),
   busy = ref(false),
-  error = ref('')
+  error = ref(''),
+  orderOpen = ref(false),
+  orderBusy = ref(false),
+  orderError = ref(''),
+  order = ref<RewardExchangeOrder>()
+function timeText(value: string) {
+  return new Date(value).toLocaleString()
+}
+async function showOrder(id: string) {
+  orderOpen.value = true
+  order.value = undefined
+  orderError.value = ''
+  orderBusy.value = true
+  try {
+    order.value = await api.adminOrder(id)
+  } catch (err) {
+    orderError.value = rewardError(err)
+  } finally {
+    orderBusy.value = false
+  }
+}
 async function load(next = false) {
   busy.value = true
   error.value = ''
@@ -128,16 +151,54 @@ watch(status, () => load(), { immediate: true })
         :checked="selected.includes(row.id)"
         @update:checked="(on: boolean) => toggle(row.id, on)"
       />
-      <code>{{ row.code || '—' }}</code>
+      <code class="code">{{ row.code || '—' }}</code>
       <span>{{ statusLabels[row.status] }}</span>
+      <span class="meta">{{ row.user_id ? `用户 @${row.username || row.user_id}` : '—' }}</span>
       <span class="meta">{{
-        row.user_id
-          ? `用户 @${row.username || row.user_id}`
-          : new Date(row.created_at).toLocaleString()
+        row.redeemed_at ? `兑换 ${timeText(row.redeemed_at)}` : `入库 ${timeText(row.created_at)}`
       }}</span>
+      <NButton
+        v-if="row.order_id"
+        text
+        type="primary"
+        class="order"
+        :title="row.order_id"
+        @click="showOrder(row.order_id)"
+        >订单 {{ row.order_id.slice(0, 8) }}</NButton
+      >
     </div>
     <NEmpty v-if="!busy && !rows.length" description="暂无库存" />
     <NButton v-if="more" :loading="busy" @click="load(true)">加载更多</NButton>
+    <NModal
+      v-model:show="orderOpen"
+      preset="card"
+      title="兑换订单"
+      style="width: min(640px, 94vw)"
+    >
+      <NSpin :show="orderBusy">
+        <NAlert v-if="orderError" type="error">{{ orderError }}</NAlert>
+        <div v-else-if="order" class="order-detail">
+          <h3>{{ order.snapshot.name }} × {{ order.units }}</h3>
+          <p>{{ order.snapshot.description }}</p>
+          <p>用户：@{{ order.username || order.user_id }}</p>
+          <p>
+            支付 {{ order.cost_quantity }} 积分<template v-if="order.snapshot.kind !== 'cdk'"
+              >；获得 {{ order.reward_quantity }} 次剧情改写</template
+            >
+          </p>
+          <p>兑换时间：{{ timeText(order.created_at) }}</p>
+          <ExchangeResult :order="order" />
+          <details>
+            <summary>交易编号</summary>
+            <p>订单：{{ order.id }}</p>
+            <p>请求：{{ order.request_id }}</p>
+            <p>商品修订：{{ order.offer_revision }}</p>
+            <p>支付流水：{{ order.cost_ledger_id }}</p>
+            <p>所得流水：{{ order.reward_ledger_id }}</p>
+          </details>
+        </div>
+      </NSpin>
+    </NModal>
   </div>
 </template>
 <style scoped>
@@ -152,15 +213,43 @@ watch(status, () => load(), { immediate: true })
 }
 .row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   gap: 12px;
   align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid var(--border-soft);
   overflow-wrap: anywhere;
 }
+.code {
+  min-width: 0;
+}
 .meta {
   color: var(--text-dim);
   font-size: 14px;
+  white-space: nowrap;
+}
+.order {
+  white-space: nowrap;
+}
+.order-detail {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.order-detail h3 {
+  margin: 0;
+}
+.order-detail p {
+  margin: 0;
+  color: var(--text-dim);
+}
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .row > :nth-child(n + 4) {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
 }
 </style>

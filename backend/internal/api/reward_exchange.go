@@ -133,6 +133,21 @@ func (s *Server) getExchangeRequest(c *gin.Context) {
 
 func (s *Server) listExchangeOrders(c *gin.Context)      { s.exchangeOrders(c, false) }
 func (s *Server) listAdminExchangeOrders(c *gin.Context) { s.exchangeOrders(c, true) }
+
+// getAdminExchangeOrder 供库存明细按 order_id 追溯订单详情。
+func (s *Server) getAdminExchangeOrder(c *gin.Context) {
+	id, ok := paramUUID(c, "id")
+	if !ok {
+		return
+	}
+	row, err := s.rewards.ExchangeOrder(c.Request.Context(), id)
+	if err != nil {
+		rewardFail(c, err)
+		return
+	}
+	c.JSON(200, row)
+}
+
 func (s *Server) exchangeOrders(c *gin.Context, admin bool) {
 	limit, ok := adminListLimit(c)
 	if !ok {

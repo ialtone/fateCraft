@@ -294,3 +294,17 @@ test('catalogue, history, and lookup have separate homes while pending state sta
   assert.ok(lookup)
   assert.equal(find(lookup, 'NInput').length, 1)
 })
+
+test('redeemed stock rows expose the order and redemption time', () => {
+  const source = fs.readFileSync(
+    new URL('../src/components/AdminExchangeStock.vue', import.meta.url),
+    'utf8',
+  )
+  const { descriptor, errors } = parse(source)
+  assert.deepEqual(errors, [])
+  assert.match(descriptor.template.content, /row\.redeemed_at/)
+  assert.match(descriptor.template.content, /showOrder\(row\.order_id\)/)
+  const stock = template('../src/components/AdminExchangeStock.vue')
+  assert.equal(find(stock, 'NModal').length, 1)
+  assert.equal(find(stock, 'ExchangeResult').length, 1)
+})

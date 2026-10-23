@@ -306,6 +306,7 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.PUT("/admin/reward-exchange/offers/:id", s.requireAdmin, s.saveExchangeOffer)
 	protected.GET("/admin/reward-exchange/offers/:id/revisions", s.requireAdmin, s.listExchangeRevisions)
 	protected.GET("/admin/reward-exchange/orders", s.requireAdmin, s.listAdminExchangeOrders)
+	protected.GET("/admin/reward-exchange/orders/:id", s.requireAdmin, s.getAdminExchangeOrder)
 	protected.GET("/admin/reward-exchange/offers/:id/stock", s.requireAdmin, s.listExchangeStock)
 	protected.POST("/admin/reward-exchange/offers/:id/stock", s.requireAdmin, s.addExchangeStock)
 	protected.POST("/admin/reward-exchange/offers/:id/stock/remove", s.requireAdmin, s.removeExchangeStock)

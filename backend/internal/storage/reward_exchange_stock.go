@@ -25,15 +25,16 @@ func (e *ExchangeDuplicateError) Error() string { return "存在重复的 CDK，
 const maxStockImport = 5000
 
 type RewardExchangeStock struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	OfferID   uuid.UUID  `gorm:"type:uuid" json:"offer_id"`
-	Code      string     `json:"code"`
-	Status    string     `json:"status"`
-	OrderID   *uuid.UUID `gorm:"type:uuid" json:"order_id"`
-	PlayerID  *uuid.UUID `gorm:"type:uuid" json:"user_id"`
-	Username  string     `gorm:"->;-:migration" json:"username,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	OfferID    uuid.UUID  `gorm:"type:uuid" json:"offer_id"`
+	Code       string     `json:"code"`
+	Status     string     `json:"status"`
+	OrderID    *uuid.UUID `gorm:"type:uuid" json:"order_id"`
+	PlayerID   *uuid.UUID `gorm:"type:uuid" json:"user_id"`
+	Username   string     `gorm:"->;-:migration" json:"username,omitempty"`
+	RedeemedAt *time.Time `json:"redeemed_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 func (RewardExchangeStock) TableName() string { return "reward_exchange_stock" }
