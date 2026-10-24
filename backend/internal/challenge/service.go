@@ -1126,6 +1126,17 @@ func ContentHashDocument(doc *VersionDocument) (string, error) {
 		}
 		runtimePayload[key] = value
 	}
+	// Empty optional guards are normalized to omission; non-empty guards are
+	// immutable content and must participate in version identity/integrity.
+	if len(doc.Runtime.NarrativeGuards) > 0 {
+		var guards []gameplay.NarrativeGuard
+		if err := jsonstrict.Decode(doc.Runtime.NarrativeGuards, &guards); err != nil {
+			return "", err
+		}
+		if len(guards) > 0 {
+			runtimePayload["narrative_guards"] = guards
+		}
+	}
 	if doc.Runtime.CampaignConfig != nil && len(*doc.Runtime.CampaignConfig) > 0 && string(*doc.Runtime.CampaignConfig) != "null" {
 		var value any
 		decoder := json.NewDecoder(strings.NewReader(string(*doc.Runtime.CampaignConfig)))

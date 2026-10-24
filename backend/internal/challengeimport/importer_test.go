@@ -444,8 +444,8 @@ func TestLoadBundledReincarnationTrials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.manifest.Version != "1.0.0" {
-		t.Fatalf("version = %q, want 1.0.0", loaded.manifest.Version)
+	if loaded.manifest.Version != "1.1.0" {
+		t.Fatalf("version = %q, want 1.1.0", loaded.manifest.Version)
 	}
 	if loaded.hash == "" {
 		t.Fatal("content hash is empty")

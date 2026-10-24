@@ -203,6 +203,23 @@ Runtime 使用 `runtime/runtime.json` 作为入口。它必须声明 `runtime_co
 
 所有 `includes` 路径必须是当前 `runtime/` 目录内的相对 JSON 文件，并符合 `backend/data/schemas/fatecraft.runtime.schema.json` 的入口 Schema。导入器会先解析这些文件，再编译为数据库中的单一 Runtime；运行时不会动态读取玩法包源文件。Campaign 模式必须额外声明 `campaign: "campaign.json"`。
 
+### `narrative_guards`（可选）
+
+`runtime.json` 顶层可声明最多 16 条叙事主张守则，作为确定性 L0/L1 校验（见 [28](28-state-narrative-consistency.md)）之外的受控扩展：
+
+~~~json
+{
+  "narrative_guards": [
+    {"pattern": "永生不死", "message": "本玩法不允许角色永生"}
+  ]
+}
+~~~
+
+- `pattern` 是 UTF-8 长度 ≤256 字节的合法 Go 正则（发布校验会编译验证）；正文中的肯定主张命中时按违例处理，走既有的删句修复 → 模板兜底链路，不会修改状态。有动作与无动作回合均适用，不能用守则表达依赖当前动作事实的条件规则。
+- `message` 非空且 ≤256 字，作为违例说明进入管理端诊断（`validation_detail.violations`）。
+- 守则是"只拒不留"的：它不授予任何状态修改能力，也不替代平台内置闸门（无动作回合的突破/治疗/物品/时间推进主张已在平台层覆盖）。只添加平台无法用通用规则表达的题材性主张。
+- 守则随 Runtime 版本固定，参与内容哈希，目录、JSON 和 ZIP 导入导出均保留；修改后发布新版本供新对话使用，已有对话继续绑定原版。
+
 ### Engine
 
 ~~~json

@@ -4,7 +4,11 @@
 
 `CharacterSidebar.vue` 按 Runtime 提供状态和行动页；`ModuleActionPanel.vue` 从统一行动 API 读取可用性、参数标签、成本、工时、风险与方案。提交中禁用重复操作；409 后重新选择方案；结果未知时保留同请求重试。`action-scope.ts` 防止切换对话后迟到结果污染当前页面，同 ID 重新打开也建立新作用域。
 
+面板交互约束：`NSpin` 只在首次加载（尚无快照）时阻塞，后续刷新为非阻塞（头部刷新按钮 loading 态 + “正在刷新…”提示），避免遮罩吞掉用户点击；行动/方案与参数选项下拉一律 `:virtual-scroll="false"`（选项量小，虚拟列表会造成滚动与渲染脱节）；执行按钮禁用时在下方 `hint` 给出瞬时原因（生成中/提交中/状态同步中）。方案可携带 `blocked_reason`，选项 label 追加缺口说明并禁选，选中时以警示 `NAlert` 展示缺口。时间线（`MessageTimeline.vue`）把连续的面板动作系统回执折叠为可展开的“面板操作”条目（分组逻辑 `lib/receipt-groups.ts`，见 13）；内容为空的终态消息壳不渲染正文。
+
 `ChallengeVersionEditor.vue` 使用服务端模块目录和 definition Schema，`RuleSchemaInput.vue` 编辑规则对象。切换模块重建权限/动作骨架，纯模块完整行动只读展示，条件由规则决定。通用 Presentation 渲染玩法公开数据，前端不根据包 slug 或中文名推导数值规则。架构及验收见[24](24-gameplay-module-architecture.md)。
+
+刷新期间可以选择行动和方案，但执行仍等待最新快照并显示刷新提示；默认优先选择可支付方案，全部资源不足时保留首项及缺口说明。无行动时显示独立空态，提交期间禁用手动刷新。
 
 青河的 `campaign.ts` 按 Campaign 在 sessionStorage 保存结果未知的原始请求，恢复后使用相同 action_id 重试；作用域隔离同一对话重开与迟到响应。提交成功而刷新失败时显示刷新提示，避免误认为行动未发生。快照分开显示阶段、终局与累计积分，阶段/终局行动及模型回合完成后刷新余额。市场列表显示当前库存、收购容量与周转间隔。
 

@@ -11,6 +11,7 @@ import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import { messagesApi } from '@/api'
 import { nextPinned } from '@/lib/scrollPin'
 import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
+import { groupTimeline, type TimelineGroup } from '@/lib/receipt-groups'
 
 const props = defineProps<{ editable: boolean }>()
 const chat = useChatStore()
@@ -26,6 +27,20 @@ const scroller = ref<HTMLElement | null>(null)
 // 剧情改写是平台能力，不从玩法 Runtime 的动作目录读取。
 const rewrite = computed(() => runtime.platformCapability(PLATFORM_CAPABILITY_MESSAGE_REWRITE))
 const rewriteEnabled = computed(() => props.editable && rewrite.value?.enabled === true)
+
+// 面板动作的系统回执折叠：连续的“已执行操作：X”展示消息合并为一条可展开
+// 的“面板操作”条目，避免长局里几十条回执冲刷时间线；详细事实在动作后的
+// 叙事回合正文中呈现。分组逻辑见 lib/receipt-groups.ts。
+const timelineGroups = computed<TimelineGroup[]>(() => groupTimeline(chat.messages))
+
+const expandedReceipts = ref<Set<string>>(new Set())
+
+function toggleReceipts(key: string) {
+  const next = new Set(expandedReceipts.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedReceipts.value = next
+}
 
 // 贴底跟随：只由用户输入（滚轮、键盘翻页、scrollTop 变小）改变"是否贴底"，内容高度变化（流式增量、节流后的
 // Markdown 渲染、思考面板动画、图片加载）一律由 ResizeObserver 跟随，
@@ -194,13 +209,25 @@ async function onEdit(id: string, content: string) {
         <div class="glyph">🏮</div>
         <p class="faint">茶尚温，故事未启。<br />落笔之处，即是开端。</p>
       </div>
-      <MessageItem
-        v-for="m in chat.messages"
-        :key="m.id"
-        :message="m"
-        :editable="rewriteEnabled"
-        @edit="onEdit"
-      />
+      <template v-for="group in timelineGroups" :key="group.key">
+        <div v-if="group.receipts" class="receipt-group">
+          <button class="receipt-toggle" type="button" @click="toggleReceipts(group.key)">
+            <span class="receipt-glyph">◈</span>
+            面板操作 × {{ group.receipts.length }}
+            <span class="receipt-arrow">{{ expandedReceipts.has(group.key) ? '▾' : '▸' }}</span>
+          </button>
+          <template v-if="expandedReceipts.has(group.key)">
+            <MessageItem v-for="m in group.receipts" :key="m.id" :message="m" :editable="false" />
+          </template>
+        </div>
+        <MessageItem
+          v-else-if="group.message"
+          :key="group.message.id"
+          :message="group.message"
+          :editable="rewriteEnabled"
+          @edit="onEdit"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -218,6 +245,32 @@ async function onEdit(id: string, content: string) {
 .load-earlier {
   text-align: center;
   margin-bottom: 10px;
+}
+
+.receipt-group {
+  margin-bottom: 10px;
+}
+
+.receipt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.receipt-toggle:hover {
+  color: var(--text);
+}
+
+.receipt-glyph,
+.receipt-arrow {
+  font-size: 11px;
 }
 
 .empty {

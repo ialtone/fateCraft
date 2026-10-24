@@ -138,7 +138,8 @@ function save() {
       >
         正在连接模型并准备上下文，请稍候…
       </div>
-      <div v-else class="markdown content" v-html="html"></div>
+      <!-- 非流式且内容为空（终态空壳/校验空段）不渲染正文，避免空白消息壳 -->
+      <div v-else-if="displayedMarkdown.trim()" class="markdown content" v-html="html"></div>
       <RollResultDetails v-if="rollDetails" :details="rollDetails" />
     </template>
     <span v-if="message.streaming" class="cursor">▍</span>

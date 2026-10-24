@@ -13,6 +13,7 @@ type RuntimeDocument struct {
 	ActionConfig     json.RawMessage
 	SettlementConfig json.RawMessage
 	Presentation     json.RawMessage
+	NarrativeGuards  json.RawMessage
 }
 
 const (

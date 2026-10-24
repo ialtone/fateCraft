@@ -2,6 +2,8 @@ package trial
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/ialtone/fatecraft/internal/gameplay/components/ruledata"
 	"github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"slices"
@@ -250,18 +252,36 @@ type option struct {
 
 func options(c Config, s State, run contract.RunState, key string) ([]option, string) {
 	out := []option{}
-	add := func(label, arg string, minutes int64, cost map[string]int64, risk string, prob int64) bool {
-		if !ruledata.CanPay(s.Stock, cost) {
-			return false
+	itemName := map[string]string{}
+	for _, i := range c.Items {
+		itemName[i.Key] = i.Name
+	}
+	missingText := func(cost map[string]int64) string {
+		parts := []string{}
+		for _, item := range c.Items {
+			need := cost[item.Key]
+			if need <= 0 {
+				continue
+			}
+			if have := s.Stock[item.Key]; have < need {
+				parts = append(parts, fmt.Sprintf("%s ×%d（持有 ×%d）", item.Name, need, have))
+			}
 		}
-		args := map[string]any{}
+		return strings.Join(parts, "、")
+	}
+	add := func(label, arg string, minutes int64, cost map[string]int64, risk string, prob int64) bool {
+		plan := contract.ActionPlan{Label: label, Arguments: map[string]any{}, Minutes: minutes, Costs: cost, Risk: risk}
+		if !ruledata.CanPay(s.Stock, cost) {
+			// 资源不足的方案保留展示但标记缺口；执行时仍会被支付复核拒绝。
+			plan.BlockedReason = "资源不足：需要 " + missingText(cost)
+		}
 		if arg != "" {
-			args["key"] = arg
+			plan.Arguments["key"] = arg
 		}
 		if minutes >= lifeRemaining(c, s, run) {
-			risk += "；本次耗时将耗尽剩余寿元，届时停止行动并结束此世"
+			plan.Risk += "；本次耗时将耗尽剩余寿元，届时停止行动并结束此世"
 		}
-		out = append(out, option{plan: contract.ActionPlan{Label: label, Arguments: args, Minutes: minutes, Costs: cost, Risk: risk}, probability: prob})
+		out = append(out, option{plan: plan, probability: prob})
 		return true
 	}
 	if s.Tribulation.Active && !slices.Contains([]string{"trial.tribulation_wave", "trial.tribulation_retreat", "trial.consume", "trial.abandon"}, key) {
@@ -300,7 +320,7 @@ func options(c Config, s State, run contract.RunState, key string) ([]option, st
 			return out, "需要本境界圆满、伤势低于 30，且尚有下一境界"
 		}
 		p := chance(c, s, realm.BreakthroughChance, s.Insight)
-		add("冲击瓶颈", "", 30*Day, map[string]int64{"breakthrough-pill": 1, "stone": realm.PracticeCost}, fmt.Sprintf("成功率 %d%%；失败损失 20 修为、15 生命并增加 10 伤势", p), p)
+		add("冲击瓶颈", "", realm.PracticeDays*Day, map[string]int64{"breakthrough-pill": 1, "stone": realm.PracticeCost}, fmt.Sprintf("成功率 %d%%；失败损失 20 修为、15 生命并增加 10 伤势", p), p)
 	case "trial.buy", "trial.sell":
 		for _, item := range c.Items {
 			if item.Key == "stone" || s.Realm < item.MinRealm {

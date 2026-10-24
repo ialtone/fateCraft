@@ -75,6 +75,9 @@ type Input struct {
 	// History 为时间正序、未隐藏、且已剔除被摘要覆盖部分之外的内部消息。
 	History       []storage.ChatMessage
 	CurrentTurnID *uuid.UUID
+	// ConsumedModuleActionIDs 是本次上下文注入过的未消费面板动作提交；
+	// 叙事落库成功后由管线标记为已消费（module_action_commits.narrated_turn_id）。
+	ConsumedModuleActionIDs []uuid.UUID
 }
 
 // SegmentInfo 记录单个段的明细，用于上下文检查器与构建日志。
@@ -527,9 +530,28 @@ func renderCampaignProjection(projection map[string]any) string {
 	if err != nil {
 		b = []byte("{}")
 	}
+	authority := "narrative_context.actions 是本次已提交动作的唯一事实来源；只把 changes 写成状态变化，preserved 不得写成恢复、清除或提升，current_facts 是当前值。未出现在 change 中的获得、失去、突破、痊愈或寿元变化一律不得编造；details_partial=true 时省略字段只能模糊描述，不能补具体数值。\n"
+	switch ctx := projection["narrative_context"].(type) {
+	case *gameplay.TurnNarrativeContext:
+		if ctx.ChallengeMode {
+			if len(ctx.Actions) == 0 {
+				authority += "本回合没有可信玩法动作，游戏时间未推进：只能描写当下的场景、对话与心理，不得叙述时间流逝、境界变化、物品得失或寿元变化。\n"
+			} else {
+				authority += "本回合的时间推进与资源变化以下列动作结果为准，逐条如实呈现，不得夸大或补写。\n"
+			}
+		}
+	case map[string]any:
+		if challenge, _ := ctx["challenge_mode"].(bool); challenge {
+			actions, _ := ctx["actions"].([]any)
+			if len(actions) == 0 {
+				authority += "本回合没有可信玩法动作，游戏时间未推进：只能描写当下的场景、对话与心理，不得叙述时间流逝、境界变化、物品得失或寿元变化。\n"
+			} else {
+				authority += "本回合的时间推进与资源变化以下列动作结果为准，逐条如实呈现，不得夸大或补写。\n"
+			}
+		}
+	}
 	return "<campaign_projection>\n" + string(b) + "\n</campaign_projection>\n" +
-		"<state_authority>\n" +
-		"narrative_context.actions 是本次已提交动作的唯一事实来源；只把 changes 写成状态变化，preserved 不得写成恢复、清除或提升，current_facts 是当前值。未出现在 change 中的获得、失去、突破、痊愈或寿元变化一律不得编造；details_partial=true 时省略字段只能模糊描述，不能补具体数值。\n" +
+		"<state_authority>\n" + authority +
 		"</state_authority>"
 }
 

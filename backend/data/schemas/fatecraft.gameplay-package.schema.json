@@ -746,6 +746,22 @@
       ],
       "type": "object"
     },
+    "NarrativeGuard": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern",
+        "message"
+      ],
+      "type": "object"
+    },
     "OutcomeSpec": {
       "additionalProperties": false,
       "properties": {
@@ -1064,6 +1080,15 @@
         },
         "mode": {
           "type": "string"
+        },
+        "narrative_guards": {
+          "items": {
+            "$ref": "#/$defs/NarrativeGuard"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "presentation": {
           "$ref": "#/$defs/Presentation"

@@ -289,6 +289,19 @@ data/preset_packs/<slug>/
 
 公开挑战列表复用版本级展示投影，但 Pack 当前入口、用户奖励余额、入口条件和可用性仍实时读取。发布新版本通过新 version ID 自然建立新缓存项；草稿和后台编辑态永不进入长期缓存。
 
+## 面板动作叙事闭环
+
+玩家通过行动面板提交领域动作后（`POST /conversations/:id/module-actions`，见 10）：
+
+1. 动作事务照旧结算并写入「已执行操作：<label>」系统回执与 `module_action_commits.narrative`（ActionResult）；
+2. 未触发结局时，服务端在同一请求内以 `trigger_type = module_action` 追加一个叙事回合（`Generator.GenerateForModuleAction`）：不创建用户消息、回合为 text-only（不提供新的玩法动作工具），模型依据注入的 ActionResult 把动作结果讲成剧情；触发结局时仍由结算流程收尾，不追加叙事；
+3. 对话忙（玩家已抢先输入，包括持久租约被其他实例占用）或模型路由不可用时静默跳过；动作结果保留为未消费，在下一次叙事回合的上下文组装中注入（源回合未失效且 `module_action_commits.narrated_turn_id IS NULL`，最多 4 条，按时间升序），叙事落库成功后标记 `narrated_turn_id`；标记失败只导致下一次回合重注入，不回滚叙事。回退排除已失效动作，并清除被撤销叙事的消费标记，保留回退点之前的有效动作；
+4. 模型历史中连续的面板动作回执被折叠为一行汇总（「其间执行了：闭关修行 ×3、购买补给 ×1」），只影响模型读取，不改 `display_messages`；前端时间线将连续回执渲染为可展开的「面板操作」条目。
+
+挑战模式叙事校验（L0/L1 与 unbacked 闸门，见 28）同时适用于该叙事回合；玩法作者的受控守则 `narrative_guards` 也在此生效（见 15）。
+
+自动叙事请求 ID 由对话、分支和动作 `request_id` 稳定派生，HTTP 重试复用持久生成记录，不重复启动已处理的叙事。历史回执折叠同时替换模型文本并清除旧内容块与 token 缓存，避免供应商仍读取第一条原始回执。
+
 ## 结算事务
 
 模型提出 `complete_challenge` 后：

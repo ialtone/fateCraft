@@ -96,7 +96,10 @@ func (g *Generator) beginAttemptFromRecords(
 	}
 	metadata := operation.Metadata{
 		ConversationID: conversationID, TurnID: turn.ID, AttemptID: attempt.ID, MemoryID: attempt.MemoryID, BranchEpoch: attempt.BranchEpoch,
-		TriggerType: triggerType, TextOnly: triggerType == "continue",
+		TriggerType: triggerType,
+		// 面板动作叙事与续写一样只做叙事收尾：事实已在动作事务中结算，
+		// 本回合不再提供新的玩法动作工具。
+		TextOnly: triggerType == "continue" || triggerType == "module_action",
 	}
 	tracker := &generationTracker{stage: "generation", code: "generation_failed"}
 	attemptCtx := withTracker(operation.WithMetadata(ctx, metadata), tracker)

@@ -209,7 +209,11 @@ func encodeArchive(p *PortablePackage) ([]byte, error) {
 		includes.Campaign = prefix + "campaign.json"
 		files[path.Join(entryDir, includes.Campaign)] = runtimeCampaignFragment{p.Runtime.Campaign}
 	}
-	files[entryPath] = runtimeSourceEntry{Schema: "fatecraft.runtime.schema.json", ContractVersion: 2, Engine: p.Runtime.Engine, Mode: p.Runtime.Mode, Includes: includes}
+	files[entryPath] = runtimeSourceEntry{
+		Schema: "fatecraft.runtime.schema.json", ContractVersion: 2,
+		Engine: p.Runtime.Engine, Mode: p.Runtime.Mode,
+		NarrativeGuards: p.Runtime.NarrativeGuards, Includes: includes,
+	}
 	files[path.Join(entryDir, includes.StateSchema)] = runtimeStateSchemaFragment{&p.Runtime.StateSchema}
 	files[path.Join(entryDir, includes.Actions)] = runtimeActionsFragment{&p.Runtime.Actions}
 	files[path.Join(entryDir, includes.Settlement)] = runtimeSettlementFragment{&p.Runtime.Settlement}

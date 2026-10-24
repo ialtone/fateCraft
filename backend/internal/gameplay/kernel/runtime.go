@@ -19,9 +19,14 @@ import (
 const MaxStateBytes = 64 * 1024
 const MaxEvents = 32
 
+// MaxActionMinutes 限定单次可信动作的最大耗时（约 6944 天 ≈ 19 年）。
+// 修仙类玩法的深闭关（单次数千天）需要超出旧的 1e6 分钟（≈694 天）预算；
+// 累计时钟仍受 MaxGameTime 约束。
+const MaxActionMinutes int64 = 10_000_000
+
 // Long-lived characters may outlive 1e9 minutes (~1900 years). Keep the
 // cumulative clock bounded and exactly representable by JSON/JavaScript;
-// the per-action one-million-minute work budget remains independent.
+// the per-action work budget remains independent.
 const MaxGameTime int64 = 100_000_000_000
 
 type tracedRandom struct {
@@ -199,7 +204,7 @@ func Preview(module contract.RuntimeModule, content contract.Content, state cont
 	seen := map[string]bool{}
 	for _, preview := range previews {
 		action, ok := declared[preview.Action.Key]
-		if !ok || seen[action.Key] || !slices.Contains(action.Actors, actor) || preview.Minutes < 0 || preview.Minutes > 1_000_000 {
+		if !ok || seen[action.Key] || !slices.Contains(action.Actors, actor) || preview.Minutes < 0 || preview.Minutes > MaxActionMinutes {
 			return nil, fmt.Errorf("动作预览未声明、越权或超出预算: %s", preview.Action.Key)
 		}
 		seen[action.Key] = true
@@ -219,7 +224,7 @@ func Preview(module contract.RuntimeModule, content contract.Content, state cont
 			return nil, fmt.Errorf("动作方案超过预算")
 		}
 		for _, plan := range preview.Plans {
-			if plan.Label == "" || plan.Minutes < 0 || plan.Minutes > 1_000_000 || len(plan.Costs) > 32 {
+			if plan.Label == "" || plan.Minutes < 0 || plan.Minutes > MaxActionMinutes || len(plan.Costs) > 32 {
 				return nil, fmt.Errorf("动作方案无效")
 			}
 			if err := ValidateArguments(preview.Action, plan.Arguments); err != nil {
@@ -280,7 +285,7 @@ func Execute(module contract.RuntimeModule, content contract.Content, state cont
 	if err != nil {
 		return contract.Transition{}, err
 	}
-	if state.Revision == math.MaxInt64 || transition.State.SchemaVersion != state.SchemaVersion || transition.State.Revision != state.Revision || transition.State.GameTime < state.GameTime || transition.State.GameTime-state.GameTime > 1_000_000 {
+	if state.Revision == math.MaxInt64 || transition.State.SchemaVersion != state.SchemaVersion || transition.State.Revision != state.Revision || transition.State.GameTime < state.GameTime || transition.State.GameTime-state.GameTime > MaxActionMinutes {
 		return contract.Transition{}, fmt.Errorf("动作非法修改修订或游戏时间")
 	}
 	transition.State.Revision++

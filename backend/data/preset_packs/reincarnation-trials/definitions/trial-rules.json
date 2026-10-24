@@ -15,7 +15,7 @@
           "key": "mortal",
           "name": "凡人",
           "lifespan_years": 80,
-          "practice_days": 30,
+          "practice_days": 120,
           "practice_cost": 1,
           "practice_gain": 23,
           "breakthrough_chance": 90
@@ -24,7 +24,7 @@
           "key": "qi-refining",
           "name": "练气期",
           "lifespan_years": 120,
-          "practice_days": 90,
+          "practice_days": 365,
           "practice_cost": 2,
           "practice_gain": 23,
           "breakthrough_chance": 85
@@ -33,7 +33,7 @@
           "key": "foundation",
           "name": "筑基期",
           "lifespan_years": 200,
-          "practice_days": 180,
+          "practice_days": 730,
           "practice_cost": 3,
           "practice_gain": 23,
           "breakthrough_chance": 80
@@ -42,7 +42,7 @@
           "key": "golden-core",
           "name": "结丹期",
           "lifespan_years": 500,
-          "practice_days": 365,
+          "practice_days": 1800,
           "practice_cost": 4,
           "practice_gain": 23,
           "breakthrough_chance": 75
@@ -51,7 +51,7 @@
           "key": "nascent-soul",
           "name": "元婴期",
           "lifespan_years": 1000,
-          "practice_days": 550,
+          "practice_days": 2750,
           "practice_cost": 6,
           "practice_gain": 23,
           "breakthrough_chance": 70
@@ -60,7 +60,7 @@
           "key": "spirit-transformation",
           "name": "化神期",
           "lifespan_years": 2000,
-          "practice_days": 600,
+          "practice_days": 3000,
           "practice_cost": 8,
           "practice_gain": 23,
           "breakthrough_chance": 68
@@ -69,7 +69,7 @@
           "key": "void-refining",
           "name": "炼虚期",
           "lifespan_years": 5000,
-          "practice_days": 650,
+          "practice_days": 3250,
           "practice_cost": 10,
           "practice_gain": 23,
           "breakthrough_chance": 65
@@ -78,7 +78,7 @@
           "key": "body-integration",
           "name": "合体期",
           "lifespan_years": 10000,
-          "practice_days": 650,
+          "practice_days": 3900,
           "practice_cost": 12,
           "practice_gain": 23,
           "breakthrough_chance": 62
@@ -87,7 +87,7 @@
           "key": "great-ascension",
           "name": "大乘期",
           "lifespan_years": 20000,
-          "practice_days": 650,
+          "practice_days": 4550,
           "practice_cost": 14,
           "practice_gain": 23,
           "breakthrough_chance": 60

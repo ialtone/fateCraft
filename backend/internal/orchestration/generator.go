@@ -531,6 +531,57 @@ func (g *Generator) Continue(ctx context.Context, convID, requestID uuid.UUID, e
 	g.runGeneration(ctx, conv, &preparation.Trigger.ID, emit)
 }
 
+// GenerateForModuleAction 在玩家面板动作提交后生成一段收尾叙事：不创建用户
+// 消息，回合触发类型为 module_action，模型依据注入的 ActionResult（见
+// assemble 的未消费 module_action_commits）把动作结果讲成剧情。生成忙时由
+// Hub 拒绝，动作结果留给下一次叙事回合注入，不会丢失。
+func (g *Generator) GenerateForModuleAction(ctx context.Context, convID, requestID uuid.UUID, emit realtime.EmitFunc) {
+	// 路由闸门失败（未配置模型、客户端直连无 Relay、路由被切换）时静默跳过：
+	// 动作本身已提交成功，叙事只是补齐；不向玩家发 error 横幅，避免纯面板
+	// 玩法的玩家每执行一次动作都收到生成故障提示。
+	if _, _, _, gateErr := g.checkLLMRouteGate(ctx, convID); gateErr != nil {
+		logging.Named("orchestration").Info("跳过面板动作叙事回合：模型路由不可用",
+			zap.String("conversation_id", convID.String()), zap.Error(gateErr))
+		return
+	}
+	conv, run, replayed, err := g.convSvc.StartGeneration(ctx, convID, generationRequest(requestID, "module_action", nil, "module_action"))
+	if errors.Is(err, storage.ErrGenerationInProgress) {
+		return // Another instance/player acquired the durable lease first.
+	}
+	if err != nil {
+		emit(domainEvent(convID, err))
+		return
+	}
+	if run == nil {
+		// 对话忙（通常玩家已抢先输入）：静默跳过，未消费结果会在下一次叙事回合注入。
+		logging.Named("orchestration").Info("跳过面板动作叙事回合：对话忙",
+			zap.String("conversation_id", convID.String()))
+		return
+	}
+	if replayed {
+		emit(realtime.Event{Type: realtime.TypeGenerationReplayed, ConversationID: convID.String(), OperationID: run.ID.String()})
+		return
+	}
+	ctx = operation.WithGeneration(ctx, convID, run.ID)
+	defer func() { g.finishGenerationRun(run.ID, ctx) }()
+	turn, attempt, err := g.turns.Begin(ctx, convID, "module_action")
+	if err != nil {
+		emit(errorEvent(convID, "创建生成回合失败: "+err.Error()))
+		return
+	}
+	ctx, finish, err := g.beginAttemptFromRecords(ctx, convID, "module_action", turn, attempt)
+	if err != nil {
+		emit(errorEvent(convID, "创建生成回合失败: "+err.Error()))
+		return
+	}
+	defer finish()
+	if ctx.Err() != nil {
+		emit(infoEvent(convID, "生成已取消"))
+		return
+	}
+	g.runGeneration(ctx, conv, nil, emit)
+}
+
 func generationRequest(requestID uuid.UUID, operationType string, targetMessageID *uuid.UUID, payload string) storage.GenerationRequest {
 	if requestID == uuid.Nil {
 		requestID = uuid.New()

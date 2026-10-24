@@ -51,6 +51,9 @@ type Generator interface {
 	Regenerate(ctx context.Context, convID, requestID uuid.UUID, emit EmitFunc)
 	// Continue 在不新增用户输入的情况下追加一段 AI 续写。
 	Continue(ctx context.Context, convID, requestID uuid.UUID, emit EmitFunc)
+	// GenerateForModuleAction 在面板动作提交后生成一段动作结果叙事；
+	// 对话忙或模型路由不可用时静默跳过（结果由下一次叙事回合注入）。
+	GenerateForModuleAction(ctx context.Context, convID, requestID uuid.UUID, emit EmitFunc)
 	// Rewrite atomically edits one user message, replaces its branch and regenerates.
 	Rewrite(ctx context.Context, convID, requestID, messageID uuid.UUID, content string, emit EmitFunc)
 	// RecoverPanic 在生成 goroutine panic 后释放该对话残留的持久化生成租约。

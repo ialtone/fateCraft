@@ -87,7 +87,8 @@ func simulateLife(t *testing.T, c contract.Content, seed int64, persona, route s
 		available := false
 		for _, o := range choices {
 			k, _ := o.plan.Arguments["key"].(string)
-			if k == arg {
+			// 缺口方案仅用于展示，策略必须视同不可用。
+			if k == arg && o.plan.BlockedReason == "" {
 				available = true
 			}
 		}

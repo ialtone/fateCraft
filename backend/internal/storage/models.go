@@ -264,6 +264,7 @@ type ChallengeRuntimeConfig struct {
 	ActionConfig       JSONDoc   `gorm:"column:action_config;type:jsonb;not null" json:"action_config"`
 	SettlementConfig   JSONDoc   `gorm:"column:settlement_config;type:jsonb;not null" json:"settlement_config"`
 	Presentation       JSONDoc   `gorm:"column:presentation;type:jsonb;not null" json:"presentation"`
+	NarrativeGuards    JSONDoc   `gorm:"column:narrative_guards;type:jsonb;not null;default:[]" json:"narrative_guards"`
 	CreatedAt          time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt          time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
@@ -897,23 +898,23 @@ type SystemSettings struct {
 	LLMAccessMode               string     `gorm:"column:llm_access_mode;size:32;not null;default:user_managed" json:"llm_access_mode"`
 	// ClientLLMRouteEnabled 默认开启，由 owner 管理；默认值由初始化 SQL 和 DefaultSystemSettings 提供。
 	// 不使用 GORM default:true，避免 upsert 时将管理员显式保存的 false 替换为 true。
-	ClientLLMRouteEnabled           bool      `gorm:"column:client_llm_route_enabled;not null" json:"client_llm_route_enabled"`
-	PublicLLMBaseURL                string    `gorm:"column:public_llm_base_url" json:"public_llm_base_url"`
-	PublicLLMProtocol               string    `gorm:"column:public_llm_protocol;size:32;not null;default:responses" json:"public_llm_protocol"`
-	PublicLLMAPIKeyEncrypted        string    `gorm:"column:public_llm_api_key_encrypted" json:"-"`
-	PublicLLMHasAPIKey              bool      `gorm:"-" json:"public_llm_has_api_key"`
-	PublicLLMModel                  string    `gorm:"column:public_llm_model" json:"public_llm_model"`
-	PublicLLMMemoryModel            string    `gorm:"column:public_llm_memory_model" json:"public_llm_memory_model"`
-	PublicLLMInquiryModel           string    `gorm:"column:public_llm_inquiry_model" json:"public_llm_inquiry_model"`
-	PublicLLMMaxContextTokens       int       `gorm:"column:public_llm_max_context_tokens;not null;default:128000" json:"public_llm_max_context_tokens"`
-	PublicLLMMaxResponseTokens      int       `gorm:"column:public_llm_max_response_tokens;not null;default:16384" json:"public_llm_max_response_tokens"`
-	PublicLLMTemperature            float64   `gorm:"column:public_llm_temperature;not null;default:0.8" json:"public_llm_temperature"`
-	PublicLLMTopP                   float64   `gorm:"column:public_llm_top_p;not null;default:1" json:"public_llm_top_p"`
-	PublicLLMStreamEnabled          bool      `gorm:"column:public_llm_stream_enabled;not null;default:true" json:"public_llm_stream_enabled"`
-	PublicLLMReasoningEffort        string    `gorm:"column:public_llm_reasoning_effort" json:"public_llm_reasoning_effort"`
-	PublicLLMMemoryReasoningEffort  string    `gorm:"column:public_llm_memory_reasoning_effort" json:"public_llm_memory_reasoning_effort"`
-	PublicLLMInquiryReasoningEffort string    `gorm:"column:public_llm_inquiry_reasoning_effort" json:"public_llm_inquiry_reasoning_effort"`
-	PublicLLMSettingsRevision       int64     `gorm:"column:public_llm_settings_revision;not null;default:1" json:"public_llm_settings_revision"`
+	ClientLLMRouteEnabled           bool    `gorm:"column:client_llm_route_enabled;not null" json:"client_llm_route_enabled"`
+	PublicLLMBaseURL                string  `gorm:"column:public_llm_base_url" json:"public_llm_base_url"`
+	PublicLLMProtocol               string  `gorm:"column:public_llm_protocol;size:32;not null;default:responses" json:"public_llm_protocol"`
+	PublicLLMAPIKeyEncrypted        string  `gorm:"column:public_llm_api_key_encrypted" json:"-"`
+	PublicLLMHasAPIKey              bool    `gorm:"-" json:"public_llm_has_api_key"`
+	PublicLLMModel                  string  `gorm:"column:public_llm_model" json:"public_llm_model"`
+	PublicLLMMemoryModel            string  `gorm:"column:public_llm_memory_model" json:"public_llm_memory_model"`
+	PublicLLMInquiryModel           string  `gorm:"column:public_llm_inquiry_model" json:"public_llm_inquiry_model"`
+	PublicLLMMaxContextTokens       int     `gorm:"column:public_llm_max_context_tokens;not null;default:128000" json:"public_llm_max_context_tokens"`
+	PublicLLMMaxResponseTokens      int     `gorm:"column:public_llm_max_response_tokens;not null;default:16384" json:"public_llm_max_response_tokens"`
+	PublicLLMTemperature            float64 `gorm:"column:public_llm_temperature;not null;default:0.8" json:"public_llm_temperature"`
+	PublicLLMTopP                   float64 `gorm:"column:public_llm_top_p;not null;default:1" json:"public_llm_top_p"`
+	PublicLLMStreamEnabled          bool    `gorm:"column:public_llm_stream_enabled;not null;default:true" json:"public_llm_stream_enabled"`
+	PublicLLMReasoningEffort        string  `gorm:"column:public_llm_reasoning_effort" json:"public_llm_reasoning_effort"`
+	PublicLLMMemoryReasoningEffort  string  `gorm:"column:public_llm_memory_reasoning_effort" json:"public_llm_memory_reasoning_effort"`
+	PublicLLMInquiryReasoningEffort string  `gorm:"column:public_llm_inquiry_reasoning_effort" json:"public_llm_inquiry_reasoning_effort"`
+	PublicLLMSettingsRevision       int64   `gorm:"column:public_llm_settings_revision;not null;default:1" json:"public_llm_settings_revision"`
 	// LLM 出站代理只通过 owner 专属接口读写，通用系统设置响应不得暴露地址、用户名或 CA。
 	LLMProxyEnabled           bool      `gorm:"column:llm_proxy_enabled;not null" json:"-"`
 	LLMProxyURL               string    `gorm:"column:llm_proxy_url;not null" json:"-"`

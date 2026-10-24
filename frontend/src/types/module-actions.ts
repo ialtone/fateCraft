@@ -31,6 +31,8 @@ export interface ModuleActionPlan {
   minutes: number
   costs?: Record<string, number>
   risk?: string
+  /** 方案存在但当前资源不足时的具体缺口说明；带此字段的方案仅用于展示 */
+  blocked_reason?: string
 }
 
 export interface ModuleActionCapability {

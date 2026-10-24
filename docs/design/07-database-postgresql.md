@@ -1,7 +1,7 @@
 # 07. PostgreSQL 数据库设计
 ## 玩法模块基线
 
-本次直接修改 `00001_init.sql`：`campaign_runtime_states` 保存纯模块的引擎、种子与状态；`campaign_checkpoints` 按回合保存完整 Campaign 可变事实；`module_action_commits` 以 `(conversation_id, branch_epoch, request_id)` 唯一记录玩家行动与结果。`gameplay_definitions.kind` 使用稳定标识约束，由对应已安装模块验证语义，不再逐题材扩张数据库枚举。
+本次直接修改 `00001_init.sql`：`campaign_runtime_states` 保存纯模块的引擎、种子与状态；`campaign_checkpoints` 按回合保存完整 Campaign 可变事实；`module_action_commits` 以 `(conversation_id, branch_epoch, request_id)` 唯一记录玩家行动与结果，并带 `narrated_turn_id`/`narrated_at` 叙事消费标记（部分索引 `idx_module_action_commits_unnarrated` 支撑未消费查询）。`challenge_runtime_configs.narrative_guards` 保存玩法作者追加的受控叙事主张守则（数组，≤16 条）。`conversation_turns.trigger_type` 与 `conversation_generation_runs.operation_type` 均包含 `module_action`——面板动作提交后自动生成的动作结果叙事回合。`gameplay_definitions.kind` 使用稳定标识约束，由对应已安装模块验证语义，不再逐题材扩张数据库枚举。
 
 恢复在一个事务内按外键顺序重建领域表，校验固定内容与存档归属，推进 revision；不恢复账号余额、账本、奖励事实、种子或追加历史。模块领域校验由投影/行动边界继续执行。已执行旧基线的库不会自动更新；使用显式 Goose 和隔离 schema 验证。实现与未验项见[24](24-gameplay-module-architecture.md)及[验收记录](gameplay-modules/validation.md)。
 

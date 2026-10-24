@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ialtone/fatecraft/internal/challenge"
 	"github.com/ialtone/fatecraft/internal/contextbuilder"
 	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/guidance"
+	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/security"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/worldbook"
@@ -40,6 +43,7 @@ type attemptAssembleCache struct {
 	bundle         *challenge.Bundle
 	worldActivated []worldbook.Activated
 	worldPinned    bool
+	moduleActions  []gameplay.ActionResult
 }
 
 // assembleInputWithCache 收集构造上下文所需的全部数据（仅限当前
@@ -126,6 +130,7 @@ func (g *Generator) assembleInputWithCache(
 	in.StateFingerprint = guidance.Fingerprint(st)
 	in.Summary = summary
 	history = filterCovered(history, summary)
+	history = foldSystemActionReceipts(history)
 	in.History = history
 	// 只对当前玩家输入做信号检测。历史中的旧文本仍受上面的静态信任
 	// 契约约束，但不会因为一次旧消息让每个后续回合都反复追加警告。
@@ -173,12 +178,33 @@ func (g *Generator) assembleInputWithCache(
 		// player view in mandatory state would leak audience-specific facts and
 		// duplicate the entire module snapshot outside that budget.
 		delete(in.State, "gameplay")
+		// 注入尚未被叙事消费的面板动作结果：既进入模型投影（narrative_context
+		// 是预算保护的核心键），也进入校验用的 NarrativeContext。
+		narrativeCtx := &gameplay.TurnNarrativeContext{ChallengeMode: true}
+		if commits, commitErr := g.challenge.Repository().UnnarratedModuleActions(ctx, conv.ID, 4); commitErr == nil {
+			for _, commit := range commits {
+				var result gameplay.ActionResult
+				encoded, encodeErr := json.Marshal(commit.Narrative)
+				if encodeErr != nil || json.Unmarshal(encoded, &result) != nil || result.ActionID == "" {
+					continue
+				}
+				narrativeCtx.Actions = append(narrativeCtx.Actions, result)
+				in.ConsumedModuleActionIDs = append(in.ConsumedModuleActionIDs, commit.ID)
+			}
+		} else {
+			logging.FromContext(ctx, "orchestration").Warn("读取未消费面板动作失败",
+				zap.String("conversation_id", conv.ID.String()), zap.Error(commitErr))
+		}
+		// Pending player actions precede tools committed by this attempt. Keep
+		// their actual order so latest facts win and a real action unfreezes time.
+		narrativeCtx.Actions = append(narrativeCtx.Actions, cache.moduleActions...)
+		projection["narrative_context"] = narrativeCtx
 		in.CampaignProjection = projection
 		in.CampaignProjectionPriority = []string{"gameplay"}
 		// Challenge mode has no campaign revision binding, but the narrative
 		// still goes through the deterministic L0/L1 gate (no persisted binding
 		// is created because CampaignID is empty).
-		in.NarrativeContext = &gameplay.TurnNarrativeContext{}
+		in.NarrativeContext = narrativeCtx
 	}
 
 	// 世界书激活（attempt 内固定，见 attemptAssembleCache）。
@@ -228,6 +254,66 @@ func filterCovered(history []storage.ChatMessage, summary *storage.ConversationM
 		}
 	}
 	return nil
+}
+
+// systemActionReceiptPrefix 是面板领域动作落库的系统回执前缀
+// （storage/module_action.go 写入「已执行操作：<label>」）。
+const systemActionReceiptPrefix = "已执行操作："
+
+// foldSystemActionReceipts 把模型上下文中连续的面板动作回执折叠为一行汇总。
+// 长局里闭关/委托等动作会累积上百条重复回执，逐条进入历史只会稀释上下文并
+// 诱导模型复述回执；折叠后保留动作类型与次数，详细事实由 ActionResult 注入。
+// 只影响模型读取的历史，不修改 display_messages。
+func foldSystemActionReceipts(history []storage.ChatMessage) []storage.ChatMessage {
+	out := make([]storage.ChatMessage, 0, len(history))
+	i := 0
+	for i < len(history) {
+		message := history[i]
+		if message.Role != storage.RoleSystem || !strings.HasPrefix(message.Content, systemActionReceiptPrefix) {
+			out = append(out, message)
+			i++
+			continue
+		}
+		counts := map[string]int{}
+		order := []string{}
+		j := i
+		for ; j < len(history); j++ {
+			next := history[j]
+			if next.Role != storage.RoleSystem || !strings.HasPrefix(next.Content, systemActionReceiptPrefix) {
+				break
+			}
+			label := strings.TrimSpace(strings.TrimPrefix(next.Content, systemActionReceiptPrefix))
+			if label == "" {
+				continue
+			}
+			if counts[label] == 0 {
+				order = append(order, label)
+			}
+			counts[label]++
+		}
+		merged := message
+		merged.Content = summarizeActionReceipts(order, counts)
+		// Provider serializers prefer canonical blocks over Content. Clear the
+		// original receipt blocks and token cache so they use the folded text.
+		merged.ContentBlocks = nil
+		merged.TokenCount = nil
+		merged.TokenizerVersion = ""
+		out = append(out, merged)
+		i = j
+	}
+	return out
+}
+
+func summarizeActionReceipts(order []string, counts map[string]int) string {
+	parts := make([]string, 0, len(order))
+	for _, label := range order {
+		if counts[label] == 1 {
+			parts = append(parts, label)
+			continue
+		}
+		parts = append(parts, label+" ×"+strconv.Itoa(counts[label]))
+	}
+	return "其间执行了：" + strings.Join(parts, "、")
 }
 
 // buildScanText 构造世界书扫描文本：最近若干历史 + 状态 + 摘要。

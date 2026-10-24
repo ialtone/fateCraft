@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -71,10 +73,26 @@ func (s *Server) executeModuleAction(c *gin.Context) {
 		s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeModuleActionCommitted, ConversationID: id.String()})
 		var typed challenge.ModuleActionResult
 		encoded, encodeErr := json.Marshal(result)
-		if encodeErr == nil && json.Unmarshal(encoded, &typed) == nil && typed.Completion != nil {
-			s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeChallengeCompleted, ConversationID: id.String(), Completion: typed.Completion})
+		if encodeErr == nil && json.Unmarshal(encoded, &typed) == nil {
+			if typed.Completion != nil {
+				s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeChallengeCompleted, ConversationID: id.String(), Completion: typed.Completion})
+			} else if gen := s.hub.Gen(); gen != nil {
+				// 动作已结算且未触发结局：追加一个 module_action 叙事回合，
+				// 把 ActionResult 讲成剧情；对话忙时静默跳过，结果由下一次
+				// 叙事回合按未消费 ActionResult 注入补齐。
+				narrationRequest := moduleActionNarrationRequestID(id, input)
+				s.hub.RunDetached(c.Request.Context(), id, func(ctx context.Context, emit realtime.EmitFunc) {
+					gen.GenerateForModuleAction(ctx, id, narrationRequest, emit)
+				})
+			}
 		}
-
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// The same action retry must replay its narration run, not buy another LLM
+// response. Include conversation and branch because action IDs are scoped there.
+func moduleActionNarrationRequestID(conversationID uuid.UUID, input challenge.ModulePlayerActionInput) uuid.UUID {
+	key := "module_action:narration:" + strconv.FormatInt(input.BranchEpoch, 10) + ":" + input.RequestID.String()
+	return uuid.NewSHA1(conversationID, []byte(key))
 }

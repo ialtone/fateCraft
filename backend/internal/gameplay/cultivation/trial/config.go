@@ -19,7 +19,7 @@ type Realm struct {
 	Key                string `json:"key"`
 	Name               string `json:"name"`
 	LifespanYears      int64  `json:"lifespan_years" minimum:"30" maximum:"20000"`
-	PracticeDays       int64  `json:"practice_days" minimum:"1" maximum:"694"`
+	PracticeDays       int64  `json:"practice_days" minimum:"1" maximum:"5000"`
 	PracticeCost       int64  `json:"practice_cost" minimum:"1" maximum:"1000"`
 	PracticeGain       int64  `json:"practice_gain" minimum:"10" maximum:"35"`
 	BreakthroughChance int64  `json:"breakthrough_chance" minimum:"30" maximum:"95"`
@@ -94,7 +94,7 @@ func validateConfig(c Config) error {
 		return fmt.Errorf("单局规则规模或难度无效")
 	}
 	for i, r := range c.Realms {
-		if r.Key != realmKeys[i] || r.Name == "" || r.LifespanYears < 30 || r.LifespanYears > 20000 || i > 0 && r.LifespanYears <= c.Realms[i-1].LifespanYears || r.PracticeDays < 1 || r.PracticeDays > 694 || r.PracticeCost < 1 || r.PracticeCost > 1000 || r.PracticeGain < 10 || r.PracticeGain > 35 || r.BreakthroughChance < 30 || r.BreakthroughChance > 95 {
+		if r.Key != realmKeys[i] || r.Name == "" || r.LifespanYears < 30 || r.LifespanYears > 20000 || i > 0 && r.LifespanYears <= c.Realms[i-1].LifespanYears || r.PracticeDays < 1 || r.PracticeDays > 5000 || r.PracticeCost < 1 || r.PracticeCost > 1000 || r.PracticeGain < 10 || r.PracticeGain > 35 || r.BreakthroughChance < 30 || r.BreakthroughChance > 95 {
 			return fmt.Errorf("境界成长或寿元配置无效: %s", r.Key)
 		}
 	}

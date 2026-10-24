@@ -10,6 +10,7 @@ func DecodeGameplayRuntime(row ChallengeRuntimeConfig) (*gameplay.RuntimeContrac
 		EngineKey: row.EngineKey, EngineVersion: row.EngineVersion, Mode: row.Mode,
 		StateSchema: json.RawMessage(row.StateSchema), ActionConfig: json.RawMessage(row.ActionConfig),
 		SettlementConfig: json.RawMessage(row.SettlementConfig), Presentation: json.RawMessage(row.Presentation),
+		NarrativeGuards: json.RawMessage(row.NarrativeGuards),
 	}
 	if row.CampaignConfig != nil {
 		config := json.RawMessage(*row.CampaignConfig)
@@ -27,6 +28,10 @@ func EncodeGameplayRuntime(contract gameplay.RuntimeContract) (ChallengeRuntimeC
 		EngineKey: document.EngineKey, EngineVersion: document.EngineVersion, Mode: document.Mode,
 		StateSchema: JSONDoc(document.StateSchema), ActionConfig: JSONDoc(document.ActionConfig),
 		SettlementConfig: JSONDoc(document.SettlementConfig), Presentation: JSONDoc(document.Presentation),
+		NarrativeGuards: JSONDoc(document.NarrativeGuards),
+	}
+	if len(row.NarrativeGuards) == 0 {
+		row.NarrativeGuards = JSONDoc("[]")
 	}
 	if document.CampaignConfig != nil {
 		config := JSONDoc(*document.CampaignConfig)

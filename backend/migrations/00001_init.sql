@@ -171,6 +171,9 @@ CREATE TABLE challenge_runtime_configs (
     action_config JSONB NOT NULL CHECK (jsonb_typeof(action_config) = 'object'),
     settlement_config JSONB NOT NULL CHECK (jsonb_typeof(settlement_config) = 'object'),
     presentation JSONB NOT NULL CHECK (jsonb_typeof(presentation) = 'object'),
+    -- 玩法作者追加的叙事主张闸门（受控正则 + 提示文案），默认空数组。
+    narrative_guards JSONB NOT NULL DEFAULT '[]'::jsonb
+        CHECK (jsonb_typeof(narrative_guards) = 'array' AND jsonb_array_length(narrative_guards) <= 16),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT challenge_runtime_campaign_pair CHECK (
@@ -603,7 +606,7 @@ CREATE TABLE conversation_generation_runs (
     id UUID PRIMARY KEY,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 	request_id UUID NOT NULL UNIQUE,
-	operation_type VARCHAR(32) NOT NULL CHECK (operation_type IN ('user_input', 'regenerate', 'continue', 'rewrite')),
+	operation_type VARCHAR(32) NOT NULL CHECK (operation_type IN ('user_input', 'regenerate', 'continue', 'rewrite', 'module_action')),
 	target_message_id UUID,
 	payload_hash VARCHAR(64) NOT NULL,
     conversation_revision BIGINT NOT NULL CHECK (conversation_revision >= 0),
@@ -631,7 +634,8 @@ CREATE TABLE conversation_turns (
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     turn_seq BIGINT NOT NULL CHECK (turn_seq > 0),
     trigger_type VARCHAR(32) NOT NULL CHECK (trigger_type IN (
-        'opening', 'user_input', 'continue', 'rewrite', 'regenerate', 'admin_mutation'
+        'opening', 'user_input', 'continue', 'rewrite', 'regenerate', 'admin_mutation',
+        'module_action'
     )),
     status VARCHAR(16) NOT NULL CHECK (status IN ('pending', 'completed', 'partial', 'failed', 'cancelled')),
     failure_stage VARCHAR(64) NOT NULL DEFAULT '',
@@ -973,9 +977,17 @@ CREATE TABLE module_action_commits (
     narrative JSONB NOT NULL DEFAULT '{}'::jsonb
         CHECK (jsonb_typeof(narrative) = 'object' AND octet_length(narrative::text) <= 65536),
     schema_version SMALLINT NOT NULL DEFAULT 1 CHECK (schema_version > 0),
+    -- 叙事消费标记：动作结果被某次助手叙事回合采用后写入；NULL 表示尚未被
+    -- 任何叙事消费（自动叙事回合被跳过时，下一次叙事回合仍会注入）。
+    narrated_turn_id UUID REFERENCES conversation_turns(id) ON DELETE SET NULL,
+    narrated_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (conversation_id, branch_epoch, request_id)
 );
+
+CREATE INDEX idx_module_action_commits_unnarrated
+    ON module_action_commits(conversation_id, created_at)
+    WHERE narrated_turn_id IS NULL;
 
 CREATE TABLE conversation_memories (
     id UUID PRIMARY KEY,

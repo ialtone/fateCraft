@@ -19,6 +19,11 @@
       }
     },
     "mode": {"enum": ["challenge", "campaign"]},
+    "narrative_guards": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/narrativeGuard"}
+    },
     "includes": {
       "type": "object",
       "additionalProperties": false,
@@ -43,6 +48,15 @@
     }
   ],
   "$defs": {
+    "narrativeGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern", "message"],
+      "properties": {
+        "pattern": {"type": "string", "minLength": 1, "maxLength": 256},
+        "message": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
     "runtimeFile": {
       "type": "string",
       "pattern": "^(?!/)(?!.*(^|/)\\.\\.?(/|$))[A-Za-z0-9._/-]+\\.json$"

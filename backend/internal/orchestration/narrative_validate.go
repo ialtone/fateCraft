@@ -64,12 +64,17 @@ func ValidateNarrative(text string, narrative *gameplay.TurnNarrativeContext) (s
 // context carries no pending action results, any claim of a realm
 // breakthrough, healing or acquired items/currency cannot be true and is
 // reported as a violation so the RepairNarrative / fallback flow applies.
-func ValidateTurnNarrative(text string, narrative *gameplay.TurnNarrativeContext, committedThisTurn bool) (string, storage.JSONMap) {
+// 挑战模式额外启用“时间推进主张”闸门：没有可信动作的回合，正文不得让日历
+// 前进（数字日/年、季节转换、岁月套语等）。guards 为玩法作者追加的受控主张。
+func ValidateTurnNarrative(text string, narrative *gameplay.TurnNarrativeContext, committedThisTurn bool, guards []gameplay.NarrativeGuard) (string, storage.JSONMap) {
 	status, detail := ValidateNarrative(text, narrative)
-	if committedThisTurn || (narrative != nil && len(narrative.Actions) > 0) {
-		return status, detail
+	extra := guardClaims(text, guards)
+	if !committedThisTurn && (narrative == nil || len(narrative.Actions) == 0) {
+		extra = append(extra, unbackedStateClaims(text)...)
+		if narrative != nil && narrative.ChallengeMode {
+			extra = append(extra, unbackedTimeClaims(text)...)
+		}
 	}
-	extra := unbackedStateClaims(text)
 	if len(extra) == 0 {
 		return status, detail
 	}
@@ -92,11 +97,79 @@ var unbackedClaimPatterns = []struct {
 func unbackedStateClaims(text string) []narrativeViolation {
 	out := make([]narrativeViolation, 0)
 	for _, rule := range unbackedClaimPatterns {
-		if match := rule.pattern.FindString(text); match != "" && !negated(text, rule.pattern) {
+		if match := firstAffirmedClaim(text, rule.pattern); match != "" {
 			out = append(out, narrativeViolation{
 				Code: rule.code, Path: rule.path, Claim: match,
 				Expected: "本回合无已提交动作", Actual: "正文宣称状态变化",
 			})
+		}
+	}
+	return out
+}
+
+// unbackedTimePatterns 匹配“日历前进”类主张，首发保守：数字天数/年数、
+// “数日/数月”类量词、“X 个月后/年后”与季节、岁月套语。模式表刻意不覆盖
+// 无后缀的“N 年”（避免误伤“他还有五十九年可走”这类寿元陈述）。
+var unbackedTimePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\d+\s*[日天]`),
+	regexp.MustCompile(`(?:第|初|过)?[一二两三四五六七八九十百千]+\s*[日天]`),
+	regexp.MustCompile(`数\s*[日天月年]`),
+	regexp.MustCompile(`[0-9一二两三四五六七八九十百千]+\s*个?\s*[月年]\s*(?:之?后)`),
+	regexp.MustCompile(`入冬|开春|入春|入夏|入秋|翌年|次年|转年|春去秋来|寒来暑往|光阴似箭|日月如梭|岁月如流`),
+}
+
+// timeClaimExempt 允许正文复述面板上的剩余寿元/已过天数（“剩余寿元 21535 天”
+// 是现状陈述而非时间推进）。
+func timeClaimExempt(text string, index []int) bool {
+	prefix := claimPrefix(text, index[0], 8)
+	for _, marker := range []string{"剩余", "寿元", "尚有", "还有", "只余", "仅剩", "已过天数",
+		"如果", "假如", "倘若", "计划", "打算", "准备", "需要", "还需", "曾经", "此前", "从前", "回想", "回忆", "每隔"} {
+		if strings.Contains(prefix, marker) {
+			return true
+		}
+	}
+	// A request to return later describes a plan, not an elapsed interval.
+	return plannedTimeSuffix.MatchString(text[index[1]:])
+}
+
+var plannedTimeSuffix = regexp.MustCompile(`^\s*(?:之?后|以后)[^，。！？\n]{0,8}(?:再|请|才会|才能|可以)`)
+
+func unbackedTimeClaims(text string) []narrativeViolation {
+	out := make([]narrativeViolation, 0)
+	seen := map[string]bool{}
+	for _, pattern := range unbackedTimePatterns {
+		for _, index := range pattern.FindAllStringIndex(text, -1) {
+			match := text[index[0]:index[1]]
+			if seen[match] || negatedAt(text, index[0]) || timeClaimExempt(text, index) {
+				continue
+			}
+			seen[match] = true
+			out = append(out, narrativeViolation{
+				Code: "unbacked_time_passage", Claim: match,
+				Expected: "本回合无已提交动作，游戏时间未推进", Actual: "正文叙述时间流逝",
+			})
+		}
+	}
+	return out
+}
+
+// guardClaims 应用玩法作者追加的受控主张守则。
+func guardClaims(text string, guards []gameplay.NarrativeGuard) []narrativeViolation {
+	out := make([]narrativeViolation, 0)
+	for _, guard := range guards {
+		pattern, err := regexp.Compile(guard.Pattern)
+		if err != nil {
+			continue // ValidateContract 已拒绝非法 pattern；此处防御性跳过
+		}
+		for _, index := range pattern.FindAllStringIndex(text, -1) {
+			if negatedAt(text, index[0]) {
+				continue
+			}
+			out = append(out, narrativeViolation{
+				Code: "narrative_guard", Claim: text[index[0]:index[1]],
+				Expected: guard.Message, Actual: "正文命中玩法守则",
+			})
+			break
 		}
 	}
 	return out
@@ -109,11 +182,12 @@ func validateNarrativeFacts(text string, narrative gameplay.TurnNarrativeContext
 	failedBreakthrough := false
 	hasInventoryChange := false
 	for _, action := range narrative.Actions {
-		if action.GoalStatus == "failed" && strings.Contains(action.ActionKey, "breakthrough") {
-			failedBreakthrough = true
+		if strings.Contains(action.ActionKey, "breakthrough") {
+			failedBreakthrough = action.GoalStatus == "failed"
 		}
 		for _, change := range action.Changes {
 			changes[change.Path] = change
+			delete(preserved, change.Path)
 			if strings.Contains(change.Path, "inventory") ||
 				strings.Contains(change.Path, "item") ||
 				strings.Contains(change.Path, "currency") {
@@ -124,7 +198,9 @@ func validateNarrativeFacts(text string, narrative gameplay.TurnNarrativeContext
 			facts[key] = value
 		}
 		for _, fact := range action.Preserved {
-			preserved[fact.Path] = true
+			if _, changed := changes[fact.Path]; !changed {
+				preserved[fact.Path] = true
+			}
 		}
 	}
 	violations := make([]narrativeViolation, 0)
@@ -233,20 +309,41 @@ func checkSingleClaim(text, label, path, unit string, facts map[string]any, viol
 }
 
 func negated(text string, pattern *regexp.Regexp) bool {
-	indexes := pattern.FindAllStringIndex(text, -1)
-	for _, index := range indexes {
-		start := index[0] - 8
-		if start < 0 {
-			start = 0
+	index := pattern.FindStringIndex(text)
+	return index != nil && negatedAt(text, index[0])
+}
+
+func firstAffirmedClaim(text string, pattern *regexp.Regexp) string {
+	for _, index := range pattern.FindAllStringIndex(text, -1) {
+		if !negatedAt(text, index[0]) {
+			return text[index[0]:index[1]]
 		}
-		prefix := text[start:index[0]]
-		for _, marker := range []string{"没有", "未", "并非", "不曾", "无法", "没有能", "没能"} {
-			if strings.Contains(prefix, marker) {
-				return true
-			}
+	}
+	return ""
+}
+
+func negatedAt(text string, matchStart int) bool {
+	prefix := claimPrefix(text, matchStart, 8)
+	for _, marker := range []string{"没有", "未", "并非", "不曾", "无法", "没有能", "没能"} {
+		if strings.Contains(prefix, marker) {
+			return true
 		}
 	}
 	return false
+}
+
+// Limit exemptions to the matching clause and count Chinese characters, not bytes.
+func claimPrefix(text string, matchStart, maxRunes int) string {
+	prefix := text[:matchStart]
+	if boundary := strings.LastIndexAny(prefix, "。！？!?；;，,\n"); boundary >= 0 {
+		_, size := utf8.DecodeRuneInString(prefix[boundary:])
+		prefix = prefix[boundary+size:]
+	}
+	runes := []rune(prefix)
+	if len(runes) > maxRunes {
+		runes = runes[len(runes)-maxRunes:]
+	}
+	return string(runes)
 }
 
 func factInt(value any) (int64, bool) {

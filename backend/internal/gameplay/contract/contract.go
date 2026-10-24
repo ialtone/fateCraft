@@ -3,6 +3,7 @@ package contract
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -264,6 +265,16 @@ type RuntimeContract struct {
 	Actions      ActionConfig     `json:"actions"`
 	Settlement   SettlementConfig `json:"settlement"`
 	Presentation Presentation     `json:"presentation"`
+	// NarrativeGuards 是玩法作者追加的叙事主张闸门：正文命中受控正则时按
+	// 违例处理，走既有的修复/兜底流程。最多 16 条，见 challenge_runtime_configs。
+	NarrativeGuards []NarrativeGuard `json:"narrative_guards,omitempty"`
+}
+
+// NarrativeGuard 是一条受控叙事守则：正文命中 pattern 时以 message 作为
+// 违例说明。pattern 必须是长度受控的合法正则；不授予任何状态修改能力。
+type NarrativeGuard struct {
+	Pattern string `json:"pattern"`
+	Message string `json:"message"`
 }
 
 func DecodeRuntime(row RuntimeDocument) (*RuntimeContract, error) {
@@ -288,6 +299,11 @@ func DecodeRuntime(row RuntimeDocument) (*RuntimeContract, error) {
 	}
 	if err := jsonstrict.Decode(row.Presentation, &contract.Presentation); err != nil {
 		return nil, fmt.Errorf("解析 presentation: %w", err)
+	}
+	if len(row.NarrativeGuards) > 0 && string(row.NarrativeGuards) != "null" {
+		if err := jsonstrict.Decode(row.NarrativeGuards, &contract.NarrativeGuards); err != nil {
+			return nil, fmt.Errorf("解析 narrative_guards: %w", err)
+		}
 	}
 	return &contract, nil
 }
@@ -319,11 +335,20 @@ func EncodeRuntime(contract RuntimeContract) (RuntimeDocument, error) {
 	if err != nil {
 		return RuntimeDocument{}, err
 	}
+	var narrativeGuards json.RawMessage
+	if len(contract.NarrativeGuards) > 0 {
+		encoded, err := json.Marshal(contract.NarrativeGuards)
+		if err != nil {
+			return RuntimeDocument{}, err
+		}
+		narrativeGuards = encoded
+	}
 	row := RuntimeDocument{
 		EngineKey: contract.Engine.Key, EngineVersion: contract.Engine.Version,
 		Mode: mode, CampaignConfig: campaignConfig,
 		StateSchema: json.RawMessage(stateSchema), ActionConfig: json.RawMessage(actions),
 		SettlementConfig: json.RawMessage(settlement), Presentation: json.RawMessage(presentation),
+		NarrativeGuards: narrativeGuards,
 	}
 	return row, nil
 }
@@ -393,6 +418,20 @@ func ValidateContract(contract *RuntimeContract) error {
 	}
 	if err := validateValueLabels(contract.Presentation.ValueLabels); err != nil {
 		return err
+	}
+	if len(contract.NarrativeGuards) > 16 {
+		return fmt.Errorf("narrative_guards 不能超过 16 条")
+	}
+	for index, guard := range contract.NarrativeGuards {
+		if len(guard.Pattern) == 0 || len(guard.Pattern) > 256 {
+			return fmt.Errorf("narrative_guards[%d] pattern 长度无效", index)
+		}
+		if _, err := regexp.Compile(guard.Pattern); err != nil {
+			return fmt.Errorf("narrative_guards[%d] pattern 无法编译: %w", index, err)
+		}
+		if message := strings.TrimSpace(guard.Message); message == "" || len([]rune(message)) > 256 {
+			return fmt.Errorf("narrative_guards[%d] message 无效", index)
+		}
 	}
 	if contract.Presentation.Guidance != nil {
 		if err := validateGuidance(*contract.Presentation.Guidance, contract); err != nil {

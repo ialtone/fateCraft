@@ -77,12 +77,15 @@ type ActionPreview struct {
 
 // ActionPlan describes one concrete parameter choice at the preview revision.
 // Plans never authorize an action; the module rechecks the current state.
+// BlockedReason 标记“方案存在但当前无法支付”的具体缺口；带此字段的方案仅用于
+// 展示，执行时会被执行器的支付复核拒绝。
 type ActionPlan struct {
-	Label     string           `json:"label"`
-	Arguments map[string]any   `json:"arguments"`
-	Minutes   int64            `json:"minutes"`
-	Costs     map[string]int64 `json:"costs,omitempty"`
-	Risk      string           `json:"risk,omitempty"`
+	Label         string           `json:"label"`
+	Arguments     map[string]any   `json:"arguments"`
+	Minutes       int64            `json:"minutes"`
+	Costs         map[string]int64 `json:"costs,omitempty"`
+	Risk          string           `json:"risk,omitempty"`
+	BlockedReason string           `json:"blocked_reason,omitempty"`
 }
 
 type RuntimeRequest struct {

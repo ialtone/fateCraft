@@ -463,3 +463,18 @@ Campaign 快照接口返回 `campaign`（含 `revision`、`state_hash`）与完�
 ### 活动快照与业务资源恢复
 
 activity_version 只表示活动稳定投影，不能作为消息、状态或 Campaign 的统一版本。完整活动快照可跳号直接应用；分支切换、回合变化、生成解锁和已知事件缺口仍恢复业务资源。首次订阅和重连等待 ready，REST 读取期间缓冲消息并按 ID/attempt 合并；当前 attempt 的持久消息不能因为终态快照先到而丢弃。无可比较版本的缓冲 state_update 触发补读，Campaign 继续验证 revision/hash。跨 endpoint 的并行 REST 并不构成原子快照。
+
+
+### 挑战模式的动作结果注入与叙事消费
+
+单局挑战没有 Campaign revision 绑定，但面板动作结果同样必须成为叙事的唯一事实来源：
+
+- 组装挑战上下文时读取源回合未失效且 `narrated_turn_id IS NULL` 的未消费提交（最多 4 条，按时间升序），把 `narrative` ActionResult 放入挑战模式的 `TurnNarrativeContext`（`ChallengeMode: true`，`CampaignID` 为空），同时写入模型投影的 `narrative_context` 核心键与校验上下文。无待消费动作时也保留空上下文，供模型读取“时间未推进”的约束。
+- 面板动作提交成功且未触发结局时，服务端以 `trigger_type = module_action` 自动追加一个 text-only 叙事回合（`GenerateForModuleAction`）消费刚提交的 ActionResult；对话忙或模型路由不可用时静默跳过，动作结果留在未消费集合中由下一次叙事回合注入。
+- 叙事落库成功后把注入过的提交标记 `narrated_turn_id`（独立事务；失败只导致下次回合重注入，不回滚叙事）。
+- 回退或改写按源回合有效性排除被撤销的动作，不能仅比较 `branch_epoch` 而遗漏仍有效的祖先动作；被撤销叙事的消费标记在分支事务内清除，下一轮可重新讲述仍有效的动作。
+- 挑战模式在“本回合无已提交动作且无未消费 ActionResult”时额外启用时间推进主张闸门（`unbacked_time_passage`）：正文不得叙述数字日/年、季节转换或岁月套语；投影 `narrative_context` 同步注入“游戏时间未推进”的只读指令。玩法作者可用 `runtime.json` 的 `narrative_guards` 追加受控主张（见 15）。
+- 模型历史中连续的面板动作回执折叠为一行汇总；前端时间线折叠展示，见 13 与 05。
+- 本 attempt 已提交的模型领域动作按执行顺序追加到待消费面板动作之后，同步提供给模型投影和校验器；失败或拒绝的调用不算已提交动作，幂等回放不重复追加。同一路径后续真实变化不能被较早动作的“不变”标记覆盖。
+
+时间主张与作者守则逐个匹配位置判断否定，不因正文中另一处否定句跳过所有肯定主张；豁免不跨句或分句。作者守则在有动作和无动作回合均生效，不能用动作存在绕过包级限制。

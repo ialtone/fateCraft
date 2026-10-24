@@ -51,6 +51,14 @@ const active = computed(() =>
 const plan = computed(() =>
   planIndex.value === null ? undefined : active.value?.plans?.[planIndex.value],
 )
+const planBlocked = computed(() => !!plan.value?.blocked_reason)
+const planOptions = computed(() =>
+  (active.value?.plans ?? []).map((p, value) => ({
+    label: p.blocked_reason ? `${p.label}（${p.blocked_reason}）` : p.label,
+    value,
+    disabled: !!p.blocked_reason,
+  })),
+)
 const costs = computed(() =>
   Object.entries(plan.value?.costs ?? active.value?.metadata?.costs ?? {}).map(
     ([key, quantity]) => `${active.value?.cost_labels?.[key] ?? '资源'} × ${quantity}`,
@@ -67,6 +75,16 @@ const blocked = computed(
     conversations.current?.id !== props.convId ||
     conversations.current?.status !== 'active',
 )
+// Keep the reason close to the disabled execution button as well as the header.
+const disabledHint = computed(() => {
+  if (planBlocked.value) return plan.value?.blocked_reason ?? ''
+  if (submitting.value) return '正在提交动作…'
+  if (chat.isGenerating) return '请等待当前叙事完成。'
+  if (socket.writeBlocked) return '状态同步中，请稍候。'
+  if (checkingGameplay.value) return '正在确认玩法版本…'
+  if (loading.value) return '正在刷新行动状态，请稍候。'
+  return ''
+})
 
 function invalidate() {
   dirty = true
@@ -128,7 +146,8 @@ async function load() {
   }
 }
 watch(active, (action) => {
-  planIndex.value = action?.plans?.length ? 0 : null
+  const availablePlan = action?.plans?.findIndex((p) => !p.blocked_reason) ?? -1
+  planIndex.value = action?.plans?.length ? Math.max(availablePlan, 0) : null
   argumentsValue.value = {}
   for (const parameter of action?.parameters ?? []) {
     argumentsValue.value[parameter.key] =
@@ -209,7 +228,8 @@ async function execute() {
   if (socket.writeBlocked) return
   if (
     submitting.value ||
-    (!pending.value && (blocked.value || !active.value?.available || !snapshot.value))
+    (!pending.value &&
+      (blocked.value || !active.value?.available || planBlocked.value || !snapshot.value))
   )
     return
   const id = props.convId
@@ -257,106 +277,117 @@ async function execute() {
 <template>
   <section class="action-panel" aria-label="玩法行动">
     <div class="panel-heading">
-      <strong>行动</strong
-      ><NButton text size="small" :disabled="submitting || loading" @click="load">刷新</NButton>
+      <strong>行动</strong>
+      <span class="heading-tools">
+        <span v-if="loading && snapshot" class="refreshing">正在刷新…</span>
+        <NButton text size="small" :loading="loading" :disabled="submitting" @click="load"
+          >刷新</NButton
+        >
+      </span>
     </div>
     <p class="hint">先选择行动，查看代价后执行。结果以当前存档为准。</p>
     <NAlert v-if="error" type="warning" :show-icon="false">{{ error }}</NAlert>
     <NButton v-if="pending" block type="primary" :loading="submitting" @click="execute"
       >查询上次操作结果</NButton
     >
-    <NSpin :show="loading">
-      <template v-if="snapshot?.action_capabilities.length">
-        <label class="field-label">选择行动</label>
-        <NSelect
-          v-model:value="selectedKey"
-          :disabled="submitting || !!pending"
-          :options="
-            snapshot.action_capabilities.map((a) => ({
-              label: a.metadata?.label || a.description,
-              value: a.key,
-            }))
-          "
-        />
-        <template v-if="active">
-          <p class="hint">{{ active.description }}</p>
-          <template v-if="active.plans?.length">
-            <label class="field-label">行动方案</label>
-            <NSelect
-              v-model:value="planIndex"
-              :disabled="submitting || !!pending"
-              :options="active.plans.map((p, value) => ({ label: p.label, value }))"
-            />
-          </template>
-          <template v-else v-for="parameter in active.parameters" :key="parameter.key">
-            <label class="field-label">{{ parameter.label }}</label>
-            <NInputNumber
-              v-if="parameter.type === 'integer'"
-              :value="Number(argumentsValue[parameter.key])"
-              :min="parameter.minimum"
-              :max="parameter.maximum"
-              :precision="0"
-              :disabled="submitting || !!pending"
-              @update:value="
-                (value) => (argumentsValue[parameter.key] = value ?? parameter.minimum ?? 0)
-              "
-            />
-            <NSwitch
-              v-else-if="parameter.type === 'boolean'"
-              :value="Boolean(argumentsValue[parameter.key])"
-              :disabled="submitting || !!pending"
-              @update:value="(value) => (argumentsValue[parameter.key] = value)"
-            />
-            <NSelect
-              v-else-if="parameter.options?.length"
-              :value="String(argumentsValue[parameter.key])"
-              :disabled="submitting || !!pending"
-              :options="
-                parameter.options.map((value) => ({
-                  value,
-                  label: parameter.option_labels?.[value] ?? parameter.label,
-                }))
-              "
-              @update:value="(value) => (argumentsValue[parameter.key] = value)"
-            />
-            <NInput
-              v-else
-              :value="String(argumentsValue[parameter.key])"
-              :maxlength="128"
-              :disabled="submitting || !!pending"
-              @update:value="(value) => (argumentsValue[parameter.key] = value)"
-            />
-          </template>
-          <dl class="action-costs">
-            <dt>耗时</dt>
-            <dd>{{ minutes ? `${minutes} 分钟` : '立即' }}</dd>
-            <dt>消耗</dt>
-            <dd>{{ costs.join('、') || '无额外消耗' }}</dd>
-          </dl>
-          <p v-if="plan?.risk || active.metadata?.risk" class="hint">
-            {{ plan?.risk || active.metadata?.risk }}
-          </p>
-          <NAlert v-if="!active.available" type="info" :show-icon="false">{{
-            active.violations?.map((v) => v.message).join('；') || '当前不可执行'
-          }}</NAlert>
-          <NButton
-            block
-            type="primary"
-            :loading="submitting"
-            :disabled="blocked || !active.available || !!pending"
-            @click="execute"
-            >执行{{ active.metadata?.label || active.description }}</NButton
-          >
-          <p v-if="chat.isGenerating" class="hint">请等待当前叙事完成。</p>
-        </template>
-      </template>
-      <NEmpty
-        v-else-if="!loading"
-        :description="
-          conversations.current?.status === 'ended' ? '本局已结束' : '当前没有可执行的行动'
+    <!-- 首次加载才阻塞展示；后续刷新一律非阻塞，避免遮罩吞掉点击 -->
+    <NSpin v-if="!snapshot && loading" class="panel-spin" />
+    <template v-else-if="snapshot?.action_capabilities.length">
+      <label class="field-label">选择行动</label>
+      <NSelect
+        v-model:value="selectedKey"
+        :virtual-scroll="false"
+        :disabled="submitting || !!pending"
+        :options="
+          snapshot.action_capabilities.map((a) => ({
+            label: a.metadata?.label || a.description,
+            value: a.key,
+          }))
         "
       />
-    </NSpin>
+      <template v-if="active">
+        <p class="hint">{{ active.description }}</p>
+        <template v-if="active.plans?.length">
+          <label class="field-label">行动方案</label>
+          <NSelect
+            v-model:value="planIndex"
+            :virtual-scroll="false"
+            :disabled="submitting || !!pending"
+            :options="planOptions"
+          />
+        </template>
+        <template v-else v-for="parameter in active.parameters" :key="parameter.key">
+          <label class="field-label">{{ parameter.label }}</label>
+          <NInputNumber
+            v-if="parameter.type === 'integer'"
+            :value="Number(argumentsValue[parameter.key])"
+            :min="parameter.minimum"
+            :max="parameter.maximum"
+            :precision="0"
+            :disabled="submitting || !!pending"
+            @update:value="
+              (value) => (argumentsValue[parameter.key] = value ?? parameter.minimum ?? 0)
+            "
+          />
+          <NSwitch
+            v-else-if="parameter.type === 'boolean'"
+            :value="Boolean(argumentsValue[parameter.key])"
+            :disabled="submitting || !!pending"
+            @update:value="(value) => (argumentsValue[parameter.key] = value)"
+          />
+          <NSelect
+            v-else-if="parameter.options?.length"
+            :virtual-scroll="false"
+            :value="String(argumentsValue[parameter.key])"
+            :disabled="submitting || !!pending"
+            :options="
+              parameter.options.map((value) => ({
+                value,
+                label: parameter.option_labels?.[value] ?? parameter.label,
+              }))
+            "
+            @update:value="(value) => (argumentsValue[parameter.key] = value)"
+          />
+          <NInput
+            v-else
+            :value="String(argumentsValue[parameter.key])"
+            :maxlength="128"
+            :disabled="submitting || !!pending"
+            @update:value="(value) => (argumentsValue[parameter.key] = value)"
+          />
+        </template>
+        <dl class="action-costs">
+          <dt>耗时</dt>
+          <dd>{{ minutes ? `${minutes} 分钟` : '立即' }}</dd>
+          <dt>消耗</dt>
+          <dd>{{ costs.join('、') || '无额外消耗' }}</dd>
+        </dl>
+        <p v-if="plan?.risk || active.metadata?.risk" class="hint">
+          {{ plan?.risk || active.metadata?.risk }}
+        </p>
+        <NAlert v-if="!active.available" type="info" :show-icon="false">{{
+          active.violations?.map((v) => v.message).join('；') || '当前不可执行'
+        }}</NAlert>
+        <NAlert v-if="planBlocked" type="warning" :show-icon="false">{{
+          plan?.blocked_reason
+        }}</NAlert>
+        <NButton
+          block
+          type="primary"
+          :loading="submitting"
+          :disabled="blocked || !active.available || planBlocked || !!pending"
+          @click="execute"
+          >执行{{ active.metadata?.label || active.description }}</NButton
+        >
+        <p v-if="disabledHint" class="hint">{{ disabledHint }}</p>
+      </template>
+    </template>
+    <NEmpty
+      v-else-if="!loading"
+      :description="
+        conversations.current?.status === 'ended' ? '本局已结束' : '当前没有可执行的行动'
+      "
+    />
   </section>
 </template>
 
@@ -371,6 +402,19 @@ async function execute() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.heading-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.refreshing {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.panel-spin {
+  display: block;
+  min-height: 120px;
 }
 .hint {
   font-size: 12px;

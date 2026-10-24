@@ -498,6 +498,13 @@ func prepareBranchInTx(
 		Updates(invalid).Error; err != nil {
 		return nil, err
 	}
+	// A retained action needs narration again when its consuming assistant
+	// turn was removed. Invalidated source actions are excluded by the reader.
+	if err := tx.Model(&ModuleActionCommit{}).
+		Where("conversation_id = ? AND narrated_turn_id IN (?)", conversationID, turnIDs).
+		Updates(map[string]any{"narrated_turn_id": nil, "narrated_at": nil}).Error; err != nil {
+		return nil, err
+	}
 	if err := tx.Model(&GenerationAttempt{}).Where("conversation_id = ? AND turn_id IN (?) AND status = ?", conversationID, turnIDs, AttemptStatusRunning).
 		Updates(map[string]any{"status": AttemptStatusCancelled, "failure_stage": reason, "error_code": reason, "finished_at": now}).Error; err != nil {
 		return nil, err

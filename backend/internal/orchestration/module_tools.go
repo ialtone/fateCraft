@@ -2,12 +2,58 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/realtime"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
+
+// Tool results may be freshly normalized or replayed from storage. Both carry
+// the same trusted narrative/feedback; never derive an action from model prose.
+func (cache *attemptAssembleCache) recordModuleAction(outcome agentToolOutcome, actionKey string) error {
+	if outcome.Status != storage.ToolInvocationCommitted || !outcome.Mutating {
+		return nil
+	}
+	raw, err := json.Marshal(outcome.Result["data"])
+	if err != nil {
+		return err
+	}
+	var data struct {
+		Narrative *gameplay.ActionResult `json:"narrative"`
+		Feedback  map[string]any         `json:"narrative_feedback"`
+		Revision  int64                  `json:"revision"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return err
+	}
+	if data.Narrative == nil {
+		// Bounded tool results retain feedback even when other fields are cut.
+		if data.Feedback == nil {
+			return errors.New("已提交的玩法动作缺少可信叙事结果")
+		}
+		action, err := gameplay.BuildActionResult(data.Feedback, gameplay.ActionResultMeta{
+			ActionID:  fmt.Sprintf("%s:%d", actionKey, data.Revision),
+			ActionKey: actionKey, ActorType: "model", Revision: data.Revision,
+		})
+		if err != nil {
+			return err
+		}
+		data.Narrative = &action
+	}
+	if err := data.Narrative.Validate(); err != nil {
+		return err
+	}
+	for _, action := range cache.moduleActions {
+		if action.ActionID == data.Narrative.ActionID {
+			return nil
+		}
+	}
+	cache.moduleActions = append(cache.moduleActions, *data.Narrative)
+	return nil
+}
 
 func (g *Generator) executeModuleToolInTx(ctx context.Context, conv *storage.Conversation, binding agentToolBinding, arguments map[string]any, tx *agentToolTx) agentToolOutcome {
 	failure := func(err error) agentToolOutcome {

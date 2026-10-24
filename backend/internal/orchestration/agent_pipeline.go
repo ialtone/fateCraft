@@ -383,13 +383,13 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			}
 			validationStatus := "not_applicable"
 			validationDetail := storage.JSONMap{}
-			if in.NarrativeContext != nil {
-				validationStatus, validationDetail = ValidateTurnNarrative(text, in.NarrativeContext, mutatingCount > 0)
+			if in.NarrativeContext != nil || len(contract.NarrativeGuards) > 0 {
+				validationStatus, validationDetail = ValidateTurnNarrative(text, in.NarrativeContext, mutatingCount > 0, contract.NarrativeGuards)
 				if validationStatus != "passed" {
 					validationDetail["original_status"] = validationStatus
 					originalDetail := validationDetail
 					if repaired := RepairNarrative(text, originalDetail); repaired != "" {
-						if repairedStatus, repairedDetail := ValidateTurnNarrative(repaired, in.NarrativeContext, mutatingCount > 0); repairedStatus == "passed" {
+						if repairedStatus, repairedDetail := ValidateTurnNarrative(repaired, in.NarrativeContext, mutatingCount > 0, contract.NarrativeGuards); repairedStatus == "passed" {
 							text = repaired
 							validationStatus = "repaired"
 							validationDetail = repairedDetail
@@ -441,6 +441,15 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			// persisted, the rewrite has succeeded and its debit must be kept even
 			// if a later realtime notification is interrupted.
 			markGenerationCommitted(ctx)
+			// 本回合叙事消费过的面板动作提交标记为已消费；失败只降级为
+			// “下一次叙事回合重注入”，不回滚已落库的叙事。
+			if len(in.ConsumedModuleActionIDs) > 0 && conv.ChallengeVersionID != uuid.Nil {
+				if err := g.challenge.Repository().MarkModuleActionsNarrated(attemptCtx, convID, metadata.TurnID, in.ConsumedModuleActionIDs); err != nil {
+					logging.FromContext(ctx, "orchestration").Warn("标记面板动作已叙事失败",
+						zap.String("conversation_id", convID.String()),
+						zap.String("turn_id", metadata.TurnID.String()), zap.Error(err))
+				}
+			}
 			// A turn can contain several tool-loop model steps. The final
 			// assistant chat row keeps the last provider reasoning payload for
 			// protocol replay, while the display projection shows the readable
@@ -513,6 +522,13 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 				turnToolMS += time.Since(toolStartedAt).Milliseconds()
 				if outcome.Mutating && outcome.Status == storage.ToolInvocationCommitted {
 					mutatingCount++
+					if binding := snapshot.Bindings[call.Name]; binding.Kind == agentToolModule {
+						if err := assembleCache.recordModuleAction(outcome, binding.ActionKey); err != nil {
+							markGenerationFailure(ctx, "finalize", "module_narrative_invalid")
+							g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, true, err, emit)
+							return
+						}
+					}
 					if revision := outcomeRevision(outcome); revision != nil {
 						snapshot.ObservedRevision = revision
 					}

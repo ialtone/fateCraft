@@ -50,11 +50,12 @@ type gameplayDefinitionFile struct {
 const runtimeSourceContractVersion = 2
 
 type runtimeSourceEntry struct {
-	Schema          string                `json:"$schema"`
-	ContractVersion int                   `json:"runtime_contract_version"`
-	Engine          gameplay.EngineRef    `json:"engine"`
-	Mode            string                `json:"mode"`
-	Includes        runtimeSourceIncludes `json:"includes"`
+	Schema          string                    `json:"$schema"`
+	ContractVersion int                       `json:"runtime_contract_version"`
+	Engine          gameplay.EngineRef        `json:"engine"`
+	Mode            string                    `json:"mode"`
+	NarrativeGuards []gameplay.NarrativeGuard `json:"narrative_guards,omitempty"`
+	Includes        runtimeSourceIncludes     `json:"includes"`
 }
 
 type runtimeSourceIncludes struct {
@@ -272,7 +273,9 @@ func loadRuntimeSource(packDirectory, entryReference string) (*gameplay.RuntimeC
 		paths[name] = path
 	}
 
-	contract := &gameplay.RuntimeContract{Engine: entry.Engine, Mode: mode}
+	contract := &gameplay.RuntimeContract{
+		Engine: entry.Engine, Mode: mode, NarrativeGuards: entry.NarrativeGuards,
+	}
 	if path := paths["campaign"]; path != "" {
 		var fragment runtimeCampaignFragment
 		if err := decodeJSONFileStrict(path, &fragment); err != nil {

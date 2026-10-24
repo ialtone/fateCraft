@@ -13,6 +13,8 @@
 
 成功提交广播 `module_action_committed`，客户端重新读取真实状态；Challenge 和 Campaign 同次终局均广播 `challenge_completed.completion`。Campaign 的收尾以领域终态为准，模型不能再写后续行动。模块 DTO、菜单方案与可见性见[24](24-gameplay-module-architecture.md)。
 
+Challenge 面板动作提交成功且未触发结局时，服务端自动追加一个 `module_action` 叙事回合（不产生用户消息），通过常规 `message_created` / agent 流式事件推送动作结果叙事；对话忙或模型路由不可用时静默跳过，结果由下一次叙事回合注入补齐，见[13](13-challenge-system.md)。行动方案可携带 `blocked_reason`（资源不足缺口说明），带该字段的方案仅用于展示，执行会被服务端支付复核以 409 拒绝。
+
 Campaign 玩家动作结果不明时，客户端按存档保存原 `action_id`、参数与 revision，重试同一请求；切换/重新打开对话后，迟到响应不得覆盖新作用域。动作已提交但快照刷新失败时保留成功事实并提示刷新，不重新执行。玩家动作成功和 `agent.turn.completed` 后刷新账号余额，涵盖阶段到账与终局所得。青河通过 `cultivation.retreat` 闭关、`character.recover` 恢复，阶段奖励随合法动作自动核验和发放；`cultivation.begin_ascension` 引劫与终局任务仍须玩家行动，具体参数取动态目录，见 [16](16-cultivation-campaign-agent-reference.md) 与 [21](21-campaign-outcome-rewards.md)。
 
 ## 通用约定

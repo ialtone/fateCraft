@@ -8,6 +8,7 @@
     "test:campaign-actions": "node --test tests/campaign-actions.test.mjs",
     "test:ending-actions": "node --test tests/ending-actions.test.mjs",
     "test:module-actions": "node --experimental-strip-types --test tests/module-actions.test.mjs",
+    "test:receipt-groups": "node --experimental-strip-types --test tests/receipt-groups.test.mjs",
     "test:play-readiness": "node --experimental-strip-types --test tests/play-readiness.test.mjs",
     "test:admin-tabs": "node --experimental-strip-types --test tests/admin-tabs.test.mjs",
     "test:player-rewards": "node --experimental-strip-types --test tests/player-rewards.test.mjs",

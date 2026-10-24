@@ -56,12 +56,16 @@ type ClaimRuleSet struct {
 // TurnNarrativeContext binds one assistant narrative to every action that was
 // committed during the turn. A text-only turn carries no actions and still
 // binds the current revision so a stale generation can be rejected.
+//
+// CampaignID 为空且 ChallengeMode 为真时，上下文来自单局挑战的可信模块：
+// Actions 携带尚未被叙事消费的玩家面板动作结果，版本字段不参与 stale 判定。
 type TurnNarrativeContext struct {
-	CampaignID   string         `json:"campaign_id"`
-	RevisionFrom int64          `json:"revision_from"`
-	RevisionTo   int64          `json:"revision_to"`
-	StateHash    string         `json:"state_hash"`
-	Actions      []ActionResult `json:"actions"`
+	CampaignID    string         `json:"campaign_id"`
+	ChallengeMode bool           `json:"challenge_mode,omitempty"`
+	RevisionFrom  int64          `json:"revision_from"`
+	RevisionTo    int64          `json:"revision_to"`
+	StateHash     string         `json:"state_hash"`
+	Actions       []ActionResult `json:"actions"`
 }
 
 type ActionResultMeta struct {
@@ -173,7 +177,7 @@ func (r ActionResult) Validate() error {
 }
 
 func (c TurnNarrativeContext) Validate() error {
-	if strings.TrimSpace(c.CampaignID) == "" {
+	if !c.ChallengeMode && strings.TrimSpace(c.CampaignID) == "" {
 		return fmt.Errorf("叙事上下文缺少 campaign_id")
 	}
 	if c.RevisionFrom < 0 || c.RevisionTo < c.RevisionFrom {
