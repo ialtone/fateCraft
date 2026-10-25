@@ -1099,7 +1099,7 @@ watch(
                     <template #header-extra>
                       <NTag v-if="settings.public_llm_has_api_key" type="success">已配置 Key</NTag>
                     </template>
-                    <div class="public-llm-content">
+                    <div v-if="settings" class="public-llm-content">
                       <NForm
                         label-placement="top"
                         size="small"

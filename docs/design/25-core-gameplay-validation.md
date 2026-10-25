@@ -33,7 +33,7 @@
 ```powershell
 cd frontend
 node --experimental-strip-types --test tests/module-actions.test.mjs tests/play-readiness.test.mjs tests/admin-tabs.test.mjs tests/player-rewards.test.mjs tests/campaign-actions.test.mjs
-npm run build
+pnpm run build
 ```
 
 后端规则与模拟：

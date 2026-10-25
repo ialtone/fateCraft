@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0-beta.2",
   "type": "module",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "test:activity": "node --test tests/activity-reconciliation.test.mjs",
     "test:campaign-actions": "node --test tests/campaign-actions.test.mjs",
@@ -24,19 +28,19 @@
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
-    "axios": "^1.7.9",
-    "dompurify": "^3.2.4",
-    "marked": "^15.0.6",
-    "naive-ui": "^2.44.1",
-    "pinia": "^2.3.0",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "axios": "^1.20.0",
+    "dompurify": "^3.4.17",
+    "marked": "^18.1.1",
+    "naive-ui": "^2.45.3",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.1",
-    "prettier": "^3.9.5",
-    "typescript": "~5.7.3",
-    "vite": "^6.0.7",
-    "vue-tsc": "^2.2.0"
+    "@vitejs/plugin-vue": "^6.0.10",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.5",
+    "vue-tsc": "^3.3.13"
   }
 }

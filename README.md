@@ -183,7 +183,7 @@ docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d
 
 ### 本机开发运行
 
-安装 Go、Node.js、Go Task 和 PostgreSQL 后，复制并编辑后端配置：
+安装 Go、Node.js、pnpm、Go Task 和 PostgreSQL 后，复制并编辑后端配置（pnpm 可用 `corepack enable` 启用）：
 
 ```bash
 cp backend/.env.example backend/.env
@@ -201,8 +201,8 @@ go run ./cmd/server
 
 ```bash
 cd frontend
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
 开发地址为 `http://localhost:5173`，后端默认监听 `http://localhost:8081`。Vite 会代理 API 和 WebSocket 请求。后端不会在服务启动时隐式执行数据库迁移；每次升级请先按部署指南检查并执行 migration。
@@ -238,7 +238,7 @@ cd backend
 go test ./...
 go vet ./...
 cd ../frontend
-npm run build
+pnpm run build
 ```
 
 涉及数据库变更时，还需使用专用测试数据库运行 PostgreSQL 集成测试，命令和环境变量见[开发验证说明](docs/design/README.md)。请不要提交 `.env` 文件、API Key、SMTP 密码或数据库凭据。

@@ -53,16 +53,16 @@ tasks:
     desc: 本机运行前端 Vite 开发服务（代理 /api 与 /ws 到 :8081）
     dir: frontend
     cmds:
-      - npm run dev
+      - pnpm run dev
 
   frontend:check:
     desc: 前端类型检查（vue-tsc）
     dir: frontend
     cmds:
-      - npx vue-tsc --noEmit
+      - pnpm exec vue-tsc --noEmit
 
   frontend:build:
     desc: 构建前端本地产物到 docker/frontend/dist（Docker 镜像构建不依赖此任务）
     dir: frontend
     cmds:
-      - npm run build -- --outDir ../docker/frontend/dist --emptyOutDir
+      - pnpm run build -- --outDir ../docker/frontend/dist --emptyOutDir

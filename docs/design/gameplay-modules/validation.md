@@ -2,6 +2,8 @@
 
 记录日期：2026-10-09。模块架构与两套核心玩法规则的代码和本地检查完成；数据库、浏览器和模型真实验收由维护者执行。此记录不等于 release 批准。
 
+> 前端包管理已统一为 pnpm。2026-10-25 之前的历史记录保留当时的 npm 命令，不代表当前用法。
+
 ## 2026-10-25：Campaign 一致性修复
 
 本轮修复叙事证据、行动入口、行动指引、生成锁与修行不可用提示，未改玩法平衡、积分规则或数据库结构，也不改变“模型只生成叙事、不决定状态”的边界。机制见 [28 状态与剧情一致性](../28-state-narrative-consistency.md)、[17 通用 Campaign 动作](../17-generic-campaign-action-capabilities.md)、[19 Agent](../19-agent-tool-loop.md) 和 [05 前端](../05-frontend-vue.md)。
@@ -12,7 +14,7 @@
 - 生成锁：四个终止事件无论是否携带 `message_id` 都清锁；attempt 去重只跳过消息副作用，仍执行清锁、操作收尾和资源失效；活动快照 `is_processing=false` 立即复位。叙事 watchdog 首轮约 15 秒后指数退避，记忆任务保留独立 75 秒窗口；横幅超过 20 秒提供“重新同步”。
 - 修行提示：`trainingrules.Unavailable` 输出 `reason_code`、所需功法与已装配功法，前端区分“未装配”与“已装配但不可修炼”；装配与可用性判定未改。
 
-本地检查通过：`go build ./...`、`go test ./... -count=1`、`go vet ./...`、`npx vue-tsc --noEmit`、`npm run build`、`npm run test:module-actions`（8 项）。新增 `trainingrules/rules_test.go`，扩展未支持主张、时间闸门与模块动作叙事测试，前端测试覆盖 `action-gate`、兜底指引与入口去重。
+本地检查通过：`go build ./...`、`go test ./... -count=1`、`go vet ./...`、`pnpm exec vue-tsc --noEmit`、`pnpm run build`、`pnpm run test:module-actions`（8 项）。新增 `trainingrules/rules_test.go`，扩展未支持主张、时间闸门与模块动作叙事测试，前端测试覆盖 `action-gate`、兜底指引与入口去重。
 
 本机仍未配置 `FATECRAFT_TEST_DATABASE_URL`，PostgreSQL 事务、并发、检查点回档与账本用例被跳过；**未做真实 SQL/锁/故障验收**。浏览器端入口去重、生成锁恢复和指引兜底仍需维护者实测；可控响应测试不能证明真实模型叙事永远正确。
 
@@ -64,7 +66,7 @@
 | 内核 | 随机证据、越界随机、未声明写入、预览修改输入、动作后 Preview/Project 超预算均有拒绝回归 |
 | 恢复与受众 | Campaign 头/游标/终态一致、player/model/inquiry 分流、模型上下文预算与省略字段说明有回归 |
 
-前端没有通用 `npm test` 脚本，可分别运行 package.json 的五个 `test:*` 命令，或执行 `node --experimental-strip-types --test tests/module-actions.test.mjs tests/play-readiness.test.mjs tests/admin-tabs.test.mjs tests/player-rewards.test.mjs tests/campaign-actions.test.mjs`。两套核心玩法的规则回归、完整经济路线与模拟分布见[25 核心玩法验证](../25-core-gameplay-validation.md)。
+前端没有通用 `pnpm test` 脚本，可分别运行 package.json 的 `test:*` 命令，或执行 `node --experimental-strip-types --test tests/module-actions.test.mjs tests/play-readiness.test.mjs tests/admin-tabs.test.mjs tests/player-rewards.test.mjs tests/campaign-actions.test.mjs`。两套核心玩法的规则回归、完整经济路线与模拟分布见[25 核心玩法验证](../25-core-gameplay-validation.md)。
 
 ## 八种类型矩阵
 

@@ -347,7 +347,7 @@ go test ./...
 go vet ./...
 
 cd ../frontend
-npm run build
+pnpm run build
 ~~~
 
 PostgreSQL 集成测试读取 `FATECRAFT_TEST_DATABASE_URL`，为每次测试创建随机临时 schema、执行完整 Goose migration，结束后删除 schema。它当前验证：
