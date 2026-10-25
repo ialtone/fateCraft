@@ -245,7 +245,8 @@ func TestPostgresModulePublicationSettlementReplayAndRewind(t *testing.T) {
 				if err := db.First(&entry, "source_type = 'campaign_outcome'").Error; err != nil {
 					t.Fatal(err)
 				}
-				if entry.QuantityDelta != scenario.points || entry.BalanceAfter != scenario.points {
+				// The terminal grant follows the three settled two-point stages.
+				if entry.QuantityDelta != scenario.points || entry.BalanceAfter != scenario.points+6 {
 					t.Fatalf("wrong account settlement: %+v", entry)
 				}
 			}

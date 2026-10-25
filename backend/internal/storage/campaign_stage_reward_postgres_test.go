@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/ialtone/fatecraft/internal/operation"
 	"github.com/ialtone/fatecraft/internal/testdb"
 )
 
@@ -101,8 +102,13 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		if count != 4 {
 			t.Fatalf("progress=%d", count)
 		}
+		turn, attempt, err := NewTurnRepo(db).Begin(context.Background(), conversation.ID, "module_action")
+		if err != nil {
+			t.Fatal(err)
+		}
+		bound := operation.WithMetadata(context.Background(), operation.Metadata{ConversationID: conversation.ID, TurnID: turn.ID, AttemptID: attempt.ID, BranchEpoch: conversation.BranchEpoch})
 		finish := func() (*CampaignActionResult, error) {
-			return repo.CommitAction(context.Background(), CommitCampaignActionInput{CampaignID: row.ID, PlayerID: row.PlayerID, ExpectedRevision: 2, IdempotencyKey: "finish", ActionKey: "test.finish", ActorType: "system"}, func(s *CampaignActionStore, locked Campaign) (CampaignActionOutcome, error) {
+			return repo.CommitAction(bound, CommitCampaignActionInput{CampaignID: row.ID, PlayerID: row.PlayerID, ExpectedRevision: 2, IdempotencyKey: "finish", ActionKey: "test.finish", ActorType: "system"}, func(s *CampaignActionStore, locked Campaign) (CampaignActionOutcome, error) {
 				if _, _, err := s.SettleCampaignStageRewards(context.Background(), locked, stageRules); err != nil {
 					return CampaignActionOutcome{}, err
 				}
@@ -110,7 +116,16 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 					return CampaignActionOutcome{}, err
 				}
 				status := CampaignStatusCompleted
-				return CampaignActionOutcome{Status: &status, OutcomeKey: &outcomeKey, Events: []CampaignEventDraft{{EventType: "test.finished", Visibility: CampaignVisibilityPlayer}}}, nil
+				// Mirror the service's terminal receipt construction. CommitAction
+				// itself only persists the result supplied by its executor.
+				after := locked
+				after.Revision++
+				after.Status, after.OutcomeKey = status, outcomeKey
+				receipt, err := s.CampaignCompletion(bound, after, "finish")
+				if err != nil {
+					return CampaignActionOutcome{}, err
+				}
+				return CampaignActionOutcome{Status: &status, OutcomeKey: &outcomeKey, Result: JSONMap{"completion": receipt}, Events: []CampaignEventDraft{{EventType: "test.finished", Visibility: CampaignVisibilityPlayer}}}, nil
 			})
 		}
 		if _, err := finish(); err != nil {
@@ -118,6 +133,9 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		}
 		if result, err := finish(); err != nil || !result.Replayed {
 			t.Fatalf("finish replay failed: %+v %v", result, err)
+		}
+		if err := NewTurnRepo(db).SealStatus(bound, turn.ID, attempt.ID, AttemptStatusCompleted, "", ""); err != nil {
+			t.Fatal(err)
 		}
 		if err := db.Where("campaign_id = ?", row.ID).Find(&claims).Error; err != nil {
 			t.Fatal(err)

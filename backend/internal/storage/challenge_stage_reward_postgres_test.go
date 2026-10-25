@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/ialtone/fatecraft/internal/operation"
 	"github.com/ialtone/fatecraft/internal/testdb"
 	"gorm.io/gorm"
 )
@@ -47,20 +46,20 @@ func TestPostgresChallengeStageRewardsAreAtomicIdempotentAndClientZero(t *testin
 	ctx := context.Background()
 	for _, route := range []string{LLMRouteServer, LLMRouteClient} {
 		conv, turnID := seedChallengeStageConversation(t, db, route)
-		bound := operation.WithMetadata(ctx, operation.Metadata{ConversationID: conv.ID, TurnID: turnID, BranchEpoch: conv.BranchEpoch})
+		bound := ctx
 		repo := NewChallengeRepository(db)
 		grant := func(key string, order int, points int64) (bool, error) {
 			var created bool
 			err := repo.WithTx(bound, func(tx *ChallengeRepository) error {
 				var err error
-				_, created, err = tx.GrantStageReward(bound, conv, StageRewardGrant{Key: key, Name: key, SortOrder: order, Points: points, ActionKey: "trial.breakthrough"})
+				_, created, err = tx.GrantStageReward(bound, conv, StageRewardGrant{Key: key, Name: key, SortOrder: order, Points: points, ActionKey: "trial.breakthrough", SourceTurnID: turnID, SourceBranchEpoch: conv.BranchEpoch})
 				return err
 			})
 			return created, err
 		}
 
 		if err := repo.WithTx(bound, func(tx *ChallengeRepository) error {
-			if _, _, err := tx.GrantStageReward(bound, conv, StageRewardGrant{Key: "rolled-back", Name: "rolled-back", Points: 25}); err != nil {
+			if _, _, err := tx.GrantStageReward(bound, conv, StageRewardGrant{Key: "rolled-back", Name: "rolled-back", Points: 25, SourceTurnID: turnID}); err != nil {
 				return err
 			}
 			return errors.New("injected failure")
@@ -151,16 +150,16 @@ func TestPostgresChallengeStageRewardsAreAtomicIdempotentAndClientZero(t *testin
 func TestPostgresChallengeStageRewardRejectsConflictingSnapshot(t *testing.T) {
 	db := testdb.Open(t, "challenge_stages")
 	conv, turnID := seedChallengeStageConversation(t, db, LLMRouteServer)
-	bound := operation.WithMetadata(context.Background(), operation.Metadata{ConversationID: conv.ID, TurnID: turnID, BranchEpoch: conv.BranchEpoch})
+	bound := context.Background()
 	repo := NewChallengeRepository(db)
 	if err := repo.WithTx(bound, func(tx *ChallengeRepository) error {
-		_, _, err := tx.GrantStageReward(bound, conv, StageRewardGrant{Key: "first", Name: "first", SortOrder: 10, Points: 25})
+		_, _, err := tx.GrantStageReward(bound, conv, StageRewardGrant{Key: "first", Name: "first", SortOrder: 10, Points: 25, SourceTurnID: turnID})
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
 	err := repo.WithTx(bound, func(tx *ChallengeRepository) error {
-		_, _, err := tx.GrantStageReward(bound, conv, StageRewardGrant{Key: "first", Name: "renamed", SortOrder: 10, Points: 25})
+		_, _, err := tx.GrantStageReward(bound, conv, StageRewardGrant{Key: "first", Name: "renamed", SortOrder: 10, Points: 25, SourceTurnID: turnID})
 		return err
 	})
 	if err == nil || !strings.Contains(err.Error(), "不一致") {
