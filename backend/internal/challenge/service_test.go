@@ -277,28 +277,28 @@ func cultivationSettlementFixture() (settlementReaderStub, *storage.Conversation
 	versionID := uuid.New()
 	outcomeID := uuid.New()
 	return settlementReaderStub{
-			outcome: storage.ChallengeOutcomeRule{
-				ID: outcomeID, OutcomeKey: "affinity_ascension", Category: "success", Title: "仙缘飞升", Tone: "success",
-				VerifierKey: "core.conditions", RewardPoints: 150,
-				VerifierConfig: storage.JSONMap{"conditions": []any{
-					map[string]any{"type": "state_in", "path": "profile.cultivation_realm_key", "values": []any{"golden-core", "nascent-soul"}},
-					map[string]any{"type": "successful_roll", "key": "筑基突破判定"},
-					map[string]any{"type": "successful_roll", "key": "结丹突破判定"},
-					map[string]any{"type": "successful_roll", "key": "仙缘获取判定"},
-				}},
-				Enabled: true,
-			},
-			successful: []string{"筑基突破判定", "结丹突破判定", "仙缘获取判定"},
-			runtime: storage.ChallengeRuntimeConfig{
-				EngineKey: "core.generic", EngineVersion: 1,
-				StateSchema:      storage.JSONDoc(`{"schema_version":1,"fields":[{"path":"profile","type":"object","visibility":"player","update_policy":"model","allow_children":true},{"path":"profile.cultivation_realm_key","type":"enum","default":"mortal","visibility":"player","update_policy":"system","constraints":{"values":["mortal","qi-refining","golden-core","nascent-soul"]}}]}`),
-				ActionConfig:     storage.JSONDoc(`{"model":["complete_challenge"],"player":[]}`),
-				SettlementConfig: storage.JSONDoc(`{"handler":"core.challenge_completion"}`),
-				Presentation:     storage.JSONDoc(`{"state_panel_title":"角色状态","state_sections":[],"completion_view":{}}`),
-			},
-		}, &storage.Conversation{
-			ID: uuid.New(), PlayerID: playerID.String(), Status: storage.StatusActive, ChallengeVersionID: versionID,
-		}, playerID
+		outcome: storage.ChallengeOutcomeRule{
+			ID: outcomeID, OutcomeKey: "affinity_ascension", Category: "success", Title: "仙缘飞升", Tone: "success",
+			VerifierKey: "core.conditions", RewardPoints: 150,
+			VerifierConfig: storage.JSONMap{"conditions": []any{
+				map[string]any{"type": "state_in", "path": "profile.cultivation_realm_key", "values": []any{"golden-core", "nascent-soul"}},
+				map[string]any{"type": "successful_roll", "key": "筑基突破判定"},
+				map[string]any{"type": "successful_roll", "key": "结丹突破判定"},
+				map[string]any{"type": "successful_roll", "key": "仙缘获取判定"},
+			}},
+			Enabled: true,
+		},
+		successful: []string{"筑基突破判定", "结丹突破判定", "仙缘获取判定"},
+		runtime: storage.ChallengeRuntimeConfig{
+			EngineKey: "core.generic", EngineVersion: 1,
+			StateSchema:      storage.JSONDoc(`{"schema_version":1,"fields":[{"path":"profile","type":"object","visibility":"player","update_policy":"model","allow_children":true},{"path":"profile.cultivation_realm_key","type":"enum","default":"mortal","visibility":"player","update_policy":"system","constraints":{"values":["mortal","qi-refining","golden-core","nascent-soul"]}}]}`),
+			ActionConfig:     storage.JSONDoc(`{"model":["complete_challenge"],"player":[]}`),
+			SettlementConfig: storage.JSONDoc(`{"handler":"core.challenge_completion"}`),
+			Presentation:     storage.JSONDoc(`{"state_panel_title":"角色状态","state_sections":[],"completion_view":{}}`),
+		},
+	}, &storage.Conversation{
+		ID: uuid.New(), PlayerID: playerID.String(), Status: storage.StatusActive, ChallengeVersionID: versionID,
+	}, playerID
 }
 
 func TestEvaluateSettlementRejectsFabricatedAffinityEndingAtQiRefining(t *testing.T) {
