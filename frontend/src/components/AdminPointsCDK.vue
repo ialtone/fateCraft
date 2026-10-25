@@ -90,6 +90,7 @@ onMounted(load)
       preset="card"
       :title="`积分 CDK · ${codesTitle}`"
       style="width: min(760px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       @update:show="(v: boolean) => !v && (codesTitle = '')"
     >
       <p v-for="code in codes" :key="code.code" class="code">

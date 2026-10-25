@@ -182,7 +182,13 @@ function scrollToTop() {
     </main>
 
     <NModal v-model:show="reportOpen">
-      <NCard class="report-dialog" title="举报分享" closable @close="reportOpen = false">
+      <NCard
+        class="report-dialog"
+        title="举报分享"
+        closable
+        content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
+        @close="reportOpen = false"
+      >
         <div class="report-form">
           <NSelect v-model:value="reportReason" :options="reportOptions" />
           <NInput

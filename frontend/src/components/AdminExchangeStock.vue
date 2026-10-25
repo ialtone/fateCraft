@@ -32,6 +32,8 @@ const rows = ref<RewardExchangeStock[]>([]),
   more = ref(false),
   status = ref(''),
   codes = ref(''),
+  code = ref(''),
+  searchCode = ref(''),
   quantity = ref<number | null>(1),
   selected = ref<string[]>([]),
   duplicates = ref<string[]>([]),
@@ -41,6 +43,18 @@ const rows = ref<RewardExchangeStock[]>([]),
   orderBusy = ref(false),
   orderError = ref(''),
   order = ref<RewardExchangeOrder>()
+// 编号搜索为显式触发：输入只改本地状态，点「搜索」或回车才查库。
+// 商品库存可能是外部兑换码，必须保留大小写和短横线。
+function search() {
+  code.value = code.value.trim()
+  searchCode.value = code.value
+  load()
+}
+function clearSearch() {
+  code.value = ''
+  searchCode.value = ''
+  load()
+}
 function timeText(value: string) {
   return new Date(value).toLocaleString()
 }
@@ -57,21 +71,26 @@ async function showOrder(id: string) {
     orderBusy.value = false
   }
 }
+let loadVersion = 0
 async function load(next = false) {
+  if (next && busy.value) return
+  const version = ++loadVersion
+  if (!next) selected.value = []
   busy.value = true
   error.value = ''
   try {
     const page = await api.stock(props.offer.id, {
       status: status.value || undefined,
+      code: searchCode.value.trim() || undefined,
       offset: next ? rows.value.length : 0,
     })
+    if (version !== loadVersion) return
     rows.value = next ? [...rows.value, ...page.stock] : page.stock
     more.value = page.has_more
-    if (!next) selected.value = []
   } catch (err) {
-    error.value = rewardError(err)
+    if (version === loadVersion) error.value = rewardError(err)
   } finally {
-    busy.value = false
+    if (version === loadVersion) busy.value = false
   }
 }
 async function add() {
@@ -83,6 +102,9 @@ async function add() {
       props.offer.kind === 'cdk' ? { codes: codes.value } : { quantity: quantity.value ?? 0 }
     message.success(`已添加 ${await api.addStock(props.offer.id, body)} 份库存`)
     codes.value = ''
+    // 新增后清空编号筛选，确保刚入库的 CDK 不会因旧筛选而隐藏。
+    code.value = ''
+    searchCode.value = ''
     await load()
   } catch (err) {
     error.value = rewardError(err)
@@ -138,6 +160,16 @@ watch(status, () => load(), { immediate: true })
       <p v-if="duplicates.length">重复的 CDK：{{ duplicates.join('、') }}</p></NAlert
     >
     <div class="add inline">
+      <template v-if="offer.kind === 'cdk'">
+        <NInput
+          v-model:value="code"
+          clearable
+          placeholder="搜索 CDK 编号，回车或点搜索"
+          style="width: 240px"
+          @keyup.enter="search"
+          @clear="clearSearch"
+        /><NButton :loading="busy" @click="search">搜索</NButton>
+      </template>
       <NSelect v-model:value="status" :options="statusOptions" style="width: 160px" /><NButton
         :disabled="!selected.length"
         :loading="busy"
@@ -169,7 +201,13 @@ watch(status, () => load(), { immediate: true })
     </div>
     <NEmpty v-if="!busy && !rows.length" description="暂无库存" />
     <NButton v-if="more" :loading="busy" @click="load(true)">加载更多</NButton>
-    <NModal v-model:show="orderOpen" preset="card" title="兑换订单" style="width: min(640px, 94vw)">
+    <NModal
+      v-model:show="orderOpen"
+      preset="card"
+      title="兑换订单"
+      style="width: min(640px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
+    >
       <NSpin :show="orderBusy">
         <NAlert v-if="orderError" type="error">{{ orderError }}</NAlert>
         <div v-else-if="order" class="order-detail">
@@ -205,6 +243,8 @@ watch(status, () => load(), { immediate: true })
 .inline {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .row {
   display: grid;

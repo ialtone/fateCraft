@@ -5,7 +5,7 @@ import { adminApi } from '@/api'
 import type { AdminUser } from '@/types'
 import { rewardError } from '@/lib/rewards'
 const emit = defineEmits<{ select: [user: AdminUser] }>()
-withDefaults(defineProps<{ selectLabel?: string }>(), { selectLabel: '积分与改写次数' })
+withDefaults(defineProps<{ selectLabel?: string }>(), { selectLabel: '账户资产' })
 const query = ref(''),
   submitted = ref(''),
   error = ref('')

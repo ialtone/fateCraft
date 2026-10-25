@@ -1947,6 +1947,7 @@ watch(
       preset="dialog"
       title="新建挑战包"
       style="width: min(520px, calc(100vw - 24px))"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NForm label-placement="top">
         <NFormItem label="Slug"
@@ -1968,6 +1969,7 @@ watch(
       preset="dialog"
       title="生成邀请码"
       style="width: min(520px, calc(100vw - 24px))"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NForm label-placement="top">
         <NFormItem label="备注">
@@ -2004,6 +2006,7 @@ watch(
       preset="dialog"
       title="邀请码已生成"
       style="width: min(520px, calc(100vw - 24px))"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NAlert type="warning" :show-icon="false"> 关闭后无法再次查看完整邀请码。 </NAlert>
       <div class="created-code-row">
@@ -2018,6 +2021,7 @@ watch(
       title="模型请求明细"
       class="llm-log-modal"
       style="width: min(960px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <div v-if="selectedLLMLog" class="llm-log-detail">
         <dl class="llm-log-meta">
@@ -2158,6 +2162,7 @@ watch(
       title="上下文构建明细"
       class="llm-log-modal"
       style="width: min(960px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <div v-if="selectedContextLog" class="llm-log-detail">
         <dl class="llm-log-meta">
@@ -2244,6 +2249,7 @@ watch(
       preset="dialog"
       title="下架分享"
       style="width: min(520px, calc(100vw - 24px))"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NForm label-placement="top">
         <NFormItem label="下架原因（仅管理员可见）"
@@ -2263,6 +2269,7 @@ watch(
       preset="dialog"
       title="新建草稿版本"
       style="width: min(520px, calc(100vw - 24px))"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NForm label-placement="top">
         <NFormItem label="新版本号"
@@ -2287,6 +2294,7 @@ watch(
     :mask-closable="!importingBuiltin"
     :closable="!importingBuiltin"
     style="width: min(960px, 96vw)"
+    content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
   >
     <template v-if="builtinPreview">
       <h3>

@@ -209,6 +209,7 @@ onMounted(() => {
       :closable="!busy"
       :close-on-esc="!busy"
       style="width: min(560px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       ><NAlert v-if="actionError" type="error">{{ actionError }}</NAlert
       ><NAlert v-if="result" :type="result.reversal_id ? 'warning' : 'success'"
         ><template v-if="result.reversal_id"
@@ -266,5 +267,9 @@ strong {
 }
 p {
   color: var(--text-dim);
+}
+/* 结果提示与“查看收支”按钮相邻时留出间距 */
+.n-alert + .n-button {
+  margin-top: 14px;
 }
 </style>

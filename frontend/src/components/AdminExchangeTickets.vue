@@ -107,6 +107,7 @@ watch(status, load, { immediate: true })
       :mask-closable="!busy"
       :closable="!busy"
       style="width: min(720px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       @update:show="(v: boolean) => !v && (selected = undefined)"
       ><div v-if="selected" class="detail">
         <NAlert v-if="error" type="error">{{ error }}</NAlert>

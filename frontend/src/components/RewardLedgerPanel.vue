@@ -227,6 +227,7 @@ watch(
       :closable="!busy && !request"
       :close-on-esc="!busy && !request"
       style="width: min(640px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <template v-if="detail"
         ><p>用户：{{ detail.user_id }}</p>

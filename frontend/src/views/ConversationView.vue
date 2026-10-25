@@ -274,7 +274,12 @@ onBeforeUnmount(() => {
 })
 
 function showEndingDialog(category: CompletionInfo['category'], options: DialogOptions) {
-  const sharedOptions = { ...options, style: { maxWidth: '520px', whiteSpace: 'pre-line' } }
+  const sharedOptions = {
+    ...options,
+    style: { maxWidth: '520px', whiteSpace: 'pre-line' },
+    contentStyle:
+      'max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow-y: auto',
+  }
   if (category === 'success') return dialog.success(sharedOptions)
   if (category === 'failure') return dialog.error(sharedOptions)
   return dialog.info(sharedOptions)
@@ -411,6 +416,8 @@ async function forkConversation() {
       dialog.warning({
         title: '请先完成模型配置',
         content: issue,
+        contentStyle:
+          'max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow-y: auto',
         positiveText: '前往设置',
         negativeText: '取消',
         onPositiveClick: () => router.push('/settings'),
@@ -422,7 +429,12 @@ async function forkConversation() {
   } catch (error: any) {
     // ActionInput already owns generation errors; this action is local to the
     // page, so keep its failure visible without mutating the source record.
-    dialog.error({ title: '无法创建新对话', content: error?.message || '请稍后重试' })
+    dialog.error({
+      title: '无法创建新对话',
+      content: error?.message || '请稍后重试',
+      contentStyle:
+        'max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow-y: auto',
+    })
   } finally {
     forking.value = false
   }

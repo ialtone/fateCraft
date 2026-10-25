@@ -318,6 +318,7 @@ async function showReferences(v: ChallengeVersion) {
       :closable="!busy"
       :close-on-esc="!busy"
       style="width: min(680px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
       <p>

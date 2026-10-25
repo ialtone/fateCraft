@@ -281,6 +281,7 @@ function applyReplacement(item: ConversationShare) {
       class="share-dialog"
       :title="replaceTarget ? '重新发布分享' : '分享对话'"
       closable
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       @close="show = false"
     >
       <NSpin :show="loadingMessages">
@@ -423,7 +424,6 @@ function applyReplacement(item: ConversationShare) {
 <style scoped>
 .share-dialog {
   width: min(920px, calc(100vw - 24px));
-  max-height: calc(100vh - 32px);
 }
 .share-form {
   display: grid;

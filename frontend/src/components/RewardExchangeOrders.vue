@@ -155,7 +155,12 @@ function viewLookupDetail() {
         v-if="!loading && !error && !rows.length"
         :description="admin ? '暂无兑换订单' : '还没有兑换记录'" /></NSpin
     ><NButton v-if="cursor" :loading="loading" @click="load(true)">加载更多</NButton>
-    <NModal v-model:show="open" preset="card" title="兑换详情" style="width: min(640px, 94vw)"
+    <NModal
+      v-model:show="open"
+      preset="card"
+      title="兑换详情"
+      style="width: min(640px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       ><div v-if="detail" class="detail">
         <h3>{{ detail.snapshot.name }} × {{ detail.units }}</h3>
         <p>{{ detail.snapshot.description }}</p>
@@ -200,6 +205,7 @@ function viewLookupDetail() {
       :closable="!lookupBusy"
       :close-on-esc="!lookupBusy"
       style="width: min(620px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <p>填写兑换确认窗口中保留的请求 ID，仅查询当前账号的兑换。</p>
       <form class="lookup-form" @submit.prevent="lookup">

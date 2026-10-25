@@ -259,6 +259,7 @@ onMounted(() => {
       :closable="!busy"
       :close-on-esc="!busy"
       style="width: min(620px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     >
       <NAlert v-if="error" type="error" class="modal-error">{{ error }}</NAlert>
       <template v-if="result"
@@ -271,7 +272,6 @@ onMounted(() => {
         <ExchangeResult :order="result" />
         <p class="identifier">订单 {{ result.id }}</p>
         <div class="toolbar">
-          <NButton @click="open = false">继续浏览商品</NButton>
           <NButton type="primary" @click="viewOrders">查看兑换记录</NButton>
         </div></template
       >
@@ -320,7 +320,6 @@ onMounted(() => {
         >
         <div class="toolbar">
           <NButton v-if="pending" :loading="busy" @click="queryPending">查询本次结果</NButton
-          ><NButton v-else :disabled="busy || loading" @click="refreshPrice">刷新价格</NButton
           ><NButton type="primary" :loading="busy" :disabled="!valid" @click="submit">{{
             pending ? '重试同次兑换' : '确认扣除并兑换'
           }}</NButton>

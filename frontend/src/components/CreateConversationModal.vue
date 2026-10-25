@@ -150,6 +150,7 @@ async function submit() {
     :mask-closable="!creating"
     class="create-dialog"
     style="width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px)"
+    content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
     @update:show="emit('update:show', $event)"
   >
     <NSpin :show="challenges.loading || checkingConfiguration">

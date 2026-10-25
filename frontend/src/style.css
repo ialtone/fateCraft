@@ -256,6 +256,30 @@ a {
   overflow-wrap: anywhere;
 }
 
+.markdown pre {
+  box-sizing: border-box;
+  margin: 0.7em 0;
+  padding: 12px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  tab-size: 4;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  white-space: inherit;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .markdown em {
   color: var(--text-dim);
 }

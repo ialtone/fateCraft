@@ -278,8 +278,9 @@ void loadRules()
     <NModal
       v-model:show="userOpen"
       preset="card"
-      title="用户积分与改写次数"
+      title="用户账户资产"
       style="width: min(1000px, 96vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       ><AdminRewardUserPanel v-if="selected" :key="selected.id" :user-id="selected.id"
     /></NModal>
   </div>

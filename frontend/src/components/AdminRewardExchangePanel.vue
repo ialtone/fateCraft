@@ -167,6 +167,7 @@ onMounted(load)
       :closable="!busy"
       :close-on-esc="!busy"
       style="width: min(720px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       ><template v-if="form"
         ><NAlert v-if="formError" type="error"
           >{{ formError }}
@@ -266,6 +267,7 @@ onMounted(load)
       preset="card"
       :title="`库存 · ${stockOffer?.name ?? ''}`"
       style="width: min(900px, 96vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       @update:show="(show: boolean) => !show && ((stockOffer = undefined), load())"
       ><AdminExchangeStock v-if="stockOffer" :offer="stockOffer"
     /></NModal>
@@ -274,6 +276,7 @@ onMounted(load)
       preset="card"
       title="商品修订记录"
       style="width: min(760px, 94vw)"
+      content-style="max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); overflow: auto"
       ><NAlert v-if="historyError" type="error">{{ historyError }}</NAlert>
       <div v-for="revision in revisions" :key="revision.revision" class="revision">
         <strong>修订 {{ revision.revision }} · {{ revision.snapshot.name }}</strong>
