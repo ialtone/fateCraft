@@ -252,6 +252,9 @@ func (s *Server) rewardLedgerPage(c *gin.Context, admin bool) {
 		last := rows[len(rows)-1]
 		next = encodeRewardCursor(last.CreatedAt, last.ID)
 	}
+	for i := range rows {
+		rows[i].PublicMeta = publicLedgerMeta(rows[i].Metadata)
+	}
 	if admin {
 		views := make([]storage.AdminRewardLedgerView, 0, len(rows))
 		for _, row := range rows {
@@ -261,6 +264,20 @@ func (s *Server) rewardLedgerPage(c *gin.Context, admin bool) {
 		return
 	}
 	c.JSON(200, gin.H{"entries": rows, "next_cursor": next})
+}
+
+// publicLedgerMeta 提取账本元数据中可对玩家展示的白名单字段（目前仅兑换商品摘要）。
+func publicLedgerMeta(meta storage.JSONMap) storage.JSONMap {
+	out := storage.JSONMap{}
+	for _, key := range []string{"offer_name", "units"} {
+		if v, ok := meta[key]; ok {
+			out[key] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // 奖励写接口拒绝未知字段，防止旧参数被当成新的默认配置。
@@ -286,6 +303,7 @@ func (s *Server) getAdminRewardLedgerEntry(c *gin.Context) {
 		rewardFail(c, err)
 		return
 	}
+	row.PublicMeta = publicLedgerMeta(row.Metadata)
 	c.JSON(200, row.AdminView())
 }
 func (s *Server) reverseAdminRewardGrant(c *gin.Context) {

@@ -213,6 +213,9 @@ watch(
           >
             玩法来源信息不完整
           </p>
+          <p v-if="row.public_meta?.offer_name">
+            兑换：{{ row.public_meta.offer_name }} × {{ row.public_meta.units }}
+          </p>
           <p v-if="row.public_note">{{ row.public_note }}</p>
         </div>
         <NButton v-if="admin || userId" @click="show(row)">详情</NButton>

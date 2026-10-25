@@ -244,13 +244,14 @@ func (r *RewardRepository) Exchange(ctx context.Context, player uuid.UUID, in Re
 		}
 		order = RewardExchangeOrder{ID: uuid.New(), RequestID: in.RequestID, PlayerID: player, OfferID: offer.ID, OfferRevision: offer.Revision, Units: in.Units, CostQuantity: offer.CostQuantity * in.Units, RewardQuantity: offer.RewardQuantity * in.Units,
 			Snapshot: JSONMap{"name": offer.Name, "description": offer.Description, "kind": offer.Kind, "tutorial": offer.Tutorial, "codes": codes, "cost_per_unit": offer.CostQuantity, "reward_per_unit": offer.RewardQuantity}, CreatedAt: time.Now()}
-		paid, err := tx.ConsumeInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: PointsKey, Quantity: order.CostQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:cost:" + order.ID.String()})
+		// 账本元数据冗余商品摘要（名称与份数），玩家收支记录无需回查订单即可展示。
+		paid, err := tx.ConsumeInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: PointsKey, Quantity: order.CostQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:cost:" + order.ID.String(), Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision, "offer_name": offer.Name, "units": in.Units}})
 		if err != nil {
 			return err
 		}
 		order.CostLedgerID = paid.Ledger.ID
 		if offer.Kind == ExchangeKindReward {
-			awarded, err := tx.GrantInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: MessageRewriteCreditKey, Quantity: order.RewardQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:reward:" + order.ID.String(), Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision}})
+			awarded, err := tx.GrantInCurrentTx(ctx, RewardMutation{PlayerID: player, RewardKey: MessageRewriteCreditKey, Quantity: order.RewardQuantity, SourceType: "reward_exchange", SourceID: order.ID.String(), IdempotencyKey: "exchange:reward:" + order.ID.String(), Metadata: JSONMap{"offer_id": offer.ID, "offer_revision": offer.Revision, "offer_name": offer.Name, "units": in.Units}})
 			if err != nil {
 				return err
 			}

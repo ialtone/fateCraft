@@ -354,6 +354,10 @@ type RewardLedgerEntry struct {
 	IdempotencyKey string                `gorm:"column:idempotency_key;uniqueIndex;not null" json:"-"`
 	Metadata       JSONMap               `gorm:"column:metadata;type:jsonb;not null" json:"-"`
 	CreatedAt      time.Time             `gorm:"column:created_at" json:"created_at"`
+
+	// PublicMeta 是 Metadata 中可对玩家展示的白名单字段（如兑换商品摘要），
+	// 由接口层从 Metadata 提取后填充；数据库不存此列。
+	PublicMeta JSONMap `gorm:"-" json:"public_meta,omitempty"`
 }
 
 func (RewardLedgerEntry) TableName() string { return "reward_ledger" }

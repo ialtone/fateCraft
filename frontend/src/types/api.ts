@@ -1380,6 +1380,8 @@ export interface PlayerReward {
 }
 
 export interface RewardLedgerEntry {
+  /** 兑换等操作的公开摘要字段（后端从账本元数据白名单提取） */
+  public_meta?: { offer_name?: string; units?: number }
   gameplay_source?: {
     pack_id: string
     pack_slug: string
