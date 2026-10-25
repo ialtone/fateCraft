@@ -138,7 +138,7 @@ Campaign 叙事校验的诊断写入 `display_messages.validation_detail`，包�
 
 2026-10-21 本地功能验证：
 
-- 后端 `go test ./...`、`go vet ./...` 通过；前端 `node --experimental-strip-types --test tests/*.test.mjs` 的 79 项测试及 `npm run build`（含类型检查）通过；本次变更文件的 Prettier 检查和 `git diff --check` 通过。全项目 `npm run format:check` 另报四处既有格式问题：`src/stores/auth.ts`、`src/types/auth.ts`、`src/views/LoginView.vue`、`src/views/SettingsView.vue`，本次未修改它们。
+- 后端 `go test ./...`、`go vet ./...` 通过；前端 `node --experimental-strip-types --test tests/*.test.mjs` 的 79 项测试及 `pnpm run build`（含类型检查）通过；本次变更文件的 Prettier 检查和 `git diff --check` 通过。全项目 `pnpm run format:check` 另报四处既有格式问题：`src/stores/auth.ts`、`src/types/auth.ts`、`src/views/LoginView.vue`、`src/views/SettingsView.vue`，本次未修改它们。
 - 本机模拟代理/模型覆盖：直连忽略环境代理、Basic Auth、HTTP/HTTPS 代理、HTTPS CONNECT 与 407 分类、CA、凭据不传给目标、`NO_PROXY` 不绕过、两协议的流式/非流式 Agent、两处模型列表、活动流完成后清理旧池、同一调用重试固定出口及下一次调用切换出口。
 - 保存与权限覆盖：密码保留/替换/清除、清除可撤销、保存失败不发布、并发修订冲突、损坏密文启动失败、无需解密旧密码即可停用代理、owner 权限、必填修订号、通用配置 JSON 脱敏、Memory 临时/永久错误退避边界；前端验证初次读取失败重试、防重复提交和卸载后忽略迟到结果。
 - PostgreSQL 事务测试已编写，包含代理与普通设置互不覆盖（数据库和同仓储缓存）、修订冲突及审计脱敏；本机未配置 `FATECRAFT_TEST_DATABASE_URL`，数据库集成测试实际跳过，不能算作已验证。未做性能测试、真实供应商请求或外部代理/容器验收；部署仍需确认容器内代理可达、CA 可用且 `AUTH_DATA_ENCRYPTION_KEY` 稳定。

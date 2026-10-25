@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NButton, NProgress, NSelect, NSkeleton, NTag, useDialog, useMessage } from 'naive-ui'
+import {
+  NAlert,
+  NButton,
+  NProgress,
+  NSelect,
+  NSkeleton,
+  NTag,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import { usePlayerActionStore } from '@/stores/playerActions'
 import { useConversationStore } from '@/stores/conversations'
 import { useCampaignStore } from '@/stores/campaign'
@@ -42,7 +51,9 @@ const view = computed(() => runtime.presentation?.campaign_view)
 // 可能因终止事件丢失而长期为真，不能参与点击判定。
 const gate = computed(() =>
   actionBlock({
-    ended: campaign.snapshot?.campaign.status !== undefined && campaign.snapshot.campaign.status !== 'active',
+    ended:
+      campaign.snapshot?.campaign.status !== undefined &&
+      campaign.snapshot.campaign.status !== 'active',
     connectionBlocked: socket.writeBlocked,
     resultPending: !!actions.pending,
     generating: context.activity.is_processing || chat.isGenerating,

@@ -66,9 +66,7 @@ const visibleCapabilities = computed(() =>
 const hiddenOnly = computed(
   () => (snapshot.value?.action_capabilities.length ?? 0) > 0 && !visibleCapabilities.value.length,
 )
-const active = computed(() =>
-  visibleCapabilities.value.find((a) => a.key === selectedKey.value),
-)
+const active = computed(() => visibleCapabilities.value.find((a) => a.key === selectedKey.value))
 const plan = computed(() =>
   planIndex.value === null ? undefined : active.value?.plans?.[planIndex.value],
 )
@@ -177,8 +175,7 @@ watch(active, (action) => {
   }
 })
 watch(visibleCapabilities, (list) => {
-  if (!list.some((a) => a.key === selectedKey.value))
-    selectedKey.value = list[0]?.key ?? null
+  if (!list.some((a) => a.key === selectedKey.value)) selectedKey.value = list[0]?.key ?? null
 })
 watch(
   () => props.convId,

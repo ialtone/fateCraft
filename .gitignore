@@ -16,7 +16,6 @@ docker/*.env.local
 /frontend/dist
 # 前端统一使用 pnpm；忽略误生成的 npm 锁文件
 /frontend/package-lock.json
-npm-debug.log*
 pnpm-debug.log*
 
 # 编辑器

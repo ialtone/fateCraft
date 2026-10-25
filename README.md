@@ -157,7 +157,7 @@ Memory Agent 和角色问答 Agent 使用结构化输出，由后端验证结果
 ### 环境要求
 
 - Docker Engine 与 Docker Compose 插件
-- 若从源码构建：Git、Go 1.25、Node.js 22、npm 与 [Go Task](https://taskfile.dev/)
+- 若从源码构建：Git、Go 1.25、Node.js 22、pnpm 与 [Go Task](https://taskfile.dev/)
 
 ### Docker 部署
 

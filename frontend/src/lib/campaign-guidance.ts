@@ -12,9 +12,7 @@ export interface FallbackGuidanceItem {
 type RecordValue = Record<string, unknown>
 
 function record(value: unknown): RecordValue | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as RecordValue)
-    : null
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as RecordValue) : null
 }
 
 function items(value: unknown): RecordValue[] {
@@ -29,10 +27,7 @@ function readable(name: string): boolean {
   return !!name && !/^[a-z][a-z0-9._:-]*$/i.test(name)
 }
 
-export function campaignFallbackGuidance(
-  snapshot: unknown,
-  limit = 4,
-): FallbackGuidanceItem[] {
+export function campaignFallbackGuidance(snapshot: unknown, limit = 4): FallbackGuidanceItem[] {
   const root = record(snapshot)
   if (!root) return []
   const out: FallbackGuidanceItem[] = []
@@ -59,7 +54,8 @@ export function campaignFallbackGuidance(
     if (quest.can_submit !== true) continue
     const name = text(quest.name)
     if (!readable(name)) continue
-    const label = text(quest.quest_type) === 'obligation' ? `履行承诺 · ${name}` : `提交委托 · ${name}`
+    const label =
+      text(quest.quest_type) === 'obligation' ? `履行承诺 · ${name}` : `提交委托 · ${name}`
     add({ key: `fallback:quest-submit:${text(quest.key)}`, label, message: `我提交「${name}」。` })
   }
 
@@ -67,7 +63,8 @@ export function campaignFallbackGuidance(
     if (quest.can_accept !== true) continue
     const name = text(quest.name)
     if (!readable(name)) continue
-    const label = text(quest.quest_type) === 'obligation' ? `接受承诺 · ${name}` : `接受委托 · ${name}`
+    const label =
+      text(quest.quest_type) === 'obligation' ? `接受承诺 · ${name}` : `接受委托 · ${name}`
     add({ key: `fallback:quest-accept:${text(quest.key)}`, label, message: `我接受「${name}」。` })
   }
 
@@ -78,14 +75,22 @@ export function campaignFallbackGuidance(
     if (!readable(name)) continue
     if (text(relation.status) && text(relation.status) !== 'active') continue
     if (currentLocation && text(relation.location_key) !== currentLocation) continue
-    add({ key: `fallback:talk:${text(relation.instance_key)}`, label: `与${name}交谈`, message: `我与${name}交谈。` })
+    add({
+      key: `fallback:talk:${text(relation.instance_key)}`,
+      label: `与${name}交谈`,
+      message: `我与${name}交谈。`,
+    })
   }
 
   for (const route of items(world?.available_routes)) {
     if (route.accessible === false) continue
     const name = text(route.name)
     if (!readable(name)) continue
-    add({ key: `fallback:travel:${text(route.location_key)}`, label: `前往${name}`, message: `我前往${name}。` })
+    add({
+      key: `fallback:travel:${text(route.location_key)}`,
+      label: `前往${name}`,
+      message: `我前往${name}。`,
+    })
   }
 
   for (const plan of items(root.training)) {

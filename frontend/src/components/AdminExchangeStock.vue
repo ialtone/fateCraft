@@ -169,12 +169,7 @@ watch(status, () => load(), { immediate: true })
     </div>
     <NEmpty v-if="!busy && !rows.length" description="暂无库存" />
     <NButton v-if="more" :loading="busy" @click="load(true)">加载更多</NButton>
-    <NModal
-      v-model:show="orderOpen"
-      preset="card"
-      title="兑换订单"
-      style="width: min(640px, 94vw)"
-    >
+    <NModal v-model:show="orderOpen" preset="card" title="兑换订单" style="width: min(640px, 94vw)">
       <NSpin :show="orderBusy">
         <NAlert v-if="orderError" type="error">{{ orderError }}</NAlert>
         <div v-else-if="order" class="order-detail">

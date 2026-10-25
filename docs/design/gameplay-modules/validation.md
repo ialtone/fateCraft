@@ -2,7 +2,7 @@
 
 记录日期：2026-10-09。模块架构与两套核心玩法规则的代码和本地检查完成；数据库、浏览器和模型真实验收由维护者执行。此记录不等于 release 批准。
 
-> 前端包管理已统一为 pnpm。2026-10-25 之前的历史记录保留当时的 npm 命令，不代表当前用法。
+> 前端包管理统一使用 pnpm。
 
 ## 2026-10-25：Campaign 一致性修复
 
@@ -22,7 +22,7 @@
 
 九个内置玩法均声明固定阶段条件；局中只把新达成阶段写入可回档进度区（单局 `_platform.stage_progress`，Campaign `campaign_stage_progress`），不写回执、不写账本、不增加余额。成功、失败、死亡、寿尽、超时、撤离和主动终止都在终局统一结算当前分支已达成阶段；成功结局再加终局积分。客户端直连记录进度，终局写实际 0 分回执并标记 `client_llm_route`。
 
-本地检查通过：`go build ./...`、`go test ./...`、`go vet ./...`、`vue-tsc --noEmit`、`npm run test:module-actions`。新增 `challengeimport/progress_rewards_test.go` 校验九包阶段金额、预算、成功结局引用与青河领域定义；`challenge/stage_rewards_test.go` 校验只按记录进度生成回执金额；`state/progress_test.go`、`state/schema_test.go` 覆盖平台保留区读取、复制与 Schema 过滤；`campaignactions/progress_test.go` 覆盖局中记录、重复重试、顺序失效、终局一次结算与直连 0 分。`challengeimport` 九包真实导入/发布测试通过。
+本地检查通过：`go build ./...`、`go test ./...`、`go vet ./...`、`vue-tsc --noEmit`、`pnpm run test:module-actions`。新增 `challengeimport/progress_rewards_test.go` 校验九包阶段金额、预算、成功结局引用与青河领域定义；`challenge/stage_rewards_test.go` 校验只按记录进度生成回执金额；`state/progress_test.go`、`state/schema_test.go` 覆盖平台保留区读取、复制与 Schema 过滤；`campaignactions/progress_test.go` 覆盖局中记录、重复重试、顺序失效、终局一次结算与直连 0 分。`challengeimport` 九包真实导入/发布测试通过。
 
 本机仍未配置 `FATECRAFT_TEST_DATABASE_URL`，所有 PostgreSQL 事务、并发、检查点回档与账本用例被跳过；**未做真实 SQL/锁/故障验收**。浏览器端阶段提示、回档展示和直连说明仍需维护者实测。
 
@@ -58,7 +58,7 @@
 | --- | --- |
 | Go 全仓 | `go test ./...` 通过；数据库测试未配置测试库时跳过，不能计作数据库通过 |
 | Go 静态检查 | `go vet ./...` 通过 |
-| 前端 | `npm run build` 通过，含 Vue/TypeScript 检查 |
+| 前端 | `pnpm run build` 通过，含 Vue/TypeScript 检查 |
 | 交互状态回归 | 共 18 项通过，覆盖模块行动、开始游戏配置、管理 Tab、奖励交互、Campaign 重试/刷新和阶段总预算 |
 | 格式 | 本轮改动的前端文件通过 Prettier 检查 |
 | 目录及发布 | 精确八类/九包、普通加载→VersionDocument JSON→验证→哈希一致；可选非默认出身也初始化；缺失动作、错误字段/控件/版本/渲染器拒绝 |

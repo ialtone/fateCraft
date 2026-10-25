@@ -1,12 +1,7 @@
 // One availability decision shared by the campaign section buttons, the action
 // panel, ending buttons and the guidance bar. Every caller must surface the
 // returned message instead of silently returning.
-export type ActionBlockCode =
-  | 'ended'
-  | 'result_pending'
-  | 'generating'
-  | 'syncing'
-  | 'conflict'
+export type ActionBlockCode = 'ended' | 'result_pending' | 'generating' | 'syncing' | 'conflict'
 
 export interface ActionBlock {
   code: ActionBlockCode
@@ -38,10 +33,8 @@ const MESSAGES: Record<ActionBlockCode, string> = {
 
 export function actionBlock(input: ActionGateInput): ActionBlock | null {
   if (input.ended) return { code: 'ended', message: MESSAGES.ended }
-  if (input.connectionBlocked)
-    return { code: 'syncing', message: '连接已中断，请刷新页面后重试。' }
-  if (input.resultPending)
-    return { code: 'result_pending', message: MESSAGES.result_pending }
+  if (input.connectionBlocked) return { code: 'syncing', message: '连接已中断，请刷新页面后重试。' }
+  if (input.resultPending) return { code: 'result_pending', message: MESSAGES.result_pending }
   if (input.generating) return { code: 'generating', message: MESSAGES.generating }
   if (input.syncing) return { code: 'syncing', message: MESSAGES.syncing }
   if (input.conflict) return { code: 'conflict', message: MESSAGES.conflict }

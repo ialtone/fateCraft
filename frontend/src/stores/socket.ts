@@ -981,15 +981,7 @@ export const useSocketStore = defineStore('socket', () => {
         // 局中只记录阶段进度，不改变账号余额；到账与结局由
         // challenge_completed 负责刷新，避免每条动作都拉取奖励余额。
         resources.invalidateMany(
-          [
-            'conversation',
-            'messages',
-            'state',
-            'guidance',
-            'endings',
-            'runtime',
-            'campaign',
-          ],
+          ['conversation', 'messages', 'state', 'guidance', 'endings', 'runtime', 'campaign'],
           true,
         )
         break

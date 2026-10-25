@@ -75,7 +75,12 @@ export const usePlayerActionStore = defineStore('playerActions', () => {
       const resources = useConversationResources()
       resources.enter(id)
       // 局中只记录阶段进度，不改变账号余额；只有终局结算才需要刷新奖励。
-      const pendingRefresh: ConversationResource[] = ['state', 'messages', 'conversation', 'endings']
+      const pendingRefresh: ConversationResource[] = [
+        'state',
+        'messages',
+        'conversation',
+        'endings',
+      ]
       if (result.completion) pendingRefresh.push('rewards')
       const refreshed = await resources.refresh(pendingRefresh)
       if (result.campaign) await resources.load('campaign').catch(() => {})

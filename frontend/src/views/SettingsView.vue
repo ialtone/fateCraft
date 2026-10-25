@@ -24,11 +24,7 @@ import { getLocalKey, setLocalKey, clearLocalKey } from '@/llm/localKey'
 import { identityApi, settingsApi } from '@/api'
 import FieldHelp from '@/components/FieldHelp.vue'
 import LLMModelSetting from '@/components/LLMModelSetting.vue'
-import type {
-  ExternalIdentity,
-  LLMCapabilityDiagnostic,
-  LLMCapabilityRole,
-} from '@/types'
+import type { ExternalIdentity, LLMCapabilityDiagnostic, LLMCapabilityRole } from '@/types'
 
 const store = useSettingsStore()
 const theme = useThemeStore()
@@ -97,9 +93,7 @@ const protocolOptions = [
 // 已过期，不展示。
 const savedProfile = computed(() => store.settings?.resolved_profile)
 const baseUrlUnchanged = computed(
-  () =>
-    String(form.value.base_url || '').trim() ===
-    String(store.settings?.base_url || '').trim(),
+  () => String(form.value.base_url || '').trim() === String(store.settings?.base_url || '').trim(),
 )
 const profileNames: Record<string, string> = {
   openai: 'OpenAI 官方',
@@ -108,8 +102,7 @@ const profileNames: Record<string, string> = {
 }
 const recognizedHint = computed(() => {
   const profile = savedProfile.value
-  if (!profile || !baseUrlUnchanged.value || profile.id === 'custom_openai_compatible')
-    return ''
+  if (!profile || !baseUrlUnchanged.value || profile.id === 'custom_openai_compatible') return ''
   return `已识别为 ${profileNames[profile.id] || profile.id}，已自动适配请求参数`
 })
 
@@ -235,7 +228,11 @@ function onRouteChange(next: 'server' | 'client') {
     ? '1. 客户端直连模式下创建的对话将无法继续生成，需新建对话；\n2. 切回平台模型无需填写 Key，个人配置会保留。'
     : '1. 客户端直连模式下创建的对话将无法继续生成，需新建对话；\n2. 切回服务端需要重新填写 Key。'
   dialog.warning({
-    title: toClient ? '切换到客户端直连？' : platformModel.value ? '切回平台模型？' : '切回服务端转发？',
+    title: toClient
+      ? '切换到客户端直连？'
+      : platformModel.value
+        ? '切回平台模型？'
+        : '切回服务端转发？',
     content: toClient ? toClientContent : toServerContent,
     positiveText: '确认切换',
     negativeText: '取消',
@@ -489,8 +486,8 @@ function clearDeviceKey() {
             <FieldHelp label="请求路由">
               <p>
                 <strong>服务端转发（平台统一模型时叫“平台模型”）</strong>
-                由服务器向模型服务商发请求。挑战与 Campaign 正常发放奖励，重新生成消耗额度；个人模式下 API
-                Key 加密保存在服务器。
+                由服务器向模型服务商发请求。挑战与 Campaign
+                正常发放奖励，重新生成消耗额度；个人模式下 API Key 加密保存在服务器。
               </p>
               <p>
                 <strong>客户端直连</strong>
@@ -533,198 +530,191 @@ function clearDeviceKey() {
           <p v-else>请联系管理员完成模型配置，或切换到客户端直连并配置自己的 API。</p>
         </div>
         <template v-if="!platformModel || clientRoute">
-        <NFormItem label="Base URL（OpenAI 兼容）">
-          <div class="protocol-setting">
-            <NInput v-model:value="form.base_url" placeholder="https://api.openai.com/v1" />
-            <div class="protocol-setting__hint">
-              填谁的地址就用谁的服务（官方、OpenRouter、中转站、本地模型均可）。OpenAI、DeepSeek、OpenRouter
-              官方地址会自动适配。
+          <NFormItem label="Base URL（OpenAI 兼容）">
+            <div class="protocol-setting">
+              <NInput v-model:value="form.base_url" placeholder="https://api.openai.com/v1" />
+              <div class="protocol-setting__hint">
+                填谁的地址就用谁的服务（官方、OpenRouter、中转站、本地模型均可）。OpenAI、DeepSeek、OpenRouter
+                官方地址会自动适配。
+              </div>
             </div>
-          </div>
-        </NFormItem>
-        <NFormItem label="接口协议">
-          <div class="protocol-setting">
-            <NSelect v-model:value="form.protocol" :options="protocolOptions" />
-            <div class="protocol-setting__hint">
-              <template v-if="recognizedHint">{{ recognizedHint }}</template>
-              <template v-else>
-                按所选协议请求。不确定时先用“测试连接”或能力诊断确认。
-              </template>
+          </NFormItem>
+          <NFormItem label="接口协议">
+            <div class="protocol-setting">
+              <NSelect v-model:value="form.protocol" :options="protocolOptions" />
+              <div class="protocol-setting__hint">
+                <template v-if="recognizedHint">{{ recognizedHint }}</template>
+                <template v-else> 按所选协议请求。不确定时先用“测试连接”或能力诊断确认。 </template>
+              </div>
             </div>
-          </div>
-        </NFormItem>
-        <NAlert
-          v-if="clientRouteClosedHint"
-          type="info"
-          :show-icon="false"
-          class="route-note"
-        >
-          平台已关闭客户端直连，请填写 API Key 以使用服务端转发。
-          您的密钥会在服务端加密保存，请放心配置。
-        </NAlert>
-        <NFormItem
-          v-if="!clientRoute"
-          :label="`API Key${store.settings?.has_api_key ? '（已配置，留空则保持不变）' : ''}`"
-        >
-          <NInput
-            v-model:value="apiKey"
-            type="password"
-            show-password-on="click"
-            placeholder="sk-…"
-          />
-          <template #feedback>
-            API Key 经服务端加密后存入数据库，不以明文保存，保存后也不会在页面中回显。
-          </template>
-        </NFormItem>
-        <template v-else>
-          <NFormItem label="本设备 API Key（只保存在本设备，不会发送到服务器）">
+          </NFormItem>
+          <NAlert v-if="clientRouteClosedHint" type="info" :show-icon="false" class="route-note">
+            平台已关闭客户端直连，请填写 API Key 以使用服务端转发。
+            您的密钥会在服务端加密保存，请放心配置。
+          </NAlert>
+          <NFormItem
+            v-if="!clientRoute"
+            :label="`API Key${store.settings?.has_api_key ? '（已配置，留空则保持不变）' : ''}`"
+          >
             <NInput
-              v-model:value="localApiKey"
+              v-model:value="apiKey"
               type="password"
               show-password-on="click"
               placeholder="sk-…"
             />
+            <template #feedback>
+              API Key 经服务端加密后存入数据库，不以明文保存，保存后也不会在页面中回显。
+            </template>
           </NFormItem>
-          <NAlert v-if="mixedContentHint" type="error" :show-icon="false" class="route-note">
-            {{ mixedContentHint }}
-          </NAlert>
-          <div class="row device-key-row">
-            <NButton secondary size="small" :loading="testingConnection" @click="testConnection">
-              测试连接
-            </NButton>
-            <NButton secondary size="small" @click="clearDeviceKey">清除本设备 Key</NButton>
-            <span class="faint sm">Relay 状态：{{ relay.connected ? '已连接' : '未连接' }}</span>
-          </div>
-          <NAlert
-            v-if="connectionResult"
-            :type="connectionResult.ok ? 'success' : 'error'"
-            :show-icon="false"
-            class="route-note"
-          >
-            {{ connectionResult.text }}
-          </NAlert>
-        </template>
-        <div class="model-setting-list">
-          <LLMModelSetting
-            v-model="form.model"
-            v-model:reasoning-effort="form.reasoning_effort"
-            :options="availableModels"
-            role="narrative"
-            :diagnostic="diagnostics.narrative"
-            :checking="checkingRoles.narrative"
-            :model-feedback="
-              availableModels.length > 0
-                ? `已加载 ${availableModels.length} 个模型，可下拉选择，也可直接输入。`
-                : ''
-            "
-            placeholder="可直接输入模型名称，或先获取模型列表"
-            @detect="checkCapability('narrative')"
-          >
-            <template #model-label-extra>
-              <NButton
-                text
-                type="primary"
-                size="tiny"
-                :loading="fetchingModels"
-                @click="fetchModels"
-              >
-                获取模型列表
+          <template v-else>
+            <NFormItem label="本设备 API Key（只保存在本设备，不会发送到服务器）">
+              <NInput
+                v-model:value="localApiKey"
+                type="password"
+                show-password-on="click"
+                placeholder="sk-…"
+              />
+            </NFormItem>
+            <NAlert v-if="mixedContentHint" type="error" :show-icon="false" class="route-note">
+              {{ mixedContentHint }}
+            </NAlert>
+            <div class="row device-key-row">
+              <NButton secondary size="small" :loading="testingConnection" @click="testConnection">
+                测试连接
               </NButton>
-            </template>
-          </LLMModelSetting>
-
-          <LLMModelSetting
-            v-model="form.memory_model"
-            v-model:reasoning-effort="form.memory_reasoning_effort"
-            :options="availableModels"
-            role="memory"
-            :diagnostic="diagnostics.memory"
-            :checking="checkingRoles.memory"
-            placeholder="留空则继承叙事模型，也可直接输入"
-            @detect="checkCapability('memory')"
-          />
-
-          <LLMModelSetting
-            v-model="form.inquiry_model"
-            v-model:reasoning-effort="form.inquiry_reasoning_effort"
-            :options="availableModels"
-            role="character_inquiry"
-            :diagnostic="diagnostics.character_inquiry"
-            :checking="checkingRoles.character_inquiry"
-            placeholder="留空则继承叙事模型，也可直接输入"
-            @detect="checkCapability('character_inquiry')"
-          />
-        </div>
-        <NFormItem>
-          <template #label>
-            <FieldHelp label="流式输出">
-              <p>开启后模型会边生成边返回内容，界面可以逐步显示；关闭后等待完整回复再展示。</p>
-              <p>流式输出不会改变模型能力或最大 token；如果服务商的流式接口不稳定，可以关闭。</p>
-            </FieldHelp>
+              <NButton secondary size="small" @click="clearDeviceKey">清除本设备 Key</NButton>
+              <span class="faint sm">Relay 状态：{{ relay.connected ? '已连接' : '未连接' }}</span>
+            </div>
+            <NAlert
+              v-if="connectionResult"
+              :type="connectionResult.ok ? 'success' : 'error'"
+              :show-icon="false"
+              class="route-note"
+            >
+              {{ connectionResult.text }}
+            </NAlert>
           </template>
-          <NSwitch v-model:value="form.stream_enabled">
-            <template #checked>开启</template>
-            <template #unchecked>关闭</template>
-          </NSwitch>
-        </NFormItem>
-        <div class="token-row row">
-          <NFormItem style="flex: 1">
+          <div class="model-setting-list">
+            <LLMModelSetting
+              v-model="form.model"
+              v-model:reasoning-effort="form.reasoning_effort"
+              :options="availableModels"
+              role="narrative"
+              :diagnostic="diagnostics.narrative"
+              :checking="checkingRoles.narrative"
+              :model-feedback="
+                availableModels.length > 0
+                  ? `已加载 ${availableModels.length} 个模型，可下拉选择，也可直接输入。`
+                  : ''
+              "
+              placeholder="可直接输入模型名称，或先获取模型列表"
+              @detect="checkCapability('narrative')"
+            >
+              <template #model-label-extra>
+                <NButton
+                  text
+                  type="primary"
+                  size="tiny"
+                  :loading="fetchingModels"
+                  @click="fetchModels"
+                >
+                  获取模型列表
+                </NButton>
+              </template>
+            </LLMModelSetting>
+
+            <LLMModelSetting
+              v-model="form.memory_model"
+              v-model:reasoning-effort="form.memory_reasoning_effort"
+              :options="availableModels"
+              role="memory"
+              :diagnostic="diagnostics.memory"
+              :checking="checkingRoles.memory"
+              placeholder="留空则继承叙事模型，也可直接输入"
+              @detect="checkCapability('memory')"
+            />
+
+            <LLMModelSetting
+              v-model="form.inquiry_model"
+              v-model:reasoning-effort="form.inquiry_reasoning_effort"
+              :options="availableModels"
+              role="character_inquiry"
+              :diagnostic="diagnostics.character_inquiry"
+              :checking="checkingRoles.character_inquiry"
+              placeholder="留空则继承叙事模型，也可直接输入"
+              @detect="checkCapability('character_inquiry')"
+            />
+          </div>
+          <NFormItem>
             <template #label>
-              <FieldHelp label="最大上下文 token">
-                <p>
-                  限制一次请求可使用的上下文总预算，包括系统提示、世界书、历史消息和模型回复。过小会丢失较早内容，过大可能超出模型窗口并增加成本。
-                </p>
+              <FieldHelp label="流式输出">
+                <p>开启后模型会边生成边返回内容，界面可以逐步显示；关闭后等待完整回复再展示。</p>
+                <p>流式输出不会改变模型能力或最大 token；如果服务商的流式接口不稳定，可以关闭。</p>
               </FieldHelp>
             </template>
-            <NInputNumber
-              v-model:value="form.max_context_tokens"
-              :min="4096"
-              :max="2000000"
-              :step="1024"
-              style="width: 100%"
-            />
+            <NSwitch v-model:value="form.stream_enabled">
+              <template #checked>开启</template>
+              <template #unchecked>关闭</template>
+            </NSwitch>
           </NFormItem>
-          <NFormItem style="flex: 1">
+          <div class="token-row row">
+            <NFormItem style="flex: 1">
+              <template #label>
+                <FieldHelp label="最大上下文 token">
+                  <p>
+                    限制一次请求可使用的上下文总预算，包括系统提示、世界书、历史消息和模型回复。过小会丢失较早内容，过大可能超出模型窗口并增加成本。
+                  </p>
+                </FieldHelp>
+              </template>
+              <NInputNumber
+                v-model:value="form.max_context_tokens"
+                :min="4096"
+                :max="2000000"
+                :step="1024"
+                style="width: 100%"
+              />
+            </NFormItem>
+            <NFormItem style="flex: 1">
+              <template #label>
+                <FieldHelp label="最大回复 token">
+                  <p>
+                    限制模型单次回复的最大
+                    token，不代表模型一定会生成这么长。该值需要小于上下文预算，并为协议和上下文留出空间。
+                  </p>
+                </FieldHelp>
+              </template>
+              <NInputNumber
+                v-model:value="form.max_response_tokens"
+                :min="128"
+                :max="maxResponseTokens"
+                :step="128"
+                style="width: 100%"
+              />
+            </NFormItem>
+          </div>
+          <NFormItem>
             <template #label>
-              <FieldHelp label="最大回复 token">
+              <FieldHelp :label="`temperature：${form.temperature ?? '—'}`">
                 <p>
-                  限制模型单次回复的最大
-                  token，不代表模型一定会生成这么长。该值需要小于上下文预算，并为协议和上下文留出空间。
+                  控制输出的随机性。值越高，输出越有创造力和不可预测性；值越低，输出越稳定和确定性。
                 </p>
+                <p>推荐范围：0.7-1.0（叙事）/ 0.2-0.5（逻辑任务）。</p>
               </FieldHelp>
             </template>
-            <NInputNumber
-              v-model:value="form.max_response_tokens"
-              :min="128"
-              :max="maxResponseTokens"
-              :step="128"
-              style="width: 100%"
-            />
+            <NSlider v-model:value="form.temperature" :min="0" :max="2" :step="0.1" />
           </NFormItem>
-        </div>
-        <NFormItem>
-          <template #label>
-            <FieldHelp :label="`temperature：${form.temperature ?? '—'}`">
-              <p>
-                控制输出的随机性。值越高，输出越有创造力和不可预测性；值越低，输出越稳定和确定性。
-              </p>
-              <p>推荐范围：0.7-1.0（叙事）/ 0.2-0.5（逻辑任务）。</p>
-            </FieldHelp>
-          </template>
-          <NSlider v-model:value="form.temperature" :min="0" :max="2" :step="0.1" />
-        </NFormItem>
-        <NFormItem>
-          <template #label>
-            <FieldHelp :label="`top_p：${form.top_p ?? '—'}`">
-              <p>
-                核采样（Nucleus
-                Sampling）控制候选词汇的范围。值越小，模型越倾向于选择最可能的词汇；值越大，候选范围越广。
-              </p>
-              <p>推荐范围：0.9-1.0，通常不要和 temperature 同时大幅调整。</p>
-            </FieldHelp>
-          </template>
-          <NSlider v-model:value="form.top_p" :min="0" :max="1" :step="0.05" />
-        </NFormItem>
+          <NFormItem>
+            <template #label>
+              <FieldHelp :label="`top_p：${form.top_p ?? '—'}`">
+                <p>
+                  核采样（Nucleus
+                  Sampling）控制候选词汇的范围。值越小，模型越倾向于选择最可能的词汇；值越大，候选范围越广。
+                </p>
+                <p>推荐范围：0.9-1.0，通常不要和 temperature 同时大幅调整。</p>
+              </FieldHelp>
+            </template>
+            <NSlider v-model:value="form.top_p" :min="0" :max="1" :step="0.05" />
+          </NFormItem>
         </template>
       </NForm>
       <div v-if="!platformModel || routeChoiceVisible" class="save-row row">
