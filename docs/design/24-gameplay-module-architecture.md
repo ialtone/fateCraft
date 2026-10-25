@@ -77,15 +77,19 @@
 
 玩家行动进入 `module_action_commits` 和正常回合日志，包含请求 ID、参数哈希和分支。事务先锁对话，再锁 Campaign，复核用户、active 状态、generation owner、branch epoch 和 revision。同请求返回已保存结果；同请求换参数、旧分支或过期 revision 拒绝，不靠前端防连点保证正确性。
 
-`campaign_checkpoints` 在回合前保存全部可变领域表，包含模块状态、角色、功法、物品、市场、NPC、关系、事件队列、任务和遭遇。改写/重新生成恢复目标检查点，并递增 revision 和 branch epoch；按外键逆序删除、正序恢复，任何表失败则整事务回滚。缺少完整检查点明确拒绝。
+阶段进度使用同一可信动作事务：状态提交成功后，平台用新状态、当前有效判定和回合数核验所有尚未处理的阶段，并把新增 key 合并到当前分支进度。单局写入 `conversation_states._platform.stage_progress`；Campaign 写入 `campaign_stage_progress` 并纳入检查点与状态哈希。局中不写领取回执或账本，也不接受模型正文与客户端金额。终局才按固定版本写回执并入账；同一动作结束本局时，阶段与终局一起提交或一起回滚。`challenge.progress_rewards` 为 Challenge/Campaign 共用平台定义，青河保留 `cultivation.progress_rewards`。
 
-账号余额、账本、奖励事实、种子和追加历史不回档。旧分支事件与动作提交按来源 turn 的有效性过滤；已到账奖励不会因为重走历史再次发放。状态恢复的存储层检查归属、固定内容哈希、格式、头部一致性和容量；模块领域不变量在后续投影和动作前重新核验，不宣称存储恢复函数已经执行全部模块规则。
+`campaign_checkpoints` 在回合前保存全部可变领域表，包含模块状态、角色、功法、物品、市场、NPC、关系、事件队列、任务、遭遇和阶段进度。改写/重新生成恢复目标检查点，并递增 revision 和 branch epoch；按外键逆序删除、正序恢复，任何表失败则整事务回滚。缺少完整检查点明确拒绝。
+
+账号余额、账本、结算回执、种子和追加历史不回档；阶段进度随当前分支回档。旧分支事件与动作提交按来源 turn 的有效性过滤；已结算奖励不会因为重走历史再次发放。状态恢复的存储层检查归属、固定内容哈希、格式、头部一致性和容量；模块领域不变量在后续投影和动作前重新核验，不宣称存储恢复函数已经执行全部模块规则。
 
 Campaign 最后一项模型行动将对话结束时，只有同 attempt、同 turn、当前终局 revision 的提交能继续完成收尾叙事。仅持有 run、旧 attempt 或旧 revision 不再拥有写入权。
 
 ## 制作、发布与版本
 
 模块注册自己的 definition kind、中文标签、Schema、形状和内容验证器。通用内容服务不维护题材枚举。发布同时检查通用资产/引用、精确模块版本、动作与字段权限、结局、所有可选出身初始化、Preview 与各受众 Project，以及通用展示路径与类型。
+
+平台另拥有少量跨模块 definition kind。当前只有 `challenge.progress_rewards`（仅 Challenge 模式）：由平台注册 Schema、标签与 `x-reward-budget`，在内容校验时先于模块分发并单独校验，再通过 `Content.PlatformDefinitions` 与模块定义分开保存。模块验证器只接收模块定义，因此 `ruledata.Singleton` 一类“有且只有一条”的契约不受影响；模块也不能重复注册平台 kind。目录和后台编辑器输出的 Definition Schema 会自动合并平台条目。
 
 七个新模块的主规则定义各为一个对象，具体字段见[模块制作指南](gameplay-modules/README.md)。严格解码拒绝未知字段；Singleton 解析限制嵌套 8 层、集合 64 项、key 128 字节、字符串 256 字符，模块还可施加更小限额。草稿解码本身不等于已通过完整发布校验。
 

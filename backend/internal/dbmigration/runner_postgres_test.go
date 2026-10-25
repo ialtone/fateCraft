@@ -110,7 +110,7 @@ func assertBaselineObjects(t *testing.T, db interface {
 	t.Helper()
 	ctx := context.Background()
 	var functions, triggers, indexes, seedRows, rewardTables, registrationSeeds, rewardTriggers int
-	var limitColumn, limitCheck, limitSnapshot int
+	var limitColumn, limitCheck, limitSnapshot, stageRewardGuards int
 	queries := []struct {
 		name   string
 		query  string
@@ -127,6 +127,7 @@ func assertBaselineObjects(t *testing.T, db interface {
 		{"exchange limit column", `SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='reward_exchange_offers' AND column_name='max_redemptions_per_user' AND column_default='0' AND is_nullable='NO'`, &limitColumn, 1},
 		{"exchange limit check", `SELECT count(*) FROM pg_constraint WHERE conrelid='reward_exchange_offers'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%max_redemptions_per_user%'`, &limitCheck, 1},
 		{"exchange limit seed snapshot", `SELECT count(*) FROM reward_exchange_revisions WHERE offer_id='00000000-0000-0000-0000-000000000001' AND revision=1 AND snapshot->>'max_redemptions_per_user'='0'`, &limitSnapshot, 1},
+		{"challenge stage reward guards", `SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgrelid='challenge_stage_rewards'::regclass AND tgname IN ('challenge_stage_reward_immutable','gameplay_write_guard')`, &stageRewardGuards, 2},
 	}
 	for _, check := range queries {
 		if err := db.QueryRowContext(ctx, check.query).Scan(check.target); err != nil {

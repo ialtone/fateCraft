@@ -167,4 +167,10 @@ type SettlementResult struct {
 	Rewards []storage.ChallengeRunReward `json:"rewards"`
 	// RewardsDisabledReason 非空表示本结算未发放奖励的原因（client 路由为 "client_llm_route"）。
 	RewardsDisabledReason string `json:"rewards_disabled_reason,omitempty"`
+	// StageRewards are the terminal stage settlement receipts and
+	// StageRewardPoints their actual total. TotalRewardPoints is the actual
+	// stage plus terminal points.
+	StageRewards      []storage.ChallengeStageReward `json:"stage_rewards,omitempty"`
+	StageRewardPoints int64                          `json:"stage_reward_points"`
+	TotalRewardPoints int64                          `json:"total_reward_points"`
 }

@@ -68,6 +68,27 @@
         "update_policy": "module"
       },
       {
+        "path": "gameplay.explored_count",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.materials_ready",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.signal_ready",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
         "path": "gameplay.weather",
         "type": "string",
         "default": "",

@@ -457,5 +457,5 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 			promises = append(promises, map[string]any{"key": p.Key, "name": p.Name, "status": statusLabels[entry.Status], "remaining_minutes": max(0, entry.Due-run.GameTime), "effort": p.Effort})
 		}
 	}
-	return map[string]any{"people": people, "facts": facts, "promises": promises, "effort": s.Effort, "game_time": run.GameTime, "remaining_minutes": max(0, c.Deadline-run.GameTime), "goal": "倾听人物往事，作出选择并处理自己许下的承诺", "outcome_key": run.OutcomeKey}, nil
+	return map[string]any{"people": people, "facts": facts, "promises": promises, "effort": s.Effort, "game_time": run.GameTime, "remaining_minutes": max(0, c.Deadline-run.GameTime), "goal": "倾听人物往事，作出选择并处理自己许下的承诺", "outcome_key": run.OutcomeKey, "listened_count": int64(len(s.Listened)), "fact_count": int64(len(s.Facts)), "event_choice_count": int64(len(s.Choices))}, nil
 }

@@ -403,7 +403,19 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 			locations = append(locations, map[string]any{"key": location.Key, "name": location.Name})
 		}
 	}
-	return map[string]any{"health": state.Health, "stamina": state.Stamina, "hunger": state.Hunger, "thirst": state.Thirst, "location": findLocation(config, state.Location).Name, "locations": locations, "inventory": inventory, "weather": state.Weather, "game_time": run.GameTime, "rescue_after_minutes": config.RescueAfterMinutes, "deadline_minutes": config.DeadlineMinutes, "goal": "制作求援装置，携带到救援地点并等待救援窗口", "outcome_key": run.OutcomeKey}, nil
+	materialsReady := false
+	for _, recipe := range config.Recipes {
+		if recipe.Output != config.RescueItem {
+			continue
+		}
+		materialsReady = true
+		for key, quantity := range recipe.Inputs {
+			materialsReady = materialsReady && state.Stock[key] >= quantity
+		}
+		break
+	}
+	signalReady := state.Crafted[config.RescueItem] > 0 || state.Stock[config.RescueItem] > 0
+	return map[string]any{"health": state.Health, "stamina": state.Stamina, "hunger": state.Hunger, "thirst": state.Thirst, "location": findLocation(config, state.Location).Name, "locations": locations, "inventory": inventory, "weather": state.Weather, "game_time": run.GameTime, "rescue_after_minutes": config.RescueAfterMinutes, "deadline_minutes": config.DeadlineMinutes, "goal": "制作求援装置，携带到救援地点并等待救援窗口", "outcome_key": run.OutcomeKey, "explored_count": int64(len(state.Discovered)), "materials_ready": materialsReady, "signal_ready": signalReady}, nil
 }
 
 func findLocation(config Config, key string) Location {

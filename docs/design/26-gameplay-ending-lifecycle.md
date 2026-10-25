@@ -8,7 +8,7 @@
 
 ## 主动终止与积分
 
-提前终止保留已到账阶段积分，不发通关/终局积分，不将修为、资源或游戏时间兑换成离场积分。单局百年飞升劫只有成功飞升才能得分，提前终止为 0。客户端直连仍执行可信条件和结局，按现有规则停发玩法积分，并显示原因。
+提前终止会结算当前分支已达成阶段的积分，不发通关/终局积分，不将修为、资源或游戏时间兑换成离场积分。单局百年飞升劫只有成功飞升才发放终局积分；阶段分与终局分分别记账，失败或提前终止不会追回已达成阶段，未达成任何阶段时提前终止为 0。客户端直连仍执行可信条件和结局，记录进度但不发玩法积分，并显示原因。
 
 百年飞升劫新增 `trial.abandon`，结局为 `abandoned`，表示提前中止而非死亡。`trial.pass_away` 仍要求剩余寿元不超过五年，结局为 `peaceful_passing`；不会为了响应聊天中的坐化要求放宽条件。雷劫进行中仍可主动中止。青河修仙志使用 `campaign.abandon`，活动遭遇也不阻止玩家中止。最终任务由通用任务动作提交；只有完成真实飞升门槛后，模块才把对应任务方案公开为玩家终局提议，普通任务仍按原权限执行。
 
@@ -24,11 +24,13 @@ Chat Completions 与 Responses 使用相同的 `fc_propose_ending` 工具：`act
 
 ## 统一结果与原子提交
 
-`CompletionView` 统一承载 Challenge/Campaign 结局：`id`、`conversation_id`、`branch_epoch`、`revision`、`key/category/title/tone/summary`、实际 `rewards`、`metrics`、`next_actions` 和 `rewards_disabled_reason`。ID 由结算/动作身份、分支和终局修订构成。Campaign 奖励使用真实账号奖励字段，不伪造 Challenge run ID；指标显示保留的已到账阶段积分。
+`CompletionView` 统一承载 Challenge/Campaign 结局：`id`、`conversation_id`、`branch_epoch`、`revision`、`key/category/title/tone/summary`、实际 `rewards`、`metrics`、`next_actions` 和 `rewards_disabled_reason`。ID 由结算/动作身份、分支和终局修订构成。Campaign 奖励使用真实账号奖励字段，不伪造 Challenge run ID；指标显示本局已结算的阶段积分。
+
+两种模式还使用同一组阶段字段：`stage_rewards` 是终局结算产生的不可变阶段回执（含零分与直连记录），`stage_reward_points` 是实际结算阶段合计，`reward_points` 是实际终局积分，`total_reward_points` 是两者之和。`rewards` 仍只是终局账号奖励明细，`reward_points` 是其中积分标量；客户端不得再把 `rewards` 计入合计。局中以 `stage_progress` / `pending_stage_points` 表示尚未结算的进度，不显示为已到账；进度随当前分支回档，回执与账本不回档。未达成的阶段不能显示为已领取。
 
 结果保存在现有模块动作、Campaign 动作或 Agent 工具结果中，没有新建结局表或迁移。Campaign 领域终态与关联 conversation 的 `ended/ended_at` 在动作提交事务中同步；Challenge 沿用原有结算事务。失败整笔回滚，提交成功后才广播 `challenge_completed.completion`。HTTP 玩家动作响应、WebSocket 和恢复查询消费同一个结果。
 
-`GET /conversations/:id/endings` 校验所有权，返回当前分支/修订、终局目录、退出动作、提议、完成结果和生成中标记。恢复只读取当前有效分支、未失效回合中的已提交结果；不从正文或账号余额推断结局，也不重算奖励。普通 `conversation_ended` 仅同步生命周期，不能代替完整结局结果。
+`GET /conversations/:id/endings` 校验所有权，返回当前分支/修订、终局目录、退出动作、提议、完成结果、生成中标记，以及对话仍 active 时可读取的 `stage_progress` / `pending_stage_points`；终局后返回 `stage_rewards` / `stage_reward_points`。局中读取只查进度，不重算资格、不发奖。恢复只读取当前有效分支、未失效回合中的已提交结果；不从正文或账号余额推断结局，也不重算奖励。普通 `conversation_ended` 仅同步生命周期，不能代替完整结局结果。
 
 终局提交后的模型只允许同 turn/attempt/revision 的有限收尾；失败可继续叙事，不能重放动作或重复结算。旧生成任务和普通 ended 会话不能获得写入权限。
 

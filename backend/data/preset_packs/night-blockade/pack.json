@@ -31,7 +31,7 @@
       "category": "success",
       "title": "携卷脱身",
       "tone": "success",
-      "reward_points": 0,
+      "reward_points": 200,
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
@@ -112,7 +112,7 @@
       }
     }
   ],
-  "quick_start_guide": "观察后选择院落或暗渠。门禁可以用开锁器解除，也能通过值班室情报解决。取到文件后仍要返回外墙出口；被追捕时先利用藏身处或干扰器降低警戒。 示例结局积分为 0。",
+  "quick_start_guide": "观察后选择院落或暗渠。门禁可以用开锁器解除，也能通过值班室情报解决。取到文件后仍要返回外墙出口；被追捕时先利用藏身处或干扰器降低警戒。 成功结局积分为 200 分；失败与主动终止为 0 分。",
   "features": [
     "双路线",
     "巡逻与警戒",

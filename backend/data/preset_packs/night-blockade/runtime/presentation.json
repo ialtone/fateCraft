@@ -84,7 +84,7 @@
       }
     ],
     "completion_view": {
-      "empty_reward_text": "本示例结局暂不发放积分"
+      "empty_reward_text": "此结局不发放积分"
     },
     "terminology": {},
     "value_labels": {}

@@ -159,12 +159,15 @@ export const useCampaignStore = defineStore('campaign', () => {
         )
       if (result.campaign.status !== 'active') conversations.markEnded()
       // A committed action remains successful even if a display refresh fails.
-      const refreshed = await Promise.allSettled([
+      // Mid-run actions only record branch progress, so the account balance is
+      // refreshed only after terminal settlement.
+      const loads: Array<Promise<unknown>> = [
         load(id),
         chat.load(conversationID),
         conversations.load(conversationID),
-        useRewardStore().load(),
-      ])
+      ]
+      if (result.campaign.status !== 'active') loads.push(useRewardStore().load())
+      const refreshed = await Promise.allSettled(loads)
       if (isCurrent() && refreshed.some((r) => r.status === 'rejected'))
         error.value = '操作已完成，部分展示未刷新。请刷新页面查看最新结果。'
       return result

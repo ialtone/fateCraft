@@ -22,6 +22,8 @@ type Store interface {
 	CreateEncounter(*storage.CampaignEncounter) error
 	SaveEncounter(*storage.CampaignEncounter) error
 	GrantCampaignStageReward(context.Context, storage.Campaign, string, string, int64) (*storage.CampaignStageReward, bool, error)
+	RecordCampaignStageProgress(context.Context, storage.Campaign, []string) ([]storage.CampaignStageProgress, []storage.CampaignStageProgress, error)
+	SettleCampaignStageRewards(context.Context, storage.Campaign, []storage.StageRewardGrant) ([]storage.CampaignStageReward, int64, error)
 }
 
 var _ Store = (*storage.CampaignActionStore)(nil)

@@ -7,7 +7,7 @@
 | 接口 | 输入/输出 |
 | --- | --- |
 | `GET /api/conversations/:id/actions` | `branch_epoch`、`revision`、公开 `gameplay`、`action_capabilities`；不支持纯行动或当前忙碌/已结束时返回空目录 |
-| `POST /api/conversations/:id/actions` | `{request_id, branch_epoch, expected_revision, key, arguments}`；成功返回新 revision、公开 result 及按模式提供的 events/campaign/settlement |
+| `POST /api/conversations/:id/actions` | `{request_id, branch_epoch, expected_revision, key, arguments}`；成功返回新 revision、公开 result 及按模式提供的 events/campaign/settlement；本次动作首次达成阶段时另带 `stage_progress` 与 `pending_stage_points`（尚未结算，不入账） |
 
 请求 ID 是 UUID，参数与整个行动输入受 8 KiB 限制。服务端复核权限、分支、实时状态和规则；冲突/规则拒绝为 409，`code` 提供 `state.conflict` 或模块原因。同请求重试读取已提交结果，不生成第二次效果。
 
@@ -15,7 +15,7 @@
 
 Challenge 面板动作提交成功且未触发结局时，服务端自动追加一个 `module_action` 叙事回合（不产生用户消息），通过常规 `message_created` / agent 流式事件推送动作结果叙事；对话忙或模型路由不可用时静默跳过，结果由下一次叙事回合注入补齐，见[13](13-challenge-system.md)。行动方案可携带 `blocked_reason`（资源不足缺口说明），带该字段的方案仅用于展示，执行会被服务端支付复核以 409 拒绝。
 
-Campaign 玩家动作结果不明时，客户端按存档保存原 `action_id`、参数与 revision，重试同一请求；切换/重新打开对话后，迟到响应不得覆盖新作用域。动作已提交但快照刷新失败时保留成功事实并提示刷新，不重新执行。玩家动作成功和 `agent.turn.completed` 后刷新账号余额，涵盖阶段到账与终局所得。青河通过 `cultivation.retreat` 闭关、`character.recover` 恢复，阶段奖励随合法动作自动核验和发放；`cultivation.begin_ascension` 引劫与终局任务仍须玩家行动，具体参数取动态目录，见 [16](16-cultivation-campaign-agent-reference.md) 与 [21](21-campaign-outcome-rewards.md)。
+Campaign 玩家动作结果不明时，客户端按存档保存原 `action_id`、参数与 revision，重试同一请求；切换/重新打开对话后，迟到响应不得覆盖新作用域。动作已提交但快照刷新失败时保留成功事实并提示刷新，不重新执行。玩家动作成功和 `agent.turn.completed` 后刷新账号余额；局中动作只返回阶段进度，不改变余额，终局 `challenge_completed` 才刷新玩家与终局所得。青河通过 `cultivation.retreat` 闭关、`character.recover` 恢复；阶段随合法动作记录为当前分支进度，终局统一结算；`cultivation.begin_ascension` 引劫与终局任务仍须玩家行动，具体参数取动态目录，见 [16](16-cultivation-campaign-agent-reference.md) 与 [21](21-campaign-outcome-rewards.md)。
 
 ## 通用约定
 
@@ -147,7 +147,7 @@ POST /api/campaigns/:id/abandon
 
 创建存档只接收挑战 slug、Persona slug 和可选标题；标题为空时使用玩法名称。后端固定发布版本、内容哈希和资产。`POST /api/campaigns/:id/conversations` 不接收独立标题，只创建一次并继承存档名，重复创建返回 409。领域动作必须提交 `action_id`、稳定 `key`、`expected_revision` 和严格参数对象。成功响应包含更新后的 Campaign（含 `state_hash`）、事件、公开结果和 `narrative` ActionResult；同一 `action_id` 重试返回 `replayed=true`，并发旧 revision 返回 409。`narrative` 只用于展示和诊断，不能作为下一次请求的可信输入。
 
-`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。`campaign` 头同时返回 `revision` 与 `state_hash`，客户端必须用它们判断消息归属。所有快照均包含平台保留的 `reward_points`（实际终局积分）、`outcome_rewards`、`stage_rewards`、`stage_reward_points`（实际阶段合计）和 `total_reward_points`（两者之和）。`stage_rewards` 保存阶段 key、名称、配置/实际积分、停发原因与领取时间。改写后的活动存档仍保留已经领取的账号事实；直连实际积分为 0。局内阶段可用性由 `progression` 提供，不能用历史到账代替当前分支前置。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
+`GET /api/campaigns/:id` 返回存档头；`GET /api/campaigns/:id/snapshot` 返回玩家快照：基础角色与有效加成、功法层效果、库存和装备效果、已知配方、持有配方载体对应的可学习配方、当前位置市场与实际买卖价、当前位置祖先路径、已发现连接及可达性、公开 NPC 关系、势力状态、当前 region 聚合局势、任务与独立分组的承诺。`campaign` 头同时返回 `revision` 与 `state_hash`，客户端必须用它们判断消息归属。所有快照均包含平台保留的 `reward_points`（实际终局积分）、`outcome_rewards`、`stage_progress` / `pending_stage_points`（当前分支尚未结算的进度与预期合计）、`stage_rewards` / `stage_reward_points`（终局后实际结算回执与合计）和 `total_reward_points`（实际阶段 + 实际终局）。`stage_rewards` 保存阶段 key、名称、配置/实际积分、停发原因与结算时间；`stage_progress` 只保存当前分支达成的 key、名称、配置积分和达成信息。改写后的活动存档仍保留已经结算的账号事实；直连实际积分为 0。局内阶段可用性由 `progression` 提供，不能用历史回执代替当前分支前置。远端市场和区域、未来计划事件、无关未知配方、NPC 私密状态/目标、随机种子、未发现地点和 internal/model 事件不在响应中。
 
 制作交易玩家动作 key 包括 `craft.learn_recipe`、`craft.execute_recipe`、`trade.buy` 和 `trade.sell`。配方动作只接收 `recipe_key`；交易动作接收 `market_key`、`item_kind`、`item_key`、`quality_key` 和 `quantity`，出售独立装备时还必须提交 `item_instance_id` 且数量为 1。服务端计算材料选择、成败、品质、补货和价格，响应 `result` 仅用于展示，不能作为下一次请求的可信输入。
 
@@ -412,7 +412,7 @@ POST  /api/admin/system-settings/llm-proxy/test
 
 预览接口返回当前/拟导入结局积分规则，确认时在事务中重新计算 token；过期返回冲突，需重新预览。
 
-gameplay-modules 返回已安装的 engine、动作、定义 Schema、verifier 与 settlement handler。结局通过 reward_points 设置固定终局积分；支持阶段预算的定义 Schema 以 `x-reward-budget` 声明阶段数组、积分、结局与总额字段，后台据此显示“阶段 + 终局 = 总预算”，发布时仍由后端复核。
+gameplay-modules 返回已安装的 engine、动作、定义 Schema、verifier 与 settlement handler。结局通过 reward_points 设置固定终局积分，只有 success 结局可为正。支持阶段预算的定义 Schema 以 `x-reward-budget` 声明阶段数组、积分、结局与总额字段：Campaign 使用 `total` 展示“阶段 + 终局 = 总预算”，单局使用 `cap` 展示“阶段合计不超过上限，终局单独结算”。发布时仍由后端复核。
 
 挑战版本 PUT 接受：
 
@@ -485,7 +485,8 @@ GET /ws/llm-relay
 | `subscription.ready` | `conversation_id` | 鉴权且注册订阅后发送，客户端再开始 REST 对账 |
 | `activity_updated` | `activity_version`, `branch_epoch`, `snapshot`, `reason` | 提交后完整活动快照；同一对话可合并到最新版本 |
 | `conversation_ended` | conversation ID | 手动结束或状态变更 |
-| `challenge_completed` | `run_id`, `outcome`, `reward_grants`, `metrics`, `next_actions` | 通用挑战结算成功；`client` 路由时 `outcome.rewards_disabled_reason=client_llm_route` 且无奖励 |
+| `module_action_committed` | `conversation_id`，可选 `stage_progress`, `pending_stage_points` | 模块动作已提交；本次首次达成阶段时携带未结算进度，客户端只提示“阶段已达成，结束时结算”，不刷新余额 |
+| `challenge_completed` | `run_id`, `outcome`, `reward_grants`, `metrics`, `next_actions`, `completion` | 通用挑战结算成功；`completion` 含阶段与终局积分字段；`client` 路由时 `outcome.rewards_disabled_reason=client_llm_route` 且无奖励 |
 | `error` | `error` | 生成、权限或持久化错误 |
 
 每个 `agent.*` 事件都带 `event_id`、`conversation_id`、`operation_id`、`turn_id`、`attempt_id`、`step_no`、attempt 内递增的 `sequence`、`occurred_at` 和按类型变化的 `payload`。`message_created`、`message_updated`、`branch.replaced`、`state_update`、`campaign_updated`、`context_built` 和 `challenge_completed` 若由生成操作产生，也带同一 `operation_id/attempt_id`。客户端按 event ID 去重并拒绝旧 operation/attempt；检测到间隙时重新读取消息、状态、Campaign、activity 和最近上下文。
@@ -581,7 +582,7 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 
 ## 结局提议与恢复接口
 
-新增 `GET /conversations/:id/endings`：返回 revision、branch_epoch、has_trusted_actions、abandon_action、ending_capabilities、proposal、completion、is_processing。提议事件为 `ending.proposed`；两种模式的真实结束都返回/广播 `CompletionView`，WS 字段为 `challenge_completed.completion`。确认仍调用现有玩家动作端点。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
+新增 `GET /conversations/:id/endings`：返回 revision、branch_epoch、has_trusted_actions、abandon_action、ending_capabilities、proposal、completion、is_processing，以及对话仍 active 时的 `stage_progress` / `pending_stage_points` 和终局后的 `stage_rewards` / `stage_reward_points`。局中读取只查进度，不重算资格或发奖。提议事件为 `ending.proposed`；两种模式的真实结束都返回/广播 `CompletionView`，WS 字段为 `challenge_completed.completion`。确认仍调用现有玩家动作端点。 完整协议见 [26 玩法结局生命周期](26-gameplay-ending-lifecycle.md)。
 
 
 ### 玩法入口启用状态

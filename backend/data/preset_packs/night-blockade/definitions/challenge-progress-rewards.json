@@ -1,0 +1,70 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "突破外围 取得关键情报 取得任务目标 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "breach-outer-ring",
+          "name": "突破外围",
+          "order": 10,
+          "points": 30,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.discovered_count",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          }
+        },
+        {
+          "key": "obtain-intel",
+          "name": "取得关键情报",
+          "order": 20,
+          "points": 30,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_equals",
+                "path": "gameplay.has_intel",
+                "value": true
+              }
+            ]
+          }
+        },
+        {
+          "key": "obtain-target",
+          "name": "取得任务目标",
+          "order": 30,
+          "points": 40,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_equals",
+                "path": "gameplay.has_target",
+                "value": true
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "escaped"
+      ],
+      "stage_cap": 100
+    }
+  }
+]

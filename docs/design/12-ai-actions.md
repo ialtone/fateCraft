@@ -6,7 +6,7 @@
 
 `module_state` 与 `gameplay` 使用 module 更新策略，普通状态工具不能覆盖；Execute 经参数、预算、写入范围和新状态验证后整体提交。终态停止后续效果，随机证据由平台保存，模型不填概率或收益。完整目录与契约见[24](24-gameplay-module-architecture.md)。
 
-百年飞升劫只允许模型修改姓名、外貌和背景等叙事字段；境界、寿元、物资、九波归属和结局均由模块行动计算，历史同名 Roll 不能代替资格。青河模型不能通过正向 `adjust_vitals` 免费恢复，不能覆盖或删除突破反噬，救援证物必须通过实际行动取得。阶段积分在合法动作后自动核验；最终引劫/结局取当前玩家能力目录，不能靠文本确认扩大 actor 权限。具体规则见 [14](14-ascension-trial-gameplay.md) 和 [16](16-cultivation-campaign-agent-reference.md)。
+百年飞升劫只允许模型修改姓名、外貌和背景等叙事字段；境界、寿元、物资、九波归属和结局均由模块行动计算，历史同名 Roll 不能代替资格。青河模型不能通过正向 `adjust_vitals` 免费恢复，不能覆盖或删除突破反噬，救援证物必须通过实际行动取得。阶段进度在合法动作后自动核验并记录为当前分支状态，终局统一结算；最终引劫/结局取当前玩家能力目录，不能靠文本确认扩大 actor 权限。具体规则见 [14](14-ascension-trial-gameplay.md) 和 [16](16-cultivation-campaign-agent-reference.md)。
 
 ## 设计目标
 

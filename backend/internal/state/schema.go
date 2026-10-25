@@ -102,6 +102,10 @@ func InspectPatch(schema gameplay.StateSchema, source string, patch map[string]a
 	for key, value := range patch {
 		isAppend := strings.HasSuffix(key, "+")
 		path := strings.TrimSuffix(key, "+")
+		if path == PlatformStateKey || strings.HasPrefix(path, PlatformStateKey+".") {
+			issues = append(issues, PatchIssue{Key: key, Code: PatchForbiddenSource})
+			continue
+		}
 		if key == "" || strings.TrimSpace(key) != key || path == "" ||
 			strings.Contains(path, "+") || strings.HasPrefix(path, ".") ||
 			strings.HasSuffix(path, ".") || strings.HasSuffix(path, "-") || strings.Contains(path, "..") {
@@ -145,14 +149,18 @@ func invalidPatchKeys(schema gameplay.StateSchema, source string, patch map[stri
 	return invalid
 }
 
-// FilterState keeps only values declared by the gameplay schema. It is used
-// for administrator replacement and never exposes undeclared state keys.
+// FilterState keeps only values declared by the gameplay schema plus the
+// platform-owned internal region. It is used for administrator replacement and
+// never exposes undeclared pack state keys.
 func FilterState(schema gameplay.StateSchema, input map[string]any) map[string]any {
 	filtered := map[string]any{}
 	for _, field := range schema.Fields {
 		if value, ok := gameplay.ValueAtPath(input, field.Path); ok {
 			setAtPath(filtered, strings.Split(field.Path, "."), deepCopyValue(value), false)
 		}
+	}
+	if platform := ReservedPlatformState(input); platform != nil {
+		filtered[PlatformStateKey] = platform
 	}
 	return filtered
 }

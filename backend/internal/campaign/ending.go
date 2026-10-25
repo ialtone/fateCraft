@@ -63,7 +63,23 @@ func (s *Service) playerProjection(ctx context.Context, row storage.Campaign, do
 			}
 		}
 	}
-	return map[string]any{"revision": row.Revision, "status": row.Status, "action_capabilities": result, "ending_capabilities": endings}, nil
+	projection := map[string]any{"revision": row.Revision, "status": row.Status, "action_capabilities": result, "ending_capabilities": endings,
+		"stage_progress": []storage.StageProgressView{}, "pending_stage_points": int64(0)}
+	if row.Status == storage.CampaignStatusActive {
+		provider, ok := s.projections[runtime.Campaign.ProjectionHandler]
+		if !ok {
+			return nil, fmt.Errorf("Campaign 投影处理器未安装: %s", runtime.Campaign.ProjectionHandler)
+		}
+		snapshot, err := provider.Snapshot(ctx, ProjectionContext{Campaign: row, Domain: domain, ContextPolicy: runtime.Campaign.ContextPolicy})
+		if err != nil {
+			return nil, err
+		}
+		if progress, ok := snapshot["stage_progress"]; ok {
+			projection["stage_progress"] = progress
+			projection["pending_stage_points"] = snapshot["pending_stage_points"]
+		}
+	}
+	return projection, nil
 }
 
 func validateEndingPlans(schema storage.JSONMap, plans []gameplay.ActionPlan) error {

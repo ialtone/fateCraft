@@ -42,7 +42,7 @@ func TestPostgresModuleActionReplayRewindAndAtomicFailure(t *testing.T) {
 			if err := store.SaveRuntimeState(next); err != nil {
 				return CampaignActionOutcome{}, err
 			}
-			if _, _, err := store.GrantCampaignStageReward(ctx, row, "early", "阶段", 5); err != nil {
+			if _, _, err := store.RecordCampaignStageProgress(ctx, row, []string{"early"}); err != nil {
 				return CampaignActionOutcome{}, err
 			}
 			_, err := NewRewardRepository(bound.db).GrantInCurrentTx(ctx, RewardMutation{PlayerID: playerID, RewardKey: PointsKey, Quantity: 12, SourceType: "test", SourceID: campaignID.String(), IdempotencyKey: "checkpoint-earned", Metadata: JSONMap{}})
@@ -97,21 +97,54 @@ func TestPostgresModuleActionReplayRewindAndAtomicFailure(t *testing.T) {
 	if err := db.Model(&RewardLedgerEntry{}).Where("player_id = ? AND reward_key = ?", playerID, PointsKey).Select("COALESCE(SUM(quantity_delta),0)").Scan(&quantity).Error; err != nil {
 		t.Fatal(err)
 	}
-	if quantity != 17 {
+	if quantity != 12 {
 		t.Fatal("rewind changed account ledger")
 	}
+	var progressCount int64
+	if err := db.Model(&CampaignStageProgress{}).Where("campaign_id = ?", campaignID).Count(&progressCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if progressCount != 0 {
+		t.Fatal("checkpoint restore kept progress from the old branch")
+	}
+	// A receipt can only come from settling the current branch. The old branch's
+	// progress was rolled back, so settling now must not pay its milestone.
+	settle := func() (bool, error) {
+		var created bool
+		err := db.Transaction(func(tx *gorm.DB) error {
+			store := &CampaignActionStore{tx: tx}
+			rows, _, err := store.SettleCampaignStageRewards(context.Background(), row, []StageRewardGrant{{Key: "early", Name: "阶段", Points: 5}})
+			if err != nil {
+				return err
+			}
+			created = len(rows) == 1
+			return nil
+		})
+		return created, err
+	}
+	if created, err := settle(); err != nil || created {
+		t.Fatalf("old branch progress settled: created=%v err=%v", created, err)
+	}
+	// Recording the milestone on the restored branch and settling pays exactly
+	// once; replaying the settlement does not create another receipt.
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		store := &CampaignActionStore{tx: tx}
-		claim, applied, err := store.GrantCampaignStageReward(context.Background(), row, "early", "阶段", 5)
-		if err != nil {
-			return err
-		}
-		if applied || claim.GrantedPoints != 5 {
-			return errors.New("rewind recreated stage entitlement")
-		}
-		return nil
+		_, _, err := store.RecordCampaignStageProgress(context.Background(), row, []string{"early"})
+		return err
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if created, err := settle(); err != nil || !created {
+		t.Fatalf("current branch progress not settled: created=%v err=%v", created, err)
+	}
+	if created, err := settle(); err != nil || created {
+		t.Fatalf("settlement paid twice: created=%v err=%v", created, err)
+	}
+	if err := db.Model(&RewardLedgerEntry{}).Where("player_id = ? AND reward_key = ?", playerID, PointsKey).Select("COALESCE(SUM(quantity_delta),0)").Scan(&quantity).Error; err != nil {
+		t.Fatal(err)
+	}
+	if quantity != 17 {
+		t.Fatalf("settled stage points not posted: %d", quantity)
 	}
 	if _, err := repo.CommitModuleAction(context.Background(), input, execute); !errors.Is(err, ErrModuleActionConflict) {
 		t.Fatalf("old branch retry accepted: %v", err)

@@ -77,6 +77,10 @@ func (g *Generator) executeModuleToolInTx(ctx context.Context, conv *storage.Con
 	outcome := agentToolOutcome{Status: storage.ToolInvocationCommitted, Code: code, Mutating: true, Result: storage.JSONMap{"ok": true, "code": code, "message": "玩法动作已执行", "data": result}}
 	if settlement := result.Settlement; settlement != nil {
 		outcome.Events = append(outcome.Events, realtime.Event{Type: realtime.TypeChallengeCompleted, ConversationID: conv.ID.String(), Completion: result.Completion, RunID: settlement.Run.ID.String(), Outcome: map[string]any{"key": settlement.Outcome.Key, "category": settlement.Outcome.Category, "title": settlement.Outcome.Title, "summary": settlement.Run.Summary, "tone": settlement.Outcome.Tone, "rewards_disabled_reason": settlement.RewardsDisabledReason}, RewardGrants: settlement.Rewards, NextActions: []string{"replay", "back_to_challenges"}})
+	} else if len(result.StageProgress) > 0 {
+		// 模型工具触发且未结束本局：新达成的阶段进度仍要推送给已连接的
+		// 客户端；未收到事件的端通过快照与 /endings 读取恢复。
+		outcome.Events = append(outcome.Events, realtime.Event{Type: realtime.TypeModuleActionCommitted, ConversationID: conv.ID.String(), StageProgress: result.StageProgress, PendingStagePoints: result.PendingStagePoints})
 	}
 	return outcome
 }

@@ -23,6 +23,10 @@ export interface CompletionInfo {
   nextActions: Array<'replay' | 'back_to_challenges'>
   /** 非空表示未发放奖励的原因（客户端直连为 client_llm_route）。 */
   rewardsDisabledReason?: string
+  stageRewards: NonNullable<CompletionView['stage_rewards']>
+  stageRewardPoints: number
+  rewardPoints: number
+  totalRewardPoints: number
 }
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -106,6 +110,10 @@ export const useConversationStore = defineStore('conversation', () => {
       ...view,
       nextActions: view.next_actions,
       rewardsDisabledReason: view.rewards_disabled_reason,
+      stageRewards: view.stage_rewards ?? [],
+      stageRewardPoints: view.stage_reward_points ?? 0,
+      rewardPoints: view.reward_points ?? 0,
+      totalRewardPoints: view.total_reward_points ?? view.reward_points ?? 0,
     }
     markEnded()
     endingState.value = null

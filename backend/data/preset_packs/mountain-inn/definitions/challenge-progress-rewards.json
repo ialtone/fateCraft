@@ -1,0 +1,72 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "恢复经营 完成订单 建成目标设施 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "first-order",
+          "name": "恢复经营",
+          "order": 10,
+          "points": 50,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.delivered",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "key": "fulfill-orders",
+          "name": "完成实质经营目标",
+          "order": 20,
+          "points": 50,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.delivered",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          }
+        },
+        {
+          "key": "build-facilities",
+          "name": "形成稳定经营成果",
+          "order": 30,
+          "points": 50,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.facility_level_sum",
+                "operator": "gte",
+                "value": 3
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "prosperous"
+      ],
+      "stage_cap": 150
+    }
+  }
+]

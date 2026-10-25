@@ -54,21 +54,126 @@ type ModuleDescriptor struct {
 	AbandonAction        string                         `json:"abandon_action,omitempty"`
 }
 
+// platformDefinition is a definition kind owned by the platform rather than by
+// a single rule module. Challenge packs can use it without every module
+// re-registering the same contract.
+type platformDefinition struct {
+	kind     string
+	label    string
+	schema   map[string]any
+	modes    []string
+	validate func(*RuntimeContract, Definition) error
+}
+
 type Registry struct {
-	modules   map[string]ModuleDescriptor
-	verifiers map[string]verifierRegistration
+	modules             map[string]ModuleDescriptor
+	verifiers           map[string]verifierRegistration
+	platformDefinitions map[string]platformDefinition
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
 		modules: map[string]ModuleDescriptor{}, verifiers: map[string]verifierRegistration{},
+		platformDefinitions: map[string]platformDefinition{},
 	}
+}
+
+// RegisterPlatformDefinition publishes a platform-owned definition kind to
+// every installed module whose modes intersect the kind's modes.
+func (r *Registry) RegisterPlatformDefinition(kind, label string, schema map[string]any, modes []string, validate func(*RuntimeContract, Definition) error) {
+	if r == nil {
+		panic("gameplay registry is nil")
+	}
+	if !ValidStableKey(kind) || strings.TrimSpace(label) == "" || validate == nil || len(modes) == 0 {
+		panic("invalid platform definition")
+	}
+	if _, exists := r.platformDefinitions[kind]; exists {
+		panic("duplicate platform definition: " + kind)
+	}
+	r.platformDefinitions[kind] = platformDefinition{kind: kind, label: label, schema: schema, modes: append([]string(nil), modes...), validate: validate}
+}
+
+// IsPlatformDefinitionKind reports whether the platform, not the pinned
+// module, owns validation for the kind.
+func IsPlatformDefinitionKind(kind string) bool {
+	return kind == DefinitionKindChallengeProgressRewards
+}
+
+func (r *Registry) validatePlatformDefinition(contract *RuntimeContract, definition Definition) error {
+	registered, ok := r.platformDefinitions[definition.Kind]
+	if !ok {
+		return fmt.Errorf("平台未注册定义 %s", definition.Kind)
+	}
+	if contract == nil || !slices.Contains(registered.modes, contract.Mode) {
+		return fmt.Errorf("%s 不支持当前运行模式", definition.Kind)
+	}
+	return registered.validate(contract, definition)
+}
+
+// withPlatformDefinitions merges platform-owned schemas and labels into a
+// module descriptor so catalog and editor output stay complete without
+// touching each rule module.
+func (r *Registry) withPlatformDefinitions(module ModuleDescriptor) ModuleDescriptor {
+	shared := make([]platformDefinition, 0, len(r.platformDefinitions))
+	for _, kind := range sortedPlatformDefinitionKinds(r.platformDefinitions) {
+		definition := r.platformDefinitions[kind]
+		for _, mode := range definition.modes {
+			if slices.Contains(module.Modes, mode) {
+				shared = append(shared, definition)
+				break
+			}
+		}
+	}
+	if len(shared) == 0 {
+		return module
+	}
+	schemas := make(map[string]map[string]any, len(module.DefinitionSchemas)+len(shared))
+	for kind, schema := range module.DefinitionSchemas {
+		schemas[kind] = schema
+	}
+	labels := make(map[string]string, len(module.DefinitionLabels)+len(shared))
+	for kind, label := range module.DefinitionLabels {
+		labels[kind] = label
+	}
+	kinds := append([]string(nil), module.DefinitionKinds...)
+	for _, definition := range shared {
+		if _, exists := schemas[definition.kind]; !exists {
+			schemas[definition.kind] = definition.schema
+		}
+		if _, exists := labels[definition.kind]; !exists {
+			labels[definition.kind] = definition.label
+		}
+		if !contains(kinds, definition.kind) {
+			kinds = append(kinds, definition.kind)
+		}
+	}
+	sort.Strings(kinds)
+	module.DefinitionSchemas = schemas
+	module.DefinitionLabels = labels
+	module.DefinitionKinds = kinds
+	return module
+}
+
+func sortedPlatformDefinitionKinds(definitions map[string]platformDefinition) []string {
+	kinds := make([]string, 0, len(definitions))
+	for kind := range definitions {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
 }
 
 func NewCoreRegistry() *Registry {
 	registry := NewRegistry()
 	registry.RegisterVerifier("core.always", validateEmptyConfig, func(Evidence, map[string]any) error { return nil })
 	registry.RegisterVerifier("core.conditions", validateConditionsConfig, verifyConditions)
+	registry.RegisterPlatformDefinition(
+		DefinitionKindChallengeProgressRewards,
+		"阶段积分",
+		ProgressRewardsSchema(),
+		[]string{RuntimeModeChallenge, RuntimeModeCampaign},
+		registry.validateProgressRewardsDefinition,
+	)
 	registry.RegisterModule(ModuleDescriptor{
 		Key: "core.generic", Version: 1, Name: "通用状态玩法",
 		Description:        "使用受限状态条件、服务端判定证据和固定通关积分。",
@@ -124,6 +229,9 @@ func (r *Registry) RegisterModule(module ModuleDescriptor) {
 		if !ValidStableKey(kind) || validate == nil {
 			panic("invalid definition handler: " + kind)
 		}
+		if IsPlatformDefinitionKind(kind) {
+			panic("platform definition must not be re-registered by a module: " + kind)
+		}
 		module.DefinitionKinds = append(module.DefinitionKinds, kind)
 	}
 	sort.Strings(module.DefinitionKinds)
@@ -143,7 +251,7 @@ func (r *Registry) RegisterVerifier(key string, validate ConfigValidator, verify
 func (r *Registry) Modules() []ModuleDescriptor {
 	out := make([]ModuleDescriptor, 0, len(r.modules))
 	for _, module := range r.modules {
-		out = append(out, module)
+		out = append(out, r.withPlatformDefinitions(module))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CategoryOrder != out[j].CategoryOrder {
@@ -162,7 +270,7 @@ func (r *Registry) Module(engine EngineRef) (ModuleDescriptor, error) {
 	if !ok {
 		return ModuleDescriptor{}, fmt.Errorf("未安装玩法模块 %s@%d", engine.Key, engine.Version)
 	}
-	return module, nil
+	return r.withPlatformDefinitions(module), nil
 }
 
 func (r *Registry) ValidateRuntime(contract *RuntimeContract) error {
@@ -251,7 +359,7 @@ func (r *Registry) ValidateVerifier(contract *RuntimeContract, key string, confi
 		return err
 	}
 	if key == "core.conditions" {
-		return validateConditionPaths(contract.StateSchema, config)
+		return validateConditionPaths(contract, config)
 	}
 	return nil
 }
@@ -440,24 +548,51 @@ func verifyCondition(evidence Evidence, condition map[string]any) error {
 	return nil
 }
 
-func validateConditionPaths(schema StateSchema, config map[string]any) error {
+func validateConditionPaths(contract *RuntimeContract, config map[string]any) error {
+	if contract == nil {
+		return fmt.Errorf("条件校验缺少 Runtime")
+	}
+	campaignMode := NormalizeRuntimeMode(contract.Mode) == RuntimeModeCampaign
+	var ownership OwnershipRegistry
+	if campaignMode {
+		compiled, err := CompileOwnershipRegistry(contract)
+		if err != nil {
+			return err
+		}
+		ownership = compiled
+	}
 	var visit func(map[string]any) error
 	visit = func(condition map[string]any) error {
 		typeName := stringValue(condition["type"])
+		if typeName == "successful_roll" || typeName == "minimum_turns" {
+			if campaignMode {
+				return fmt.Errorf("%s 条件不能用于 Campaign 阶段事实", typeName)
+			}
+		}
 		if typeName == "state_number" || typeName == "state_equals" || typeName == "state_in" {
 			path := stringValue(condition["path"])
-			field, ok := FieldForPath(schema, path)
-			if !ok {
-				return fmt.Errorf("条件引用了未声明的状态路径: %s", path)
-			}
-			if typeName == "state_number" &&
-				(field.Path != path || (field.Type != "integer" && field.Type != "number")) {
-				return fmt.Errorf("state_number 必须引用已声明的数值状态: %s", path)
-			}
-			if typeName == "state_in" {
-				for _, value := range condition["values"].([]any) {
-					if !ValidUpdateValue(field, path, value, false) {
-						return fmt.Errorf("state_in.values 包含不符合状态字段 %s 的值", path)
+			if campaignMode {
+				owner, ok := ownership.Resolve(path)
+				if !ok || owner.Owner != OwnerCampaign {
+					return fmt.Errorf("Campaign 条件引用了未授权或非存档字段: %s", path)
+				}
+				if owner.Visibility != VisibilityPlayer {
+					return fmt.Errorf("Campaign 条件只能引用玩家可见的存档投影: %s", path)
+				}
+			} else {
+				field, ok := FieldForPath(contract.StateSchema, path)
+				if !ok {
+					return fmt.Errorf("条件引用了未声明的状态路径: %s", path)
+				}
+				if typeName == "state_number" &&
+					(field.Path != path || (field.Type != "integer" && field.Type != "number")) {
+					return fmt.Errorf("state_number 必须引用已声明的数值状态: %s", path)
+				}
+				if typeName == "state_in" {
+					for _, value := range condition["values"].([]any) {
+						if !ValidUpdateValue(field, path, value, false) {
+							return fmt.Errorf("state_in.values 包含不符合状态字段 %s 的值", path)
+						}
 					}
 				}
 			}

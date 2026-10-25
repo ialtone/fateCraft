@@ -59,6 +59,6 @@ func InstallCampaign(service *campaign.Service) {
 
 func installRuntimeCampaigns(service *campaign.Service, registry *contract.Registry) {
 	for _, descriptor := range registry.Modules() {
-		campaignruntime.Install(service, descriptor)
+		campaignruntime.Install(service, descriptor, registry)
 	}
 }

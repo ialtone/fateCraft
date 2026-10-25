@@ -355,5 +355,14 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 	view["rest_remaining"] = max(0, expedition.Find(c.World, s.Journey.Position).Rest-s.Journey.Rested[s.Journey.Position])
 	view["remaining_minutes"] = c.World.Deadline - run.GameTime
 	view["outcome_key"] = run.OutcomeKey
+	defeated := int64(0)
+	for _, e := range c.Enemies {
+		if s.Enemies[e.Key] == 0 {
+			defeated++
+		}
+	}
+	view["visited_count"] = int64(len(s.Journey.Visited))
+	view["defeated_count"] = defeated
+	view["boss_defeated"] = c.Boss != "" && s.Enemies[c.Boss] == 0
 	return view, nil
 }

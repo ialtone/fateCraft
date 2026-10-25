@@ -129,6 +129,27 @@
         "default": [],
         "visibility": "player",
         "update_policy": "module"
+      },
+      {
+        "path": "gameplay.visited_count",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.defeated_count",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.boss_defeated",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
       }
     ]
   }

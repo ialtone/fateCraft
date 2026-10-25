@@ -176,13 +176,16 @@ func registerAction(
 		if err != nil {
 			return storage.CampaignActionOutcome{}, err
 		}
-		if err := settleProgressRewards(ctx, execution, &outcome); err != nil {
+		if err := recordProgressRewards(ctx, execution, &outcome); err != nil {
 			return storage.CampaignActionOutcome{}, err
 		}
 		// Campaign 已终局（本次提交刚终结，或提交前已不是 active）时，
 		// 不再处理状态到期与计划事件：completed 之后不应再追加任务失败等事件，
-		// 角色死亡后也不应继续推进世界事件。
+		// 角色死亡后也不应继续推进世界事件。终局阶段积分在返回前统一结算。
 		if outcome.Status != nil || execution.Campaign.Status != storage.CampaignStatusActive {
+			if err := settleProgressRewards(ctx, execution, &outcome); err != nil {
+				return storage.CampaignActionOutcome{}, err
+			}
 			return outcome, nil
 		}
 		if err := expireDueConditions(execution, &outcome); err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -190,6 +193,12 @@ func registerAction(
 		}
 		if err := worldactions.ProcessDueScheduledEvents(execution, &outcome); err != nil {
 			return storage.CampaignActionOutcome{}, err
+		}
+		if outcome.Status != nil {
+			// 到期条件或计划事件可能刚触发死亡或超时，仍按已达阶段结算。
+			if err := settleProgressRewards(ctx, execution, &outcome); err != nil {
+				return storage.CampaignActionOutcome{}, err
+			}
 		}
 		return outcome, nil
 	})

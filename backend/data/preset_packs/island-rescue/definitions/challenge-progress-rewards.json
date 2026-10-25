@@ -1,0 +1,70 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "探索周边 备齐材料 完成求援装置 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "explore-coast",
+          "name": "探索周边",
+          "order": 10,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.explored_count",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          }
+        },
+        {
+          "key": "gather-materials",
+          "name": "备齐求援材料",
+          "order": 20,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_equals",
+                "path": "gameplay.materials_ready",
+                "value": true
+              }
+            ]
+          }
+        },
+        {
+          "key": "craft-signal",
+          "name": "完成求援装置",
+          "order": 30,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_equals",
+                "path": "gameplay.signal_ready",
+                "value": true
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "rescued"
+      ],
+      "stage_cap": 75
+    }
+  }
+]

@@ -29,7 +29,7 @@
       "category": "success",
       "title": "获救归航",
       "tone": "success",
-      "reward_points": 0,
+      "reward_points": 150,
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
@@ -93,7 +93,7 @@
       }
     }
   ],
-  "quick_start_guide": "观察周围，采集制作材料，留意饥渴与环境风险。制作求援装置后返回海滩，在救援窗口点击发出求援信号。示例结局暂不发放积分。",
+  "quick_start_guide": "观察周围，采集制作材料，留意饥渴与环境风险。制作求援装置后返回海滩，在救援窗口点击发出求援信号。获救结局积分为 150 分；失败、超时与主动放弃为 0 分。",
   "features": [
     "有限资源",
     "可信制作",

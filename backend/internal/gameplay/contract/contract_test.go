@@ -4,6 +4,14 @@ import (
 	"testing"
 )
 
+func TestStateSchemaCannotDeclarePlatformProgress(t *testing.T) {
+	for _, path := range []string{"_platform", "_platform.stage_progress"} {
+		if err := validateStateField(StateField{Path: path, Type: "object", Default: map[string]any{}, Visibility: VisibilityPlayer, UpdatePolicy: UpdateModel, AllowChildren: true}); err == nil {
+			t.Fatalf("pack declared reserved state %s", path)
+		}
+	}
+}
+
 func TestPlayerStateDoesNotLeakHiddenObjectChildren(t *testing.T) {
 	contract := RuntimeContract{StateSchema: StateSchema{SchemaVersion: 1, Fields: []StateField{
 		{Path: "case", Type: "object", Visibility: VisibilityPlayer, UpdatePolicy: UpdateModel, AllowChildren: true},

@@ -464,6 +464,10 @@ export interface CampaignSnapshot {
     game_time: number
   }>
   stage_reward_points: number
+  /** 当前分支已达成、尚未结算的阶段；局中不增加余额。 */
+  stage_progress: Array<import('./endings').StageProgress>
+  /** 上述阶段的预期积分合计。 */
+  pending_stage_points: number
   total_reward_points: number
   /** 客户端直连终局不发放奖励时后端填写，前端据此展示替代文案。 */
   rewards_disabled_reason?: string
@@ -1718,6 +1722,10 @@ export interface GenerationReplayedEvent extends SocketEventBase {
 
 export interface ModuleActionCommittedEvent extends SocketEventBase {
   type: 'module.action_committed'
+  /** 当前分支已达成、尚未结算的阶段；局中不增加余额。 */
+  stage_progress?: Array<import('./endings').StageProgress>
+  /** 上述阶段的预期积分合计。 */
+  pending_stage_points?: number
 }
 
 /** 玩家状态更新（携带更新后的完整状态） */

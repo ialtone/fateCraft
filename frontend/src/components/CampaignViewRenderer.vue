@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NButton, NProgress, NSelect, NSkeleton, NTag, useDialog } from 'naive-ui'
+import { NAlert, NButton, NProgress, NSelect, NSkeleton, NTag, useDialog, useMessage } from 'naive-ui'
 import { usePlayerActionStore } from '@/stores/playerActions'
 import { useConversationStore } from '@/stores/conversations'
 import { useCampaignStore } from '@/stores/campaign'
 import { useRuntimeStore } from '@/stores/runtime'
 import { presentValue } from '@/lib/presentation'
+import { stageProgressNotice } from '@/lib/stage-rewards'
 import { collectEndingEntries, type EndingEntry } from '@/lib/ending-actions'
 import GuidanceRenderer from '@/components/GuidanceRenderer.vue'
+import type { ModuleActionInput } from '@/types/module-actions'
+import type { StageProgress } from '@/types/endings'
 import type {
   CampaignViewAction,
   CampaignViewCondition,
@@ -22,6 +25,7 @@ const campaign = useCampaignStore()
 const actions = usePlayerActionStore()
 const conversations = useConversationStore()
 const dialog = useDialog()
+const message = useMessage()
 const runtime = useRuntimeStore()
 const snapshot = computed<Record<string, unknown> | null>(() => {
   return campaign.snapshot ? (campaign.snapshot as unknown as Record<string, unknown>) : null
@@ -369,6 +373,17 @@ function guidanceGroupsForSection(section: CampaignViewSection): GuidanceGroup[]
   ]
 }
 
+// 局中只提示阶段已达成，余额和阶段回执要等终局 challenge_completed 才刷新。
+async function executeAction(id: string, input?: ModuleActionInput) {
+  const result = await actions.execute(id, input)
+  if (!result) return null
+  const embedded = (result.result as { stage_progress?: StageProgress[] } | undefined)
+    ?.stage_progress
+  const notice = stageProgressNotice(result.stage_progress ?? embedded)
+  if (notice) message.success(`阶段已达成：${notice}，结束时统一结算`)
+  return result
+}
+
 function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
   if (item.mode !== 'action' || !item.action_key) return
   const conv = conversations.current
@@ -389,7 +404,7 @@ function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
     key: item.action_key,
     arguments: args as Record<string, string | number | boolean>,
   }
-  const run = () => actions.execute(conv.id, input)
+  const run = () => executeAction(conv.id, input)
   const ending = conversations.endingState?.ending_capabilities.find(
     (cap) =>
       cap.key === item.action_key &&
@@ -434,7 +449,7 @@ function runEnding(entry: EndingEntry) {
     positiveText: '确认执行',
     negativeText: '取消',
     onPositiveClick: () => {
-      void actions.execute(conv.id, input)
+      void executeAction(conv.id, input)
     },
   })
 }
@@ -469,7 +484,7 @@ function emptyText(section: CampaignViewSection): string {
         v-if="actions.pending"
         block
         :loading="actions.acting"
-        @click="conversations.current && actions.execute(conversations.current.id)"
+        @click="conversations.current && executeAction(conversations.current.id)"
       >
         查询上次操作结果
       </NButton>
@@ -490,11 +505,22 @@ function emptyText(section: CampaignViewSection): string {
         {{
           campaign.snapshot?.outcome_title ||
           (campaign.snapshot?.outcome_category === 'failure' ? '本局失败' : '本局已结束')
-        }}；本局获得 {{ snapshot?.reward_points ?? 0 }} 积分，本局累计
-        {{ snapshot?.total_reward_points ?? 0 }} 积分
+        }}；终局获得 {{ snapshot?.reward_points ?? 0 }} 积分，本局累计
+        {{ snapshot?.total_reward_points ?? 0 }} 积分（含阶段积分）
       </NAlert>
+      <div v-if="campaign.snapshot?.stage_progress?.length" class="stage-rewards">
+        <strong>
+          阶段进度 · 预期 {{ campaign.snapshot.pending_stage_points ?? 0 }} 积分（结束时结算）
+        </strong>
+        <p>阶段已达成，局中不会到账；本局结束时统一结算。</p>
+        <p v-for="stage in campaign.snapshot.stage_progress" :key="stage.stage_key">
+          {{ stage.name }}：{{ stage.configured_points }} 积分{{
+            stage.disabled_reason === 'client_llm_route' ? '（客户端直连不发积分）' : ''
+          }}
+        </p>
+      </div>
       <div v-if="campaign.snapshot?.stage_rewards?.length" class="stage-rewards">
-        <strong>阶段记录 · 已到账 {{ campaign.snapshot.stage_reward_points }} 积分</strong>
+        <strong>阶段结算 · 已发放 {{ campaign.snapshot.stage_reward_points }} 积分</strong>
         <p>本局累计到账 {{ campaign.snapshot.total_reward_points }} 积分</p>
         <p v-for="stage in campaign.snapshot.stage_rewards" :key="stage.stage_key">
           {{ stage.name }}：{{ stage.granted_points }} 积分{{

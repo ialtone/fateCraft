@@ -2,6 +2,7 @@ package challenge
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 
@@ -21,6 +22,25 @@ type ModuleActionResult struct {
 	Events            []gameplay.RuntimeEvent `json:"events"`
 	Settlement        *SettlementResult       `json:"settlement,omitempty"`
 	NarrativeFeedback map[string]any          `json:"narrative_feedback,omitempty"`
+	// StageProgress are the milestones first reached by this action on the
+	// current branch. PendingStagePoints is only their expected configured
+	// total; it never increases an account balance. The full branch progress is
+	// available from the snapshot and ending endpoints.
+	StageProgress      []storage.StageProgressView `json:"stage_progress,omitempty"`
+	PendingStagePoints int64                       `json:"pending_stage_points"`
+	// StageRewards and StageRewardPoints are filled only when this action
+	// performed the terminal settlement. Conversation totals live in the
+	// completion receipt.
+	StageRewards      []storage.ChallengeStageReward `json:"stage_rewards,omitempty"`
+	StageRewardPoints int64                          `json:"stage_reward_points"`
+}
+
+// campaignStageFields decodes the stage fields a Campaign handler placed in
+// its persisted action result. Campaign receipts only exist after settlement,
+// so a terminal action returns them through the completion receipt instead.
+type campaignStageFields struct {
+	StageProgress      []storage.StageProgressView `json:"stage_progress"`
+	PendingStagePoints int64                       `json:"pending_stage_points"`
 }
 
 type CampaignModuleExecutor interface {
@@ -49,7 +69,20 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 		if err != nil {
 			return nil, err
 		}
-		return &ModuleActionResult{Revision: committed.Campaign.Revision, Result: committed.Result, Campaign: &committed.Campaign, Narrative: committed.Narrative, Completion: storage.CompletionFromResult(committed.Result)}, nil
+		result := &ModuleActionResult{Revision: committed.Campaign.Revision, Result: committed.Result, Campaign: &committed.Campaign, Narrative: committed.Narrative, Completion: storage.CompletionFromResult(committed.Result)}
+		if raw, encodeErr := json.Marshal(committed.Result); encodeErr == nil {
+			var fields campaignStageFields
+			if json.Unmarshal(raw, &fields) == nil {
+				result.StageProgress = fields.StageProgress
+				result.PendingStagePoints = fields.PendingStagePoints
+			}
+		}
+		if result.Completion != nil {
+			result.StageRewards = result.Completion.StageRewards
+			result.StageRewardPoints = result.Completion.StageRewardPoints
+			result.StageProgress, result.PendingStagePoints = nil, 0
+		}
+		return result, nil
 	}
 	if module.Runtime == nil {
 		return nil, fmt.Errorf("可信模块执行器未安装")
@@ -89,6 +122,15 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 	if err != nil {
 		return nil, err
 	}
+	_, reached, err := s.recordStageRewards(ctx, repo, conv, content, after, key)
+	if err != nil {
+		return nil, err
+	}
+	disabledReason := ""
+	if conv.LLMRoute == storage.LLMRouteClient {
+		disabledReason = storage.RewardsDisabledReasonClientRoute
+	}
+	progressViews, pendingPoints := stageProgressViewsForReached(reached, disabledReason)
 	events := []gameplay.RuntimeEvent{}
 	for _, event := range transition.Events {
 		if event.Visibility == gameplay.VisibilityPlayer || actor == "model" && event.Visibility == gameplay.VisibilityModel {
@@ -102,7 +144,7 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 	if err != nil {
 		return nil, err
 	}
-	result := &ModuleActionResult{Revision: transition.State.Revision, Result: transition.Result, Events: events, NarrativeFeedback: feedback, Narrative: &narrative}
+	result := &ModuleActionResult{Revision: transition.State.Revision, Result: transition.Result, Events: events, NarrativeFeedback: feedback, Narrative: &narrative, StageProgress: progressViews, PendingStagePoints: pendingPoints}
 	if transition.State.Status != gameplay.RunActive {
 		playerID, err := uuid.Parse(conv.PlayerID)
 		if err != nil {
@@ -113,6 +155,8 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 			return nil, err
 		}
 		settled := result.Settlement
+		result.StageProgress, result.PendingStagePoints = nil, 0
+		result.StageRewards, result.StageRewardPoints = settled.StageRewards, settled.StageRewardPoints
 		view := storage.NewCompletion(*conv, result.Revision, "challenge:"+settled.Run.ID.String(), storage.ChallengeOutcomeRule{OutcomeKey: settled.Outcome.Key, Category: settled.Outcome.Category, Title: settled.Outcome.Title, Tone: settled.Outcome.Tone})
 		view.Summary, view.RewardsDisabledReason = settled.Run.Summary, settled.RewardsDisabledReason
 		view.Chronicle = []string{
@@ -121,6 +165,10 @@ func (s *Service) ExecuteModuleInTx(ctx context.Context, states *storage.StateRe
 		}
 		for _, reward := range settled.Rewards {
 			view.Rewards = append(view.Rewards, storage.CompletionReward{RewardKey: reward.RewardKeySnapshot, Name: reward.NameSnapshot, Unit: reward.UnitSnapshot, Icon: reward.IconSnapshot, Quantity: reward.Quantity, BalanceAfter: reward.BalanceAfter})
+		}
+		view.RewardPoints = storage.TerminalRewardPoints(view.Rewards)
+		if err := repo.FillStageRewards(ctx, view); err != nil {
+			return nil, err
 		}
 		result.Completion = view
 	}

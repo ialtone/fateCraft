@@ -6,7 +6,7 @@
 
 Challenge 的模块信封和 Campaign 的模块状态表分别接入现有事务；Campaign 平台头与收益投影由服务拥有。具体接口、预算、注册方法和代码位置见[24 玩法模块架构](24-gameplay-module-architecture.md)。
 
-`cultivation.trial@2` 是纯模块，版本定义决定概率与成本，保护成长/经济/死亡状态；`cultivation.campaign@2` 保留关系领域表，专属成长、出身、进度和飞升规则位于 cultivation 模块。公共市场支持按目标库存周转，公共世界时钟先核验到期事件预算再写入。阶段积分资格由模块判断，领取事实、账号余额和幂等由存储事务保存；规则及验证见 [14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[21](21-campaign-outcome-rewards.md)、[25](25-core-gameplay-validation.md)。
+`cultivation.trial@2` 是纯模块，版本定义决定概率与成本，保护成长/经济/死亡状态；`cultivation.campaign@2` 保留关系领域表，专属成长、出身、进度和飞升规则位于 cultivation 模块。公共市场支持按目标库存周转，公共世界时钟先核验到期事件预算再写入。阶段资格由模块判断，局中进度、终局回执、账号余额和幂等由存储事务保存；规则及验证见 [14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[21](21-campaign-outcome-rewards.md)、[25](25-core-gameplay-validation.md)。
 
 ## 技术与入口
 

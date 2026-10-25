@@ -583,18 +583,6 @@ func (r *ChallengeRepository) CompleteRun(
 	if err != nil {
 		return nil, fmt.Errorf("玩家 ID 无效: %w", err)
 	}
-	if conv.LLMRoute != LLMRouteClient && points > 0 {
-		capped, err := endingRewardCapped(ctx, r.db, playerID, run.ChallengeVersionID, run.OutcomeKey, conv.ID.String())
-		if err != nil {
-			return nil, err
-		}
-		if capped && run.SettlementDetail != nil {
-			run.SettlementDetail["reward_points"] = 0
-		}
-		if capped {
-			points = 0 // 结局照常结算，只是不再发积分
-		}
-	}
 	if err := r.db.WithContext(ctx).Create(run).Error; err != nil {
 		return nil, err
 	}
@@ -625,24 +613,4 @@ func stringFromMap(values JSONMap, key, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-// endingRewardWindow 内同一玩家、同一玩法包（含所有版本）、同一结局只发一次积分，
-// 挑战结算与长期存档结局共用，防止重复通关刷取奖励。
-const endingRewardWindow = 24 * time.Hour
-
-// endingRewardCapped 必须在结算事务内调用；sourceID 为本次结算来源，自身的幂等重放不计入。
-func endingRewardCapped(ctx context.Context, tx *gorm.DB, playerID, versionID uuid.UUID, outcomeKey, sourceID string) (bool, error) {
-	db := tx.WithContext(ctx)
-	if err := db.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "ending_reward:"+playerID.String()+":"+outcomeKey).Error; err != nil {
-		return false, err
-	}
-	var granted int64
-	err := db.Raw(`SELECT count(*) FROM reward_ledger rl
-		JOIN challenge_versions v ON v.id::text = rl.metadata->>'challenge_version_id'
-		WHERE rl.player_id = ? AND rl.operation = 'grant' AND rl.source_type IN ('campaign_outcome', 'challenge_run')
-		AND rl.source_id <> ? AND rl.metadata->>'outcome_key' = ? AND rl.created_at > ?
-		AND v.challenge_pack_id = (SELECT challenge_pack_id FROM challenge_versions WHERE id = ?)`,
-		playerID, sourceID, outcomeKey, time.Now().Add(-endingRewardWindow), versionID).Scan(&granted).Error
-	return granted > 0, err
 }

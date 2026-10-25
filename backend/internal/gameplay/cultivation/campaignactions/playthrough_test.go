@@ -170,7 +170,7 @@ func (p *cultivationPlaythrough) do(key string, handler campaign.ActionHandlerFu
 			p.recoveryCost += before - after
 		}
 	}
-	if err := settleProgressRewards(context.Background(), p.e, &out); err != nil {
+	if err := recordProgressRewards(context.Background(), p.e, &out); err != nil {
 		p.t.Fatal(err)
 	}
 	if out.Status == nil {
@@ -178,6 +178,11 @@ func (p *cultivationPlaythrough) do(key string, handler campaign.ActionHandlerFu
 			p.t.Fatal(err)
 		}
 		if err := worldactions.ProcessDueScheduledEvents(p.e, &out); err != nil {
+			p.t.Fatal(err)
+		}
+	}
+	if out.Status != nil {
+		if err := settleProgressRewards(context.Background(), p.e, &out); err != nil {
 			p.t.Fatal(err)
 		}
 	}

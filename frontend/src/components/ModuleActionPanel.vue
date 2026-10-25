@@ -10,6 +10,7 @@ import {
   NSpin,
   NSwitch,
   useDialog,
+  useMessage,
 } from 'naive-ui'
 import axios from 'axios'
 import { moduleActionsApi } from '@/api'
@@ -22,6 +23,7 @@ import { useStateStore } from '@/stores/state'
 import { useCampaignStore } from '@/stores/campaign'
 import { useSocketStore } from '@/stores/socket'
 import { useGameplayVersionStore } from '@/stores/gameplayVersion'
+import { stageProgressNotice } from '@/lib/stage-rewards'
 
 const props = defineProps<{ convId: string; visible: boolean }>()
 const chat = useChatStore()
@@ -36,6 +38,7 @@ const planIndex = ref<number | null>(null)
 const argumentsValue = ref<Record<string, string | number | boolean>>({})
 const actions = usePlayerActionStore()
 const dialog = useDialog()
+const message = useMessage()
 const { pending, acting: submitting, error } = storeToRefs(actions)
 const loading = ref(false)
 const checkingGameplay = ref(false)
@@ -248,7 +251,9 @@ async function execute() {
       if (!(await ensureGameplayFresh(id))) return
       if (version !== generation || props.convId !== id || socket.writeBlocked || chat.isGenerating)
         return
-      await actions.execute(id, input)
+      const result = await actions.execute(id, input)
+      const notice = stageProgressNotice(result?.stage_progress)
+      if (notice) message.success(`阶段已达成：${notice}，结束时统一结算`)
       if (alive && version === generation && props.convId === id) await load()
     } finally {
       if (version === generation) checkingGameplay.value = false
@@ -262,7 +267,7 @@ async function execute() {
         costs.value.join('，'),
         minutes.value ? `耗时 ${minutes.value} 分钟` : '',
         plan.value?.risk || active.value.metadata?.risk,
-        '确认后按当前方案执行；达到结局后无法继续本局。主动终止保留已到账阶段积分，不额外发放通关积分。',
+        '确认后按当前方案执行；达到结局后无法继续本局。主动终止会结算已达成阶段积分，不额外发放通关积分。',
       ]
         .filter(Boolean)
         .join('\n\n'),

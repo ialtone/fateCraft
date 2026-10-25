@@ -42,7 +42,13 @@ func TestInstalledNarrativeCoreCoversEightGameplayTypes(t *testing.T) {
 				if err := json.Unmarshal(raw, &definitions); err != nil {
 					t.Fatal(err)
 				}
-				content.Definitions = append(content.Definitions, definitions...)
+				for _, definition := range definitions {
+					if contract.IsPlatformDefinitionKind(definition.Kind) {
+						content.PlatformDefinitions = append(content.PlatformDefinitions, definition)
+						continue
+					}
+					content.Definitions = append(content.Definitions, definition)
+				}
 			}
 			personas, _ := filepath.Glob(filepath.Join(root, "personas", "*.json"))
 			if len(personas) == 0 {

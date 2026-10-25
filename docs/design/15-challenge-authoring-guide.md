@@ -9,7 +9,7 @@
 1. 叙事内容：Character、Persona、Scenario、Prompt、WorldBook。
 2. 运行契约：State Schema、允许动作、玩家能力和展示布局。
 3. 可信规则：已安装玩法模块的动作、定义与 verifier。
-4. 账号奖励：稳定 outcome 和固定 `reward_points`，支持的模块还可声明阶段积分；账号资产仅积分与剧情改写次数。
+4. 账号奖励：稳定 outcome 和固定 `reward_points`，只有 success 可为正；青河用 `cultivation.progress_rewards`，其余内置 Challenge/Campaign 用平台 `challenge.progress_rewards` 声明阶段积分。账号资产仅积分与剧情改写次数。
 
 ## 先判断是否需要新后端模块
 
@@ -178,9 +178,56 @@ Manifest 的 ID、名称和说明必须与 Challenge Pack 一致。所有推荐�
 
 ### 通关积分
 
-在上述 outcome 中填写 `reward_points`（例如 100）。非负安全整数，省略或 0 均不发积分；0 积分结局仍正常完成。单局与 Campaign 使用同一字段，发布后随版本固定。关系表修仙 Campaign 的正积分结局必须由本版本真实终局任务引用；纯 Campaign 模块使用自己的可信完成状态，不能硬塞修仙任务。
+在上述 outcome 中填写 `reward_points`（例如 100）。非负安全整数，省略或 0 均不发积分；0 积分结局仍正常完成。单局与 Campaign 使用同一字段，发布后随版本固定。只有 `category = success` 的结局可以有正积分，`failure` 与 `neutral` 必须为 0，发布校验会拒绝违反者。关系表修仙 Campaign 的正积分结局必须由本版本真实终局任务引用；纯 Campaign 模块使用自己的可信完成状态，不能硬塞修仙任务。
 
-不创建通用奖励类型目录或收益倍率计算器。青河的 `cultivation.progress_rewards` 定义阶段、任务/胜利前置与总预算，阶段资格在合法动作后自动核验；后台结局编辑器显示“阶段 + 终局 = 总预算”，发布时必须一致。不要在 Prompt、action 或 narrative 中计算平台奖励，也不要把局内灵石、碎片折算或额外扣除来发账号奖励。事务、幂等与直连边界见 [21 Campaign 阶段与终局积分](21-campaign-outcome-rewards.md)。
+不创建通用奖励类型目录或收益倍率计算器。青河的 `cultivation.progress_rewards` 定义阶段、任务/胜利前置与总预算；阶段在合法动作后记录为当前分支进度，终局统一结算。后台结局编辑器显示“阶段 + 终局 = 总预算”，发布时必须一致。
+
+### 阶段积分（Challenge 与 Campaign）
+
+Challenge 与通用 Campaign 可以额外声明平台定义 `challenge.progress_rewards`，为可信里程碑记录阶段积分。它是平台定义，不由题材模块注册；青河保留 `cultivation.progress_rewards`，同一版本不能同时使用两种阶段来源。阶段定义放在 `definitions/challenge-progress-rewards.json`，内容形如：
+
+~~~json
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "content": {
+      "stages": [
+        {
+          "key": "first-milestone",
+          "name": "首个里程碑",
+          "order": 10,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {"type": "state_in", "path": "gameplay.realm_key", "values": ["reach-2", "reach-3"]}
+            ]
+          }
+        }
+      ],
+      "outcome_keys": ["ascend"],
+      "stage_cap": 25
+    }
+  }
+]
+~~~
+
+规则：
+
+- 每个阶段用当前模块允许的 verifier 核验服务端动作后的可信状态；不接受模型正文、客户端金额或历史奖励记录。
+- Challenge 条件必须引用 `state-schema.json` 已声明、由 module/system/immutable 维护的字段；新增投影证据（如探索数、击败数、设施等级和）要同时补 schema，否则发布被拒绝。
+- Campaign 条件引用 `campaign.json.field_ownership` 中玩家可见的 `gameplay.*` 投影字段；模块必须注册 `core.conditions` 验证器并在动作后提供该投影。
+- 条件应覆盖“当前值与所有更高值”，优先用 `state_in`，避免一次跳跃跳过低阶段导致永久漏发。
+- `stage_cap` 必须正好等于最低正积分成功结局的 50%（向下取整）；阶段总额不得超过 `stage_cap`。没有正积分成功结局时不允许配置阶段。
+- `outcome_keys` 只用于发布期确认阶段预算归属哪些成功结局，不作为运行时门槛：失败、死亡、寿尽、超时、撤离与主动终止仍结算已达成阶段。
+- 同一版本只能有一条该定义；阶段 key、order 唯一，阶段数量 1–8，积分 1 至 9007199254740991。
+- 局中只合并到可回档的进度区（单局 `_platform.stage_progress`，Campaign `campaign_stage_progress`），不写回执、不写账本；终局才写 `challenge_stage_rewards` / `campaign_stage_rewards` 并入账。
+- `x-reward-budget` 由平台 Schema 提供（`stages` / `points` / `outcomes` / `cap`），后台据此提示“阶段 N 积分（上限 X），终局积分单独结算”。
+
+不要在 Prompt、action 或 narrative 中计算平台奖励，也不要把局内灵石、碎片折算或额外扣除来发账号奖励。事务、幂等、回档与直连边界见 [21 阶段与终局积分](21-campaign-outcome-rewards.md)。
 
 ## `runtime/`
 
@@ -411,7 +458,7 @@ Campaign Runtime 还可以声明 `presentation.campaign_view`，由通用 `Campa
 
 ## 账号奖励边界
 
-玩法包声明固定结局积分；支持阶段机制的模块通过自身定义声明阶段积分与预算。平台固定 `fatecraft.points` 与 `fatecraft.message-rewrite-credit` 两项余额；导入器拒绝旧的 `rewards.json` 文件，Manifest 和版本保存拒绝旧 `reward_rules` 等未知字段。注册赠送和兑换套餐独立由后台管理，不写入玩法包。
+玩法包声明固定结局积分；Challenge 与通用 Campaign 通过平台定义 `challenge.progress_rewards` 声明阶段积分与预算，青河保留 `cultivation.progress_rewards`。阶段局中只记录进度、终局统一结算；平台固定 `fatecraft.points` 与 `fatecraft.message-rewrite-credit` 两项余额；导入器拒绝旧的 `rewards.json` 文件，Manifest 和版本保存拒绝旧 `reward_rules` 等未知字段。注册赠送和兑换套餐独立由后台管理，不写入玩法包。
 
 ## Character、Persona 与 Scenario
 
@@ -469,9 +516,9 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 
 ## 奖励设计
 
-为每个结局设置容易理解的固定积分，局内资源继续服务于原玩法。账号奖励自动到账，积分可兑换剧情改写次数。注册、管理发放、套餐和收支见 [22 奖励管理](22-reward-management-and-exchange.md)。
+为每个结局设置容易理解的固定积分，局内资源继续服务于原玩法。失败、中性、撤离与主动终止必须为 0；阶段积分只作为进度奖励，不能让阶段总额超过最低正积分成功结局的 50%。局中只记录阶段进度，终局统一结算；账号奖励在结算后到账，积分可兑换剧情改写次数。注册、管理发放、套餐和收支见 [22 奖励管理](22-reward-management-and-exchange.md)。
 
-通关积分进入玩法版本；注册赠送和兑换价格不进入玩法哈希。修改后两者不应改变旧存档的通关所得。
+通关积分进入玩法版本；注册赠送和兑换价格不进入玩法哈希。修改后两者不应改变旧存档的通关所得。同一对话的终局与阶段只结算一次；新建对话可以再次获得，平台不按时间窗口限制重复奖励。
 
 ## 管理端工作流
 
@@ -483,7 +530,7 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 4. 在“玩法运行”选择已安装模块并声明 State Schema。
 5. 在“玩家界面”配置状态分组。
 6. 在“结局验证”选择 verifier 并填写受限配置。
-7. 在同一结局表单填写终局积分，0 表示不发放；阶段积分在“规则定义”维护，并核对每条终局的总预算。后台“奖励管理”可集中定位结局规则。
+7. 在同一结局表单填写终局积分，0 表示不发放；阶段积分在“规则定义”维护。Campaign 核对“阶段 + 终局 = 总预算”，单局核对阶段合计不超过 `stage_cap`（最低正积分成功结局的 50%）。后台“奖励管理”可集中定位结局规则。
 8. 保存草稿，再校验发布。
 
 整份 JSON 位于“高级 JSON”，适合导入/导出，不是主要维护入口。
@@ -512,8 +559,8 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 - internal/model 字段没有进入 presentation。
 - 每个 outcome key 唯一，Prompt 明确引用。
 - verifier 的状态路径和 roll key 正确。
-- reward_points 为非负安全整数，入口余额条件只能引用两个固定 key。
-- 修仙 Campaign 正积分结局关联真实终局任务，纯 Campaign 完成依赖本模块事实；阶段预算与所有配置终局一致。
+- reward_points 为非负安全整数，且只有 success 结局可以为正；入口余额条件只能引用两个固定 key。
+- 修仙 Campaign 正积分结局关联真实终局任务，纯 Campaign 完成依赖本模块事实；Campaign 阶段预算与所有配置终局一致，单局阶段的 stage_cap 等于最低正积分成功结局的 50%。
 - 成功、失败、中性结局都有清晰叙事行为。
 - 玩家伪造过去事件、物品、判定或奖励不能绕过服务端。
 - 可重复玩法不存在无业务必要的统一初始功法或物品；Campaign 的互斥开局传承使用 `starting_pool`，未选内容仍有可信取得路径。

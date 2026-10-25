@@ -331,5 +331,5 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 	if s.Alert >= c.PursuitThreshold {
 		status = "正在被追捕，寻找掩护降低警戒"
 	}
-	return map[string]any{"location": find(c, s.Location).Name, "alert": s.Alert, "pursuit": status, "lockpicks": s.Lockpicks, "decoys": s.Decoys, "has_intel": s.Intel, "has_target": s.Target, "locations": locations, "observation": observation, "game_time": run.GameTime, "remaining_minutes": max(0, c.Deadline-run.GameTime), "goal": "取得目标文件，摆脱追捕并回到撤离出口", "outcome_key": run.OutcomeKey}, nil
+	return map[string]any{"location": find(c, s.Location).Name, "alert": s.Alert, "pursuit": status, "lockpicks": s.Lockpicks, "decoys": s.Decoys, "has_intel": s.Intel, "has_target": s.Target, "locations": locations, "observation": observation, "game_time": run.GameTime, "remaining_minutes": max(0, c.Deadline-run.GameTime), "goal": "取得目标文件，摆脱追捕并回到撤离出口", "outcome_key": run.OutcomeKey, "discovered_count": int64(len(s.Discovered))}, nil
 }

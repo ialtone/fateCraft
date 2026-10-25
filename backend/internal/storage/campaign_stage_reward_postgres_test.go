@@ -36,15 +36,18 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 			t.Fatal(err)
 		}
 		repo := NewCampaignRepository(db)
+		stageRules := []StageRewardGrant{
+			{Key: "first", Name: "first", Points: 100},
+			{Key: "second", Name: "second", Points: 100},
+			{Key: "third", Name: "third", Points: 100},
+			{Key: "zero", Name: "zero", Points: 0},
+		}
 		commit := func(key string, revision int64, fail bool) error {
 			_, err := repo.CommitAction(context.Background(), CommitCampaignActionInput{CampaignID: row.ID, PlayerID: row.PlayerID, IdempotencyKey: key, ActionKey: "test.stage", ActorType: "system", ExpectedRevision: revision}, func(s *CampaignActionStore, locked Campaign) (CampaignActionOutcome, error) {
-				for _, stage := range []struct {
-					key    string
-					points int64
-				}{{"first", 100}, {"second", 100}, {"third", 100}, {"zero", 0}} {
-					if _, _, err := s.GrantCampaignStageReward(context.Background(), locked, stage.key, stage.key, stage.points); err != nil {
-						return CampaignActionOutcome{}, err
-					}
+				// Milestones reached by the action are branch progress only. No
+				// receipt or ledger entry exists until terminal settlement.
+				if _, _, err := s.RecordCampaignStageProgress(context.Background(), locked, []string{"first", "second", "third", "zero"}); err != nil {
+					return CampaignActionOutcome{}, err
 				}
 				if fail {
 					return CampaignActionOutcome{}, errors.New("injected failure")
@@ -60,6 +63,10 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		db.Model(&CampaignStageReward{}).Where("campaign_id = ?", row.ID).Count(&count)
 		if count != 0 {
 			t.Fatal("claim survived rollback")
+		}
+		db.Model(&CampaignStageProgress{}).Where("campaign_id = ?", row.ID).Count(&count)
+		if count != 0 {
+			t.Fatal("progress survived rollback")
 		}
 		var wg sync.WaitGroup
 		results := make(chan error, 2)
@@ -81,7 +88,37 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		if err := commit("replayed-facts", 1, false); err != nil {
 			t.Fatal(err)
 		}
+		// Progress is reachable and branch-scoped, but no receipt exists before
+		// terminal settlement.
 		var claims []CampaignStageReward
+		if err := db.Where("campaign_id = ?", row.ID).Find(&claims).Error; err != nil {
+			t.Fatal(err)
+		}
+		if len(claims) != 0 {
+			t.Fatalf("receipts before settlement=%d", len(claims))
+		}
+		db.Model(&CampaignStageProgress{}).Where("campaign_id = ?", row.ID).Count(&count)
+		if count != 4 {
+			t.Fatalf("progress=%d", count)
+		}
+		finish := func() (*CampaignActionResult, error) {
+			return repo.CommitAction(context.Background(), CommitCampaignActionInput{CampaignID: row.ID, PlayerID: row.PlayerID, ExpectedRevision: 2, IdempotencyKey: "finish", ActionKey: "test.finish", ActorType: "system"}, func(s *CampaignActionStore, locked Campaign) (CampaignActionOutcome, error) {
+				if _, _, err := s.SettleCampaignStageRewards(context.Background(), locked, stageRules); err != nil {
+					return CampaignActionOutcome{}, err
+				}
+				if _, err := s.GrantCampaignOutcomeRewards(context.Background(), locked, outcomeKey); err != nil {
+					return CampaignActionOutcome{}, err
+				}
+				status := CampaignStatusCompleted
+				return CampaignActionOutcome{Status: &status, OutcomeKey: &outcomeKey, Events: []CampaignEventDraft{{EventType: "test.finished", Visibility: CampaignVisibilityPlayer}}}, nil
+			})
+		}
+		if _, err := finish(); err != nil {
+			t.Fatal(err)
+		}
+		if result, err := finish(); err != nil || !result.Replayed {
+			t.Fatalf("finish replay failed: %+v %v", result, err)
+		}
 		if err := db.Where("campaign_id = ?", row.ID).Find(&claims).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -107,21 +144,6 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		if count != ledgerWant {
 			t.Fatalf("route=%s ledger rows=%d", route, count)
 		}
-		finish := func() (*CampaignActionResult, error) {
-			return repo.CommitAction(context.Background(), CommitCampaignActionInput{CampaignID: row.ID, PlayerID: row.PlayerID, ExpectedRevision: 2, IdempotencyKey: "finish", ActionKey: "test.finish", ActorType: "system"}, func(s *CampaignActionStore, locked Campaign) (CampaignActionOutcome, error) {
-				if _, err := s.GrantCampaignOutcomeRewards(context.Background(), locked, outcomeKey); err != nil {
-					return CampaignActionOutcome{}, err
-				}
-				status := CampaignStatusCompleted
-				return CampaignActionOutcome{Status: &status, OutcomeKey: &outcomeKey, Events: []CampaignEventDraft{{EventType: "test.finished", Visibility: CampaignVisibilityPlayer}}}, nil
-			})
-		}
-		if _, err := finish(); err != nil {
-			t.Fatal(err)
-		}
-		if result, err := finish(); err != nil || !result.Replayed {
-			t.Fatalf("finish replay failed: %+v %v", result, err)
-		}
 		if err := db.First(&conversation, "id = ?", conversation.ID).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -141,6 +163,13 @@ func TestPostgresCampaignStagesAreAtomicUniqueAndIndependentOfRewind(t *testing.
 		}
 		if total != fullWant {
 			t.Fatalf("complete route %s paid %d", route, total)
+		}
+		view, err := NewChallengeRepository(db).Completion(context.Background(), conversation)
+		if err != nil || view == nil {
+			t.Fatalf("completion receipt: %+v %v", view, err)
+		}
+		if len(view.StageRewards) != 4 || view.StageRewardPoints != want || view.RewardPoints != fullWant-want || view.TotalRewardPoints != fullWant {
+			t.Fatalf("incorrect completion reward totals: %+v", view)
 		}
 		if err := db.Model(&CampaignStageReward{}).Where("campaign_id = ?", row.ID).Update("granted_points", 1).Error; err == nil {
 			t.Fatal("immutable claim changed")

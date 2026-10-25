@@ -88,7 +88,7 @@
     "completion_view": {
       "replay_label": "再次求生",
       "back_label": "返回玩法",
-      "empty_reward_text": "示例玩法暂不发放积分"
+      "empty_reward_text": "此结局不发放积分"
     },
     "terminology": {
       "challenge": "生存挑战",

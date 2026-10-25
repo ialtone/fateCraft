@@ -8,7 +8,7 @@ Campaign 模型动作结束存档后，当前相同 attempt/turn/revision 的提
 
 本文是 fateCraft 主叙事 Agent 的统一传输、协调、事务和恢复规范。设计与题材无关，适用于导入任何符合 Runtime Contract 的挑战或长期玩法。
 
-百年飞升劫的可信数值通过模块行动更新，普通状态工具仅操作声明为 model 的叙事字段；结局按模块终态结算。青河阶段积分属于已提交账号事实，改写不回滚，当前分支的任务证据仍需重新满足。模型步骤失败或余额刷新失败都不能触发重复发放。规则与验收见 [14](14-ascension-trial-gameplay.md)、[21](21-campaign-outcome-rewards.md) 和 [25](25-core-gameplay-validation.md)。
+百年飞升劫的可信数值通过模块行动更新，普通状态工具仅操作声明为 model 的叙事字段；结局按模块终态结算。青河阶段进度属于当前分支的可回档玩法状态，结算回执与账本在终局事务提交后不回档；当前分支的任务证据仍需重新满足。模型步骤失败或余额刷新失败都不能触发重复发放。规则与验收见 [14](14-ascension-trial-gameplay.md)、[21](21-campaign-outcome-rewards.md) 和 [25](25-core-gameplay-validation.md)。
 
 ## Agent 边界
 

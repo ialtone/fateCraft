@@ -1,0 +1,83 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "恢复基础 招纳弟子 建成大殿 完成派遣 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "restore-base",
+          "name": "恢复基础",
+          "order": 10,
+          "points": 75,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.facility_level_sum",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "key": "grow-sect",
+          "name": "完成关键建设或弟子目标",
+          "order": 20,
+          "points": 75,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "any",
+                "conditions": [
+                  {
+                    "type": "state_number",
+                    "path": "gameplay.disciple_count",
+                    "operator": "gte",
+                    "value": 4
+                  },
+                  {
+                    "type": "state_number",
+                    "path": "gameplay.facility_level_sum",
+                    "operator": "gte",
+                    "value": 3
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "key": "rebuild-milestone",
+          "name": "取得重建里程碑",
+          "order": 30,
+          "points": 100,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.successful_missions",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "rebuilt"
+      ],
+      "stage_cap": 250
+    }
+  }
+]

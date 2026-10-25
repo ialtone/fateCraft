@@ -25,6 +25,7 @@ import { useRewardStore } from '@/stores/rewards'
 import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import type { GuidanceItem } from '@/types'
 import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
+import { stageProgressNotice } from '@/lib/stage-rewards'
 
 const props = defineProps<{ convId: string; disabled: boolean }>()
 const chat = useChatStore()
@@ -280,7 +281,10 @@ function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown
     if (socket.writeBlocked) return null
     if (!(await ensureGameplayFresh(conv.id))) return null
     if (socket.writeBlocked || props.convId !== conv.id) return null
-    return playerActions.execute(conv.id, input)
+    const result = await playerActions.execute(conv.id, input)
+    const notice = stageProgressNotice(result?.stage_progress)
+    if (notice) message.success(`阶段已达成：${notice}，结束时统一结算`)
+    return result
   }
   const ending = conversations.endingState?.ending_capabilities.find(
     (cap) =>

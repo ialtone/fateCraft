@@ -30,7 +30,7 @@
       "category": "success",
       "title": "遗物重见天日",
       "tone": "success",
-      "reward_points": 0,
+      "reward_points": 150,
       "verifier_key": "core.conditions",
       "verifier_config": {
         "conditions": [
@@ -128,7 +128,7 @@
       }
     }
   ],
-  "quick_start_guide": "在壁画室研读方位图，再到祭台理解机关顺序。可以依线索解门，也可消耗工具冒险绕行。古印在深处，拿到后须返回墓口；留出足够照明、返程补给和负重。 示例结局积分为 0。",
+  "quick_start_guide": "在壁画室研读方位图，再到祭台理解机关顺序。可以依线索解门，也可消耗工具冒险绕行。古印在深处，拿到后须返回墓口；留出足够照明、返程补给和负重。 成功结局积分为 150 分；失败与主动终止为 0 分。",
   "features": [
     "关联线索",
     "机关绕行",

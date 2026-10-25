@@ -58,7 +58,16 @@ func loadRuntimeDomainContent(ctx context.Context, tx *gorm.DB, campaign Campaig
 	}
 	var err error
 	domain.OutcomeRewards, err = loadCampaignOutcomeRewards(ctx, tx, campaign)
-	return domain, err
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.WithContext(ctx).Where("campaign_id = ?", campaign.ID).Order("source_revision ASC, stage_key ASC").Find(&domain.StageProgress).Error; err != nil {
+		return nil, err
+	}
+	if err := tx.WithContext(ctx).Where("campaign_id = ?", campaign.ID).Order("created_at ASC, stage_key ASC").Find(&domain.StageRewards).Error; err != nil {
+		return nil, err
+	}
+	return domain, nil
 }
 
 func CampaignRuntimeInitialContent(ctx context.Context, tx *gorm.DB, campaign Campaign) (*CampaignDomainState, error) {

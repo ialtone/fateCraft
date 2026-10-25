@@ -3,7 +3,7 @@
 
 本次直接修改 `00001_init.sql`：`campaign_runtime_states` 保存纯模块的引擎、种子与状态；`campaign_checkpoints` 按回合保存完整 Campaign 可变事实；`module_action_commits` 以 `(conversation_id, branch_epoch, request_id)` 唯一记录玩家行动与结果，并带 `narrated_turn_id`/`narrated_at` 叙事消费标记（部分索引 `idx_module_action_commits_unnarrated` 支撑未消费查询）。`challenge_runtime_configs.narrative_guards` 保存玩法作者追加的受控叙事主张守则（数组，≤16 条）。`conversation_turns.trigger_type` 与 `conversation_generation_runs.operation_type` 均包含 `module_action`——面板动作提交后自动生成的动作结果叙事回合。`gameplay_definitions.kind` 使用稳定标识约束，由对应已安装模块验证语义，不再逐题材扩张数据库枚举。
 
-恢复在一个事务内按外键顺序重建领域表，校验固定内容与存档归属，推进 revision；不恢复账号余额、账本、奖励事实、种子或追加历史。模块领域校验由投影/行动边界继续执行。已执行旧基线的库不会自动更新；使用显式 Goose 和隔离 schema 验证。实现与未验项见[24](24-gameplay-module-architecture.md)及[验收记录](gameplay-modules/validation.md)。
+恢复在一个事务内按外键顺序重建领域表，校验固定内容与存档归属，推进 revision；不恢复账号余额、账本、结算回执、种子或追加历史（阶段进度属于领域状态，会随检查点恢复）。模块领域校验由投影/行动边界继续执行。已执行旧基线的库不会自动更新；使用显式 Goose 和隔离 schema 验证。实现与未验项见[24](24-gameplay-module-architecture.md)及[验收记录](gameplay-modules/validation.md)。
 
 ## 定位与初始化原则
 
@@ -36,7 +36,8 @@ users
   |     |-- campaign_events
   |     |-- campaign_action_commits
   |     |-- campaign_runtime_states / campaign_checkpoints
-  |     |-- campaign_stage_rewards（不随检查点恢复）
+  |     |-- campaign_stage_progress（随检查点恢复）
+  |     |-- campaign_stage_rewards（终局回执，不随检查点恢复）
   |     `-- conversations（唯一持续对话）
   |-- conversations
   |     |-- conversation_turns
@@ -53,6 +54,7 @@ users
   |     |     `-- character_inquiry_messages
   |     |-- context_build_logs
   |     |-- roll_history
+  |     |-- challenge_stage_rewards（单局阶段回执，不随分支改写撤回）
   |     `-- challenge_runs（每个对话至多一条）
   |             `-- challenge_run_rewards
   |-- player_reward_balances
@@ -66,7 +68,7 @@ challenge_packs
         `-- challenge_outcome_rules（含 reward_points）
 ~~~
 
-基线 migration 当前包含 67 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
+基线 migration 当前包含 68 张业务表，并为每张表提供 `COMMENT ON TABLE`。Goose 另行维护 `goose_db_version`。表注释用于数据库工具和后续维护，不代替本文的关系与事务说明。
 
 ## 认证与平台设置
 
@@ -265,13 +267,21 @@ Campaign 助手叙事在 `display_messages` 上额外保存 `campaign_revision`�
 
 幂等键、管理员请求 ID、`(player_id,reward_key,operation,source_type,source_id)` 分别唯一。返还关联改写消费，撤回只关联原管理员发放；每笔各最多处理一次，触发器验证用户、项目、金额、原操作与来源并拒绝账本 UPDATE/DELETE。余额、账本、原业务事实和必要管理审计共同提交。
 
-Campaign 来源为 `campaign_outcome`，source_id 为 Campaign ID，metadata 保存结局与固定版本。完成态据账本恢复积分；0 分保存于完成事实，不写零金额账本。参见 [21 终局积分](21-campaign-outcome-rewards.md)。
+Campaign 与单局挑战都使用账本，但来源不同：Campaign 终局为 `campaign_outcome`，source_id 为 Campaign ID，metadata 保存结局与固定版本；单局终局为 `challenge_run`，source_id 为 conversation ID 并以 `challenge_run_id` 指定结算记录。完成态据账本恢复积分；0 分保存于完成事实，不写零金额账本。参见 [21 终局积分](21-campaign-outcome-rewards.md)。
 
 ### `campaign_stage_rewards`
 
-阶段领取事实在 `00001_init.sql` 中定义，以 `(campaign_id, stage_key)` 唯一，记录名称、配置积分、实际积分、停发原因和游戏时间。UPDATE/DELETE 由触发器拒绝，Campaign 外键为 RESTRICT。实际正积分与配置相同；0 分和客户端直连也保存事实，分别记录 `zero_points` / `client_llm_route`，不写零金额账本。
+Campaign 阶段进度保存在 `campaign_stage_progress`，以 `(campaign_id, stage_key)` 唯一，只记录 `source_revision`、`source_game_time` 和 `created_at`；它属于当前分支的可变玩法状态，纳入 `campaignCheckpoints`、`CampaignStateHash` 与 capture/restore，回档时随分支恢复。单局进度保存在 `conversation_states.state._platform.stage_progress`，随 `state_revisions.after_state` 恢复；该平台保留区不接受模型、客户端或模块 patch 写入。
 
-领取与 Campaign 事件、revision、余额、账本及动作提交处于同一事务。正积分账本来源 `campaign_stage`，source_id 为 `CampaignID:stageKey`，与终局的 `campaign_outcome` / CampaignID 分开。事实不进入检查点；改写后重新满足当前分支前置也不会再次发放，历史领取不替代新分支的任务和胜利事实。规则与完整事务边界见 [21 阶段与终局积分](21-campaign-outcome-rewards.md)。
+`campaign_stage_rewards` 是终局才写入的阶段结算回执，以 `(campaign_id, stage_key)` 唯一，记录名称、配置积分、实际积分、停发原因和真实结算时间。UPDATE/DELETE 由触发器拒绝，Campaign 外键为 RESTRICT。实际正积分与配置相同；0 分和客户端直连也保存实际为 0 的回执，分别记录 `zero_points` / `client_llm_route`，不写零金额账本。
+
+回执与 Campaign 事件、revision、余额、账本及动作提交处于同一终局事务。正积分账本来源 `campaign_stage`，source_id 为 `CampaignID:stageKey`，与终局的 `campaign_outcome` / CampaignID 分开。回执不进入检查点；改写后进度可恢复到阶段之前，但已经写入的回执和账本不会撤回，同局不能再次领取。规则与完整事务边界见 [21 阶段与终局积分](21-campaign-outcome-rewards.md)。
+
+### `challenge_stage_rewards`
+
+单局阶段回执以 `(conversation_id, stage_key)` 唯一，通过复合外键绑定 `conversations(id, player_id, challenge_version_id)`，并以 `(conversation_id, source_turn_id)` 引用触发动作的回合。记录 `name_snapshot`、`sort_order`、`configured_points`、`granted_points`、`disabled_reason`、来源 `branch_epoch` / `turn_id` / `action_key` 与 `granted_at`；UPDATE/DELETE 由 `reject_reward_ledger_mutation()` 触发器拒绝，父对象外键均为 RESTRICT。实际正积分等于配置金额；客户端直连同样保存回执但 `granted_points=0`、`disabled_reason='client_llm_route'`，不写零金额账本。
+
+单局阶段回执只在终局结算写入，局中进度保存在 `_platform.stage_progress` 并随分支回档，因此回执只能作为账号事实展示，不能证明当前分支仍满足阶段条件。正积分账本来源 `challenge_stage`，source_id 为 `<conversation_id>:<stage_key>`，metadata 保存 `challenge_version_id`、`conversation_id`、`stage_key`、`stage_name`；幂等键为 `challenge-stage:<conversation_id>:<stage_key>`。回执与账本在同一终局事务提交，规则见 [21 阶段与终局积分](21-campaign-outcome-rewards.md)。
 
 ### 注册与兑换
 

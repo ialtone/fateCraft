@@ -463,5 +463,13 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 		sort.Strings(items)
 		orders = append(orders, map[string]any{"key": o.Key, "name": o.Name, "status": labels[s.Orders[o.Key]], "items": items, "income": o.Income, "penalty": o.Penalty, "remaining_minutes": max(0, o.Deadline-run.GameTime)})
 	}
-	return map[string]any{"cash": s.Stock["cash"], "debt": s.Debt, "revenue": s.Revenue, "goal_revenue": c.GoalRevenue, "delivered": delivered, "goal_orders": c.GoalOrders, "daily_expense": c.DailyExpense, "inventory": stock, "facilities": facilities, "jobs": jobs, "orders": orders, "game_time": run.GameTime, "deadline": c.Deadline, "goal": "升级目标设施，履约经营订单并偿清欠款", "outcome_key": run.OutcomeKey}, nil
+	return map[string]any{"cash": s.Stock["cash"], "debt": s.Debt, "revenue": s.Revenue, "goal_revenue": c.GoalRevenue, "delivered": delivered, "goal_orders": c.GoalOrders, "daily_expense": c.DailyExpense, "inventory": stock, "facilities": facilities, "jobs": jobs, "orders": orders, "game_time": run.GameTime, "deadline": c.Deadline, "goal": "升级目标设施，履约经营订单并偿清欠款", "outcome_key": run.OutcomeKey, "facility_level_sum": facilityLevelSum(c, s)}, nil
+}
+
+func facilityLevelSum(c Config, s State) int64 {
+	var total int64
+	for _, facility := range c.Facilities {
+		total += s.Facilities[facility.Key]
+	}
+	return total
 }

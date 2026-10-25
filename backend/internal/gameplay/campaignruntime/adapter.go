@@ -12,7 +12,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/storage"
 	"gorm.io/gorm"
 	"slices"
-	"sort"
+	"strings"
 )
 
 func decode[T any](value any) (T, error) {
@@ -32,24 +32,37 @@ func content(domain *storage.CampaignDomainState) (contract.Content, error) {
 	}
 	result := contract.Content{Runtime: runtime}
 	for _, d := range domain.Definitions {
-		result.Definitions = append(result.Definitions, contract.Definition{Kind: d.Kind, Key: d.Key, Name: d.Name, Content: d.Content, Tags: d.Tags, Visibility: d.Visibility, SortOrder: d.SortOrder})
+		definition := contract.Definition{Kind: d.Kind, Key: d.Key, Name: d.Name, Content: d.Content, Tags: d.Tags, Visibility: d.Visibility, SortOrder: d.SortOrder}
+		if contract.IsPlatformDefinitionKind(d.Kind) {
+			result.PlatformDefinitions = append(result.PlatformDefinitions, definition)
+			continue
+		}
+		result.Definitions = append(result.Definitions, definition)
 	}
-	sort.Slice(result.Definitions, func(i, j int) bool {
-		return result.Definitions[i].Kind+result.Definitions[i].Key < result.Definitions[j].Kind+result.Definitions[j].Key
-	})
+	sortDefinitions(result.Definitions)
+	sortDefinitions(result.PlatformDefinitions)
 	for _, o := range domain.Outcomes {
 		result.Outcomes = append(result.Outcomes, contract.Outcome{Key: o.OutcomeKey, Enabled: o.Enabled, Category: o.Category, RewardPoints: o.RewardPoints})
 	}
 	return result, nil
 }
 
-type adapter struct{ descriptor contract.ModuleDescriptor }
+func sortDefinitions(definitions []contract.Definition) {
+	slices.SortFunc(definitions, func(left, right contract.Definition) int {
+		return strings.Compare(left.Kind+left.Key, right.Kind+right.Key)
+	})
+}
 
-func Install(service *campaign.Service, descriptor contract.ModuleDescriptor) {
+type adapter struct {
+	descriptor contract.ModuleDescriptor
+	registry   *contract.Registry
+}
+
+func Install(service *campaign.Service, descriptor contract.ModuleDescriptor, registry *contract.Registry) {
 	if descriptor.Runtime == nil || !slices.Contains(descriptor.Modes, contract.RuntimeModeCampaign) {
 		return
 	}
-	a := adapter{descriptor: descriptor}
+	a := adapter{descriptor: descriptor, registry: registry}
 	service.RegisterInitializer(descriptor.CampaignLifecycleHandlers[0], a.initialize)
 	service.RegisterProjection(descriptor.CampaignProjectionHandlers[0], a)
 	for _, action := range descriptor.Runtime.Actions() {
@@ -157,6 +170,9 @@ func (a adapter) execute(ctx context.Context, input campaign.ActionExecution, ar
 		return storage.CampaignActionOutcome{}, err
 	}
 	outcome := storage.CampaignActionOutcome{GameTimeDelta: transition.State.GameTime - run.GameTime, Result: storage.JSONMap(transition.Result)}
+	if outcome.Result == nil {
+		outcome.Result = storage.JSONMap{}
+	}
 	for _, event := range transition.Events {
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{EventType: event.Kind, Visibility: event.Visibility, Payload: storage.JSONMap(event.Data)})
 	}
@@ -166,6 +182,35 @@ func (a adapter) execute(ctx context.Context, input campaign.ActionExecution, ar
 	for offset := 0; offset < len(transition.State.RandomEvidence); offset += 16 {
 		draws := transition.State.RandomEvidence[offset:min(offset+16, len(transition.State.RandomEvidence))]
 		outcome.Events = append(outcome.Events, storage.CampaignEventDraft{EventType: contract.CampaignModuleRandomEvent, Visibility: contract.VisibilityInternal, Payload: storage.JSONMap{"engine": rules.Runtime.Engine, "action": input.ActionKey, "revision": transition.State.Revision, "draws": draws}})
+	}
+	// Record milestones reached by this action on the current branch. Nothing
+	// is paid here; the receipt is written only when the run ends.
+	row := input.Campaign
+	row.Revision = transition.State.Revision
+	row.GameTime = transition.State.GameTime
+	progressRules, hasRules, err := contract.ParseProgressRewards(rules)
+	if err != nil {
+		return storage.CampaignActionOutcome{}, err
+	}
+	if hasRules {
+		reached, err := a.reachedStages(progressRules, rules, transition.State)
+		if err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
+		keys := make([]string, 0, len(reached))
+		for _, stage := range reached {
+			keys = append(keys, stage.Key)
+		}
+		added, _, err := store.RecordCampaignStageProgress(ctx, row, keys)
+		if err != nil {
+			return storage.CampaignActionOutcome{}, err
+		}
+		// Report only the milestones first recorded by this action so the
+		// player is not notified again on every later turn. The snapshot
+		// endpoint exposes the complete current branch progress.
+		views, pending := progressViews(progressRules, added, row.LLMRoute)
+		outcome.Result["stage_progress"] = views
+		outcome.Result["pending_stage_points"] = pending
 	}
 	if transition.State.Status != contract.RunActive {
 		status := storage.CampaignStatusCompleted
@@ -184,16 +229,71 @@ func (a adapter) execute(ctx context.Context, input campaign.ActionExecution, ar
 		}
 		outcome.Status = &status
 		outcome.OutcomeKey = &key
+		if hasRules {
+			grants := make([]storage.StageRewardGrant, 0, len(progressRules.Stages))
+			for _, stage := range contract.SortedProgressRewardStages(progressRules.Stages) {
+				grants = append(grants, storage.StageRewardGrant{Key: stage.Key, Name: stage.Name, SortOrder: stage.Order, Points: stage.Points})
+			}
+			rows, points, err := store.SettleCampaignStageRewards(ctx, row, grants)
+			if err != nil {
+				return storage.CampaignActionOutcome{}, err
+			}
+			outcome.Result["stage_progress"] = []storage.StageProgressView{}
+			outcome.Result["pending_stage_points"] = int64(0)
+			outcome.Result["stage_rewards"] = rows
+			outcome.Result["stage_reward_points"] = points
+		}
 		rewards, err := store.GrantCampaignOutcomeRewards(ctx, input.Campaign, key)
 		if err != nil {
 			return storage.CampaignActionOutcome{}, err
 		}
-		if outcome.Result == nil {
-			outcome.Result = storage.JSONMap{}
-		}
 		outcome.Result["outcome_rewards"] = rewards
 	}
 	return outcome, nil
+}
+
+// reachedStages verifies every configured milestone against the post-action
+// player projection. The projection is the same trusted view the player sees,
+// and its paths are the ones validated against field ownership at publication.
+func (a adapter) reachedStages(rules contract.ProgressRewards, content contract.Content, run contract.RunState) ([]contract.ProgressRewardStage, error) {
+	if a.registry == nil {
+		return nil, fmt.Errorf("Campaign 阶段核验缺少注册表")
+	}
+	view, err := kernel.Project(a.descriptor.Runtime, content, run, contract.AudiencePlayer)
+	if err != nil {
+		return nil, err
+	}
+	evidence := contract.Evidence{State: map[string]any{"gameplay": view}, Facts: map[string]any{"engine_key": content.Runtime.Engine.Key}}
+	reached := make([]contract.ProgressRewardStage, 0, len(rules.Stages))
+	for _, stage := range contract.SortedProgressRewardStages(rules.Stages) {
+		if err := a.registry.Verify(stage.VerifierKey, evidence, stage.VerifierConfig); err != nil {
+			continue
+		}
+		reached = append(reached, stage)
+	}
+	return reached, nil
+}
+
+func progressViews(rules contract.ProgressRewards, progress []storage.CampaignStageProgress, route string) ([]storage.StageProgressView, int64) {
+	byKey := make(map[string]contract.ProgressRewardStage, len(rules.Stages))
+	for _, stage := range rules.Stages {
+		byKey[stage.Key] = stage
+	}
+	views := make([]storage.StageProgressView, 0, len(progress))
+	var pending int64
+	for _, row := range progress {
+		stage, ok := byKey[row.StageKey]
+		if !ok {
+			continue
+		}
+		disabled := ""
+		if route == storage.LLMRouteClient {
+			disabled = storage.RewardsDisabledReasonClientRoute
+		}
+		views = append(views, storage.StageProgressView{StageKey: stage.Key, Name: stage.Name, SortOrder: stage.Order, ConfiguredPoints: stage.Points, ReachedAt: row.CreatedAt, DisabledReason: disabled})
+		pending += stage.Points
+	}
+	return views, pending
 }
 
 func (a adapter) project(input campaign.ProjectionContext, audience string) (map[string]any, error) {
@@ -208,10 +308,44 @@ func (a adapter) project(input campaign.ProjectionContext, audience string) (map
 	return map[string]any{"gameplay": view}, nil
 }
 func (a adapter) Snapshot(_ context.Context, input campaign.ProjectionContext) (map[string]any, error) {
-	return a.project(input, contract.AudiencePlayer)
+	view, err := a.project(input, contract.AudiencePlayer)
+	if err != nil {
+		return nil, err
+	}
+	return a.withProgress(view, input)
 }
 func (a adapter) Inquiry(_ context.Context, input campaign.ProjectionContext) (map[string]any, error) {
-	return a.project(input, contract.AudienceInquiry)
+	view, err := a.project(input, contract.AudienceInquiry)
+	if err != nil {
+		return nil, err
+	}
+	return a.withProgress(view, input)
+}
+
+// withProgress attaches the branch's unsettled milestones to the player view.
+// Ended Campaigns show receipts instead, so pending progress is emptied.
+func (a adapter) withProgress(view map[string]any, input campaign.ProjectionContext) (map[string]any, error) {
+	if view == nil {
+		view = map[string]any{}
+	}
+	views := []storage.StageProgressView{}
+	var pending int64
+	if input.Domain != nil && input.Campaign.Status == storage.CampaignStatusActive {
+		rulesContent, err := content(input.Domain)
+		if err != nil {
+			return nil, err
+		}
+		rules, found, err := contract.ParseProgressRewards(rulesContent)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			views, pending = progressViews(rules, input.Domain.StageProgress, input.Campaign.LLMRoute)
+		}
+	}
+	view["stage_progress"] = views
+	view["pending_stage_points"] = pending
+	return view, nil
 }
 func (a adapter) Context(_ context.Context, input campaign.ProjectionContext) (campaign.ProjectionView, error) {
 	view, err := a.project(input, contract.AudienceModel)

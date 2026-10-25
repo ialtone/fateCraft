@@ -318,6 +318,7 @@ type CampaignDomainState struct {
 	Encounters      []CampaignEncounter
 	OutcomeRewards  []CampaignOutcomeReward
 	StageRewards    []CampaignStageReward
+	StageProgress   []CampaignStageProgress
 	Definitions     map[string]GameplayDefinition
 }
 
@@ -722,9 +723,6 @@ func (s *CampaignActionStore) GrantCampaignOutcomeRewards(ctx context.Context, c
 	if outcome.RewardPoints == 0 {
 		return []CampaignOutcomeReward{}, nil
 	}
-	if capped, err := endingRewardCapped(ctx, s.tx, campaign.PlayerID, campaign.ChallengeVersionID, outcomeKey, campaign.ID.String()); err != nil || capped {
-		return []CampaignOutcomeReward{}, err
-	}
 	_, err := NewRewardRepository(s.tx).GrantInCurrentTx(ctx, RewardMutation{PlayerID: campaign.PlayerID, RewardKey: PointsKey, Quantity: outcome.RewardPoints, SourceType: "campaign_outcome", SourceID: campaign.ID.String(), IdempotencyKey: "campaign:" + campaign.ID.String() + ":points", Metadata: JSONMap{"outcome_key": outcomeKey, "challenge_version_id": campaign.ChallengeVersionID}})
 	if err != nil {
 		return nil, err
@@ -804,6 +802,9 @@ func loadCampaignDomainState(ctx context.Context, db *gorm.DB, campaign Campaign
 		}
 	}
 	if err := db.WithContext(ctx).Where("campaign_id = ?", campaign.ID).Order("created_at ASC, stage_key ASC").Find(&state.StageRewards).Error; err != nil {
+		return nil, err
+	}
+	if err := db.WithContext(ctx).Where("campaign_id = ?", campaign.ID).Order("source_revision ASC, stage_key ASC").Find(&state.StageProgress).Error; err != nil {
 		return nil, err
 	}
 	// Paid account rewards survive a story rewind, including when it restores

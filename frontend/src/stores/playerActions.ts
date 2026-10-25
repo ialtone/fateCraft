@@ -7,6 +7,7 @@ import { useConversationStore } from './conversations'
 import { useChatStore } from './chat'
 import { useCampaignStore } from './campaign'
 import { useConversationResources } from './conversationResources'
+import type { ConversationResource } from './conversationResources'
 import { useSocketStore } from './socket'
 import type { ModuleActionInput } from '@/types/module-actions'
 
@@ -73,13 +74,10 @@ export const usePlayerActionStore = defineStore('playerActions', () => {
       if (result.campaign) campaign.applyCampaign(result.campaign)
       const resources = useConversationResources()
       resources.enter(id)
-      const refreshed = await resources.refresh([
-        'state',
-        'messages',
-        'conversation',
-        'endings',
-        'rewards',
-      ])
+      // 局中只记录阶段进度，不改变账号余额；只有终局结算才需要刷新奖励。
+      const pendingRefresh: ConversationResource[] = ['state', 'messages', 'conversation', 'endings']
+      if (result.completion) pendingRefresh.push('rewards')
+      const refreshed = await resources.refresh(pendingRefresh)
       if (result.campaign) await resources.load('campaign').catch(() => {})
       if (result.campaign && scope.isCurrent(token)) {
         const latestBound = [...chat.messages]

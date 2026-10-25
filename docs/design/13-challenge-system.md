@@ -125,7 +125,7 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 
 纯内容玩法若能使用 `core.generic`，只需新增数据，不需要修改 Go。只有无法由受限通用条件安全表达的规则，才新增后端模块。
 
-定义类型、Schema 和内容校验归当前主模块；不再使用全局修仙类型枚举。发布会检查所有可选 Persona 的初始化、双方行动预览、三类投影和展示路径/控件，拒绝缺失必要行动与未知渲染器。初始空列表、时间和随机可行性仍需流程测试。默认初始化使用 `backend/data/bootstrap.json`；当前清单包含全部八类九个内置包；启动只补齐缺失包，不覆盖已有包或启用状态。
+定义类型、Schema 和内容校验归当前主模块；不再使用全局修仙类型枚举。平台另拥有 `challenge.progress_rewards` 这一跨模块 kind（仅 Challenge 模式），由平台注册 Schema、标签与预算元数据；它不会进入模块定义列表，模块也不能重复注册。发布会检查所有可选 Persona 的初始化、双方行动预览、三类投影和展示路径/控件，拒绝缺失必要行动与未知渲染器。初始空列表、时间和随机可行性仍需流程测试。默认初始化使用 `backend/data/bootstrap.json`；当前清单包含全部八类九个内置包；启动只补齐缺失包，不覆盖已有包或启用状态。
 
 ## 结局规则
 
@@ -154,9 +154,11 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 
 ## 结局积分
 
-每个 outcome 直接保存 `reward_points`，范围为 0–9007199254740991；省略视为 0。正整数在可信通关后自动进入 `fatecraft.points`，0 正常完成且不创建零金额流水。积分与局内财富、库存无换算关系。
+每个 outcome 直接保存 `reward_points`，范围为 0–9007199254740991；省略视为 0。只有 `category=success` 的结局可以为正，failure 与 neutral 必须为 0，发布校验强制执行。正整数在可信通关后自动进入 `fatecraft.points`，0 正常完成且不创建零金额流水。积分与局内财富、库存无换算关系；同一对话只结算一次，新建对话可以再次获得，平台不设时间窗口封顶。
 
-青河还通过版本定义 `cultivation.progress_rewards` 保存阶段规则和总预算，阶段积分随合法动作自动核验；后台明确区分终局积分与“阶段 + 终局”总额。阶段事实不随剧情回档，账号事务和实际收益字段见 [21](21-campaign-outcome-rewards.md)。单局与长期的当前规则及本地证据见 [14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[25](25-core-gameplay-validation.md)。
+青河还通过版本定义 `cultivation.progress_rewards` 保存阶段规则和总预算，阶段随合法动作记录进当前分支的 Campaign 进度；后台明确区分终局积分与“阶段 + 终局”总额。进度跟随分支回档，结算回执与账本不回档，实际收益字段见 [21](21-campaign-outcome-rewards.md)。
+
+Challenge 与 Campaign 共用平台定义 `challenge.progress_rewards`，青河保留领域定义。它声明阶段 key、名称、顺序、积分、verifier 与配置，以及用于发布期预算核对的 `outcome_keys` 和 `stage_cap`。发布校验拒绝重复定义、重复 key/order、未知或模块不允许的 verifier、非法状态路径与金额、非 success 结局带正积分，以及阶段总额超过最低正积分成功结局的 50%（`stage_cap` 必须正好等于该上限）；Campaign 还要求条件只引用玩家可见的存档投影字段。阶段在模块动作事务内、状态提交之后核验并记录进度，局中不写回执或账本；终局统一结算，正积分通过统一账本来源入账，失败结局仍结算已达成阶段。九包阶段配置与本地证据见 [21](21-campaign-outcome-rewards.md)、[14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[25](25-core-gameplay-validation.md)。
 
 账号只保留积分与剧情改写次数。玩家用积分兑换改写套餐，后台运营规则见 [22 奖励管理](22-reward-management-and-exchange.md)。Campaign 正积分结局必须由当前版本真实终局任务引用，任务核验、积分和存档完成同事务；详见 [21 终局积分](21-campaign-outcome-rewards.md)。
 
@@ -214,7 +216,7 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 - outcome key 唯一，category/tone 合法，verifier 已安装且配置有效；
 - 通用数值条件引用已声明的数值字段；
 - Prompt 明确引用每个 outcome key；
-- 每个结局积分是非负安全整数；
+- 每个结局积分是非负安全整数，且只有 success 结局可以为正；阶段定义满足平台预算上限；
 - 能力成本只引用积分或剧情改写次数，数量不越界；
 - 入口余额条件只引用两项固定 key，条件树不过深。
 

@@ -163,6 +163,36 @@ func TestFilterStateDropsUndeclaredValues(t *testing.T) {
 	}
 }
 
+// Stage progress lives in a platform-owned region that packs never declare.
+// Schema filtering must copy it through so a branch restore keeps its
+// milestones, while ordinary patches cannot write the region at all.
+func TestFilterStateKeepsPlatformProgress(t *testing.T) {
+	progress := []any{map[string]any{"stage_key": "first", "source_branch_epoch": int64(2)}}
+	filtered := FilterState(testSchema(), map[string]any{
+		"profile":        map[string]any{"name": "A"},
+		PlatformStateKey: map[string]any{"stage_progress": progress},
+	})
+	region, ok := filtered[PlatformStateKey].(map[string]any)
+	if !ok {
+		t.Fatalf("platform region dropped: %#v", filtered)
+	}
+	if entries, ok := region["stage_progress"].([]any); !ok || len(entries) != 1 {
+		t.Fatalf("progress dropped: %#v", region)
+	}
+	if err := ValidatePatch(testSchema(), storage.SourceAI, map[string]any{
+		PlatformStateKey + ".stage_progress": []any{map[string]any{"stage_key": "forged"}},
+	}); err == nil {
+		t.Fatal("model patch wrote the platform progress region")
+	}
+}
+
+func TestPlatformProgressRejectsPatchesEvenWithConflictingSchema(t *testing.T) {
+	schema := gameplay.StateSchema{Fields: []gameplay.StateField{{Path: PlatformStateKey, Type: "object", UpdatePolicy: gameplay.UpdateModel, AllowChildren: true}}}
+	if err := ValidatePatch(schema, storage.SourceAI, map[string]any{PlatformStateKey + ".stage_progress": []any{}}); err == nil {
+		t.Fatal("model overwrote platform progress through a pack schema")
+	}
+}
+
 func TestProjectPlayerRevisionDropsInternalState(t *testing.T) {
 	contract := gameplay.RuntimeContract{StateSchema: testSchema()}
 	revision := storage.StateRevision{

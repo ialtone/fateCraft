@@ -1,0 +1,71 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "探索哨塔 击败守卫 击败指挥官 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "scout-tower",
+          "name": "探索哨塔",
+          "order": 10,
+          "points": 30,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.visited_count",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          }
+        },
+        {
+          "key": "first-victory",
+          "name": "击败塔内守卫",
+          "order": 20,
+          "points": 30,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.defeated_count",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "key": "defeat-commander",
+          "name": "击败指挥官",
+          "order": 30,
+          "points": 40,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_equals",
+                "path": "gameplay.boss_defeated",
+                "value": true
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "cleared"
+      ],
+      "stage_cap": 100
+    }
+  }
+]

@@ -109,7 +109,7 @@ func TestPostgresFixedPointsSettlementIsAtomicAndOnce(t *testing.T) {
 	checkRewardBalance(t, db, player.ID, PointsKey, 100)
 }
 
-func TestPostgresEndingRewardCapPerPlayerPackAndOutcome(t *testing.T) {
+func TestPostgresEndingRewardsAreRepeatableAcrossSettlements(t *testing.T) {
 	db, _, _, player := rewardFixture(t)
 	ctx := context.Background()
 	pack, v1, v2 := uuid.New(), uuid.New(), uuid.New()
@@ -159,24 +159,24 @@ func TestPostgresEndingRewardCapPerPlayerPackAndOutcome(t *testing.T) {
 	if got := settle(v1, "end"); len(got) != 1 {
 		t.Fatalf("first clear must be rewarded: %+v", got)
 	}
-	if got := settle(v1, "end"); len(got) != 0 {
-		t.Fatalf("repeat clear must not be rewarded: %+v", got)
+	if got := settle(v1, "end"); len(got) != 1 {
+		t.Fatalf("repeat clear must be rewarded again: %+v", got)
 	}
 	if err := db.Exec(`UPDATE challenge_packs SET current_version_id = ? WHERE id = ?`, v2, pack).Error; err != nil {
 		t.Fatal(err)
 	}
-	if got := settle(v2, "end"); len(got) != 0 {
-		t.Fatalf("new version of the same pack must share the cap: %+v", got)
+	if got := settle(v2, "end"); len(got) != 1 {
+		t.Fatalf("a new version of the same pack must be rewarded: %+v", got)
 	}
 	if err := db.Exec(`UPDATE challenge_packs SET current_version_id = ? WHERE id = ?`, v1, pack).Error; err != nil {
 		t.Fatal(err)
 	}
 	if got := settle(v1, "other"); len(got) != 1 {
-		t.Fatalf("a different ending is capped separately: %+v", got)
+		t.Fatalf("a different ending must be rewarded: %+v", got)
 	}
-	checkRewardBalance(t, db, player.ID, PointsKey, 200)
-	var capped int64
-	if err := db.Model(&ChallengeRun{}).Where("player_id = ? AND settlement_detail->>'reward_points' = '0'", player.ID).Count(&capped).Error; err != nil || capped != 2 {
-		t.Fatalf("capped runs = %d err=%v", capped, err)
+	checkRewardBalance(t, db, player.ID, PointsKey, 400)
+	var zero int64
+	if err := db.Model(&ChallengeRun{}).Where("player_id = ? AND settlement_detail->>'reward_points' = '0'", player.ID).Count(&zero).Error; err != nil || zero != 0 {
+		t.Fatalf("zero-point runs = %d err=%v", zero, err)
 	}
 }

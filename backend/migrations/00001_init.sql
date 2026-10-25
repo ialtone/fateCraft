@@ -1672,6 +1672,16 @@ CREATE TRIGGER reward_exchange_ticket_entry_immutable BEFORE UPDATE OR DELETE ON
 CREATE TRIGGER reward_exchange_revision_immutable BEFORE UPDATE OR DELETE ON reward_exchange_revisions FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 CREATE TRIGGER registration_reward_revision_immutable BEFORE UPDATE OR DELETE ON registration_reward_rules FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 
+CREATE TABLE campaign_stage_progress (
+    campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
+    stage_key VARCHAR(64) NOT NULL CHECK (stage_key ~ '^[a-z][a-z0-9._-]{0,63}$'),
+    source_revision BIGINT NOT NULL CHECK (source_revision >= 0),
+    source_game_time BIGINT NOT NULL CHECK (source_game_time >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (campaign_id, stage_key)
+);
+COMMENT ON TABLE campaign_stage_progress IS '长期存档当前分支已达成但尚未结算的阶段进度；随剧情检查点回档，不是账号资产事实';
+
 CREATE TABLE campaign_stage_rewards (
     id UUID PRIMARY KEY,
     campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE RESTRICT,
@@ -1687,8 +1697,34 @@ CREATE TABLE campaign_stage_rewards (
         OR (disabled_reason = 'zero_points' AND configured_points = 0 AND granted_points = 0)
         OR (disabled_reason = 'client_llm_route' AND granted_points = 0))
 );
-COMMENT ON TABLE campaign_stage_rewards IS '账号级只追加阶段领奖事实，含零分和直连；不随剧情检查点回档';
+COMMENT ON TABLE campaign_stage_rewards IS '终局才写入的不可变阶段结算回执，含零分和直连；不随剧情检查点回档';
 CREATE TRIGGER campaign_stage_reward_immutable BEFORE UPDATE OR DELETE ON campaign_stage_rewards FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
+
+CREATE TABLE challenge_stage_rewards (
+    id UUID PRIMARY KEY,
+    conversation_id UUID NOT NULL,
+    player_id UUID NOT NULL,
+    challenge_version_id UUID NOT NULL,
+    stage_key VARCHAR(64) NOT NULL CHECK (stage_key ~ '^[a-z][a-z0-9._-]{0,63}$'),
+    name_snapshot VARCHAR(128) NOT NULL CHECK (btrim(name_snapshot) <> ''),
+    sort_order INTEGER NOT NULL CHECK (sort_order >= 0),
+    configured_points BIGINT NOT NULL CHECK (configured_points BETWEEN 1 AND 9007199254740991),
+    granted_points BIGINT NOT NULL CHECK (granted_points BETWEEN 0 AND 9007199254740991),
+    disabled_reason VARCHAR(64) NOT NULL DEFAULT '',
+    source_branch_epoch BIGINT NOT NULL CHECK (source_branch_epoch >= 0),
+    source_turn_id UUID NOT NULL,
+    source_action_key VARCHAR(128) NOT NULL,
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (conversation_id, stage_key),
+    FOREIGN KEY (conversation_id, player_id, challenge_version_id)
+        REFERENCES conversations(id, player_id, challenge_version_id) ON DELETE RESTRICT,
+    FOREIGN KEY (conversation_id, source_turn_id)
+        REFERENCES conversation_turns(conversation_id, id) ON DELETE RESTRICT,
+    CHECK ((disabled_reason = '' AND granted_points = configured_points AND granted_points > 0)
+        OR (disabled_reason = 'client_llm_route' AND granted_points = 0))
+);
+COMMENT ON TABLE challenge_stage_rewards IS '单局终局才写入的不可变阶段结算回执，含直连的零分记录，不随分支改写撤回';
+CREATE TRIGGER challenge_stage_reward_immutable BEFORE UPDATE OR DELETE ON challenge_stage_rewards FOR EACH ROW EXECUTE FUNCTION reject_reward_ledger_mutation();
 
 CREATE TABLE gameplay_imports (
     id UUID PRIMARY KEY,
@@ -1772,10 +1808,11 @@ BEGIN
         'campaign_item_instances','campaign_known_recipes','campaign_market_states','campaign_market_stocks',
         'campaign_location_discoveries','campaign_npcs','campaign_relationships','campaign_faction_standings',
         'campaign_scheduled_events','campaign_region_states','campaign_quests','campaign_encounters',
+        'campaign_stage_progress',
         'campaign_events','campaign_action_commits','campaign_stage_rewards','campaign_checkpoints',
-        'display_message_campaign_actions'
+        'challenge_stage_rewards','display_message_campaign_actions'
     ] LOOP
-        IF table_name IN ('conversation_generation_runs','campaign_events','campaign_action_commits','campaign_stage_rewards','challenge_runs','module_action_commits','roll_history','state_revisions') THEN
+        IF table_name IN ('conversation_generation_runs','campaign_events','campaign_action_commits','campaign_stage_rewards','challenge_stage_rewards','challenge_runs','module_action_commits','roll_history','state_revisions') THEN
             EXECUTE format('CREATE TRIGGER gameplay_write_guard BEFORE INSERT ON %I FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write()',table_name);
         ELSE
             EXECUTE format('CREATE TRIGGER gameplay_write_guard BEFORE INSERT OR UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION guard_gameplay_write()',table_name);

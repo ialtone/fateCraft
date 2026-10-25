@@ -72,5 +72,9 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 		successful += n
 	}
 	crisis := map[string]string{"pending": "尚未到来", "defended": "已守住", "fallen": "核心失守"}
-	return map[string]any{"goal": "达成设施与人数目标，培养至少一名二级传承弟子，完成派遣并守住宗门危机", "stock": stock, "facilities": facilities, "disciples": members, "tasks": tasks, "disciple_count": len(s.Disciples), "goal_disciples": c.GoalDisciples, "upkeep": int64(len(s.Disciples)) * c.Upkeep, "upkeep_resource": c.Resources[c.UpkeepResource], "defense": defense(c, s), "threat": c.Threat, "crisis": crisis[s.Crisis], "crisis_minutes": max(0, c.CrisisTime-run.GameTime), "successful_missions": successful, "failed_missions": s.Failures, "remaining_minutes": max(0, c.Deadline-run.GameTime), "outcome_key": run.OutcomeKey}, nil
+	facilityLevels := int64(0)
+	for _, f := range c.Facilities {
+		facilityLevels += s.Facilities[f.Key]
+	}
+	return map[string]any{"goal": "达成设施与人数目标，培养至少一名二级传承弟子，完成派遣并守住宗门危机", "stock": stock, "facilities": facilities, "disciples": members, "tasks": tasks, "disciple_count": len(s.Disciples), "goal_disciples": c.GoalDisciples, "upkeep": int64(len(s.Disciples)) * c.Upkeep, "upkeep_resource": c.Resources[c.UpkeepResource], "defense": defense(c, s), "threat": c.Threat, "crisis": crisis[s.Crisis], "crisis_minutes": max(0, c.CrisisTime-run.GameTime), "successful_missions": successful, "failed_missions": s.Failures, "facility_level_sum": facilityLevels, "remaining_minutes": max(0, c.Deadline-run.GameTime), "outcome_key": run.OutcomeKey}, nil
 }

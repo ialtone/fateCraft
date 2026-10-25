@@ -1,0 +1,73 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "倾听往事 回应关系事件 推进旧约 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "know-the-town",
+          "name": "倾听坊间往事",
+          "order": 10,
+          "points": 15,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.fact_count",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "key": "first-choice",
+          "name": "回应核心关系事件",
+          "order": 20,
+          "points": 15,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.event_choice_count",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "key": "advance-old-pact",
+          "name": "推进小镇旧约",
+          "order": 30,
+          "points": 20,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.event_choice_count",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "reunited",
+        "honest_distance"
+      ],
+      "stage_cap": 50
+    }
+  }
+]

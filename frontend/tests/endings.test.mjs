@@ -19,6 +19,7 @@ test('abandon confirmation accepts null metadata and executes only after confirm
     branch_epoch: 0,
     revision: 3,
     is_processing: false,
+	stage_progress: [{ stage_key: 'first', name: '初试', configured_points: 25 }],
     abandon_action: 'campaign.abandon',
     ending_capabilities: [{ key: 'campaign.abandon', available: true, metadata: null }],
   }
@@ -52,7 +53,8 @@ test('abandon confirmation accepts null metadata and executes only after confirm
   assert.equal(popup.positiveText, '确认放弃')
   assert.equal(popup.negativeText, '继续游玩')
   assert.equal(popup.style.maxWidth, '520px')
-  assert.match(popup.content, /阶段积分会保留/)
+  assert.match(popup.content, /已达成的阶段会按结算规则发放/)
+  assert.match(popup.content, /初试：25 积分/)
   assert.doesNotMatch(popup.content, /后端|校验/)
   assert.equal(calls.length, 0)
   await popup.onPositiveClick()

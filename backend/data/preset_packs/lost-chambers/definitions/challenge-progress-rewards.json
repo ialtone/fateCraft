@@ -1,0 +1,72 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "深入墓道 解除机关 取得墓印 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "enter-depths",
+          "name": "深入墓道",
+          "order": 10,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.visited_count",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          }
+        },
+        {
+          "key": "solve-trap",
+          "name": "解除关键机关",
+          "order": 20,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.resolved_count",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "key": "take-seal",
+          "name": "取得墓印",
+          "order": 30,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.goal_items",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "recovered"
+      ],
+      "stage_cap": 75
+    }
+  }
+]

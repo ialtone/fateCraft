@@ -32,6 +32,49 @@ test('module-described reward budget includes stages exactly once for each endin
   assert.equal(outcomeRewardBudgets(definitions, schemas, 'a', 700)[0].valid, false)
 })
 
+test('single-run stage budget uses a cap instead of a fixed total', () => {
+  const schemas = {
+    challenge: {
+      'x-reward-budget': {
+        stages: 'stages',
+        points: 'points',
+        outcomes: 'outcomes',
+        cap: 'stage_cap',
+      },
+    },
+  }
+  const definitions = [
+    {
+      kind: 'challenge',
+      content: {
+        stages: [{ points: 25 }, { points: 25 }, { points: 25 }],
+        outcomes: ['ascend'],
+        stage_cap: 75,
+      },
+    },
+  ]
+  const [budget] = outcomeRewardBudgets(definitions, schemas, 'ascend', 150)
+  assert.equal(budget.valid, true)
+  assert.match(budget.text, /阶段 75 积分/)
+  assert.match(budget.text, /终局 150 积分单独结算/)
+
+  // The cap is not derived from the terminal payout at runtime; it is a fixed
+  // single-run ceiling, so every success route validates against the same cap.
+  assert.equal(outcomeRewardBudgets(definitions, schemas, 'ascend', 700)[0].valid, true)
+  assert.deepEqual(outcomeRewardBudgets(definitions, schemas, 'other', 150), [])
+
+  definitions[0].content.stage_cap = 50
+  assert.equal(outcomeRewardBudgets(definitions, schemas, 'ascend', 150)[0].valid, false)
+
+  // Malformed or missing configuration must be reported, never treated as valid.
+  definitions[0].content.stage_cap = '75'
+  assert.equal(outcomeRewardBudgets(definitions, schemas, 'ascend', 150)[0].valid, false)
+  definitions[0].content.stages = 'nope'
+  assert.deepEqual(outcomeRewardBudgets(definitions, schemas, 'ascend', 150), [
+    { text: '阶段积分配置不完整', valid: false },
+  ])
+})
+
 test('an old result cannot update a reopened conversation with the same ID', () => {
   const scope = createActionScope()
   scope.enter('first')

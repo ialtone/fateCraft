@@ -1,4 +1,5 @@
 import type { Campaign, ChallengeRunReward, NarrativeActionResult } from './api'
+import type { StageProgress, StageReward } from './endings'
 
 export interface RuleSchema {
   type: 'object' | 'array' | 'string' | 'integer' | 'number' | 'boolean'
@@ -79,4 +80,12 @@ export interface ModuleActionResult {
     rewards: ChallengeRunReward[]
     rewards_disabled_reason?: string
   }
+  /** 当前分支已达成、尚未结算的阶段；局中不增加余额。 */
+  stage_progress?: StageProgress[]
+  /** 上述阶段的预期积分合计。 */
+  pending_stage_points?: number
+  /** 本次动作执行终局结算时返回的阶段回执。 */
+  stage_rewards?: StageReward[]
+  /** 本次终局结算实际新增的阶段积分。 */
+  stage_reward_points?: number
 }

@@ -582,10 +582,17 @@ func TestBundledCultivationPacksSharePublicSettingRules(t *testing.T) {
 	}
 
 	campaignRealms := realmDefinitionsByRank(campaign.document.Definitions)
-	if len(trial.document.Definitions) != 1 {
+	var trialRuleDefinition *storage.GameplayDefinition
+	for i := range trial.document.Definitions {
+		if trial.document.Definitions[i].Kind == "cultivation.trial_rules" {
+			trialRuleDefinition = &trial.document.Definitions[i]
+			break
+		}
+	}
+	if trialRuleDefinition == nil {
 		t.Fatal("trial rule singleton missing")
 	}
-	trialRealms, ok := trial.document.Definitions[0].Content["realms"].([]any)
+	trialRealms, ok := trialRuleDefinition.Content["realms"].([]any)
 	if !ok || len(trialRealms) != len(campaignRealms) {
 		t.Fatal("realm catalogues differ in length")
 	}

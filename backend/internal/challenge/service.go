@@ -722,19 +722,16 @@ func (s *Service) Settle(ctx context.Context, in SettlementInput) (*SettlementRe
 	if in.SettledAt.IsZero() {
 		in.SettledAt = time.Now()
 	}
-	var settled storage.ChallengeRun
-	var rewards []storage.ChallengeRunReward
-	var settledOutcome OutcomeView
-	var disabledReason string
+	var result *SettlementResult
 	err := s.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
 		var err error
-		settled, rewards, settledOutcome, disabledReason, err = s.settleInRepo(ctx, tx, in)
+		result, err = s.settleInRepo(ctx, tx, in)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &SettlementResult{Run: settled, Outcome: settledOutcome, Rewards: rewards, RewardsDisabledReason: disabledReason}, nil
+	return result, nil
 }
 
 // SettleWithRepository runs settlement on a repository bound to an existing
@@ -743,27 +740,44 @@ func (s *Service) SettleWithRepository(ctx context.Context, repo *storage.Challe
 	if repo == nil {
 		return nil, errors.New("结算事务仓库未配置")
 	}
-	if err := validateSettlementInput(in); err != nil {
-		return nil, err
-	}
-	settled, rewards, outcome, disabledReason, err := s.settleInRepo(ctx, repo, in)
-	if err != nil {
-		return nil, err
-	}
-	return &SettlementResult{Run: settled, Outcome: outcome, Rewards: rewards, RewardsDisabledReason: disabledReason}, nil
+	return s.settleInRepo(ctx, repo, in)
 }
 
-func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeRepository, in SettlementInput) (storage.ChallengeRun, []storage.ChallengeRunReward, OutcomeView, string, error) {
+func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeRepository, in SettlementInput) (*SettlementResult, error) {
 	if err := validateSettlementInput(in); err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
+		return nil, err
 	}
 	conv, err := tx.LockConversation(ctx, in.ConversationID)
 	if err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
+		return nil, err
 	}
 	evaluation, err := s.evaluateSettlement(ctx, tx, conv, in)
 	if err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
+		return nil, err
+	}
+	// Record progress reached by the final action before turning it into
+	// receipts, so a milestone reached in the same action as the ending is not
+	// lost.
+	content, err := moduleContentForVersion(ctx, tx, conv.ChallengeVersionID)
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := s.recordStageRewards(ctx, tx, conv, content, in.TrustedState, in.OutcomeKey); err != nil {
+		return nil, err
+	}
+	progress, err := s.loadStageProgress(ctx, tx, conv, in.TrustedState)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := stageGrantsForProgress(content, progress)
+	if err != nil {
+		return nil, err
+	}
+	// Stage receipts and their ledger entries are written before the terminal
+	// reward so balance snapshots follow the real posting order.
+	stageRows, stagePoints, err := tx.SettleStageRewards(ctx, *conv, grants)
+	if err != nil {
+		return nil, err
 	}
 	// client 路由：照常校验结局、写 challenge_runs 并结束对话，但跳过全部奖励授予。
 	rewardsDisabledReason := ""
@@ -792,9 +806,13 @@ func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeReposit
 	}
 	rewards, err := tx.CompleteRun(ctx, conv, &settled, evaluation.points)
 	if err != nil {
-		return storage.ChallengeRun{}, nil, OutcomeView{}, "", err
+		return nil, err
 	}
-	return settled, rewards, settledOutcome, rewardsDisabledReason, nil
+	return &SettlementResult{
+		Run: settled, Outcome: settledOutcome, Rewards: rewards, RewardsDisabledReason: rewardsDisabledReason,
+		StageRewards: stageRows, StageRewardPoints: stagePoints,
+		TotalRewardPoints: stagePoints + storage.TerminalRunRewardPoints(rewards),
+	}, nil
 }
 
 func validateSettlementInput(in SettlementInput) error {
@@ -1022,6 +1040,9 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 		}
 		if outcome.Category != "success" && outcome.Category != "failure" && outcome.Category != "neutral" {
 			return fmt.Errorf("%w: 结局 %s 的 category 无效", ErrInvalidChallenge, outcome.OutcomeKey)
+		}
+		if outcome.Category != "success" && outcome.RewardPoints != 0 {
+			return fmt.Errorf("%w: 非成功结局 %s 的积分必须为 0", ErrInvalidChallenge, outcome.OutcomeKey)
 		}
 		if outcome.Tone != "success" && outcome.Tone != "error" && outcome.Tone != "warning" && outcome.Tone != "info" {
 			return fmt.Errorf("%w: 结局 %s 的 tone 无效", ErrInvalidChallenge, outcome.OutcomeKey)

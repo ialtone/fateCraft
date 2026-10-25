@@ -23,6 +23,7 @@ var campaignCheckpointTables = []string{
 	"campaign_market_states", "campaign_market_stocks", "campaign_location_discoveries",
 	"campaign_npcs", "campaign_relationships", "campaign_faction_standings",
 	"campaign_scheduled_events", "campaign_region_states", "campaign_quests", "campaign_encounters",
+	"campaign_stage_progress",
 }
 
 type campaignCheckpointData struct {

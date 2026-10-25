@@ -792,6 +792,15 @@ func (s *Service) snapshot(ctx context.Context, id uuid.UUID, inquiry bool) (map
 		}
 	}
 	snapshot["campaign"] = *row
+	// Module projections may publish branch-scoped milestone progress. Packs
+	// without stage rules simply have none; both fields are always present so
+	// clients never confuse "no progress" with "unknown".
+	if _, exists := snapshot["stage_progress"]; !exists {
+		snapshot["stage_progress"] = []storage.StageProgressView{}
+	}
+	if _, exists := snapshot["pending_stage_points"]; !exists {
+		snapshot["pending_stage_points"] = int64(0)
+	}
 	if row.OutcomeKey != "" {
 		for _, outcome := range domain.Outcomes {
 			if outcome.OutcomeKey == row.OutcomeKey && outcome.Enabled {

@@ -29,7 +29,7 @@
       "category": "success",
       "title": "客栈兴旺",
       "tone": "success",
-      "reward_points": 0,
+      "reward_points": 300,
       "verifier_key": "core.always",
       "verifier_config": {}
     },
@@ -61,7 +61,7 @@
       "verifier_config": {}
     }
   ],
-  "quick_start_guide": "先建厨房和客房，升级客房后安排餐食与住宿服务生产。承接订单前检查截止时间；生产需推进游戏时间。最后亲自确认经营目标。示例积分为 0。",
+  "quick_start_guide": "先建厨房和客房，升级客房后安排餐食与住宿服务生产。承接订单前检查截止时间；生产需推进游戏时间。最后亲自确认经营目标。成功结局积分为 300 分；失败与主动终止为 0 分。",
   "features": [
     "关联生产链",
     "设施升级",

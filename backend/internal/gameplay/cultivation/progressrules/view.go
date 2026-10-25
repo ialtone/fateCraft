@@ -54,9 +54,14 @@ func Views(state *storage.CampaignDomainState) ([]map[string]any, error) {
 			parts = append(parts, "战胜"+encounter.Name)
 		}
 		status := "尚未达成"
+		for _, entry := range state.StageProgress {
+			if entry.StageKey == stage.Key {
+				status = fmt.Sprintf("已达成 · 结束时结算 %d 积分", stage.Points)
+			}
+		}
 		for _, claim := range state.StageRewards {
 			if claim.StageKey == stage.Key {
-				status = fmt.Sprintf("已记录 · 到账 %d 积分", claim.GrantedPoints)
+				status = fmt.Sprintf("已结算 · 到账 %d 积分", claim.GrantedPoints)
 				if claim.DisabledReason == storage.RewardsDisabledReasonClientRoute {
 					status += "（客户端直连）"
 				}

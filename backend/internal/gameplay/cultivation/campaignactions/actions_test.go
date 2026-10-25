@@ -32,6 +32,7 @@ type actionStoreStub struct {
 	quests        map[string]*storage.CampaignQuest
 	encounters    map[uuid.UUID]*storage.CampaignEncounter
 	stageRewards  map[string]*storage.CampaignStageReward
+	stageProgress map[string]*storage.CampaignStageProgress
 	stageGranted  int64
 }
 
@@ -352,6 +353,45 @@ func (s *actionStoreStub) GrantCampaignStageReward(_ context.Context, c storage.
 	s.stageRewards[key] = row
 	s.stageGranted += row.GrantedPoints
 	return row, true, nil
+}
+
+func (s *actionStoreStub) RecordCampaignStageProgress(_ context.Context, c storage.Campaign, keys []string) ([]storage.CampaignStageProgress, []storage.CampaignStageProgress, error) {
+	if s.stageProgress == nil {
+		s.stageProgress = map[string]*storage.CampaignStageProgress{}
+	}
+	added := []storage.CampaignStageProgress{}
+	for _, key := range keys {
+		if _, exists := s.stageProgress[key]; exists {
+			continue
+		}
+		row := &storage.CampaignStageProgress{CampaignID: c.ID, StageKey: key, SourceRevision: c.Revision, SourceGameTime: c.GameTime}
+		s.stageProgress[key] = row
+		added = append(added, *row)
+	}
+	all := []storage.CampaignStageProgress{}
+	for _, row := range s.stageProgress {
+		all = append(all, *row)
+	}
+	return added, all, nil
+}
+
+func (s *actionStoreStub) SettleCampaignStageRewards(ctx context.Context, c storage.Campaign, grants []storage.StageRewardGrant) ([]storage.CampaignStageReward, int64, error) {
+	rows := []storage.CampaignStageReward{}
+	var points int64
+	for _, grant := range grants {
+		if _, exists := s.stageProgress[grant.Key]; !exists {
+			continue
+		}
+		row, applied, err := s.GrantCampaignStageReward(ctx, c, grant.Key, grant.Name, grant.Points)
+		if err != nil {
+			return nil, 0, err
+		}
+		if applied {
+			rows = append(rows, *row)
+			points += row.GrantedPoints
+		}
+	}
+	return rows, points, nil
 }
 
 func newActionStore() *actionStoreStub {

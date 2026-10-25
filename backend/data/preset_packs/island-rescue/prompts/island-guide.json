@@ -30,7 +30,7 @@
       "preset_id": "island-guide",
       "key": "settlement_security",
       "role": "system",
-      "content": "结局只接受可信模块动作产生的终态：rescued 为获救，perished 为生存条件耗尽，timeout 为错过期限，abandoned 为主动放弃。不允许通过状态工具、正文或自行填写奖励取得结算资格。失败与成功均由服务端核验，示例不发放积分。",
+      "content": "结局只接受可信模块动作产生的终态：rescued 为获救，perished 为生存条件耗尽，timeout 为错过期限，abandoned 为主动放弃。不允许通过状态工具、正文或自行填写奖励取得结算资格。失败与成功均由服务端核验；只有获救结局发放账号积分，其余结局为 0。",
       "enabled": true,
       "required": true,
       "priority": 90,

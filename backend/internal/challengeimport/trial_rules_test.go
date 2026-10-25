@@ -22,7 +22,7 @@ func TestTrialPublicationRejectsBypassesAndBrokenOrigins(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			config := loaded.document.Definitions[0].Content
+			config := trialRulesContent(t, loaded.document.Definitions)
 			switch variant {
 			case "old-engine":
 				runtime.Engine.Version = 1
@@ -91,4 +91,17 @@ func TestTrialProtectedFactsAndModelSettlementCannotBeForged(t *testing.T) {
 			t.Fatalf("fresh birth qualifies for %s", o.OutcomeKey)
 		}
 	}
+}
+
+// trialRulesContent returns the module-owned trial rules. Platform definitions
+// share the same catalog, so tests must look the kind up instead of index 0.
+func trialRulesContent(t *testing.T, definitions []storage.GameplayDefinition) map[string]any {
+	t.Helper()
+	for _, definition := range definitions {
+		if definition.Kind == "cultivation.trial_rules" {
+			return definition.Content
+		}
+	}
+	t.Fatal("trial rule definition missing")
+	return nil
 }

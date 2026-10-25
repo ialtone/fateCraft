@@ -153,6 +153,14 @@ function showCompletion(completion: CompletionInfo) {
     (reward) =>
       `${reward.name}：${reward.quantity.toLocaleString()} ${reward.unit}（余额 ${reward.balance_after.toLocaleString()}）`,
   )
+  const stageLines = completion.stageRewards.map((stage) => {
+    if (stage.granted_points > 0) return `${stage.name}：+${stage.granted_points} 积分`
+    return `${stage.name}：0 积分${stage.disabled_reason === 'client_llm_route' ? '（客户端直连）' : ''}`
+  })
+  const totalLine =
+    completion.stageRewardPoints > 0 || completion.rewardPoints > 0
+      ? `阶段 ${completion.stageRewardPoints} + 终局 ${completion.rewardPoints} = 合计 ${completion.totalRewardPoints} 积分`
+      : ''
   const metricLines = completion.metrics.map(
     (metric) => `${metric.label}：${String(metric.value)}${metric.unit ? ` ${metric.unit}` : ''}`,
   )
@@ -162,11 +170,13 @@ function showCompletion(completion: CompletionInfo) {
   const details = [
     completion.summary,
     chronicleLines.length ? `本世经历\n${chronicleLines.join('\n')}` : '',
+    stageLines.length ? `阶段结算\n${stageLines.join('\n')}` : '',
     completion.rewardsDisabledReason
       ? '客户端直连模式不发放奖励'
       : rewardLines.length
         ? `获得奖励\n${rewardLines.join('\n')}`
         : '本次获得 0 积分',
+    totalLine,
     metricLines.length ? metricLines.join('\n') : '',
   ].filter(Boolean)
   const replay = completion.nextActions.includes('replay')
@@ -301,17 +311,24 @@ function confirmEnding(
     arguments: arguments_,
   }
   const abandoning = key === snapshot.abandon_action
+  const pendingStages = snapshot.stage_progress ?? []
+  const pendingLine = pendingStages.length
+    ? `已达成阶段（结束时结算）\n${pendingStages
+        .map((stage) => `${stage.name}：${stage.configured_points} 积分`)
+        .join('\n')}`
+    : ''
   showEndingDialog('failure', {
     title: abandoning ? '确认放弃本局' : label,
     content: [
       abandoning
         ? '这段旅程将在此结束。确认放弃后，将显示本局结局，无法继续游玩。'
         : capability.description,
+      pendingLine,
       costs,
       metadata?.minutes ? `耗时 ${metadata.minutes} 分钟` : '',
       metadata?.risk,
       abandoning
-        ? '已获得的阶段积分会保留，本次放弃不额外获得通关积分。'
+        ? '已达成的阶段会按结算规则发放，本次放弃不额外获得通关积分。'
         : '确认后将结束本局，无法继续游玩。结局与积分以最终结算为准。',
     ]
       .filter(Boolean)

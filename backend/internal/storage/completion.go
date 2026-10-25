@@ -29,6 +29,13 @@ type CompletionView struct {
 	Metrics               []CompletionMetric `json:"metrics"`
 	NextActions           []string           `json:"next_actions"`
 	RewardsDisabledReason string             `json:"rewards_disabled_reason,omitempty"`
+	// StageRewards are the conversation's stage facts; StageRewardPoints is
+	// their actual total. RewardPoints is only the terminal account points and
+	// TotalRewardPoints is the sum of both. Clients must not add Rewards again.
+	StageRewards      []ChallengeStageReward `json:"stage_rewards"`
+	StageRewardPoints int64                  `json:"stage_reward_points"`
+	RewardPoints      int64                  `json:"reward_points"`
+	TotalRewardPoints int64                  `json:"total_reward_points"`
 }
 
 type CompletionReward struct {
@@ -47,7 +54,52 @@ type CompletionMetric struct {
 }
 
 func NewCompletion(conv Conversation, revision int64, identity string, outcome ChallengeOutcomeRule) *CompletionView {
-	return &CompletionView{ID: fmt.Sprintf("%s/%d/%d", identity, conv.BranchEpoch, revision), ConversationID: conv.ID, BranchEpoch: conv.BranchEpoch, Revision: revision, Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title, Tone: outcome.Tone, Summary: "本局已按可信玩法规则结束。", Chronicle: []string{}, Rewards: []CompletionReward{}, Metrics: []CompletionMetric{}, NextActions: []string{"replay", "back_to_challenges"}}
+	return &CompletionView{ID: fmt.Sprintf("%s/%d/%d", identity, conv.BranchEpoch, revision), ConversationID: conv.ID, BranchEpoch: conv.BranchEpoch, Revision: revision, Key: outcome.OutcomeKey, Category: outcome.Category, Title: outcome.Title, Tone: outcome.Tone, Summary: "本局已按可信玩法规则结束。", Chronicle: []string{}, Rewards: []CompletionReward{}, StageRewards: []ChallengeStageReward{}, Metrics: []CompletionMetric{}, NextActions: []string{"replay", "back_to_challenges"}}
+}
+
+// TerminalRewardPoints sums the terminal account points already present in the
+// receipt. Stage points are tracked separately and must not be added twice.
+func TerminalRewardPoints(rewards []CompletionReward) int64 {
+	var total int64
+	for _, reward := range rewards {
+		if reward.RewardKey == PointsKey {
+			total += reward.Quantity
+		}
+	}
+	return total
+}
+
+// TerminalRunRewardPoints is TerminalRewardPoints for the run-reward rows
+// created by final settlement.
+func TerminalRunRewardPoints(rewards []ChallengeRunReward) int64 {
+	var total int64
+	for _, reward := range rewards {
+		if reward.RewardKeySnapshot == PointsKey {
+			total += reward.Quantity
+		}
+	}
+	return total
+}
+
+// FillStageRewards attaches the conversation's immutable stage facts and the
+// derived totals to a completion receipt being assembled inside the settling
+// transaction. It never re-verifies or grants anything.
+func (r *ChallengeRepository) FillStageRewards(ctx context.Context, view *CompletionView) error {
+	if view == nil {
+		return nil
+	}
+	rows, err := r.StageRewards(ctx, view.ConversationID)
+	if err != nil {
+		return err
+	}
+	var stagePoints int64
+	for _, row := range rows {
+		stagePoints += row.GrantedPoints
+	}
+	view.StageRewards = rows
+	view.StageRewardPoints = stagePoints
+	view.TotalRewardPoints = view.RewardPoints + stagePoints
+	return nil
 }
 
 func CompletionFromResult(result JSONMap) *CompletionView {
@@ -116,7 +168,7 @@ func (s *CampaignActionStore) CampaignCompletion(ctx context.Context, row Campai
 	}
 	view := NewCompletion(conv, row.Revision, "campaign:"+row.ID.String()+":"+actionID, outcome)
 	if row.Status == CampaignStatusAbandoned {
-		view.Summary = "玩家主动终止本局；保留此前已到账的阶段积分，不发放终局积分。"
+		view.Summary = "玩家主动终止本局；结算已达成的阶段积分，不发放终局积分。"
 	}
 	if row.LLMRoute == LLMRouteClient {
 		view.RewardsDisabledReason = RewardsDisabledReasonClientRoute
@@ -130,11 +182,19 @@ func (s *CampaignActionStore) CampaignCompletion(ctx context.Context, row Campai
 			view.Rewards = append(view.Rewards, CompletionReward{RewardKey: reward.Key, Name: reward.Name, Unit: reward.Unit, Icon: reward.Icon, Quantity: reward.Quantity, BalanceAfter: reward.Balance})
 		}
 	}
-	var stagePoints int64
-	if err := s.tx.WithContext(ctx).Raw("SELECT COALESCE(SUM(granted_points),0) FROM campaign_stage_rewards WHERE campaign_id=?", row.ID).Scan(&stagePoints).Error; err != nil {
+	stages, err := NewChallengeRepository(s.tx).ConversationStageRewards(ctx, conv)
+	if err != nil {
 		return nil, err
 	}
-	view.Metrics = append(view.Metrics, CompletionMetric{Label: "已到账阶段积分（保留）", Value: stagePoints, Unit: "积分"})
+	var stagePoints int64
+	for _, stage := range stages {
+		stagePoints += stage.GrantedPoints
+	}
+	view.StageRewards = stages
+	view.StageRewardPoints = stagePoints
+	view.RewardPoints = TerminalRewardPoints(view.Rewards)
+	view.TotalRewardPoints = view.RewardPoints + stagePoints
+	view.Metrics = append(view.Metrics, CompletionMetric{Label: "已结算阶段积分", Value: stagePoints, Unit: "积分"})
 	if state, stateErr := s.DomainState(ctx, row); stateErr == nil && state != nil {
 		view.Chronicle = campaignLifeChronicle(state, row, outcome, stagePoints)
 		view.Summary = campaignCompletionSummary(state, row, outcome, stagePoints)
@@ -209,7 +269,7 @@ func campaignCompletionSummary(state *CampaignDomainState, row Campaign, outcome
 	realm := realmStageName(state, character.RealmKey, character.StageKey)
 	switch {
 	case row.Status == CampaignStatusAbandoned:
-		return fmt.Sprintf("玩家主动终止本世，止步于%s，保留阶段积分 %d 分。", realm, stagePoints)
+		return fmt.Sprintf("玩家主动终止本世，止步于%s，结算阶段积分 %d 分。", realm, stagePoints)
 	case outcome.OutcomeKey == "lifespan_exhausted":
 		return fmt.Sprintf("本世寿元耗尽，止步于%s。", realm)
 	case row.Status == CampaignStatusDead:

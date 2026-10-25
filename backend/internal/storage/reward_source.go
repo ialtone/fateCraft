@@ -25,7 +25,7 @@ type GameplayRewardSource struct {
 }
 
 func (r *RewardRepository) gameplayRewardSource(ctx context.Context, in *RewardMutation) error {
-	if in.SourceType != "challenge_run" && in.SourceType != "campaign_stage" && in.SourceType != "campaign_outcome" {
+	if in.SourceType != "challenge_run" && in.SourceType != "campaign_stage" && in.SourceType != "campaign_outcome" && in.SourceType != "challenge_stage" {
 		return nil
 	}
 	versionID, err := uuid.Parse(fmt.Sprint(in.Metadata["challenge_version_id"]))
@@ -66,6 +66,23 @@ func (r *RewardRepository) gameplayRewardSource(ctx context.Context, in *RewardM
 		snapshot.ConversationID = &run.ConversationID
 		snapshot.OutcomeKey = run.OutcomeKey
 		snapshot.OutcomeTitle = run.TitleSnapshot
+	} else if in.SourceType == "challenge_stage" {
+		// Single-run stages belong to a conversation, not a Campaign; source_id
+		// is "<conversation_id>:<stage_key>" so the conversation comes from
+		// metadata rather than the ledger source id.
+		conversationID, err := uuid.Parse(fmt.Sprint(in.Metadata["conversation_id"]))
+		if err != nil {
+			return ErrRewardState
+		}
+		if err := r.db.WithContext(ctx).First(&conv, "id=?", conversationID).Error; err != nil {
+			return err
+		}
+		if conv.ChallengeVersionID != v.ID || conv.PlayerID != in.PlayerID.String() {
+			return ErrRewardState
+		}
+		snapshot.ConversationID = &conversationID
+		snapshot.StageKey, _ = in.Metadata["stage_key"].(string)
+		snapshot.StageName, _ = in.Metadata["stage_name"].(string)
 	} else {
 		campaignID := in.SourceID
 		if in.SourceType == "campaign_stage" {

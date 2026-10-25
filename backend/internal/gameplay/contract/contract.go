@@ -1390,6 +1390,9 @@ func describeRequire(cond any) string {
 }
 
 func validateStateField(field StateField) error {
+	if field.Path == "_platform" || strings.HasPrefix(field.Path, "_platform.") {
+		return fmt.Errorf("状态路径为平台保留字段: %s", field.Path)
+	}
 	if strings.TrimSpace(field.Path) == "" || strings.HasPrefix(field.Path, ".") ||
 		strings.HasSuffix(field.Path, ".") || strings.Contains(field.Path, "..") ||
 		strings.Contains(field.Path, "+") {

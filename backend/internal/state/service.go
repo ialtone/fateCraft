@@ -196,6 +196,14 @@ func (s *Service) Replace(ctx context.Context, convID uuid.UUID, newState map[st
 		if err != nil {
 			return err
 		}
+		// The platform progress region is branch state owned by the gameplay
+		// lifecycle. Administrator replacement keeps the current value and can
+		// never erase or forge it.
+		if platform := ReservedPlatformState(before); platform != nil {
+			filtered[PlatformStateKey] = platform
+		} else {
+			delete(filtered, PlatformStateKey)
+		}
 		for _, field := range contract.StateSchema.Fields {
 			if field.UpdatePolicy != gameplay.UpdateModule {
 				continue

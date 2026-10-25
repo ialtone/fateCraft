@@ -737,6 +737,12 @@ func (g *Generator) executeAgentToolInTx(
 		for _, reward := range result.Rewards {
 			view.Rewards = append(view.Rewards, storage.CompletionReward{RewardKey: reward.RewardKeySnapshot, Name: reward.NameSnapshot, Unit: reward.UnitSnapshot, Icon: reward.IconSnapshot, Quantity: reward.Quantity, BalanceAfter: reward.BalanceAfter})
 		}
+		// 模型工具直接提交终局：阶段事实可能来自更早的动作，必须在本事务
+		// 内附加到可恢复回执，不能只让 HTTP 动作路径装配。
+		view.RewardPoints = storage.TerminalRewardPoints(view.Rewards)
+		if err := tx.challenges.FillStageRewards(ctx, view); err != nil {
+			return fail("settlement_failed", err)
+		}
 		outcomePayload := map[string]any{"completion": view, "outcome_key": result.Outcome.Key, "rewards": result.Rewards}
 		outcomeMap := map[string]any{"key": result.Outcome.Key, "category": result.Outcome.Category, "title": result.Outcome.Title, "summary": result.Run.Summary, "tone": result.Outcome.Tone}
 		if result.RewardsDisabledReason != "" {

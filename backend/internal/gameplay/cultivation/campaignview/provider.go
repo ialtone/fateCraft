@@ -89,7 +89,51 @@ func snapshotWithAscension(input campaign.ProjectionContext) (map[string]any, er
 	if ascension != nil {
 		view["ascension"] = ascension
 	}
+	pendingProgress, pending, err := stageProgress(input)
+	if err != nil {
+		return nil, err
+	}
+	view["stage_progress"] = pendingProgress
+	view["pending_stage_points"] = pending
 	return view, nil
+}
+
+// stageProgress exposes branch-scoped milestones that have not been settled.
+// Once the Campaign ends the receipts are the authoritative record, so the
+// pending view is emptied.
+func stageProgress(input campaign.ProjectionContext) ([]storage.StageProgressView, int64, error) {
+	views := []storage.StageProgressView{}
+	if input.Domain == nil || input.Campaign.Status != storage.CampaignStatusActive {
+		return views, 0, nil
+	}
+	d, ok := input.Domain.Definition(progressrules.DefinitionKind, progressrules.DefinitionKey)
+	if !ok {
+		return views, 0, nil
+	}
+	c, err := progressrules.Parse(d.Content)
+	if err != nil {
+		return nil, 0, err
+	}
+	reached := make(map[string]bool, len(input.Domain.StageProgress))
+	for _, row := range input.Domain.StageProgress {
+		reached[row.StageKey] = true
+	}
+	var pending int64
+	for index, stage := range c.Stages {
+		if !reached[stage.Key] {
+			continue
+		}
+		disabled := ""
+		if input.Campaign.LLMRoute == storage.LLMRouteClient {
+			disabled = storage.RewardsDisabledReasonClientRoute
+		}
+		views = append(views, storage.StageProgressView{
+			StageKey: stage.Key, Name: stage.Name, SortOrder: index,
+			ConfiguredPoints: stage.Points, DisabledReason: disabled,
+		})
+		pending += stage.Points
+	}
+	return views, pending, nil
 }
 
 func validateTechniqueState(state *storage.CampaignDomainState) error {

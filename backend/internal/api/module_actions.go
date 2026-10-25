@@ -70,10 +70,10 @@ func (s *Server) executeModuleAction(c *gin.Context) {
 		return
 	}
 	if s.hub != nil {
-		s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeModuleActionCommitted, ConversationID: id.String()})
 		var typed challenge.ModuleActionResult
 		encoded, encodeErr := json.Marshal(result)
 		if encodeErr == nil && json.Unmarshal(encoded, &typed) == nil {
+			s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeModuleActionCommitted, ConversationID: id.String(), StageProgress: typed.StageProgress, PendingStagePoints: typed.PendingStagePoints})
 			if typed.Completion != nil {
 				s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeChallengeCompleted, ConversationID: id.String(), Completion: typed.Completion})
 			} else if gen := s.hub.Gen(); gen != nil {
@@ -85,6 +85,8 @@ func (s *Server) executeModuleAction(c *gin.Context) {
 					gen.GenerateForModuleAction(ctx, id, narrationRequest, emit)
 				})
 			}
+		} else {
+			s.hub.Broadcast(id, realtime.Event{Type: realtime.TypeModuleActionCommitted, ConversationID: id.String()})
 		}
 	}
 	c.JSON(http.StatusOK, result)

@@ -14,7 +14,30 @@ import (
 type testProjectionProvider struct{}
 
 func (testProjectionProvider) Snapshot(_ context.Context, _ ProjectionContext) (map[string]any, error) {
-	return map[string]any{"topic": "snapshot"}, nil
+	return map[string]any{"topic": "snapshot", "stage_progress": []storage.StageProgressView{{StageKey: "first", ConfiguredPoints: 25}}, "pending_stage_points": int64(25)}, nil
+}
+
+func TestPlayerEndingProjectionIncludesPendingStages(t *testing.T) {
+	identity, ctx := testIdentityContext(uuid.New())
+	runtime := campaignContract()
+	runtime.Campaign.ActionAllowlist = nil
+	runtime.Campaign.ProjectionHandler = "test.projection"
+	service := NewService(nil, challengeStub{contract: runtime}, nil, identity)
+	service.RegisterProjection("test.projection", testProjectionProvider{})
+	for _, status := range []string{storage.CampaignStatusActive, storage.CampaignStatusCompleted} {
+		view, err := service.playerProjection(ctx, storage.Campaign{Status: status}, &storage.CampaignDomainState{}, runtime)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stages := view["stage_progress"].([]storage.StageProgressView)
+		if status == storage.CampaignStatusActive {
+			if len(stages) != 1 || view["pending_stage_points"] != int64(25) {
+				t.Fatalf("pending stages missing: %+v", view)
+			}
+		} else if len(stages) != 0 || view["pending_stage_points"] != int64(0) {
+			t.Fatalf("ended campaign shows pending stages: %+v", view)
+		}
+	}
 }
 
 func (testProjectionProvider) Inquiry(_ context.Context, _ ProjectionContext) (map[string]any, error) {

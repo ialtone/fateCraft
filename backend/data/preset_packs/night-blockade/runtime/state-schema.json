@@ -103,6 +103,13 @@
         "update_policy": "module"
       },
       {
+        "path": "gameplay.discovered_count",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
         "path": "gameplay.outcome_key",
         "type": "string",
         "default": "",

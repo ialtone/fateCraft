@@ -24,7 +24,12 @@ func testModuleContent(t *testing.T, doc challenge.VersionDocument) contract.Con
 	}
 	c := contract.Content{Runtime: runtime}
 	for _, d := range doc.Definitions {
-		c.Definitions = append(c.Definitions, contract.Definition{Kind: d.Kind, Key: d.Key, Name: d.Name, Content: d.Content, Tags: d.Tags, Visibility: d.Visibility, SortOrder: d.SortOrder})
+		definition := contract.Definition{Kind: d.Kind, Key: d.Key, Name: d.Name, Content: d.Content, Tags: d.Tags, Visibility: d.Visibility, SortOrder: d.SortOrder}
+		if contract.IsPlatformDefinitionKind(d.Kind) {
+			c.PlatformDefinitions = append(c.PlatformDefinitions, definition)
+			continue
+		}
+		c.Definitions = append(c.Definitions, definition)
 	}
 	for _, o := range doc.Outcomes {
 		c.Outcomes = append(c.Outcomes, contract.Outcome{Key: o.OutcomeKey, Enabled: o.Enabled, Category: o.Category, RewardPoints: o.RewardPoints})
@@ -84,8 +89,8 @@ func TestEightCategoryContentAndRuntimeAcceptance(t *testing.T) {
 				return
 			} // cultivation deep rules belong to phase two
 			for _, outcome := range copy.Outcomes {
-				if outcome.RewardPoints != 0 {
-					t.Fatal("example must not enable account point farming")
+				if outcome.Category != "success" && outcome.RewardPoints != 0 {
+					t.Fatal("failure and neutral endings must not pay account points")
 				}
 			}
 			// Publication and execution must not require an installed cultivation module.

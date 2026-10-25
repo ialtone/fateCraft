@@ -1,0 +1,89 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "首次结丹 首次元婴 首次化神 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "golden-core",
+          "name": "首次结丹",
+          "order": 10,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_in",
+                "path": "gameplay.realm_key",
+                "values": [
+                  "golden-core",
+                  "nascent-soul",
+                  "spirit-transformation",
+                  "void-refining",
+                  "body-integration",
+                  "great-ascension"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "key": "nascent-soul",
+          "name": "首次元婴",
+          "order": 20,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_in",
+                "path": "gameplay.realm_key",
+                "values": [
+                  "nascent-soul",
+                  "spirit-transformation",
+                  "void-refining",
+                  "body-integration",
+                  "great-ascension"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "key": "spirit-transformation",
+          "name": "首次化神",
+          "order": 30,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_in",
+                "path": "gameplay.realm_key",
+                "values": [
+                  "spirit-transformation",
+                  "void-refining",
+                  "body-integration",
+                  "great-ascension"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "orthodox_ascension",
+        "void_ascension",
+        "affinity_ascension"
+      ],
+      "stage_cap": 75
+    }
+  }
+]

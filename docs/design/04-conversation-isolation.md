@@ -4,7 +4,7 @@
 
 纯玩法模块的玩家行动与模型工具共用对话归属、运行租约、回合和分支保障。请求携带 `request_id`、`branch_epoch`、`expected_revision`，锁定后复核；重复请求重用已提交结果，旧分支/旧修订拒绝。
 
-Campaign 每回合保存完整 `campaign_checkpoints`。改写/重新生成恢复领域表和模块状态，递增 Campaign revision 与对话 branch epoch；缺少检查点拒绝。账号余额、已领取奖励、种子与追加历史不回档，旧事件按来源 turn 有效性过滤。模型失败后的“继续叙事”保持已提交事实，不执行这类显式改写。细节见[24 玩法架构](24-gameplay-module-architecture.md)。
+Campaign 每回合保存完整 `campaign_checkpoints`。改写/重新生成恢复领域表和模块状态，递增 Campaign revision 与对话 branch epoch；缺少检查点拒绝。账号余额、已结算阶段回执、种子与追加历史不回档，旧事件按来源 turn 有效性过滤。模型失败后的“继续叙事”保持已提交事实，不执行这类显式改写。细节见[24 玩法架构](24-gameplay-module-architecture.md)。
 
 ## 隔离目标
 

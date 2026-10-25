@@ -10,9 +10,9 @@
 
 刷新期间可以选择行动和方案，但执行仍等待最新快照并显示刷新提示；默认优先选择可支付方案，全部资源不足时保留首项及缺口说明。无行动时显示独立空态，提交期间禁用手动刷新。
 
-青河的 `campaign.ts` 按 Campaign 在 sessionStorage 保存结果未知的原始请求，恢复后使用相同 action_id 重试；作用域隔离同一对话重开与迟到响应。提交成功而刷新失败时显示刷新提示，避免误认为行动未发生。快照分开显示阶段、终局与累计积分，阶段/终局行动及模型回合完成后刷新余额。市场列表显示当前库存、收购容量与周转间隔。
+青河的 `campaign.ts` 按 Campaign 在 sessionStorage 保存结果未知的原始请求，恢复后使用相同 action_id 重试；作用域隔离同一对话重开与迟到响应。提交成功而刷新失败时显示刷新提示，避免误认为行动未发生。单局 `playerActions.ts` 同样按对话保存请求 ID。快照分开显示阶段进度、已结算阶段、终局与累计积分。局中阶段只记录进度，Challenge 的模块动作响应带 `stage_progress` / `pending_stage_points`，Campaign 的同名字段位于玩法结果内，由 `stage-rewards.ts` 生成“阶段已达成，结束时结算”提示，不刷新余额；直连的 0 分情况明确说明。终局 `challenge_completed` 才刷新余额并展示 `stage_rewards`。市场列表显示当前库存、收购容量与周转间隔。
 
-后台结局编辑器把 `reward_points` 标为“终局积分”，通过定义 Schema 的 `x-reward-budget` 显示阶段积分、终局积分与总预算；金额不匹配提示检查规则定义，后端发布校验仍是最终依据。当前青河为 300 + 700 = 1000。详见 [21](21-campaign-outcome-rewards.md) 和 [25](25-core-gameplay-validation.md)。
+后台结局编辑器把 `reward_points` 标为“终局积分”，通过定义 Schema 的 `x-reward-budget` 显示阶段预算：Campaign 为“阶段 + 终局 = 总预算”，单局为“阶段合计不超过上限，终局单独结算”。金额不匹配提示检查规则定义，后端发布校验仍是最终依据。当前青河为 300 + 700 = 1000；其余内置玩法阶段合计均不超过最低成功结局的 50%，百年飞升劫为 25 × 3 = 75（上限 75）。详见 [21](21-campaign-outcome-rewards.md) 和 [25](25-core-gameplay-validation.md)。
 
 ## 技术栈
 
@@ -98,7 +98,7 @@ Character、WorldBook 和 Prompt 不再拥有普通用户独立路由。旧页�
 
 只有 active 对话显示输入和生成操作。ended 或 archived 对话显示只读状态提示；普通对话可从只读页面调用 fork，在当前玩法版本创建新对话。
 
-流式输出按 `operation_id + attempt_id + message_id` 聚合，并按事件 ID 去重、按 sequence（合并 delta 使用 `payload.sequence_start` 到 `sequence` 的覆盖范围）拒绝倒序和检测真实缺口。带有操作/attempt 身份的迟到消息、状态和 Campaign 事实事件，如果不属于当前操作会直接丢弃。`agent.reasoning.delta` 写入临时 assistant 的思考区，思考期间自动展开；首个 `agent.text.delta` 到达时收起。时间线由 Chat Store 的内容变更通知驱动滚动，只在用户贴近底部时跟随，并覆盖思考折叠动画的最终高度；用户主动上翻后不抢回位置。收到最终 `message_created` 和 `agent.turn.completed` 后以服务端消息替换临时内容；收到 `agent.turn.failed/cancelled` 时清除未持久化增量，收到 `agent.turn.partial` 时保留已提交状态并提示继续叙事。`state_update` 更新状态，`challenge_completed` 使用 Runtime 的 completion presentation 展示通用完成弹窗并刷新奖励。
+流式输出按 `operation_id + attempt_id + message_id` 聚合，并按事件 ID 去重、按 sequence（合并 delta 使用 `payload.sequence_start` 到 `sequence` 的覆盖范围）拒绝倒序和检测真实缺口。带有操作/attempt 身份的迟到消息、状态和 Campaign 事实事件，如果不属于当前操作会直接丢弃。`agent.reasoning.delta` 写入临时 assistant 的思考区，思考期间自动展开；首个 `agent.text.delta` 到达时收起。时间线由 Chat Store 的内容变更通知驱动滚动，只在用户贴近底部时跟随，并覆盖思考折叠动画的最终高度；用户主动上翻后不抢回位置。收到最终 `message_created` 和 `agent.turn.completed` 后以服务端消息替换临时内容；收到 `agent.turn.failed/cancelled` 时清除未持久化增量，收到 `agent.turn.partial` 时保留已提交状态并提示继续叙事。`state_update` 更新状态，`challenge_completed` 使用 Runtime 的 completion presentation 展示通用完成弹窗并刷新奖励；`module.action_committed` 只更新进度与状态，不刷新余额。
 
 重新生成、续写和编辑改写的 REST 响应为 `202 Accepted`，只代表操作已被 durable run 接收，不代表分支已经替换或模型已经完成。前端不得在 202 后删除 assistant、截断时间线或扣除本地奖励；必须等待带操作身份的 `branch.replaced`/终态事件，或通过快照重新读取确认。按钮的 `actionPending` 必须保持到终态、明确 HTTP 错误或快照确认后才解除，不能在收到 202 的瞬间释放。
 

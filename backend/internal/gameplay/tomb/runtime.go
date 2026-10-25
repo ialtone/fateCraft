@@ -378,5 +378,15 @@ func (Module) Project(content contract.Content, run contract.RunState, _ string)
 	view["tools"] = s.Tools
 	view["remaining_minutes"] = c.World.Deadline - run.GameTime
 	view["outcome_key"] = run.OutcomeKey
+	resolved := int64(0)
+	for _, status := range s.Resolved {
+		if status == "solved" || status == "bypassed" {
+			resolved++
+		}
+	}
+	goalItems := s.Journey.Carried[c.World.Goal] + s.Journey.Secured[c.World.Goal]
+	view["visited_count"] = int64(len(s.Journey.Visited))
+	view["resolved_count"] = resolved
+	view["goal_items"] = goalItems
 	return view, nil
 }
