@@ -2,6 +2,67 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createActionScope, clearMatchingAction } from '../src/lib/action-scope.ts'
 import { outcomeRewardBudgets } from '../src/lib/reward-budget.ts'
+import { actionBlock } from '../src/lib/action-gate.ts'
+import {
+  campaignFallbackGuidance,
+  withoutEntityBoundActions,
+} from '../src/lib/campaign-guidance.ts'
+
+test('action gate exposes one reason with stable priority', () => {
+  assert.equal(actionBlock({}), null)
+  assert.equal(actionBlock({ generating: true, syncing: true }).code, 'generating')
+  assert.equal(actionBlock({ resultPending: true, generating: true }).code, 'result_pending')
+  assert.equal(actionBlock({ ended: true, resultPending: true }).code, 'ended')
+  assert.equal(actionBlock({ connectionBlocked: true, generating: true }).code, 'syncing')
+  assert.match(actionBlock({ connectionBlocked: true }).message, /连接/)
+  assert.equal(actionBlock({ syncing: true, conflict: true }).code, 'syncing')
+  assert.equal(actionBlock({ conflict: true }).code, 'conflict')
+})
+
+test('campaign fallback guidance derives message intents from the public snapshot', () => {
+  const snapshot = {
+    encounters: [],
+    quests: [
+      { key: 'q1', name: '寻找失踪药农', quest_type: 'task', can_submit: true },
+      { key: 'q2', name: '守夜', quest_type: 'obligation', can_accept: true },
+    ],
+    world: {
+      current: { key: 'village' },
+      available_routes: [{ location_key: 'market', name: '青石集', accessible: true }],
+    },
+    relationships: [
+      { instance_key: 'npc1', name: '老邢', status: 'active', location_key: 'village' },
+      { instance_key: 'npc2', name: '远方客', status: 'active', location_key: 'market' },
+    ],
+    training: [{ key: 'retreat', name: '筑基静修', available: true }],
+  }
+  const items = campaignFallbackGuidance(snapshot)
+  assert.ok(items.length > 0 && items.length <= 4)
+  assert.ok(items.some((item) => item.label === '提交委托 · 寻找失踪药农'))
+  assert.ok(items.some((item) => item.label === '接受承诺 · 守夜'))
+  assert.ok(items.some((item) => item.label === '与老邢交谈'))
+  assert.ok(!items.some((item) => item.label.includes('远方客')))
+  assert.ok(items.every((item) => item.message.length > 0))
+  assert.deepEqual(campaignFallbackGuidance(null), [])
+})
+
+test('entity-bound campaign actions are not rendered twice in the action panel', () => {
+  const capabilities = [
+    { key: 'quest.accept' },
+    { key: 'cultivation.practice' },
+    { key: 'world.investigate' },
+  ]
+  const actions = [
+    { key: 'quest.accept', source_path: 'quests' },
+    { key: 'cultivation.practice', source_path: 'techniques' },
+    { key: 'world.investigate' },
+  ]
+  assert.deepEqual(
+    withoutEntityBoundActions(capabilities, actions).map((capability) => capability.key),
+    ['world.investigate'],
+  )
+  assert.deepEqual(withoutEntityBoundActions(capabilities, []), capabilities)
+})
 
 test('module-described reward budget includes stages exactly once for each ending', () => {
   const schemas = {

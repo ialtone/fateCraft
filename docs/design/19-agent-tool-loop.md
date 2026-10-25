@@ -248,9 +248,9 @@ API Key、Authorization、URL userinfo/query/fragment 不得入库。工具领�
 
 ### 动态行动提示
 
-主叙事 Agent 通过 `fc_present_guidance` 提交可选的玩家意图提示。该工具只接受 2 到 4 个短标题和意图文本，不执行领域动作，也不允许模型提交 action key 或前端参数。它仅在玩家缺少方向、面临重要决策分叉或主动索要建议时开放；普通回合不提供该工具。服务端校验后把提示快照附着在最终 assistant display message 上，并通过 `guidance.updated` 推送。提示与消息分支、state fingerprint 和 Campaign revision 绑定，状态变化、回合开始、失败或分支替换都会使其失效。点击时客户端只提交 guidance ID 与 item key，服务端重新校验快照后把受信任的意图文本作为普通用户输入创建新回合，不能信任客户端 label 或 message。
+主叙事 Agent 通过 `fc_present_guidance` 提交可选的玩家意图提示。该工具只接受 2 到 4 个短标题和意图文本，不执行领域动作，也不允许模型提交 action key 或前端参数。它仅在玩家缺少方向、面临重要决策分叉或主动索要建议时开放；普通回合不提供该工具。服务端校验后把提示快照附着在最终 assistant display message 上，并通过 `guidance.updated` 推送。快照在回合内所有动作提交完成后再计算 `state_fingerprint` 与 `campaign_revision`，使用回合结束值，避免动作改变状态后刷新即过期；提示仍与消息分支绑定，分支替换、对话结束或版本切换时失效。点击时客户端只提交 guidance ID 与 item key，服务端重新校验快照后把受信任的意图文本作为普通用户输入创建新回合，不能信任客户端 label 或 message。
 
-前端动态提示不渲染在消息正文内，而由会话底部固定的 `ConversationGuidanceBar` 展示在滚动内容区与输入框之间。没有 active guidance 时组件完全移除；正文和思考仍按原流式链路显示。Runtime 中声明的长期玩法固定 guidance 仍由 Presentation 渲染，和主叙事动态提示使用同一按钮组件但拥有独立生命周期。
+前端动态提示不渲染在消息正文内，而由会话底部固定的 `ConversationGuidanceBar` 展示在滚动内容区与输入框之间。没有可展示项时组件完全移除；`agent.turn.started` 不清空提示，只在生成中隐藏并在终止后恢复。模型未提供合法 proposal 时，前端从当前 Campaign 公开快照派生最多 4 条普通消息意图（遭遇、委托提交/接受、交谈、前往、修行），点击走普通用户输入；这些意图不绑定 capability，服务端仍重新校验。`campaign_revision` 落后于当前快照的提示直接丢弃。Runtime 中声明的长期玩法固定 guidance 仍由 Presentation 渲染，和主叙事动态提示使用同一按钮组件但拥有独立生命周期。
 
 ## 客户端直连传输切点
 

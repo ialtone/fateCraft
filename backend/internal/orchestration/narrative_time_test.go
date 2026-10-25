@@ -26,7 +26,7 @@ func TestNarrativeGuardsApplyToEveryTurn(t *testing.T) {
 	guards := []gameplay.NarrativeGuard{{Pattern: "永生不死", Message: "本玩法不允许永生"}}
 	for _, committed := range []bool{false, true} {
 		for _, narrative := range []*gameplay.TurnNarrativeContext{nil, {ChallengeMode: true}, ptrNarrative(testNarrativeContext())} {
-			status, detail := ValidateTurnNarrative("你并非永生不死，但此刻确实永生不死。", narrative, committed, guards)
+			status, detail := ValidateTurnNarrative("你并非永生不死，但此刻确实永生不死。", narrative, BuildTurnEvidence(narrative, nil, nil, committed), guards)
 			if status != "failed" {
 				t.Fatalf("guard skipped: committed=%v narrative=%#v detail=%#v", committed, narrative, detail)
 			}

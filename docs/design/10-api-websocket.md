@@ -493,6 +493,10 @@ GET /ws/llm-relay
 
 临时文本只有在 `message_created` 与 `agent.turn.completed` 后成为持久事实。失败、取消或截断时前端清除尚未持久化的增量；若收到 `agent.turn.partial`，已提交工具产生的状态和领域事实必须保留，并提示用户使用“继续叙事”收尾。
 
+`guidance.updated` 推送可选行动提示，payload `guidance` 为 `null` 或 `{id,title,items,source,campaign_revision,state_hash}`；`source=model` 表示模型 proposal。`GET /conversations/:id/guidance` 返回同一结构。提示快照在回合内所有动作提交完成后再写入 assistant metadata，`state_hash` 与 `campaign_revision` 必须是回合结束值，否则刷新后会被判定过期。`agent.turn.started` 不清空提示；前端在生成中隐藏，终止后恢复，仅当 `campaign_revision` 落后于当前快照时丢弃。模型未提供 proposal 时前端从当前 Campaign 公开快照派生普通消息意图，不新增服务端授权面。
+
+四个终止事件（`completed/partial/failed/cancelled`）无论是否携带 `message_id` 都必须解除生成锁。客户端按 attempt 去重时可以跳过重复的消息/通知副作用，但清锁、操作收尾和资源失效必须幂等执行；活动快照 `is_processing=false` 是权威复位信号。叙事 watchdog 首轮约 15 秒后指数退避，记忆任务使用独立的 75 秒窗口；横幅持续超过 20 秒时提供“重新同步”入口。
+
 ## 连接存活与丢事件
 
 服务端每 30 秒发送 ping，60 秒未收到任何帧或 pong 则关闭连接。每个连接维护容量有限的出站队列（当前为 256），但队列不是可靠事件存储：
@@ -604,4 +608,4 @@ HTTP 返回服务端生成的 `X-Request-ID`，未知 500 为 `{error:"服务暂
 
 完整快照可跨版本直接应用；refresh_required=true 的失效通知只提高目标版本，需取得至少该版本的快照。当前发布器发送完整快照。agent phase 仍按 attempt + sequence 排序，不用 activity_version 排序字符。无版本业务事件不能覆盖更新的权威快照。
 
-客户端先缓冲、收到 subscription.ready 后读取活动及消息/状态/Campaign/结局/guidance/奖励等快照，再合并事件。ready 超过 5 秒、恢复超过 15 秒或缓冲超过 2048 条/约 2MiB 时关闭连接恢复。首连失败后最多自动重连 5 次；耗尽或鉴权失败后停止自动恢复和写入，提示用户刷新。健康空闲不轮询；已知任务无进展由 watchdog 核验，重连预算内的恢复请求按资源单飞合并，同一资源在途再次失效最多补读一次。LISTEN 缺口关闭 WS 订阅以强制重建快照。协议不提供 durable replay，仍按单实例部署。
+客户端先缓冲、收到 subscription.ready 后读取活动及消息/状态/Campaign/结局/guidance/奖励等快照，再合并事件。ready 超过 5 秒、恢复超过 15 秒或缓冲超过 2048 条/约 2MiB 时关闭连接恢复。首连失败后最多自动重连 5 次；耗尽或鉴权失败后停止自动恢复和写入，提示用户刷新。健康空闲不轮询；已知任务无进展由 watchdog 核验（叙事约 15 秒起、记忆 75 秒起，分别退避），重连预算内的恢复请求按资源单飞合并，同一资源在途再次失效最多补读一次。LISTEN 缺口关闭 WS 订阅以强制重建快照。协议不提供 durable replay，仍按单实例部署。

@@ -23,6 +23,10 @@ import { useStateStore } from '@/stores/state'
 import { useCampaignStore } from '@/stores/campaign'
 import { useSocketStore } from '@/stores/socket'
 import { useGameplayVersionStore } from '@/stores/gameplayVersion'
+import { useRuntimeStore } from '@/stores/runtime'
+import { useContextStore } from '@/stores/context'
+import { actionBlock } from '@/lib/action-gate'
+import { withoutEntityBoundActions } from '@/lib/campaign-guidance'
 import { stageProgressNotice } from '@/lib/stage-rewards'
 
 const props = defineProps<{ convId: string; visible: boolean }>()
@@ -32,6 +36,8 @@ const state = useStateStore()
 const campaign = useCampaignStore()
 const socket = useSocketStore()
 const gameplay = useGameplayVersionStore()
+const runtime = useRuntimeStore()
+const context = useContextStore()
 const snapshot = ref<ModuleActionSnapshot | null>(null)
 const selectedKey = ref<string | null>(null)
 const planIndex = ref<number | null>(null)
@@ -48,8 +54,20 @@ let inFlight: Promise<void> | null = null
 let queued = false
 let dirty = true
 let scheduled: ReturnType<typeof setTimeout> | null = null
+// campaign_view.actions 中带 source_path 的动作由 Campaign 侧栏按实体渲染；
+// 行动页只保留需要玩家填写参数或方案的动作，避免同一 (action_key, entity)
+// 出现两个提交入口。
+const visibleCapabilities = computed(() =>
+  withoutEntityBoundActions(
+    snapshot.value?.action_capabilities,
+    runtime.presentation?.campaign_view?.actions,
+  ),
+)
+const hiddenOnly = computed(
+  () => (snapshot.value?.action_capabilities.length ?? 0) > 0 && !visibleCapabilities.value.length,
+)
 const active = computed(() =>
-  snapshot.value?.action_capabilities.find((a) => a.key === selectedKey.value),
+  visibleCapabilities.value.find((a) => a.key === selectedKey.value),
 )
 const plan = computed(() =>
   planIndex.value === null ? undefined : active.value?.plans?.[planIndex.value],
@@ -68,24 +86,21 @@ const costs = computed(() =>
   ),
 )
 const minutes = computed(() => plan.value?.minutes ?? active.value?.metadata?.minutes ?? 0)
-const blocked = computed(
-  () =>
-    loading.value ||
-    checkingGameplay.value ||
-    submitting.value ||
-    chat.isGenerating ||
-    socket.writeBlocked ||
-    conversations.current?.id !== props.convId ||
-    conversations.current?.status !== 'active',
+// 忙碌门禁只认服务端租约与本端乐观锁；conversations.current.is_processing
+// 可能因终止事件丢失而长期为真，不能参与点击判定。
+const gate = computed(() =>
+  actionBlock({
+    ended: conversations.current?.status !== undefined && conversations.current.status !== 'active',
+    connectionBlocked: socket.writeBlocked,
+    resultPending: !!pending.value,
+    generating: context.activity.is_processing || chat.isGenerating,
+    syncing: loading.value || checkingGameplay.value,
+  }),
 )
 // Keep the reason close to the disabled execution button as well as the header.
 const disabledHint = computed(() => {
   if (planBlocked.value) return plan.value?.blocked_reason ?? ''
-  if (submitting.value) return '正在提交动作…'
-  if (chat.isGenerating) return '请等待当前叙事完成。'
-  if (socket.writeBlocked) return '状态同步中，请稍候。'
-  if (checkingGameplay.value) return '正在确认玩法版本…'
-  if (loading.value) return '正在刷新行动状态，请稍候。'
+  if (gate.value) return gate.value.message
   return ''
 })
 
@@ -126,8 +141,8 @@ async function load() {
       const next = await moduleActionsApi.get(id)
       if (!alive || version !== generation || id !== props.convId || socket.writeBlocked) return
       snapshot.value = next
-      if (!next.action_capabilities.some((a) => a.key === selectedKey.value))
-        selectedKey.value = next.action_capabilities[0]?.key ?? null
+      if (!visibleCapabilities.value.some((a) => a.key === selectedKey.value))
+        selectedKey.value = visibleCapabilities.value[0]?.key ?? null
     } catch (cause) {
       if (alive && version === generation)
         error.value = axios.isAxiosError(cause)
@@ -160,6 +175,10 @@ watch(active, (action) => {
           ? false
           : (parameter.options?.[0] ?? '')
   }
+})
+watch(visibleCapabilities, (list) => {
+  if (!list.some((a) => a.key === selectedKey.value))
+    selectedKey.value = list[0]?.key ?? null
 })
 watch(
   () => props.convId,
@@ -228,13 +247,34 @@ async function ensureGameplayFresh(id: string) {
 }
 
 async function execute() {
-  if (socket.writeBlocked) return
-  if (
-    submitting.value ||
-    (!pending.value &&
-      (blocked.value || !active.value?.available || planBlocked.value || !snapshot.value))
-  )
+  if (submitting.value) {
+    message.warning('动作正在提交，请稍候。')
     return
+  }
+  if (!pending.value) {
+    const blocked = gate.value
+    if (blocked) {
+      message.warning(blocked.message)
+      return
+    }
+    if (!snapshot.value || !active.value) {
+      message.warning('当前没有可执行行动。')
+      return
+    }
+    if (!active.value.available) {
+      message.warning(
+        active.value.violations?.map((v) => v.message).join('；') || '当前行动不可执行。',
+      )
+      return
+    }
+    if (planBlocked.value) {
+      message.warning(plan.value?.blocked_reason || '当前方案不可执行。')
+      return
+    }
+  } else if (socket.writeBlocked) {
+    message.warning('连接已中断，请刷新页面后重试。')
+    return
+  }
   const id = props.convId
   const version = generation
   const input: ModuleActionInput = pending.value ?? {
@@ -245,14 +285,34 @@ async function execute() {
     arguments: { ...(plan.value?.arguments ?? argumentsValue.value) },
   }
   const run = async () => {
-    if (socket.writeBlocked || checkingGameplay.value || version !== generation || !alive) return
+    if (checkingGameplay.value || version !== generation || !alive) return
+    // 查询上次操作结果不应该被自己的 resultPending 拦下；其他门禁仍生效。
+    const blocked = pending.value
+      ? actionBlock({ connectionBlocked: socket.writeBlocked })
+      : gate.value
+    if (blocked) {
+      message.warning(blocked.message)
+      return
+    }
     checkingGameplay.value = true
     try {
       if (!(await ensureGameplayFresh(id))) return
-      if (version !== generation || props.convId !== id || socket.writeBlocked || chat.isGenerating)
+      if (
+        version !== generation ||
+        props.convId !== id ||
+        socket.writeBlocked ||
+        chat.isGenerating ||
+        context.activity.is_processing
+      ) {
+        message.warning('状态已变化，请等待当前操作完成后重试。')
         return
+      }
       const result = await actions.execute(id, input)
-      const notice = stageProgressNotice(result?.stage_progress)
+      if (!result) {
+        message.warning(actions.error || '操作未提交，请稍后重试。')
+        return
+      }
+      const notice = stageProgressNotice(result.stage_progress)
       if (notice) message.success(`阶段已达成：${notice}，结束时统一结算`)
       if (alive && version === generation && props.convId === id) await load()
     } finally {
@@ -297,14 +357,14 @@ async function execute() {
     >
     <!-- 首次加载才阻塞展示；后续刷新一律非阻塞，避免遮罩吞掉点击 -->
     <NSpin v-if="!snapshot && loading" class="panel-spin" />
-    <template v-else-if="snapshot?.action_capabilities.length">
+    <template v-else-if="visibleCapabilities.length">
       <label class="field-label">选择行动</label>
       <NSelect
         v-model:value="selectedKey"
         :virtual-scroll="false"
         :disabled="submitting || !!pending"
         :options="
-          snapshot.action_capabilities.map((a) => ({
+          visibleCapabilities.map((a) => ({
             label: a.metadata?.label || a.description,
             value: a.key,
           }))
@@ -380,13 +440,17 @@ async function execute() {
           block
           type="primary"
           :loading="submitting"
-          :disabled="blocked || !active.available || planBlocked || !!pending"
+          :disabled="!!gate || !active.available || planBlocked || !!pending"
           @click="execute"
           >执行{{ active.metadata?.label || active.description }}</NButton
         >
         <p v-if="disabledHint" class="hint">{{ disabledHint }}</p>
       </template>
     </template>
+    <NEmpty
+      v-else-if="hiddenOnly"
+      description="这些行动已在左侧实体列表提供，请从任务、人物、地点或功法条目上操作"
+    />
     <NEmpty
       v-else-if="!loading"
       :description="

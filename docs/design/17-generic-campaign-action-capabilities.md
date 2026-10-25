@@ -195,6 +195,8 @@ Handler 返回 rejected/failed 时，内部哨兵回滚该工具事务内的所�
 
 同一套 `GuidanceRenderer` 也承载普通对话快捷指引。`presentation.guidance` 的 `message` 项只会提交普通玩家消息，`action` 项复用上述能力/事务入口；指引投影是派生 UI 数据，不是事实或授权。Campaign guidance 的条件和绑定必须通过 `OwnershipRegistry` 的公开字段校验。Campaign 的旧 `campaign_view.actions` 在前端适配为 guidance item，保持旧玩法包兼容。
 
+入口分工：`campaign_view.actions` 中带 `source_path` 的动作是实体绑定动作（任务、NPC、地点、功法、配方等），由 Campaign 侧栏按实体渲染；`ModuleActionPanel` 隐藏这些 action key，只展示需要玩家填写参数或方案的动作（突破、调查、交易数量等由能力参数决定）。前端用同一份 `campaign_view.actions` 做去重，保证同一 `(action_key, entity)` 至多一个提交面。两个入口及结局、指引条共用 `lib/action-gate.ts` 判定生成中、结果未确认、同步中、本局结束和 revision 冲突；禁用必须显示原因，点击被拦下也要提示。模型未提供 guidance proposal 时，前端可从当前公开快照派生最多 4 条普通消息意图，但不能据此拼接 capability 参数或跳过服务端校验。
+
 `Priority` 是 Data 顶层 key 的高到低顺序，必须由玩法模块根据当前决策需要声明；平台不能出现题材 key。未列出的主题仍是低优先级候选，不会丢失兼容性。
 
 平台保留 `id`、`status`、`current_location_key`、`game_time`、`revision`、`recent_events`、内部 `action_capabilities`、玩家 Snapshot 的 `outcome_rewards` 和压缩时注入的 `projection_control`，玩法投影不能覆盖。`outcome_rewards` 由平台根据不可变账本恢复，不进入玩法 Provider 自定义数据。玩家 snapshot 不能泄漏 internal 或仅供模型使用的事实；模型上下文也必须先按地点、查询和集合上限裁剪，再接受统一 Token 压缩。内部 `action_capabilities` 在生成工具快照后会从模型可见 Projection 移除。

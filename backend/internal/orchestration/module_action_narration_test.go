@@ -100,7 +100,7 @@ func TestLaterCommittedActionSupersedesEarlierPreservedFacts(t *testing.T) {
 		{ActionKey: "trial.breakthrough", GoalStatus: "failed", Preserved: []gameplay.FactRef{{Path: "character.realm_name"}}},
 		{ActionKey: "trial.breakthrough", GoalStatus: "success", Changes: []gameplay.FactChange{{Path: "character.realm_name", Before: "炼气", After: "筑基"}}},
 	}}
-	if status, detail := ValidateTurnNarrative("这一次突破成功。", narrative, true, nil); status != "passed" {
+	if status, detail := ValidateTurnNarrative("这一次突破成功。", narrative, BuildTurnEvidence(narrative, nil, nil, true), nil); status != "passed" {
 		t.Fatalf("earlier action overrode later change: %#v", detail)
 	}
 }

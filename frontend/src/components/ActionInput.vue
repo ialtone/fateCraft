@@ -25,6 +25,7 @@ import { useRewardStore } from '@/stores/rewards'
 import { useGameplayVersionStore } from '@/stores/gameplayVersion'
 import type { GuidanceItem } from '@/types'
 import { PLATFORM_CAPABILITY_MESSAGE_REWRITE } from '@/lib/platformCapabilities'
+import { actionBlock } from '@/lib/action-gate'
 import { stageProgressNotice } from '@/lib/stage-rewards'
 
 const props = defineProps<{ convId: string; disabled: boolean }>()
@@ -42,9 +43,33 @@ const message = useMessage()
 const dialog = useDialog()
 const text = ref('')
 const checkingGameplay = ref(false)
+// 终止事件丢失时横幅会一直挂着；超过 20 秒给出手动对账入口。
+const nowTick = ref(Date.now())
+let generatingSince = 0
+let stuckTimer: ReturnType<typeof setInterval> | null = null
 let inputEpoch = 0
+watch(
+  () => chat.isGenerating,
+  (generating) => {
+    if (generating) {
+      generatingSince = Date.now()
+      nowTick.value = generatingSince
+      if (!stuckTimer) stuckTimer = setInterval(() => (nowTick.value = Date.now()), 5000)
+    } else {
+      generatingSince = 0
+      if (stuckTimer) clearInterval(stuckTimer)
+      stuckTimer = null
+    }
+  },
+  { immediate: true },
+)
+const generatingStuck = computed(
+  () => chat.isGenerating && generatingSince > 0 && nowTick.value - generatingSince > 20000,
+)
 onBeforeUnmount(() => {
   inputEpoch++
+  if (stuckTimer) clearInterval(stuckTimer)
+  stuckTimer = null
 })
 
 // 断线 REST 降级期间的"等待中"标记：WS 断开时后端 202 立即返回、
@@ -249,27 +274,33 @@ function dispatchGuidanceMessage(content: string) {
   dispatchUserInput(content)
 }
 
+function guidanceActionBlock() {
+  const row = campaign.snapshot?.campaign
+  return actionBlock({
+    ended:
+      props.disabled ||
+      (row?.status !== undefined && row.status !== 'active') ||
+      (conversations.current?.status !== undefined && conversations.current.status !== 'active'),
+    connectionBlocked: socket.writeBlocked,
+    resultPending: !!playerActions.pending,
+    generating: context.activity.is_processing || chat.isGenerating || actionPending.value,
+    syncing: checkingGameplay.value,
+  })
+}
+
 function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
-  if (
-    socket.writeBlocked ||
-    item.mode !== 'action' ||
-    !item.action_key ||
-    props.disabled ||
-    chat.isGenerating ||
-    actionPending.value
-  )
+  if (item.mode !== 'action' || !item.action_key) return
+  const blocked = guidanceActionBlock()
+  if (blocked) {
+    message.warning(blocked.message)
     return
+  }
   const conv = conversations.current
   const row = campaign.snapshot?.campaign
-  if (
-    !conv ||
-    !row ||
-    conv.status !== 'active' ||
-    conv.is_processing ||
-    playerActions.pending ||
-    playerActions.acting
-  )
+  if (!conv || !row) {
+    message.warning('当前状态尚未就绪，请稍后再试。')
     return
+  }
   const input = {
     request_id: crypto.randomUUID(),
     branch_epoch: conv.branch_epoch,
@@ -278,11 +309,19 @@ function dispatchGuidanceAction(item: GuidanceItem, args: Record<string, unknown
     arguments: args as Record<string, string | number | boolean>,
   }
   const run = async () => {
-    if (socket.writeBlocked) return null
+    const pending = guidanceActionBlock()
+    if (pending) {
+      message.warning(pending.message)
+      return null
+    }
     if (!(await ensureGameplayFresh(conv.id))) return null
-    if (socket.writeBlocked || props.convId !== conv.id) return null
+    if (props.convId !== conv.id) return null
     const result = await playerActions.execute(conv.id, input)
-    const notice = stageProgressNotice(result?.stage_progress)
+    if (!result) {
+      message.warning(playerActions.error || '操作未提交，请稍后重试。')
+      return null
+    }
+    const notice = stageProgressNotice(result.stage_progress)
     if (notice) message.success(`阶段已达成：${notice}，结束时统一结算`)
     return result
   }
@@ -546,6 +585,15 @@ function cancel() {
         <span v-if="chat.isGenerating" class="generating faint">
           {{ generationLabel }}<span class="dots"></span>
         </span>
+        <NButton
+          v-if="generatingStuck"
+          quaternary
+          size="tiny"
+          :disabled="socket.writeBlocked"
+          @click="socket.resyncNow"
+        >
+          重新同步
+        </NButton>
         <span v-else-if="awaitingRestGen" class="generating faint">
           已提交，等待重连接收结果<span class="dots"></span>
         </span>

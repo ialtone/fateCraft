@@ -1275,6 +1275,10 @@ export interface ActiveGuidance {
   id: string
   title: string
   items: { key: string; label: string }[]
+  /** model: server proposal; platform: reserved for server-side fallback. */
+  source?: 'model' | 'platform'
+  campaign_revision?: number
+  state_hash?: string
 }
 
 export interface CampaignViewAction {

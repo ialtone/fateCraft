@@ -5,7 +5,11 @@ import { usePlayerActionStore } from '@/stores/playerActions'
 import { useConversationStore } from '@/stores/conversations'
 import { useCampaignStore } from '@/stores/campaign'
 import { useRuntimeStore } from '@/stores/runtime'
+import { useChatStore } from '@/stores/chat'
+import { useContextStore } from '@/stores/context'
+import { useSocketStore } from '@/stores/socket'
 import { presentValue } from '@/lib/presentation'
+import { actionBlock } from '@/lib/action-gate'
 import { stageProgressNotice } from '@/lib/stage-rewards'
 import { collectEndingEntries, type EndingEntry } from '@/lib/ending-actions'
 import GuidanceRenderer from '@/components/GuidanceRenderer.vue'
@@ -24,6 +28,9 @@ import type {
 const campaign = useCampaignStore()
 const actions = usePlayerActionStore()
 const conversations = useConversationStore()
+const chat = useChatStore()
+const context = useContextStore()
+const socket = useSocketStore()
 const dialog = useDialog()
 const message = useMessage()
 const runtime = useRuntimeStore()
@@ -31,6 +38,17 @@ const snapshot = computed<Record<string, unknown> | null>(() => {
   return campaign.snapshot ? (campaign.snapshot as unknown as Record<string, unknown>) : null
 })
 const view = computed(() => runtime.presentation?.campaign_view)
+// 忙碌门禁只认服务端租约与本端乐观锁；conversations.current.is_processing
+// 可能因终止事件丢失而长期为真，不能参与点击判定。
+const gate = computed(() =>
+  actionBlock({
+    ended: campaign.snapshot?.campaign.status !== undefined && campaign.snapshot.campaign.status !== 'active',
+    connectionBlocked: socket.writeBlocked,
+    resultPending: !!actions.pending,
+    generating: context.activity.is_processing || chat.isGenerating,
+    syncing: campaign.loading || actions.acting,
+  }),
+)
 const activeSection = ref('')
 // client 路由终局不发放奖励：后端快照带 rewards_disabled_reason，前端显示替代文案。
 const rewardsDisabledReason = computed(() => {
@@ -376,7 +394,11 @@ function guidanceGroupsForSection(section: CampaignViewSection): GuidanceGroup[]
 // 局中只提示阶段已达成，余额和阶段回执要等终局 challenge_completed 才刷新。
 async function executeAction(id: string, input?: ModuleActionInput) {
   const result = await actions.execute(id, input)
-  if (!result) return null
+  if (!result) {
+    const blocked = gate.value
+    message.warning(blocked?.message || actions.error || '操作未提交，请稍后重试。')
+    return null
+  }
   const embedded = (result.result as { stage_progress?: StageProgress[] } | undefined)
     ?.stage_progress
   const notice = stageProgressNotice(result.stage_progress ?? embedded)
@@ -384,19 +406,26 @@ async function executeAction(id: string, input?: ModuleActionInput) {
   return result
 }
 
-function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
-  if (item.mode !== 'action' || !item.action_key) return
+function ensureActionable(): boolean {
+  const blocked = gate.value
+  if (blocked) {
+    message.warning(blocked.message)
+    return false
+  }
   const conv = conversations.current
   const row = campaign.snapshot?.campaign
-  if (
-    !conv ||
-    !row ||
-    actions.pending ||
-    actions.acting ||
-    conv.is_processing ||
-    conv.status !== 'active'
-  )
-    return
+  if (!conv || !row) {
+    message.warning('当前状态尚未就绪，请稍后再试。')
+    return false
+  }
+  return true
+}
+
+function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
+  if (item.mode !== 'action' || !item.action_key) return
+  if (!ensureActionable()) return
+  const conv = conversations.current!
+  const row = campaign.snapshot!.campaign
   const input = {
     request_id: crypto.randomUUID(),
     branch_epoch: conv.branch_epoch,
@@ -425,17 +454,9 @@ function runGuidanceAction(item: GuidanceItem, args: Record<string, unknown>) {
 }
 
 function runEnding(entry: EndingEntry) {
-  const conv = conversations.current
-  const row = campaign.snapshot?.campaign
-  if (
-    !conv ||
-    !row ||
-    conv.status !== 'active' ||
-    conv.is_processing ||
-    actions.pending ||
-    actions.acting
-  )
-    return
+  if (!ensureActionable()) return
+  const conv = conversations.current!
+  const row = campaign.snapshot!.campaign
   const input = {
     request_id: crypto.randomUUID(),
     branch_epoch: conv.branch_epoch,
@@ -488,6 +509,7 @@ function emptyText(section: CampaignViewSection): string {
       >
         查询上次操作结果
       </NButton>
+      <p v-if="gate" class="action-block">{{ gate.message }}</p>
       <NAlert v-if="rewardsDisabledReason" type="warning" :bordered="false">
         客户端直连模式不发放奖励
       </NAlert>
@@ -588,7 +610,7 @@ function emptyText(section: CampaignViewSection): string {
             :groups="guidanceGroupsForSection(section)"
             :snapshot="snapshot"
             placement="campaign_panel"
-            :disabled="actions.acting || campaign.loading || !!actions.pending"
+            :disabled="!!gate || actions.acting || campaign.loading || !!actions.pending"
             :loading="actions.acting"
             @action="runGuidanceAction"
           />
@@ -612,7 +634,7 @@ function emptyText(section: CampaignViewSection): string {
               size="small"
               secondary
               type="warning"
-              :disabled="actions.acting || campaign.loading || !!actions.pending"
+              :disabled="!!gate || actions.acting || campaign.loading || !!actions.pending"
               @click="runEnding(entry)"
             >
               {{ entry.label }}
@@ -747,6 +769,12 @@ function emptyText(section: CampaignViewSection): string {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+.action-block {
+  margin: 8px 0 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .empty {
   display: grid;

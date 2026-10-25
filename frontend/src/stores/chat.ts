@@ -197,12 +197,17 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // 未完成的文本从未持久化；失败、取消或 partial 时移除临时缓冲。
-  function abortStream(id: string) {
-    messages.value = messages.value.filter((m) => m.id !== id)
-    if (streamingId.value === id) {
-      streamingId.value = null
-      isGenerating.value = false
+  // 清锁不以 streamingId 匹配为前提：agent.turn.started 可能丢失，本端只
+  // 通过 markGenerating() 置真，此时终止事件仍必须解除输入锁。
+  function abortStream(id?: string) {
+    const target = id ?? streamingId.value ?? undefined
+    if (target) messages.value = messages.value.filter((m) => m.id !== target)
+    if (streamingId.value && streamingId.value !== target) {
+      const current = messages.value.find((m) => m.id === streamingId.value)
+      if (current) current.streaming = false
     }
+    streamingId.value = null
+    isGenerating.value = false
   }
 
   // 打开对话时服务端仍在生成（conversation.is_processing）：先锁住输入并

@@ -33,9 +33,12 @@ type Item struct {
 }
 
 type Active struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Items []Item `json:"items"`
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	Items            []Item `json:"items"`
+	Source           string `json:"source,omitempty"`
+	CampaignRevision int64  `json:"campaign_revision,omitempty"`
+	StateHash        string `json:"state_hash,omitempty"`
 }
 
 // Snapshot belongs to the assistant message and shares its branch lifecycle.
@@ -56,7 +59,11 @@ func Fingerprint(state any) string {
 }
 
 func (s Snapshot) Public(id string) Active {
-	a := Active{ID: id, Title: s.Proposal.Title, Items: make([]Item, 0, len(s.Proposal.Options))}
+	a := Active{
+		ID: id, Title: s.Proposal.Title, Source: "model",
+		CampaignRevision: s.CampaignRevision, StateHash: s.StateFingerprint,
+		Items: make([]Item, 0, len(s.Proposal.Options)),
+	}
 	for i, option := range s.Proposal.Options {
 		a.Items = append(a.Items, Item{Key: fmt.Sprintf("option-%d", i+1), Label: option.Label})
 	}

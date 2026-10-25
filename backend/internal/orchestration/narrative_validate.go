@@ -3,6 +3,7 @@ package orchestration
 import (
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -59,19 +60,218 @@ func ValidateNarrative(text string, narrative *gameplay.TurnNarrativeContext) (s
 	return status, detail
 }
 
+// ClaimDomain is the narrowest set of committed facts that can back one class
+// of narrative claim. A committed action only vouches for the domains it
+// actually wrote; "travel" cannot prove an item was gained or a relationship
+// improved.
+type ClaimDomain string
+
+const (
+	ClaimRealm         ClaimDomain = "realm"
+	ClaimHealth        ClaimDomain = "health"
+	ClaimInventory     ClaimDomain = "inventory"
+	ClaimRelationship  ClaimDomain = "relationship"
+	ClaimQuestAccept   ClaimDomain = "quest_accept"
+	ClaimQuestComplete ClaimDomain = "quest_complete"
+	ClaimFaction       ClaimDomain = "faction"
+)
+
+// TurnEvidence is the trusted, per-turn set of committed facts. It is built
+// from ActionResult changes and committed state-tool paths, never from model
+// prose or display projections.
+type TurnEvidence struct {
+	Domains map[ClaimDomain]bool
+	Paths   map[string]gameplay.FactChange
+	// Entities maps a domain to the entity names seen in committed change
+	// paths (for example the NPC name inside relationships["老邢"].trust).
+	Entities   map[ClaimDomain]map[string]bool
+	Actions    []gameplay.ActionResult
+	StatePaths []string
+	// UnknownMutation marks a turn that committed a tool without exposing
+	// inspectable facts (for example a roll). Such a turn neither grants nor
+	// denies domains.
+	UnknownMutation bool
+}
+
+func (e TurnEvidence) enforce() bool {
+	return len(e.Actions) > 0 || len(e.Paths) > 0 || len(e.StatePaths) > 0 || !e.UnknownMutation
+}
+
+func (e TurnEvidence) hasDomain(domains []ClaimDomain) bool {
+	for _, domain := range domains {
+		if e.Domains[domain] {
+			return true
+		}
+	}
+	return false
+}
+
+// entityMatches reports whether the claim names one of the entities that the
+// committed changes touched. When no entity name was observed the check is
+// skipped rather than guessed.
+func (e TurnEvidence) entityMatches(domains []ClaimDomain, claim string) bool {
+	checked := false
+	for _, domain := range domains {
+		names := e.Entities[domain]
+		if len(names) == 0 {
+			continue
+		}
+		checked = true
+		for name := range names {
+			if name != "" && strings.Contains(claim, name) {
+				return true
+			}
+		}
+	}
+	return !checked
+}
+
+// BuildTurnEvidence collects domains, changed paths and entity names from the
+// actions that were committed during this turn. statePaths are the explicit
+// field paths written by challenge state tools.
+func BuildTurnEvidence(narrative *gameplay.TurnNarrativeContext, extra []gameplay.ActionResult, statePaths []string, unknownMutation bool) TurnEvidence {
+	evidence := TurnEvidence{
+		Domains: map[ClaimDomain]bool{}, Paths: map[string]gameplay.FactChange{},
+		Entities: map[ClaimDomain]map[string]bool{}, StatePaths: statePaths,
+		UnknownMutation: unknownMutation,
+	}
+	seen := map[string]bool{}
+	add := func(action gameplay.ActionResult) {
+		if action.ActionID != "" && seen[action.ActionID] {
+			return
+		}
+		if action.ActionID != "" {
+			seen[action.ActionID] = true
+		}
+		evidence.Actions = append(evidence.Actions, action)
+		for _, domain := range claimDomainsForKey(action.ActionKey) {
+			evidence.domains(domain)
+		}
+		for _, change := range action.Changes {
+			evidence.addPath(change)
+		}
+	}
+	if narrative != nil {
+		for _, action := range narrative.Actions {
+			add(action)
+		}
+	}
+	for _, action := range extra {
+		add(action)
+	}
+	for _, path := range statePaths {
+		evidence.addPath(gameplay.FactChange{Path: path})
+	}
+	return evidence
+}
+
+func (e *TurnEvidence) domains(domains ...ClaimDomain) {
+	for _, domain := range domains {
+		e.Domains[domain] = true
+	}
+}
+
+func (e *TurnEvidence) addPath(change gameplay.FactChange) {
+	path := strings.ToLower(change.Path)
+	if path == "" {
+		return
+	}
+	e.Paths[change.Path] = change
+	domains := claimDomainsForPath(path, change.After)
+	for _, domain := range domains {
+		e.domains(domain)
+	}
+	for _, name := range pathEntityNames(change.Path) {
+		for _, domain := range domains {
+			if e.Entities[domain] == nil {
+				e.Entities[domain] = map[string]bool{}
+			}
+			e.Entities[domain][name] = true
+		}
+	}
+}
+
+func claimDomainsForKey(key string) []ClaimDomain {
+	switch {
+	case key == "cultivation.attempt_breakthrough" || key == "cultivation.begin_ascension":
+		return []ClaimDomain{ClaimRealm}
+	case key == "character.recover", key == "character.apply_condition",
+		key == "character.resolve_condition", key == "character.adjust_vitals":
+		return []ClaimDomain{ClaimHealth}
+	case key == "inventory.use_item":
+		return []ClaimDomain{ClaimHealth, ClaimInventory}
+	case key == "cultivation.retreat":
+		return []ClaimDomain{ClaimInventory}
+	case key == "quest.accept":
+		return []ClaimDomain{ClaimQuestAccept}
+	case key == "quest.submit":
+		return []ClaimDomain{ClaimQuestComplete}
+	}
+	switch {
+	case strings.HasPrefix(key, "inventory."), strings.HasPrefix(key, "craft."),
+		key == "trade.buy", key == "trade.sell", key == "world.gather":
+		return []ClaimDomain{ClaimInventory}
+	case strings.HasPrefix(key, "relationship."):
+		return []ClaimDomain{ClaimRelationship}
+	case strings.HasPrefix(key, "faction."):
+		return []ClaimDomain{ClaimFaction}
+	}
+	return nil
+}
+
+func claimDomainsForPath(path string, after any) []ClaimDomain {
+	out := make([]ClaimDomain, 0, 2)
+	if strings.Contains(path, "realm") {
+		out = append(out, ClaimRealm)
+	}
+	if strings.Contains(path, "health") || strings.Contains(path, "injur") {
+		out = append(out, ClaimHealth)
+	}
+	if strings.Contains(path, "inventory") || strings.Contains(path, "currency") {
+		out = append(out, ClaimInventory)
+	}
+	if strings.Contains(path, "relationship") {
+		out = append(out, ClaimRelationship)
+	}
+	if strings.Contains(path, "quest") || strings.Contains(path, "obligation") {
+		status, _ := after.(string)
+		if status == "completed" || status == "resolved" {
+			out = append(out, ClaimQuestComplete)
+		} else {
+			out = append(out, ClaimQuestAccept)
+		}
+	}
+	if strings.Contains(path, "faction") {
+		out = append(out, ClaimFaction)
+	}
+	return out
+}
+
+var pathEntityPattern = regexp.MustCompile(`\["([^"]+)"\]`)
+
+func pathEntityNames(path string) []string {
+	matches := pathEntityPattern.FindAllStringSubmatch(path, -1)
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) == 2 && match[1] != "" {
+			out = append(out, match[1])
+		}
+	}
+	return out
+}
+
 // ValidateTurnNarrative extends ValidateNarrative with the "unbacked claim"
-// gate: when the turn committed no state-changing action and the narrative
-// context carries no pending action results, any claim of a realm
-// breakthrough, healing or acquired items/currency cannot be true and is
-// reported as a violation so the RepairNarrative / fallback flow applies.
+// gate: a narrative may only claim a change in a domain that this turn's
+// committed facts actually touched. Claims without matching evidence are
+// reported so the RepairNarrative / fallback flow applies.
 // 挑战模式额外启用“时间推进主张”闸门：没有可信动作的回合，正文不得让日历
 // 前进（数字日/年、季节转换、岁月套语等）。guards 为玩法作者追加的受控主张。
-func ValidateTurnNarrative(text string, narrative *gameplay.TurnNarrativeContext, committedThisTurn bool, guards []gameplay.NarrativeGuard) (string, storage.JSONMap) {
+func ValidateTurnNarrative(text string, narrative *gameplay.TurnNarrativeContext, evidence TurnEvidence, guards []gameplay.NarrativeGuard) (string, storage.JSONMap) {
 	status, detail := ValidateNarrative(text, narrative)
 	extra := guardClaims(text, guards)
-	if !committedThisTurn && (narrative == nil || len(narrative.Actions) == 0) {
-		extra = append(extra, unbackedStateClaims(text)...)
-		if narrative != nil && narrative.ChallengeMode {
+	if evidence.enforce() {
+		extra = append(extra, unbackedStateClaims(text, evidence)...)
+		if narrative != nil && narrative.ChallengeMode && len(narrative.Actions) == 0 && !evidence.UnknownMutation {
 			extra = append(extra, unbackedTimeClaims(text)...)
 		}
 	}
@@ -80,29 +280,74 @@ func ValidateTurnNarrative(text string, narrative *gameplay.TurnNarrativeContext
 	}
 	violations, _ := detail["violations"].([]narrativeViolation)
 	detail["violations"] = append(violations, extra...)
+	detail["evidence_domains"] = evidence.domainNames()
+	detail["missing_domains"] = missingDomains(extra)
 	return "failed", detail
 }
 
-var unbackedClaimPatterns = []struct {
-	code    string
-	path    string
-	pattern *regexp.Regexp
-}{
-	{"unbacked_realm_change", "character.realm_name", regexp.MustCompile(`突破[^。！？\n]{0,12}成功|成功[^。！？\n]{0,12}突破|晋升成功|破境成功|境界(?:提升|突破|跃升)|一举突破`)},
-	{"unbacked_healing", "character.health", regexp.MustCompile(`伤势?[^。！？\n]{0,8}(痊愈|愈合|全消|尽复)|伤愈|气血[^。！？\n]{0,8}(回满|尽复|全满)|恢复如初`)},
-	{"unbacked_item_gain", "inventory", regexp.MustCompile(`(?:获得|得到|拾取|收获|到手|赚得|赚到|赚了)[^。！？\n]{0,8}?(?:\d+|[一二两三四五六七八九十百千万几数]+)\s*(?:块|枚|株|份|件|瓶|张|颗|粒|两|贯|文|个|把|本)`)},
-	{"unbacked_currency_gain", "currency", regexp.MustCompile(`(?:灵石|银两|银子|金币|铜钱|钱财)[^。！？\n]{0,4}(?:增加|大增|入账|翻倍)`)},
+func (e TurnEvidence) domainNames() []string {
+	out := make([]string, 0, len(e.Domains))
+	for domain := range e.Domains {
+		out = append(out, string(domain))
+	}
+	sort.Strings(out)
+	return out
 }
 
-func unbackedStateClaims(text string) []narrativeViolation {
+func missingDomains(violations []narrativeViolation) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(violations))
+	for _, violation := range violations {
+		for _, rule := range unbackedClaimPatterns {
+			if rule.code != violation.Code {
+				continue
+			}
+			for _, domain := range rule.domains {
+				key := string(domain)
+				if !seen[key] {
+					seen[key] = true
+					out = append(out, key)
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+var unbackedClaimPatterns = []struct {
+	code     string
+	path     string
+	domains  []ClaimDomain
+	entities bool
+	pattern  *regexp.Regexp
+}{
+	{"unbacked_realm_change", "character.realm_name", []ClaimDomain{ClaimRealm}, false, regexp.MustCompile(`突破[^。！？\n]{0,12}成功|成功[^。！？\n]{0,12}突破|晋升成功|破境成功|境界(?:提升|突破|跃升)|一举突破`)},
+	{"unbacked_healing", "character.health", []ClaimDomain{ClaimHealth}, false, regexp.MustCompile(`伤势?[^。！？\n]{0,8}(痊愈|愈合|全消|尽复)|伤愈|气血[^。！？\n]{0,8}(回满|尽复|全满)|恢复如初`)},
+	{"unbacked_item_gain", "inventory", []ClaimDomain{ClaimInventory}, false, regexp.MustCompile(`(?:获得|得到|拾取|收获|到手|赚得|赚到|赚了)[^。！？\n]{0,8}?(?:\d+|[一二两三四五六七八九十百千万几数]+)\s*(?:块|枚|株|份|件|瓶|张|颗|粒|两|贯|文|个|把|本)`)},
+	{"unbacked_currency_gain", "currency", []ClaimDomain{ClaimInventory}, false, regexp.MustCompile(`(?:灵石|银两|银子|金币|铜钱|钱财)[^。！？\n]{0,4}(?:增加|大增|入账|翻倍)`)},
+	{"unbacked_item_loss", "inventory", []ClaimDomain{ClaimInventory}, false, regexp.MustCompile(`(?:用掉|消耗|花掉|失去|交出|耗尽)[^。！？\n]{0,8}(?:\d+|[一二两三四五六七八九十百千万几数]+)\s*(?:块|枚|株|份|件|瓶|张|颗|粒|两|贯|文|个|把|本)`)},
+	{"unbacked_relationship_gain", "relationships", []ClaimDomain{ClaimRelationship}, true, regexp.MustCompile(`(?:好感|信任)[^。！？\n]{0,6}(?:提升|增加|上涨|加深|增强)|(?:更|更加|越发)信任`)},
+	{"unbacked_quest_accept", "quests", []ClaimDomain{ClaimQuestAccept}, false, regexp.MustCompile(`(?:接下|接受|领取)[^。！？\n]{0,8}(?:任务|委托|承诺)`)},
+	{"unbacked_quest_complete", "quests", []ClaimDomain{ClaimQuestComplete}, false, regexp.MustCompile(`(?:任务|委托|承诺)[^。！？\n]{0,4}(?:完成|结束|交付)|(?:完成|交付|提交)[^。！？\n]{0,4}(?:任务|委托|承诺)`)},
+	{"unbacked_faction_change", "factions", []ClaimDomain{ClaimFaction}, false, regexp.MustCompile(`(?:声望|名望)[^。！？\n]{0,4}(?:提升|增加|上涨)|(?:成为|晋升为)[^。！？\n]{0,8}(?:弟子|执事|长老|成员)`)},
+}
+
+func unbackedStateClaims(text string, evidence TurnEvidence) []narrativeViolation {
 	out := make([]narrativeViolation, 0)
 	for _, rule := range unbackedClaimPatterns {
-		if match := firstAffirmedClaim(text, rule.pattern); match != "" {
-			out = append(out, narrativeViolation{
-				Code: rule.code, Path: rule.path, Claim: match,
-				Expected: "本回合无已提交动作", Actual: "正文宣称状态变化",
-			})
+		match := firstAffirmedClaim(text, rule.pattern)
+		if match == "" {
+			continue
 		}
+		if evidence.hasDomain(rule.domains) &&
+			(!rule.entities || evidence.entityMatches(rule.domains, text)) {
+			continue
+		}
+		out = append(out, narrativeViolation{
+			Code: rule.code, Path: rule.path, Claim: match,
+			Expected: "本回合该领域无已提交变化", Actual: "正文宣称状态变化",
+		})
 	}
 	return out
 }
@@ -315,11 +560,24 @@ func negated(text string, pattern *regexp.Regexp) bool {
 
 func firstAffirmedClaim(text string, pattern *regexp.Regexp) string {
 	for _, index := range pattern.FindAllStringIndex(text, -1) {
-		if !negatedAt(text, index[0]) {
-			return text[index[0]:index[1]]
+		if negatedAt(text, index[0]) || speculativeAt(text, index[0]) {
+			continue
 		}
+		return text[index[0]:index[1]]
 	}
 	return ""
+}
+
+// speculativeAt skips rumour, comparison and hypothetical clauses: missing a
+// claim is preferable to rejecting legitimate prose.
+func speculativeAt(text string, matchStart int) bool {
+	prefix := claimPrefix(text, matchStart, 8)
+	for _, marker := range []string{"据说", "传闻", "听说", "仿佛", "似乎", "像是", "好像", "也许", "可能", "如果", "假如"} {
+		if strings.Contains(prefix, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func negatedAt(text string, matchStart int) bool {

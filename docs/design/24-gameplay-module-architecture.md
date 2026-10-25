@@ -55,7 +55,9 @@
 
 动作反馈从执行前后真实投影产生，区分可信提交与游戏目标成功；由 player/model 投影交集保证共享结果不泄露独占字段。反馈最多 8 KiB，最多 24 条变化，集合按稳定身份列出变化项；无法完整提供的详情明确标记。Campaign 的反馈提升为持久 `ActionResult`，写入 `campaign_action_commits.narrative`，并带 `revision` 与 `state_hash`；单局模块写入 `module_action_commits.narrative`，不参与 Campaign 哈希。助手叙事通过 `display_message_campaign_actions` 关联全部来源动作，系统动作回执不算叙事消费。
 
-领域规则继续负责动作可用性和公开解释，平台只保留 model 主体当前可见的只读限制说明。未知动作、目录限制、前置不足及过期预览分别处理；可用目录仍是唯一执行权限来源。恢复和回放使用已提交结果，不因补反馈而重复执行动作。
+叙事校验以本回合已提交的 `ActionResult.Changes` 和状态工具写入路径构建 `TurnEvidence`，按领域和实体判断主张是否有据；展示投影或模型正文不作为证据。已有一个可信动作不会整回合豁免其他领域的主张：前往某地不能证明另一名 NPC 的关系提升，接受任务不能证明任务完成。具体规则见 [28 状态与剧情一致性](28-state-narrative-consistency.md)。
+
+领域规则继续负责动作可用性和公开解释，平台只保留 model 主体当前可见的只读限制说明。未知动作、目录限制、前置不足及过期预览分别处理；可用目录仍是唯一执行权限来源。可用性原因尽量结构化，而不是只给一句合并文案：例如修仙闭关的 `trainingrules.Unavailable` 会给出 `reason_code`、所需功法与当前已装配功法，前端据此区分“未装配”和“已装配但不适用”，判定本身不变。恢复和回放使用已提交结果，不因补反馈而重复执行动作。
 
 ## 两种持久化适配
 
@@ -102,6 +104,8 @@ backend/data/bootstrap.json 列出八类九个默认包。启动补齐缺失包�
 ## 玩家、管理员与上下文
 
 玩家侧栏的“行动”页使用 `ModuleActionPanel.vue` 展示实时菜单与方案，并通过统一 GET/POST `/api/conversations/:id/actions` 请求。状态冲突刷新方案；网络结果不明时保留同一请求重试。切换对话后迟到响应不能污染当前页，旧请求不能清除新请求。异步提交成功后重新读取状态、Campaign 与账号余额，不乐观伪造结果。
+
+行动入口按 `campaign_view.actions` 分工：带 `source_path` 的实体动作（任务、NPC、地点、功法等）由 Campaign 侧栏按实体渲染，行动页隐藏这些 capability，只保留需要填写参数或方案的动作，避免同一 `(action_key, entity)` 出现两个提交入口。行动页、Campaign 分区、结局和指引条共用 `lib/action-gate.ts`：本局结束、结果未确认、生成中、同步中和 revision 冲突都会给出可见原因，点击被拦截也提示而非静默返回；忙碌只认权威 `activity.is_processing` 与本端乐观锁。
 
 管理员版本编辑器按分类选择已安装模块，并根据该模块的 Schema 编辑规则。切换模块初始化对应权限、动作及展示骨架，但仍须补齐规则和结局才能发布；完整示例导入是推荐起点。未知渲染器和不支持的动作明确报错。
 

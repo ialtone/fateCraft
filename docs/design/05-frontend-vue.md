@@ -270,7 +270,9 @@ WebSocket 事件不是可靠队列。服务端会合并相邻同键 reasoning/te
 ## 响应式与交互约束
 
 - 固定工具条、对话输入区和状态面板不能因长标题或长标签错位。
-- 对话动态行动提示使用内容区底部固定的 `ConversationGuidanceBar`，位于滚动消息区和输入框之间；没有 active guidance 时不占布局空间，点击只提交服务端签发的 guidance ID 与 item key。
+- 对话动态行动提示使用内容区底部固定的 `ConversationGuidanceBar`，位于滚动消息区和输入框之间；没有可展示项时不占布局空间。服务端 guidance 存在时点击只提交服务端签发的 guidance ID 与 item key；模型未产出合法 proposal 时，组件从当前 Campaign 快照派生最多 4 条普通消息意图（遭遇、委托提交/接受、交谈、前往、修行），点击走普通用户输入，服务端重新校验，不自行拼接 capability 参数。`agent.turn.started` 不再清空指引，仅因生成中隐藏，终止后恢复；`guidance.updated` 的 Campaign revision 落后于当前快照时丢弃，分支替换、对话结束或版本切换才清空。
+- 生成锁以终止事件为主信号：`agent.turn.completed/partial/failed/cancelled` 无论是否携带 `message_id` 都解除输入锁；`terminalAttempts` 去重只跳过重复的消息/通知处理，仍执行清锁、操作收尾和资源失效；活动快照 `is_processing=false` 立即复位。叙事 watchdog 首轮约 15 秒后指数退避（记忆任务仍用独立长窗口），横幅超过 20 秒时提供“重新同步”按钮，回到前台或恢复网络时立即对账。
+- 所有动作入口（Campaign 分区、行动页、结局、指引条）共用 `lib/action-gate.ts`：生成中、结果未确认、同步中、本局结束、版本冲突都会显示原因；点击被拦截也给出提示。同一 `(action_key, entity)` 只渲染一个提交面。
 - 移动端优先保证对话阅读和输入，辅助面板可折叠。
 - 图标按钮需要 tooltip 或可访问名称。
 - 危险操作应使用明确确认，不能把“结束”“归档”“删除”混成同一语义。

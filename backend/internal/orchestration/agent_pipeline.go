@@ -125,6 +125,9 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 	}
 
 	mutatingCount := 0
+	// stateToolPaths 记录本回合状态工具实际写入的字段路径，作为叙事校验的
+	// 领域证据；它与 mutatingCount 不同，精确到字段而不是整回合放行。
+	var stateToolPaths []string
 	// settled 表示本 attempt 已提交挑战结算：对话已结束，后续步骤只允许写收尾叙事。
 	settled := false
 	pinned := false
@@ -361,10 +364,20 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			}
 			meta := map[string]any{"model": settings.Model, "agent_steps": stepNo, "tool_calls": mutatingCount}
 			if pendingGuidance != nil {
-				proposal := guidance.Snapshot{Proposal: *pendingGuidance, StateFingerprint: in.StateFingerprint}
-				if snapshot.CampaignRevision != nil {
-					proposal.CampaignRevision = *snapshot.CampaignRevision
+				// 指引快照必须绑定本轮动作提交之后的权威状态；装配阶段
+				// 的 fingerprint/revision 在回合内发生过写操作后必然失效，
+				// GET /guidance 会返回空。
+				fingerprint := in.StateFingerprint
+				if finalState, stateErr := g.stateSvc.Get(context.WithoutCancel(attemptCtx), convID); stateErr == nil {
+					fingerprint = guidance.Fingerprint(finalState)
 				}
+				var revision int64
+				if snapshot.ObservedRevision != nil {
+					revision = *snapshot.ObservedRevision
+				} else if snapshot.CampaignRevision != nil {
+					revision = *snapshot.CampaignRevision
+				}
+				proposal := guidance.Snapshot{Proposal: *pendingGuidance, StateFingerprint: fingerprint, CampaignRevision: revision}
 				meta[guidance.MetadataKey] = proposal
 			}
 			if !settings.StreamEnabled || !textPreview.sent() {
@@ -384,12 +397,13 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 			validationStatus := "not_applicable"
 			validationDetail := storage.JSONMap{}
 			if in.NarrativeContext != nil || len(contract.NarrativeGuards) > 0 {
-				validationStatus, validationDetail = ValidateTurnNarrative(text, in.NarrativeContext, mutatingCount > 0, contract.NarrativeGuards)
+				evidence := BuildTurnEvidence(in.NarrativeContext, assembleCache.moduleActions, stateToolPaths, mutatingCount > 0)
+				validationStatus, validationDetail = ValidateTurnNarrative(text, in.NarrativeContext, evidence, contract.NarrativeGuards)
 				if validationStatus != "passed" {
 					validationDetail["original_status"] = validationStatus
 					originalDetail := validationDetail
 					if repaired := RepairNarrative(text, originalDetail); repaired != "" {
-						if repairedStatus, repairedDetail := ValidateTurnNarrative(repaired, in.NarrativeContext, mutatingCount > 0, contract.NarrativeGuards); repairedStatus == "passed" {
+						if repairedStatus, repairedDetail := ValidateTurnNarrative(repaired, in.NarrativeContext, evidence, contract.NarrativeGuards); repairedStatus == "passed" {
 							text = repaired
 							validationStatus = "repaired"
 							validationDetail = repairedDetail
@@ -528,6 +542,8 @@ func (g *Generator) runAgentGeneration(ctx context.Context, conv *storage.Conver
 							g.finishAgentFailure(ctx, runtimeEvents, convID, stepNo, true, err, emit)
 							return
 						}
+					} else if isStateToolKind(binding.Kind) {
+						stateToolPaths = append(stateToolPaths, outcomeStatePaths(outcome)...)
 					}
 					if revision := outcomeRevision(outcome); revision != nil {
 						snapshot.ObservedRevision = revision

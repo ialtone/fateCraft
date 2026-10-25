@@ -192,7 +192,14 @@ func projectPracticeCapability(capability *campaign.ActionCapability, state *sto
 	}
 	keys := worldactions.OptionStrings(capability.Options, "technique_key")
 	if len(keys) == 0 {
-		*capability = worldactions.DenyCapability(*capability, "cultivation.unavailable", "当前没有可修炼的已装配功法或资源不足")
+		message := "当前没有可修炼的功法；请先学习并装配功法"
+		for _, technique := range state.Techniques {
+			if technique.Status == "active" && technique.EquippedSlot != nil {
+				message = "已装配功法当前不可修炼：可能法力不足、修为已满或功法层级无效"
+				break
+			}
+		}
+		*capability = worldactions.DenyCapability(*capability, "cultivation.unavailable", message)
 		return
 	}
 	worldactions.SetStringEnum(capability.ArgumentSchema, "technique_key", keys)

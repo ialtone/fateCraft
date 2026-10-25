@@ -1,10 +1,12 @@
 package trainingrules
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/ialtone/fatecraft/internal/gameplay/components/ruledata"
 	"github.com/ialtone/fatecraft/internal/gameplay/contract"
@@ -93,6 +95,47 @@ func Technique(p Plan, state *storage.CampaignDomainState) *storage.CampaignTech
 	return nil
 }
 
+// Unavailable describes why a plan cannot run in a player-readable way.
+// Technique-related reasons also list what the plan accepts and what is
+// currently equipped, so "尚未装配功法" is not mistaken for a missing
+// technique when a valid but ineligible one is equipped.
+type Unavailable struct {
+	Code               string   `json:"code"`
+	Message            string   `json:"message"`
+	RequiredTechniques []string `json:"required_techniques,omitempty"`
+	EquippedTechniques []string `json:"equipped_techniques,omitempty"`
+}
+
+func (e *Unavailable) Error() string { return e.Message }
+
+func techniqueNames(keys []string, state *storage.CampaignDomainState) []string {
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		name := key
+		if definition, ok := state.Definition(storage.DefinitionTechnique, key); ok && definition.Name != "" {
+			name = definition.Name
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func equippedTechniqueNames(state *storage.CampaignDomainState) []string {
+	out := make([]string, 0, len(state.Techniques))
+	for _, t := range state.Techniques {
+		if t.Status != "active" || t.EquippedSlot == nil {
+			continue
+		}
+		name := t.TechniqueKey
+		if definition, ok := state.Definition(storage.DefinitionTechnique, t.TechniqueKey); ok && definition.Name != "" {
+			name = definition.Name
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func Ready(p Plan, row storage.Campaign, state *storage.CampaignDomainState) error {
 	if row.GameTime < 0 || row.GameTime > math.MaxInt64-p.Days*1440 {
 		return fmt.Errorf("修行时间跨度无效")
@@ -123,7 +166,22 @@ func Ready(p Plan, row storage.Campaign, state *storage.CampaignDomainState) err
 	if p.Mode == "retreat" {
 		t := Technique(p, state)
 		if t == nil {
-			return fmt.Errorf("尚未装配方案要求的功法")
+			required := techniqueNames(p.TechniqueKeys, state)
+			equipped := equippedTechniqueNames(state)
+			if len(equipped) == 0 {
+				return &Unavailable{
+					Code: "technique.none",
+					Message: "尚未装配功法；需要装配以下任一功法：" +
+						strings.Join(required, " / "),
+					RequiredTechniques: required, EquippedTechniques: equipped,
+				}
+			}
+			return &Unavailable{
+				Code: "technique.ineligible",
+				Message: "已装配的" + strings.Join(equipped, "、") +
+					"不适用于此方案；需要装配以下任一功法：" + strings.Join(required, " / "),
+				RequiredTechniques: required, EquippedTechniques: equipped,
+			}
 		}
 		d, ok := state.Definition(storage.DefinitionTechnique, t.TechniqueKey)
 		if !ok {
@@ -172,12 +230,17 @@ type View struct {
 	Days            int64  `json:"days"`
 	Available       bool   `json:"available"`
 	Reason          string `json:"reason"`
+	ReasonCode      string `json:"reason_code,omitempty"`
 	CostText        string `json:"cost_text"`
 	CultivationGain int64  `json:"cultivation_gain"`
 	MasteryGain     int64  `json:"mastery_gain"`
 	ManaCost        int64  `json:"mana_cost"`
 	TechniqueName   string `json:"technique_name"`
 	EffectText      string `json:"effect_text"`
+	// Technique hints let the UI explain which technique a retreat accepts
+	// instead of only reporting that the equipped one does not apply.
+	RequiredTechniques []string `json:"required_techniques,omitempty"`
+	EquippedTechniques []string `json:"equipped_techniques,omitempty"`
 }
 
 func Views(row storage.Campaign, state *storage.CampaignDomainState) ([]View, error) {
@@ -203,6 +266,12 @@ func Views(row storage.Campaign, state *storage.CampaignDomainState) ([]View, er
 		if err := Ready(p, row, state); err != nil {
 			v.Available = false
 			v.Reason = err.Error()
+			var unavailable *Unavailable
+			if errors.As(err, &unavailable) {
+				v.ReasonCode = unavailable.Code
+				v.RequiredTechniques = unavailable.RequiredTechniques
+				v.EquippedTechniques = unavailable.EquippedTechniques
+			}
 		}
 		if t := Technique(p, state); t != nil {
 			definition, _ := state.Definition(storage.DefinitionTechnique, t.TechniqueKey)

@@ -2,6 +2,20 @@
 
 记录日期：2026-10-09。模块架构与两套核心玩法规则的代码和本地检查完成；数据库、浏览器和模型真实验收由维护者执行。此记录不等于 release 批准。
 
+## 2026-10-25：Campaign 一致性修复
+
+本轮修复叙事证据、行动入口、行动指引、生成锁与修行不可用提示，未改玩法平衡、积分规则或数据库结构，也不改变“模型只生成叙事、不决定状态”的边界。机制见 [28 状态与剧情一致性](../28-state-narrative-consistency.md)、[17 通用 Campaign 动作](../17-generic-campaign-action-capabilities.md)、[19 Agent](../19-agent-tool-loop.md) 和 [05 前端](../05-frontend-vue.md)。
+
+- 叙事校验改用 `TurnEvidence`：由本回合已提交的 `ActionResult.Changes`、模块动作与状态工具写入路径构建领域、路径和实体证据，替代“本回合有变更就整回合放行”。前往、交谈、判定等动作不能为其他领域背书；传闻、假设和否定表达豁免。校验详情记录 `evidence_domains` / `missing_domains`。
+- 行动入口去重：`campaign_view.actions` 中带 `source_path` 的实体动作只由 Campaign 侧栏渲染，行动页隐藏对应 capability；所有入口共用 `action-gate`，禁用与拦截都显示原因，不再静默返回。
+- 行动指引：模型 guidance 快照改用回合结束后的 `state_hash` 与 `campaign_revision`；`agent.turn.started` 不再清空提示；模型未提供 proposal 时前端从 Campaign 公开快照派生普通消息意图，点击走普通用户输入，服务端重新校验。
+- 生成锁：四个终止事件无论是否携带 `message_id` 都清锁；attempt 去重只跳过消息副作用，仍执行清锁、操作收尾和资源失效；活动快照 `is_processing=false` 立即复位。叙事 watchdog 首轮约 15 秒后指数退避，记忆任务保留独立 75 秒窗口；横幅超过 20 秒提供“重新同步”。
+- 修行提示：`trainingrules.Unavailable` 输出 `reason_code`、所需功法与已装配功法，前端区分“未装配”与“已装配但不可修炼”；装配与可用性判定未改。
+
+本地检查通过：`go build ./...`、`go test ./... -count=1`、`go vet ./...`、`npx vue-tsc --noEmit`、`npm run build`、`npm run test:module-actions`（8 项）。新增 `trainingrules/rules_test.go`，扩展未支持主张、时间闸门与模块动作叙事测试，前端测试覆盖 `action-gate`、兜底指引与入口去重。
+
+本机仍未配置 `FATECRAFT_TEST_DATABASE_URL`，PostgreSQL 事务、并发、检查点回档与账本用例被跳过；**未做真实 SQL/锁/故障验收**。浏览器端入口去重、生成锁恢复和指引兜底仍需维护者实测；可控响应测试不能证明真实模型叙事永远正确。
+
 ## 2026-10-25：阶段记录与终局统一结算
 
 九个内置玩法均声明固定阶段条件；局中只把新达成阶段写入可回档进度区（单局 `_platform.stage_progress`，Campaign `campaign_stage_progress`），不写回执、不写账本、不增加余额。成功、失败、死亡、寿尽、超时、撤离和主动终止都在终局统一结算当前分支已达成阶段；成功结局再加终局积分。客户端直连记录进度，终局写实际 0 分回执并标记 `client_llm_route`。

@@ -503,6 +503,36 @@ type agentToolOutcome struct {
 	Events   []realtime.Event
 }
 
+func isStateToolKind(kind agentToolKind) bool {
+	switch kind {
+	case agentToolStateText, agentToolStateNumber, agentToolStateBoolean,
+		agentToolStateReplace, agentToolStateAppend, agentToolStateDynamic:
+		return true
+	}
+	return false
+}
+
+// outcomeStatePaths returns the field paths a committed state tool wrote.
+func outcomeStatePaths(outcome agentToolOutcome) []string {
+	data, ok := outcome.Result["data"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	switch paths := data["paths"].(type) {
+	case []string:
+		return paths
+	case []any:
+		out := make([]string, 0, len(paths))
+		for _, path := range paths {
+			if value, ok := path.(string); ok && value != "" {
+				out = append(out, value)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 func (g *Generator) executeAgentToolInTx(
 	ctx context.Context,
 	conv *storage.Conversation,

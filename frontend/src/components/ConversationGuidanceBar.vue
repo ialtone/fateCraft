@@ -5,28 +5,79 @@ import GuidanceRenderer from './GuidanceRenderer.vue'
 import { useGuidanceStore } from '@/stores/guidance'
 import { useChatStore } from '@/stores/chat'
 import { useSocketStore } from '@/stores/socket'
-import { guidanceApi } from '@/api'
+import { useCampaignStore } from '@/stores/campaign'
+import { campaignFallbackGuidance } from '@/lib/campaign-guidance'
+import { guidanceApi, messagesApi } from '@/api'
 import type { GuidanceGroup, GuidanceItem } from '@/types'
 
 const props = defineProps<{ convId: string; disabled: boolean }>()
 const guidance = useGuidanceStore()
 const chat = useChatStore()
 const socket = useSocketStore()
+const campaign = useCampaignStore()
 const message = useMessage()
 const pending = ref(false)
 let retry: { selection: string; requestId: string } | null = null
 
-const groups = computed<GuidanceGroup[]>(() =>
-  guidance.active
-    ? [
-        {
-          key: guidance.active.id,
-          title: guidance.active.title,
-          items: guidance.active.items.map((item) => ({ ...item, mode: 'message' })),
-        },
-      ]
-    : [],
+// 服务端 proposal 是可选的模型产物。模型未调用指引工具时，用当前 Campaign
+// 快照派生普通消息意图；这些意图不绑定 capability，提交后仍由服务端重新校验。
+const fallback = computed(() =>
+  guidance.active ? [] : campaignFallbackGuidance(campaign.snapshot),
 )
+
+const groups = computed<GuidanceGroup[]>(() => {
+  if (guidance.active) {
+    return [
+      {
+        key: guidance.active.id,
+        title: guidance.active.title,
+        items: guidance.active.items.map((item) => ({ ...item, mode: 'message' })),
+      },
+    ]
+  }
+  if (!fallback.value.length) return []
+  return [
+    {
+      key: 'campaign-fallback',
+      title: '当前可选行动',
+      items: fallback.value.map((item) => ({
+        key: item.key,
+        label: item.label,
+        mode: 'message',
+        message: item.message,
+      })),
+    },
+  ]
+})
+
+async function send(content: string) {
+  if (
+    !content.trim() ||
+    props.disabled ||
+    socket.writeBlocked ||
+    chat.isGenerating ||
+    pending.value
+  )
+    return
+  const convId = props.convId
+  pending.value = true
+  socket.clearError()
+  const tempId = chat.addOptimisticUser(content)
+  chat.markGenerating()
+  const requestId = crypto.randomUUID()
+  try {
+    if (!socket.sendUserInput(content, requestId)) {
+      await messagesApi.send(convId, content, requestId)
+    }
+  } catch (err: any) {
+    if (props.convId !== convId) return
+    chat.removeById(tempId)
+    chat.stopGenerating()
+    message.error(err.message || '发送行动失败')
+  } finally {
+    pending.value = false
+  }
+}
 
 async function select(item: GuidanceItem) {
   const active = guidance.active
@@ -53,11 +104,17 @@ async function select(item: GuidanceItem) {
 
 <template>
   <section
-    v-if="!disabled && guidance.active && !chat.isGenerating"
+    v-if="!disabled && groups.length && !chat.isGenerating"
     class="conversation-guidance-bar"
     aria-label="当前行动选项"
   >
-    <GuidanceRenderer :groups="groups" :disabled="pending" :loading="pending" @select="select" />
+    <GuidanceRenderer
+      :groups="groups"
+      :disabled="pending"
+      :loading="pending"
+      @select="select"
+      @message="send"
+    />
   </section>
 </template>
 
