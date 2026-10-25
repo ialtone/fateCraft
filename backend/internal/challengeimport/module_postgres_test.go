@@ -52,6 +52,34 @@ func TestPostgresModulePublicationSettlementReplayAndRewind(t *testing.T) {
 					loaded.document.Outcomes[i].RewardPoints = scenario.points
 				}
 			}
+			// The progress-reward contract derives its cap from the lowest
+			// positive success outcome. Keep this lifecycle fixture valid for
+			// the small positive payout, and omit progress rewards entirely for
+			// the zero-payout case.
+			if scenario.points == 0 {
+				filtered := loaded.document.Definitions[:0]
+				for _, definition := range loaded.document.Definitions {
+					if definition.Kind != contract.DefinitionKindChallengeProgressRewards {
+						filtered = append(filtered, definition)
+					}
+				}
+				loaded.document.Definitions = filtered
+			} else {
+				for i := range loaded.document.Definitions {
+					definition := &loaded.document.Definitions[i]
+					if definition.Kind != contract.DefinitionKindChallengeProgressRewards {
+						continue
+					}
+					definition.Content["stage_cap"] = int64(scenario.points / 2)
+					if stages, ok := definition.Content["stages"].([]any); ok {
+						for _, raw := range stages {
+							if stage, ok := raw.(map[string]any); ok {
+								stage["points"] = int64(2)
+							}
+						}
+					}
+				}
+			}
 			pack, err := challenges.CreatePack(ctx, player, challenge.CreatePackInput{Slug: loaded.manifest.ID, Name: loaded.manifest.Name, Description: loaded.manifest.Description})
 			if err != nil {
 				t.Fatal(err)

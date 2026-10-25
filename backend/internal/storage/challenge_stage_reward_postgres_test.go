@@ -23,7 +23,7 @@ func seedChallengeStageConversation(t *testing.T, db *gorm.DB, route string) (Co
 		query string
 		args  []any
 	}{
-		{`INSERT INTO users (id, username, display_name) VALUES (?, ?, 'Stage Test')`, []any{playerID, "stage-" + suffix}},
+		{`INSERT INTO users (id, username, display_name) VALUES (?, ?, 'Stage Test')`, []any{playerID, "stage-" + suffix[:8]}},
 		{`INSERT INTO challenge_packs (id, slug, name) VALUES (?, ?, 'Stage Test')`, []any{packID, slug}},
 		{`INSERT INTO challenge_versions (id, challenge_pack_id, version, status, manifest, content_hash, published_at) VALUES (?, ?, '1.0.0', 'published', '{}'::jsonb, ?, CURRENT_TIMESTAMP)`, []any{versionID, packID, hash}},
 		{`UPDATE challenge_packs SET current_version_id = ?, status = 'active' WHERE id = ?`, []any{versionID, packID}},
