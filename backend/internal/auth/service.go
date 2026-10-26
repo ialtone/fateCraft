@@ -61,7 +61,6 @@ var (
 	ErrInvalidDisplayName         = errors.New("昵称无效")
 	ErrInvalidOAuthFlow           = errors.New("OAuth 登录流程已失效，请重试")
 	ErrProviderRejected           = errors.New("LinuxDo 账号不可用")
-	ErrLinuxDOUnbound             = errors.New("该 LinuxDo 账户尚未绑定站内账号")
 	ErrLinuxDOCancelled           = errors.New("已取消 LinuxDo 授权")
 	ErrLinuxDOBindSessionMismatch = errors.New("绑定 LinuxDo 需要在发起绑定的账号保持登录时完成")
 )
@@ -76,6 +75,7 @@ type Repository interface {
 	UserByIdentifier(context.Context, string) (*storage.User, error)
 	RegisterEmailUser(context.Context, *storage.User, *uuid.UUID, *string, time.Time) error
 	ExternalUserByProviderSubject(context.Context, string, string) (*storage.User, error)
+	RegisterExternalUser(context.Context, *storage.User, storage.ExternalIdentityInput) error
 	BindExternalIdentity(context.Context, uuid.UUID, storage.ExternalIdentityInput) (*storage.ExternalIdentitySummary, error)
 	ListExternalIdentities(context.Context, uuid.UUID) ([]storage.ExternalIdentitySummary, error)
 	ListAllExternalIdentities(context.Context, int, int) ([]storage.AdminExternalIdentitySummary, error)
@@ -344,10 +344,10 @@ func (s *Service) CompleteLinuxDO(ctx context.Context, in LinuxDOCallback) (*Log
 		return &LoginResult{Purpose: flow.Purpose, ReturnTo: flow.ReturnTo}, nil
 	}
 	user, err := s.repo.ExternalUserByProviderSubject(ctx, linuxDOProvider, profile.Sub)
+	if errors.Is(err, storage.ErrIdentityNotFound) {
+		user, err = s.registerLinuxDOUser(ctx, identityInput)
+	}
 	if err != nil {
-		if errors.Is(err, storage.ErrIdentityNotFound) {
-			return fail(ErrLinuxDOUnbound)
-		}
 		return fail(err)
 	}
 	token, err := s.createSession(ctx, user)
@@ -355,6 +355,42 @@ func (s *Service) CompleteLinuxDO(ctx context.Context, in LinuxDOCallback) (*Log
 		return fail(err)
 	}
 	return &LoginResult{Purpose: flow.Purpose, User: user, SessionToken: token, ReturnTo: flow.ReturnTo}, nil
+}
+
+// registerLinuxDOUser 为未绑定的 LinuxDo 账户自动创建站内账号（无密码），并发放与邮箱注册相同的注册奖励。
+// 身份已绑定到停用账号，或并发回调已抢先建号时，按已绑定账号重新查找。
+func (s *Service) registerLinuxDOUser(ctx context.Context, in storage.ExternalIdentityInput) (*storage.User, error) {
+	initialized, err := s.repo.InstallationComplete(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !initialized {
+		return nil, ErrInstallationRequired
+	}
+	username, err := normalizeUsername(in.Username)
+	if err != nil {
+		username = "linuxdo_" + in.ProviderUserID
+		if utf8.RuneCountInString(username) > usernameMaxRunes {
+			username = string([]rune(username)[:usernameMaxRunes])
+		}
+	}
+	displayName, err := normalizeDisplayName(in.DisplayName, username)
+	if err != nil {
+		displayName = username
+	}
+	now := time.Now()
+	user := &storage.User{
+		ID: uuid.New(), Username: username, Email: in.Email, DisplayName: displayName, AvatarURL: in.AvatarURL,
+		Status: storage.UserStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+	err = s.repo.RegisterExternalUser(ctx, user, in)
+	if errors.Is(err, storage.ErrIdentityAlreadyBound) {
+		user, err = s.repo.ExternalUserByProviderSubject(ctx, in.Provider, in.ProviderUserID)
+		if errors.Is(err, storage.ErrIdentityNotFound) {
+			return nil, ErrProviderRejected
+		}
+	}
+	return user, err
 }
 
 // AbortLinuxDO 处理授权回调携带 error 参数（例如用户拒绝授权）的情况。

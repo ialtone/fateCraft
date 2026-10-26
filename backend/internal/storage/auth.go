@@ -29,6 +29,7 @@ const (
 const (
 	usersUsernameUniqueIndex   = "idx_users_username_lower"
 	usersEmailUniqueConstraint = "users_email_key"
+	identityUniqueConstraint   = "auth_identities_provider_provider_user_id_key"
 	pgUniqueViolationCode      = "23505"
 )
 
@@ -386,6 +387,8 @@ func translateUserUniqueViolation(err error) error {
 		return ErrUsernameInUse
 	case usersEmailUniqueConstraint:
 		return ErrEmailInUse
+	case identityUniqueConstraint:
+		return ErrIdentityAlreadyBound
 	default:
 		return err
 	}
@@ -773,6 +776,63 @@ func (r *AuthRepository) BindExternalIdentity(ctx context.Context, userID uuid.U
 		return tx.Model(&row).Select("id", "provider", "provider_user_id", "username", "provider_email", "trust_level", "created_at", "updated_at").First(&summary).Error
 	})
 	return &summary, err
+}
+
+// RegisterExternalUser 在同一事务中用外部身份创建新用户、绑定身份并发放注册奖励。
+// 用户名被占用时依次追加数字后缀重试；邮箱已被其他用户使用时不写入邮箱。
+// 外部身份已被绑定（包括并发回调抢先创建）时返回 ErrIdentityAlreadyBound。
+func (r *AuthRepository) RegisterExternalUser(ctx context.Context, user *User, in ExternalIdentityInput) error {
+	base := []rune(user.Username)
+	for attempt := 0; attempt < 20; attempt++ {
+		if attempt > 0 {
+			suffix := fmt.Sprintf("_%d", attempt)
+			if attempt >= 10 {
+				suffix = "_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+			}
+			if limit := 32 - len(suffix); len(base) > limit {
+				user.Username = string(base[:limit]) + suffix
+			} else {
+				user.Username = string(base) + suffix
+			}
+		}
+		err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var count int64
+			if err := tx.Model(&User{}).Where("lower(username) = lower(?)", user.Username).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return ErrUsernameInUse
+			}
+			if user.Email != nil && r.emailExists(tx, *user.Email) {
+				user.Email = nil
+			}
+			user.Role = UserRoleUser
+			if err := tx.Create(user).Error; err != nil {
+				return translateUserUniqueViolation(err)
+			}
+			now := time.Now()
+			identity := AuthIdentity{
+				ID: uuid.New(), UserID: user.ID, Provider: in.Provider, ProviderUserID: in.ProviderUserID,
+				Username: in.Username, ProviderEmail: in.Email, TrustLevel: in.TrustLevel,
+				Profile: in.Profile, CreatedAt: now, UpdatedAt: now,
+			}
+			if err := tx.Create(&identity).Error; err != nil {
+				return translateUserUniqueViolation(err)
+			}
+			return grantInitialRewards(ctx, tx, user.ID)
+		})
+		switch {
+		case errors.Is(err, ErrUsernameInUse):
+			continue
+		case errors.Is(err, ErrEmailInUse):
+			// 并发注册抢占了邮箱：放弃邮箱后用同一用户名重试。
+			user.Email = nil
+			attempt--
+			continue
+		}
+		return err
+	}
+	return ErrUsernameInUse
 }
 
 // UnbindExternalIdentity 删除用户自己的一个外部身份，并保证删除后账号仍至少保留一种可用的登录方式：

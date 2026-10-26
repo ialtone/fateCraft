@@ -29,6 +29,7 @@ type oauthTestRepo struct {
 	loginUser   *storage.User
 	bindErr     error
 	boundUserID *uuid.UUID
+	registered  *storage.User
 }
 
 func newOAuthTestRepo() *oauthTestRepo {
@@ -83,6 +84,11 @@ func (r *oauthTestRepo) ExternalUserByProviderSubject(context.Context, string, s
 		return nil, storage.ErrIdentityNotFound
 	}
 	return r.loginUser, nil
+}
+
+func (r *oauthTestRepo) RegisterExternalUser(_ context.Context, user *storage.User, _ storage.ExternalIdentityInput) error {
+	r.registered = user
+	return nil
 }
 
 func (r *oauthTestRepo) BindExternalIdentity(_ context.Context, userID uuid.UUID, in storage.ExternalIdentityInput) (*storage.ExternalIdentitySummary, error) {
@@ -258,14 +264,16 @@ func TestLinuxDOLoginCallback(t *testing.T) {
 		assertBindingCookieCleared(t, recorder)
 	})
 
-	t.Run("unbound_identity_explains_binding", func(t *testing.T) {
+	t.Run("unbound_identity_registers_and_logs_in", func(t *testing.T) {
 		env := newOAuthTestEnv(t, false)
-		state, binding := env.start(t, "/api/auth/linuxdo/start")
+		state, binding := env.start(t, "/api/auth/linuxdo/start?return_to=/conversations")
 		recorder := env.do(t, "/api/auth/linuxdo/callback?code=auth-code&state="+url.QueryEscape(state), binding)
 		target := redirectTarget(t, recorder)
-		want := "该 LinuxDo 账户尚未绑定站内账号，请先用用户名或邮箱登录，再到“设置 → 第三方账户”中绑定"
-		if target.Path != "/login" || target.Query().Get("error") != want {
-			t.Fatalf("unexpected redirect: %s", target)
+		if target.String() != "/conversations" || env.repo.registered == nil {
+			t.Fatalf("redirect = %s registered = %v", target, env.repo.registered)
+		}
+		if session := responseCookie(recorder, sessionCookieName); session == nil || session.Value == "" {
+			t.Fatal("session cookie was not set")
 		}
 	})
 

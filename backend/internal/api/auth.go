@@ -147,8 +147,8 @@ func linuxDOBindErrorMessage(err error) string {
 // linuxDOLoginErrorMessage 把登录失败原因转换为展示给用户的提示。
 func linuxDOLoginErrorMessage(err error) string {
 	switch {
-	case errors.Is(err, authservice.ErrLinuxDOUnbound):
-		return "该 LinuxDo 账户尚未绑定站内账号，请先用用户名或邮箱登录，再到“设置 → 第三方账户”中绑定"
+	case errors.Is(err, authservice.ErrInstallationRequired):
+		return "请先完成首次安装"
 	case errors.Is(err, authservice.ErrLinuxDOCancelled):
 		return "已取消 LinuxDo 授权"
 	case errors.Is(err, authservice.ErrLinuxDOLoginDisabled):
@@ -452,7 +452,7 @@ func authFail(c *gin.Context, err error) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, authservice.ErrInstallationRequired):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, authservice.ErrInvalidOAuthFlow), errors.Is(err, authservice.ErrProviderRejected), errors.Is(err, authservice.ErrLinuxDOUnbound):
+	case errors.Is(err, authservice.ErrInvalidOAuthFlow), errors.Is(err, authservice.ErrProviderRejected):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, storage.ErrNotFound):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})

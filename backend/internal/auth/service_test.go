@@ -95,6 +95,14 @@ func (f *fakeRepository) ExternalUserByProviderSubject(_ context.Context, _, _ s
 	}
 	return f.user, nil
 }
+func (f *fakeRepository) RegisterExternalUser(_ context.Context, user *storage.User, in storage.ExternalIdentityInput) error {
+	if f.registerErr != nil {
+		return f.registerErr
+	}
+	f.user = user
+	f.boundUserID = &user.ID
+	return nil
+}
 func (f *fakeRepository) BindExternalIdentity(_ context.Context, userID uuid.UUID, in storage.ExternalIdentityInput) (*storage.ExternalIdentitySummary, error) {
 	if f.bindErr != nil {
 		return nil, f.bindErr
@@ -460,7 +468,7 @@ func TestCompleteLinuxDOFailuresCarryFlowPurpose(t *testing.T) {
 			t.Fatalf("unexpected flow error: %+v", flowErr)
 		}
 	})
-	t.Run("login_unbound_identity", func(t *testing.T) {
+	t.Run("login_unbound_identity_registers_user", func(t *testing.T) {
 		repo := &fakeRepository{}
 		provider, _ := newFakeLinuxDOProvider(t)
 		svc := NewService(repo, linuxDOTestConfig(provider))
@@ -468,15 +476,17 @@ func TestCompleteLinuxDOFailuresCarryFlowPurpose(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
+		result, err := svc.CompleteLinuxDO(context.Background(), LinuxDOCallback{
 			Code: "auth-code", State: stateOf(t, start), BrowserBinding: start.BrowserBinding,
 		})
-		var flowErr *LinuxDOFlowError
-		if !errors.As(err, &flowErr) || !errors.Is(err, ErrLinuxDOUnbound) || flowErr.Purpose != storage.OAuthPurposeLogin {
-			t.Fatalf("expected unbound login flow error, got %v", err)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if repo.session != nil {
-			t.Fatal("unbound identity must not create a session")
+		if result.User == nil || result.SessionToken == "" || repo.session == nil || repo.session.UserID != result.User.ID {
+			t.Fatalf("unbound identity must register and log in: %+v", result)
+		}
+		if result.User.PasswordHash != nil || result.User.Status != storage.UserStatusActive || result.User.Username == "" {
+			t.Fatalf("unexpected registered user: %+v", result.User)
 		}
 	})
 }
