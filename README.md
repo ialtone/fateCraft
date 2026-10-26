@@ -59,6 +59,10 @@
 
 ## 界面截图
 
+### 首页
+
+![首页界面](docs/assets/readme/首页.png)
+
 ### 青河修仙志
 
 ![青河修仙志对话界面](docs/assets/readme/青河修仙志.png)
