@@ -583,6 +583,10 @@ func (r *ChallengeRepository) CompleteRun(
 	if err != nil {
 		return nil, fmt.Errorf("玩家 ID 无效: %w", err)
 	}
+	// 兜底：零值时间会让 challenge_runs.settled_at 与对话 ended_at 落成 0001-01-01。
+	if run.SettledAt.IsZero() {
+		run.SettledAt = time.Now()
+	}
 	if err := r.db.WithContext(ctx).Create(run).Error; err != nil {
 		return nil, err
 	}

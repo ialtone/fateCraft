@@ -707,6 +707,9 @@ func (s *Service) ValidateSettlementWithRepository(ctx context.Context, repo *st
 	if err := validateSettlementInput(in); err != nil {
 		return err
 	}
+	if err := fillSettlementDefaults(ctx, repo, &in); err != nil {
+		return err
+	}
 	conv, err := repo.Conversation(ctx, in.ConversationID)
 	if err != nil {
 		return err
@@ -718,9 +721,6 @@ func (s *Service) ValidateSettlementWithRepository(ctx context.Context, repo *st
 func (s *Service) Settle(ctx context.Context, in SettlementInput) (*SettlementResult, error) {
 	if err := validateSettlementInput(in); err != nil {
 		return nil, err
-	}
-	if in.SettledAt.IsZero() {
-		in.SettledAt = time.Now()
 	}
 	var result *SettlementResult
 	err := s.repo.WithTx(ctx, func(tx *storage.ChallengeRepository) error {
@@ -745,6 +745,9 @@ func (s *Service) SettleWithRepository(ctx context.Context, repo *storage.Challe
 
 func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeRepository, in SettlementInput) (*SettlementResult, error) {
 	if err := validateSettlementInput(in); err != nil {
+		return nil, err
+	}
+	if err := fillSettlementDefaults(ctx, tx, &in); err != nil {
 		return nil, err
 	}
 	conv, err := tx.LockConversation(ctx, in.ConversationID)
@@ -813,6 +816,23 @@ func (s *Service) settleInRepo(ctx context.Context, tx *storage.ChallengeReposit
 		StageRewards: stageRows, StageRewardPoints: stagePoints,
 		TotalRewardPoints: stagePoints + storage.TerminalRunRewardPoints(rewards),
 	}, nil
+}
+
+// fillSettlementDefaults 补全调用方未提供的结算输入，所有结算路径（工具、模块动作、Settle）共用：
+// SettledAt 缺省为当前时间，避免写入零值时间；TurnCount 缺省按有效用户消息数统计，
+// 与阶段奖励证据使用同一口径（模块动作路径不会预先统计回合数）。
+func fillSettlementDefaults(ctx context.Context, repo *storage.ChallengeRepository, in *SettlementInput) error {
+	if in.SettledAt.IsZero() {
+		in.SettledAt = time.Now()
+	}
+	if in.TurnCount <= 0 {
+		count, err := repo.UserTurnCount(ctx, in.ConversationID)
+		if err != nil {
+			return err
+		}
+		in.TurnCount = count
+	}
+	return nil
 }
 
 func validateSettlementInput(in SettlementInput) error {
