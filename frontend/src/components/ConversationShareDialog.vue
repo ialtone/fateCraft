@@ -12,6 +12,7 @@ import {
   NSpin,
   NSwitch,
   NTag,
+  useDialog,
   useMessage,
 } from 'naive-ui'
 import { messagesApi, sharesApi } from '@/api'
@@ -33,6 +34,7 @@ const props = defineProps<{
 const emit = defineEmits<{ published: [] }>()
 const show = defineModel<boolean>('show', { default: false })
 const message = useMessage()
+const dialog = useDialog()
 const auth = useAuthStore()
 
 const loadingMessages = ref(false)
@@ -233,12 +235,19 @@ async function publish() {
   publishing.value = true
   try {
     const target = props.replaceTarget
-    await (target
+    const share = await (target
       ? sharesApi.replace(target.id, requestBody())
       : sharesApi.create(props.conversationId, requestBody()))
-    message.success(target ? '分享已重新发布' : '分享已发布')
+    const prefix = target ? '分享已重新发布' : '分享已发布'
     show.value = false
     emit('published')
+    const url = new URL(share.public_url, window.location.origin).toString()
+    try {
+      await navigator.clipboard.writeText(url)
+      message.success(`${prefix}，链接已复制`)
+    } catch {
+      dialog.success({ title: prefix, content: url, positiveText: '知道了' })
+    }
   } catch (error: any) {
     message.error(error?.message || '发布分享失败')
   } finally {
