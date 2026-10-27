@@ -1,8 +1,10 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,13 +39,17 @@ func logQuery(c *gin.Context, kind string) (storage.LogQuery, bool) {
 	if kind == "audit" {
 		ids["actor_id"] = &q.ActorID
 		q.Action = c.Query("action")
+		q.UserRole = c.Query("user_role")
+		q.Result = c.Query("result")
 	} else {
 		ids["conversation_id"] = &q.ConversationID
 		ids["attempt_id"] = &q.AttemptID
 	}
+	if kind != "audit" {
+		q.Model = c.Query("model")
+	}
 	if kind == "llm" {
 		ids["trace_id"] = &q.TraceID
-		q.Model = c.Query("model")
 		q.Purpose = c.Query("purpose")
 		if raw := c.Query("success"); raw != "" {
 			value, err := strconv.ParseBool(raw)
@@ -66,6 +72,29 @@ func logQuery(c *gin.Context, kind string) (storage.LogQuery, bool) {
 		return invalid()
 	}
 	return q, true
+}
+
+// applyLogUser 把 ?user=<用户 ID（username）> 解析为用户主键；用户不存在时已写出 404。
+func (s *Server) applyLogUser(c *gin.Context, q *storage.LogQuery) bool {
+	name := strings.TrimSpace(c.Query("user"))
+	if name == "" {
+		return true
+	}
+	if s.adminUsers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "用户管理服务未配置"})
+		return false
+	}
+	id, err := s.adminUsers.IDByUsername(c.Request.Context(), name)
+	if errors.Is(err, storage.ErrNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return false
+	}
+	if err != nil {
+		fail(c, err)
+		return false
+	}
+	q.UserID = &id
+	return true
 }
 
 func (s *Server) diagnosticStatus(c *gin.Context) {

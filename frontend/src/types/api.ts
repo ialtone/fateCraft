@@ -1010,6 +1010,7 @@ export interface AdminLLMRequestLogSummary {
   structured_success: boolean
   structured_error_code?: string
   output_types: string[]
+  user?: AdminUserRef
   created_at: string
 }
 
@@ -1049,6 +1050,7 @@ export interface AdminContextBuildLogSummary {
   memory_id?: string
   memory_lag: boolean
   memory_job_id?: string
+  user?: AdminUserRef
   created_at: string
 }
 
@@ -1109,8 +1111,48 @@ export interface AdminUser {
   status: 'active' | 'disabled' | string
   role: 'owner' | 'admin' | 'user' | string
   last_login_at?: string
+  registration_method?: 'email' | 'linuxdo'
   created_at: string
   updated_at: string
+}
+
+// 日志与审计里对用户的引用：界面只展示用户 ID（username），不展示 UUID。
+export interface AdminUserRef {
+  id: string
+  username: string
+}
+
+export interface AdminUserDetail extends AdminUser {
+  linuxdo?: { username: string; trust_level?: number; bound_at: string }
+  stats: { started: number; completed: number; success: number; failure: number; neutral: number }
+}
+
+export interface AdminUserLoggingCoverage {
+  covered: boolean
+  enabled: boolean
+  scope: DetailedLLMLoggingScope
+}
+
+export interface AdminUserConversation {
+  id: string
+  title: string
+  status: string
+  created_at: string
+  record_count: number
+  last_record_at: string
+}
+
+export interface AdminConversationRecord {
+  id: string
+  purpose: string
+  model: string
+  success: boolean
+  error?: string
+  body_status: string
+  audit_truncated: boolean
+  request_body: unknown
+  response_text: string
+  created_at: string
 }
 
 export interface AdminExternalIdentity {
@@ -1136,6 +1178,8 @@ export interface AdminAuditLog {
   new_role?: string
   result: 'success' | 'rejected' | 'failed' | string
   metadata: Record<string, unknown>
+  actor?: AdminUserRef
+  target?: AdminUserRef
   created_at: string
 }
 

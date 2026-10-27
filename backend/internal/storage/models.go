@@ -968,6 +968,7 @@ func DefaultSystemSettings() *SystemSettings {
 // LLMRequestLog 保存一次模型请求的详细诊断快照。请求体不含认证头和 API Key。
 type LLMRequestLog struct {
 	TraceID                    *uuid.UUID     `gorm:"column:trace_id;type:uuid" json:"trace_id,omitempty"`
+	UserID                     *uuid.UUID     `gorm:"column:user_id;type:uuid" json:"user_id,omitempty"`
 	Protocol                   string         `gorm:"column:protocol;not null;default:responses" json:"protocol"`
 	StartedAt                  time.Time      `gorm:"column:started_at;not null;default:CURRENT_TIMESTAMP" json:"started_at"`
 	TransportAttempts          int            `gorm:"column:transport_attempts;not null" json:"transport_attempts"`

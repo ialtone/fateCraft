@@ -24,6 +24,9 @@ type LogQuery struct {
 	AttemptID      *uuid.UUID `json:"attempt_id,omitempty"`
 	TraceID        *uuid.UUID `json:"trace_id,omitempty"`
 	ActorID        *uuid.UUID `json:"actor_id,omitempty"`
+	UserID         *uuid.UUID `json:"user_id,omitempty"`   // 按用户筛选：模型调用按发起人，上下文按对话所属玩家，审计按操作者/目标
+	UserRole       string     `json:"user_role,omitempty"` // 仅审计：actor / target，留空表示两者之一
+	Result         string     `json:"result,omitempty"`    // 仅审计：success / rejected / failed
 	Purpose        string     `json:"purpose,omitempty"`
 	Model          string     `json:"model,omitempty"`
 	Action         string     `json:"action,omitempty"`
@@ -44,7 +47,7 @@ func (q LogQuery) fingerprint() string {
 }
 
 func (q LogQuery) query(ctx context.Context, db *gorm.DB, kind string) (*gorm.DB, error) {
-	if q.Limit < 1 || q.Limit > 200 || len(q.Cursor) > 2048 || len(q.Model) > 256 || len(q.Purpose) > 64 || len(q.Action) > 64 {
+	if q.Limit < 1 || q.Limit > 200 || len(q.Cursor) > 2048 || len(q.Model) > 256 || len(q.Purpose) > 64 || len(q.Action) > 64 || len(q.Result) > 16 || (q.UserRole != "" && q.UserRole != "actor" && q.UserRole != "target") {
 		return nil, ErrLogQuery
 	}
 	if q.From != nil && q.Until != nil && !q.From.Before(*q.Until) {
@@ -68,6 +71,26 @@ func (q LogQuery) query(ctx context.Context, db *gorm.DB, kind string) (*gorm.DB
 	}
 	if q.ActorID != nil {
 		query = query.Where("actor_user_id = ?", *q.ActorID)
+	}
+	if q.UserID != nil {
+		switch kind {
+		case "llm":
+			query = query.Where("user_id = ?", *q.UserID)
+		case "context":
+			query = query.Where("conversation_id IN (SELECT id FROM conversations WHERE player_id = ?)", *q.UserID)
+		case "audit":
+			switch q.UserRole {
+			case "actor":
+				query = query.Where("actor_user_id = ?", *q.UserID)
+			case "target":
+				query = query.Where("target_user_id = ?", *q.UserID)
+			default:
+				query = query.Where("(actor_user_id = ? OR target_user_id = ?)", *q.UserID, *q.UserID)
+			}
+		}
+	}
+	if q.Result != "" {
+		query = query.Where("result = ?", q.Result)
 	}
 	if q.Purpose != "" {
 		query = query.Where("purpose = ?", q.Purpose)

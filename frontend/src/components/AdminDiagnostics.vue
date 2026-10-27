@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -15,8 +15,14 @@ import {
   NTag,
   useMessage,
 } from 'naive-ui'
+import AdminUserDetailModal from './AdminUserDetailModal.vue'
 import { adminApi, type DiagnosticQuery, type DiagnosticStatus } from '@/api'
-import type { AdminLLMRequestLogSummary, AdminContextBuildLogSummary, AdminAuditLog } from '@/types'
+import type {
+  AdminLLMRequestLogSummary,
+  AdminContextBuildLogSummary,
+  AdminAuditLog,
+  AdminUserRef,
+} from '@/types'
 
 const emit = defineEmits<{
   'open-llm': [row: AdminLLMRequestLogSummary]
@@ -36,9 +42,12 @@ const filters = reactive({
   model: '',
   purpose: null as string | null,
   success: null as string | null,
-  actor: '',
+  user: '',
+  userRole: null as 'actor' | 'target' | null,
+  result: null as string | null,
   action: '',
 })
+const detailUserId = ref<string | null>(null)
 const models = ref<AdminLLMRequestLogSummary[]>([])
 const contexts = ref<AdminContextBuildLogSummary[]>([])
 const audits = ref<AdminAuditLog[]>([])
@@ -56,6 +65,15 @@ const resultOptions = [
   { label: '成功', value: 'true' },
   { label: '失败', value: 'false' },
 ]
+const auditResultOptions = [
+  { label: '成功', value: 'success' },
+  { label: '被拒绝', value: 'rejected' },
+  { label: '失败', value: 'failed' },
+]
+const userRoleOptions = [
+  { label: '作为操作者', value: 'actor' },
+  { label: '作为被操作用户', value: 'target' },
+]
 const bodyLabels: Record<string, string> = {
   disabled: '未采集正文',
   captured: '正文已采集',
@@ -68,6 +86,9 @@ const actionLabels: Record<string, string> = {
   role_change: '角色变更',
   status_change: '账号状态变更',
   installation_complete: '首次安装',
+  user_conversations_view: '查看用户对话列表',
+  user_conversation_view: '查看用户对话记录',
+  user_detailed_logging_enable: '对用户开启详细日志',
 }
 const totalDropped = computed(() =>
   Object.values(status.value?.writer.dropped || {}).reduce((sum, value) => sum + value, 0),
@@ -79,6 +100,19 @@ const empty = computed(() =>
       ? !contexts.value.length
       : !audits.value.length,
 )
+// 日志里的用户一律显示用户 ID（username），点击打开用户详情。
+const UserLink = (props: { user?: AdminUserRef; empty?: string }) =>
+  props.user
+    ? h(
+        'a',
+        {
+          href: '#',
+          onClick: (e: Event) => (e.preventDefault(), (detailUserId.value = props.user!.id)),
+        },
+        props.user.username,
+      )
+    : (props.empty ?? '无')
+UserLink.props = ['user', 'empty']
 const time = (value?: string) => (value ? new Date(value).toLocaleString() : '尚无记录')
 const mib = (value: number) => (value / 1048576).toFixed(2)
 function failure(err: unknown): string {
@@ -91,16 +125,18 @@ function query(): DiagnosticQuery {
     q.from = new Date(range.value[0]).toISOString()
     q.until = new Date(range.value[1]).toISOString()
   }
+  q.user = filters.user.trim() || undefined
   if (tab.value === 'audit') {
-    q.actor_id = filters.actor.trim() || undefined
+    q.user_role = filters.userRole || undefined
+    q.result = filters.result || undefined
     q.action = filters.action.trim() || undefined
   } else {
     q.conversation_id = filters.conversation.trim() || undefined
     q.attempt_id = filters.attempt.trim() || undefined
+    q.model = filters.model.trim() || undefined
   }
   if (tab.value === 'llm') {
     q.trace_id = filters.trace.trim() || undefined
-    q.model = filters.model.trim() || undefined
     q.purpose = filters.purpose || undefined
     q.success = filters.success === null ? undefined : filters.success === 'true'
   }
@@ -198,6 +234,12 @@ onMounted(() => {
           start-placeholder="开始时间"
           end-placeholder="结束时间（不含）"
         />
+        <NInput
+          v-model:value="filters.user"
+          aria-label="用户 ID"
+          placeholder="用户 ID（用户名）"
+          clearable
+        />
         <template v-if="tab !== 'audit'">
           <NInput
             v-model:value="filters.conversation"
@@ -212,17 +254,18 @@ onMounted(() => {
             clearable
           />
         </template>
+        <NInput
+          v-if="tab !== 'audit'"
+          v-model:value="filters.model"
+          aria-label="模型名称"
+          placeholder="模型名称（精确匹配）"
+          clearable
+        />
         <template v-if="tab === 'llm'">
           <NInput
             v-model:value="filters.trace"
             aria-label="关联 ID"
             placeholder="关联 ID"
-            clearable
-          />
-          <NInput
-            v-model:value="filters.model"
-            aria-label="模型名称"
-            placeholder="模型名称（精确匹配）"
             clearable
           />
           <NSelect
@@ -239,10 +282,16 @@ onMounted(() => {
           />
         </template>
         <template v-if="tab === 'audit'">
-          <NInput
-            v-model:value="filters.actor"
-            aria-label="操作者 ID"
-            placeholder="操作者 ID"
+          <NSelect
+            v-model:value="filters.userRole"
+            :options="userRoleOptions"
+            placeholder="操作者或被操作用户"
+            clearable
+          />
+          <NSelect
+            v-model:value="filters.result"
+            :options="auditResultOptions"
+            placeholder="全部结果"
             clearable
           />
           <NInput
@@ -275,7 +324,8 @@ onMounted(() => {
                 {{ row.transport_attempts }} 次
               </p>
               <p class="identifier">
-                关联 {{ row.trace_id || '无' }} · 对话 {{ row.conversation_id || '无' }}
+                用户 <UserLink :user="row.user" /> · 关联 {{ row.trace_id || '无' }} · 对话
+                {{ row.conversation_id || '无' }}
               </p>
               <NAlert v-if="row.error" type="error" :show-icon="false">{{ row.error }}</NAlert>
               <NSpace
@@ -299,7 +349,8 @@ onMounted(() => {
                 {{ row.max_context_tokens }} token
               </p>
               <p class="identifier">
-                对话 {{ row.conversation_id }} · 尝试 {{ row.attempt_id || '无' }}
+                用户 <UserLink :user="row.user" /> · 对话 {{ row.conversation_id }} · 尝试
+                {{ row.attempt_id || '无' }}
               </p>
               <NButton size="small" @click="emit('open-context', row)">查看预算与裁剪</NButton>
             </NCard>
@@ -308,7 +359,10 @@ onMounted(() => {
             <NCard v-for="row in audits" :key="row.id" size="small">
               <strong>{{ actionLabels[row.action] || row.action }}</strong>
               <p>{{ time(row.created_at) }} · {{ row.result }}</p>
-              <p class="identifier">操作者 {{ row.actor_user_id || '系统初始化' }}</p>
+              <p class="identifier">
+                操作者 <UserLink :user="row.actor" empty="系统初始化" />
+                <template v-if="row.target"> · 被操作用户 <UserLink :user="row.target" /></template>
+              </p>
               <p class="identifier">关联 {{ row.trace_id || '无' }}</p>
               <NButton v-if="row.trace_id" size="small" @click="copy(row.trace_id)"
                 >复制关联 ID</NButton
@@ -370,6 +424,7 @@ onMounted(() => {
         </NCard>
       </template>
     </template>
+    <AdminUserDetailModal :user-id="detailUserId" @close="detailUserId = null" />
   </section>
 </template>
 

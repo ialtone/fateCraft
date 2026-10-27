@@ -51,6 +51,10 @@ import type {
   PublicConversationShare,
   ConversationShareReport,
   AdminUser,
+  AdminUserDetail,
+  AdminUserLoggingCoverage,
+  AdminUserConversation,
+  AdminConversationRecord,
   AdminExternalIdentity,
   AdminAuditLog,
 } from '@/types'
@@ -69,6 +73,19 @@ export interface DiagnosticQuery {
   success?: boolean
   actor_id?: string
   action?: string
+  user?: string // 用户 ID（username）
+  user_role?: 'actor' | 'target' // 仅审计
+  result?: string // 仅审计
+}
+export interface UserListQuery {
+  q?: string
+  status?: string
+  role?: string
+  registration?: string
+  sort?: 'created_at' | 'last_login_at'
+  order?: 'asc' | 'desc'
+  limit?: number
+  offset?: number
 }
 export interface LogPage<T> {
   logs: T[]
@@ -329,10 +346,35 @@ export const settingsApi = {
 // 管理员全局玩法设置
 export const adminApi = {
   // 用户与第三方身份列表由后端限制为每页最多 200 条。
-  listUsers: (params: { q?: string; limit?: number; offset?: number } = { limit: 30 }) =>
+  listUsers: (params: UserListQuery = { limit: 30 }) =>
     http
       .get<{ users: AdminUser[]; has_more: boolean }>('/admin/users', { params })
       .then((r) => r.data),
+  getUser: (id: string) =>
+    http
+      .get<{
+        user: AdminUserDetail
+        rewards: PlayerReward[] | null
+        detailed_logging: AdminUserLoggingCoverage
+      }>(`/admin/users/${id}`)
+      .then((r) => r.data),
+  // 对话记录只在详细日志覆盖该用户时可读（否则 403），每次查看都会写入管理审计。
+  listUserConversations: (id: string) =>
+    http
+      .get<{ conversations: AdminUserConversation[] }>(`/admin/users/${id}/conversations`)
+      .then((r) => r.data.conversations),
+  listUserConversationRecords: (id: string, conversationID: string) =>
+    http
+      .get<{
+        records: AdminConversationRecord[]
+      }>(`/admin/users/${id}/conversations/${conversationID}/records`)
+      .then((r) => r.data.records),
+  enableUserDetailedLogging: (id: string) =>
+    http
+      .post<{
+        detailed_logging: AdminUserLoggingCoverage
+      }>(`/admin/users/${id}/detailed-logging`)
+      .then((r) => r.data.detailed_logging),
   listAuthIdentities: (params: { limit?: number; offset?: number } = { limit: 200 }) =>
     http
       .get<{ identities: AdminExternalIdentity[] }>('/admin/auth-identities', { params })

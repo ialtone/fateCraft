@@ -248,7 +248,7 @@ func (c *Client) writeAudit(ctx context.Context, auditOn bool, p Params, stream 
 		return
 	}
 	detail := RequestAudit{
-		ConversationID: p.ConversationID, MessageID: p.MessageID,
+		PlayerID: p.PlayerID, ConversationID: p.ConversationID, MessageID: p.MessageID,
 		Purpose: p.Purpose, AttemptID: p.AttemptID, MemoryJobID: p.MemoryJobID, MemoryID: p.MemoryID,
 		InquiryID: p.InquiryID, InquirySnapshotID: p.InquirySnapshotID,
 		InquirySnapshotBranchEpoch: p.InquirySnapshotBranchEpoch, InquirySnapshotRevision: p.InquirySnapshotRevision,

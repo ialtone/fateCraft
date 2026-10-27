@@ -398,39 +398,42 @@ type adminLLMRequestLogSummary struct {
 	ReceivedDone               bool            `json:"received_done"`
 	Success                    bool            `json:"success"`
 	// 列表状态列依赖这三个字段判断“传输失败 / 结构失败”，必须随摘要返回。
-	TransportSuccess    bool     `json:"transport_success"`
-	StructuredSuccess   bool     `json:"structured_success"`
-	OutputMode          string   `json:"output_mode,omitempty"`
-	AuditTruncated      bool     `json:"audit_truncated"`
-	Error               string   `json:"error,omitempty"`
-	DurationMS          int64    `json:"duration_ms"`
-	CreatedAt           string   `json:"created_at"`
-	SettingsSource      string   `json:"settings_source"`
-	SettingsRevision    int64    `json:"settings_revision"`
-	ContractName        string   `json:"contract_name,omitempty"`
-	ContractVersion     string   `json:"contract_version,omitempty"`
-	ContractFingerprint string   `json:"contract_fingerprint,omitempty"`
-	StructuredErrorCode string   `json:"structured_error_code,omitempty"`
-	OutputTypes         []string `json:"output_types"`
+	TransportSuccess    bool             `json:"transport_success"`
+	StructuredSuccess   bool             `json:"structured_success"`
+	OutputMode          string           `json:"output_mode,omitempty"`
+	AuditTruncated      bool             `json:"audit_truncated"`
+	Error               string           `json:"error,omitempty"`
+	DurationMS          int64            `json:"duration_ms"`
+	CreatedAt           string           `json:"created_at"`
+	SettingsSource      string           `json:"settings_source"`
+	SettingsRevision    int64            `json:"settings_revision"`
+	ContractName        string           `json:"contract_name,omitempty"`
+	ContractVersion     string           `json:"contract_version,omitempty"`
+	ContractFingerprint string           `json:"contract_fingerprint,omitempty"`
+	StructuredErrorCode string           `json:"structured_error_code,omitempty"`
+	OutputTypes         []string         `json:"output_types"`
+	UserID              *uuid.UUID       `json:"user_id,omitempty"`
+	User                *storage.UserRef `json:"user,omitempty"`
 }
 
 type adminContextBuildLogSummary struct {
-	ID                       uuid.UUID  `json:"id"`
-	ConversationID           uuid.UUID  `json:"conversation_id"`
-	TriggerMessageID         *uuid.UUID `json:"trigger_message_id,omitempty"`
-	Model                    string     `json:"model"`
-	MaxContextTokens         int        `json:"max_context_tokens"`
-	ReservedResponseTokens   int        `json:"reserved_response_tokens"`
-	UsedPromptTokens         int        `json:"used_prompt_tokens"`
-	IncludedMessageCount     int        `json:"included_message_count"`
-	ActivatedWorldEntryCount int        `json:"activated_world_entry_count"`
-	TurnID                   *uuid.UUID `json:"turn_id,omitempty"`
-	AttemptID                *uuid.UUID `json:"attempt_id,omitempty"`
-	BranchEpoch              int64      `json:"branch_epoch"`
-	MemoryID                 *uuid.UUID `json:"memory_id,omitempty"`
-	MemoryLag                bool       `json:"memory_lag"`
-	MemoryJobID              *uuid.UUID `json:"memory_job_id,omitempty"`
-	CreatedAt                string     `json:"created_at"`
+	ID                       uuid.UUID        `json:"id"`
+	ConversationID           uuid.UUID        `json:"conversation_id"`
+	TriggerMessageID         *uuid.UUID       `json:"trigger_message_id,omitempty"`
+	Model                    string           `json:"model"`
+	MaxContextTokens         int              `json:"max_context_tokens"`
+	ReservedResponseTokens   int              `json:"reserved_response_tokens"`
+	UsedPromptTokens         int              `json:"used_prompt_tokens"`
+	IncludedMessageCount     int              `json:"included_message_count"`
+	ActivatedWorldEntryCount int              `json:"activated_world_entry_count"`
+	TurnID                   *uuid.UUID       `json:"turn_id,omitempty"`
+	AttemptID                *uuid.UUID       `json:"attempt_id,omitempty"`
+	BranchEpoch              int64            `json:"branch_epoch"`
+	MemoryID                 *uuid.UUID       `json:"memory_id,omitempty"`
+	MemoryLag                bool             `json:"memory_lag"`
+	MemoryJobID              *uuid.UUID       `json:"memory_job_id,omitempty"`
+	CreatedAt                string           `json:"created_at"`
+	User                     *storage.UserRef `json:"user,omitempty"`
 }
 
 func summarizeAdminContextBuildLog(row storage.ContextBuildLog) adminContextBuildLogSummary {
@@ -464,7 +467,7 @@ func summarizeAdminLLMRequestLog(row storage.LLMRequestLog) adminLLMRequestLogSu
 
 func (s *Server) listAdminLLMRequestLogs(c *gin.Context) {
 	filter, ok := logQuery(c, "llm")
-	if !ok {
+	if !ok || !s.applyLogUser(c, &filter) {
 		return
 	}
 	if s.llmRequestLogs == nil {
@@ -476,9 +479,17 @@ func (s *Server) listAdminLLMRequestLogs(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	users := s.llmLogUsers(c, rows)
 	out := make([]adminLLMRequestLogSummary, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, summarizeAdminLLMRequestLog(row))
+		item := summarizeAdminLLMRequestLog(row)
+		item.UserID = row.UserID
+		if row.UserID != nil {
+			if ref, ok := users[*row.UserID]; ok {
+				item.User = &ref
+			}
+		}
+		out = append(out, item)
 	}
 	c.JSON(http.StatusOK, gin.H{"logs": out, "next_cursor": next, "has_more": more})
 }
@@ -502,7 +513,7 @@ func (s *Server) getAdminLLMRequestLog(c *gin.Context) {
 
 func (s *Server) listAdminContextBuildLogs(c *gin.Context) {
 	filter, ok := logQuery(c, "context")
-	if !ok {
+	if !ok || !s.applyLogUser(c, &filter) {
 		return
 	}
 	if s.ctxLogs == nil {
@@ -514,9 +525,14 @@ func (s *Server) listAdminContextBuildLogs(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	users := s.contextLogUsers(c, rows)
 	out := make([]adminContextBuildLogSummary, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, summarizeAdminContextBuildLog(row))
+		item := summarizeAdminContextBuildLog(row)
+		if ref, ok := users[row.ConversationID]; ok {
+			item.User = &ref
+		}
+		out = append(out, item)
 	}
 	c.JSON(http.StatusOK, gin.H{"logs": out, "next_cursor": next, "has_more": more})
 }

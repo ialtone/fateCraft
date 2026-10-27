@@ -256,7 +256,11 @@ func (r *AuthRepository) CreateSession(ctx context.Context, session *AuthSession
 		if err := tx.Where("expires_at <= ?", time.Now()).Delete(&AuthSession{}).Error; err != nil {
 			return err
 		}
-		return tx.Create(session).Error
+		if err := tx.Create(session).Error; err != nil {
+			return err
+		}
+		// 每次建立会话即一次登录；UpdateColumn 不触碰 updated_at。
+		return tx.Model(&User{}).Where("id = ?", session.UserID).UpdateColumn("last_login_at", session.CreatedAt).Error
 	})
 }
 
@@ -572,20 +576,24 @@ func (r *AuthRepository) InitializeOwner(ctx context.Context, user *User) (*User
 // ListUsers 按创建时间倒序分页读取用户；limit/offset 的取值范围由调用方校验。
 func (r *AuthRepository) ListUsers(ctx context.Context, limit, offset int, search string) ([]User, error) {
 	var users []User
-	query := r.db.WithContext(ctx)
-	search = strings.TrimSpace(search)
-	if search != "" {
-		if id, err := uuid.Parse(search); err == nil {
-			query = query.Where("id = ?", id)
-		} else if strings.Contains(search, "@") {
-			query = query.Where("lower(email) = lower(?)", search)
-		} else {
-			pattern := "%" + strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(search) + "%"
-			query = query.Where("username ILIKE ? OR display_name ILIKE ?", pattern, pattern)
-		}
-	}
-	err := query.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&users).Error
+	err := applyUserSearch(r.db.WithContext(ctx), search).Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&users).Error
 	return users, err
+}
+
+// applyUserSearch 按用户 ID（username）、显示名称、完整邮箱或主键筛选；空串不加条件。
+func applyUserSearch(query *gorm.DB, search string) *gorm.DB {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return query
+	}
+	if id, err := uuid.Parse(search); err == nil {
+		return query.Where("users.id = ?", id)
+	}
+	if strings.Contains(search, "@") {
+		return query.Where("lower(users.email) = lower(?)", search)
+	}
+	pattern := "%" + strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(search) + "%"
+	return query.Where("users.username ILIKE ? OR users.display_name ILIKE ?", pattern, pattern)
 }
 
 // UpdateUserRole 由 owner 修改目标用户角色；目标为 owner 时表示转交，原 owner 同一事务内降为 admin。

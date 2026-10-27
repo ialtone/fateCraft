@@ -169,6 +169,9 @@ func main() {
 		for key, value := range audit.BodyMetadata {
 			row.BodyMetadata[key] = value
 		}
+		if id, err := uuid.Parse(audit.PlayerID); err == nil {
+			row.UserID = &id
+		}
 		if id, err := uuid.Parse(audit.ConversationID); err == nil {
 			row.ConversationID = &id
 		}
@@ -274,7 +277,7 @@ func main() {
 	server := api.NewServer(api.Deps{
 		Conv: convSvc, Campaigns: campaignSvc, Chat: chatSvc, State: stateSvc, Challenges: challengeSvc, Builtins: builtinImporter,
 		Memory: memSvc, Inquiries: inquirySvc, Settings: settingsRepo, LLMSettings: llmSettingsSvc, System: systemSettingsRepo, CtxLogs: ctxRepo, Messages: msgRepo, Agents: agentRepo,
-		Rewards: rewardRepo, LLMRequestLogs: llmRequestLogRepo, Turns: turnRepo,
+		Rewards: rewardRepo, LLMRequestLogs: llmRequestLogRepo, AdminUsers: storage.NewAdminUserRepo(db), Turns: turnRepo,
 		Activity: activityRepo,
 		Diagnostics: func() any {
 			return map[string]any{"instance_id": cfg.InstanceID, "writer": auditWriter.Status(), "cleanup": diagnosticLogRepo.Status()}

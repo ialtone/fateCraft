@@ -61,6 +61,7 @@ func lockLLMLogParents(tx *gorm.DB, row *LLMRequestLog) error {
 		table string
 		id    *uuid.UUID
 	}{
+		{"users", row.UserID},
 		{"conversations", row.ConversationID},
 		{"generation_attempts", row.AttemptID},
 		{"memory_jobs", row.MemoryJobID},
@@ -98,7 +99,7 @@ func (r *LLMRequestLogRepo) List(ctx context.Context, filter LogQuery) ([]LLMReq
 	}
 	var rows []LLMRequestLog
 	err = query.Select(
-		"id", "trace_id", "protocol", "started_at", "transport_attempts", "input_tokens", "output_tokens", "error_code", "body_status", "body_metadata", "settings_source", "conversation_id", "message_id", "purpose", "attempt_id", "memory_job_id", "memory_id",
+		"id", "trace_id", "user_id", "protocol", "started_at", "transport_attempts", "input_tokens", "output_tokens", "error_code", "body_status", "body_metadata", "settings_source", "conversation_id", "message_id", "purpose", "attempt_id", "memory_job_id", "memory_id",
 		"inquiry_id", "inquiry_snapshot_id", "inquiry_snapshot_branch_epoch", "inquiry_snapshot_revision", "model", "stream", "response_status",
 		"finish_reason", "received_done", "success", "audit_truncated", "error", "duration_ms", "created_at",
 		"settings_revision", "output_mode", "contract_name", "contract_version", "contract_fingerprint",

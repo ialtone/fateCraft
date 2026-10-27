@@ -691,7 +691,7 @@ func (c *Client) writeStructuredAudit(ctx context.Context, auditOn bool, p Param
 		return
 	}
 	detail := RequestAudit{
-		ConversationID: p.ConversationID, MessageID: p.MessageID, Purpose: p.Purpose,
+		PlayerID: p.PlayerID, ConversationID: p.ConversationID, MessageID: p.MessageID, Purpose: p.Purpose,
 		AttemptID: p.AttemptID, MemoryJobID: p.MemoryJobID, MemoryID: p.MemoryID,
 		InquiryID: p.InquiryID, InquirySnapshotID: p.InquirySnapshotID,
 		InquirySnapshotBranchEpoch: p.InquirySnapshotBranchEpoch, InquirySnapshotRevision: p.InquirySnapshotRevision,

@@ -281,6 +281,7 @@ type RequestAudit struct {
 	ErrorCode                  string
 	BodyStatus                 string
 	BodyMetadata               map[string]AuditFieldInfo
+	PlayerID                   string // 发起调用的玩家，写入日志的 user_id 以便按用户筛选
 	ConversationID             string
 	MessageID                  string
 	Purpose                    string

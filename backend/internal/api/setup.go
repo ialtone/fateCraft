@@ -75,11 +75,12 @@ func (s *Server) listAdminUsers(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if len(c.Query("q")) > 256 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "搜索内容过长"})
+	filter, ok := userFilterValues(c)
+	if !ok {
 		return
 	}
-	users, err := s.auth.ListUsers(c.Request.Context(), limit+1, offset, c.Query("q"))
+	filter.Limit, filter.Offset = limit+1, offset
+	users, err := s.adminUsers.List(c.Request.Context(), filter)
 	if err != nil {
 		fail(c, err)
 		return
@@ -154,7 +155,7 @@ func (s *Server) updateAdminUserStatus(c *gin.Context) {
 
 func (s *Server) listAdminAuditLogs(c *gin.Context) {
 	filter, ok := logQuery(c, "audit")
-	if !ok {
+	if !ok || !s.applyLogUser(c, &filter) {
 		return
 	}
 	logs, next, more, err := s.auth.ListAdminAuditLogs(c.Request.Context(), filter)
@@ -162,7 +163,7 @@ func (s *Server) listAdminAuditLogs(c *gin.Context) {
 		fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"logs": logs, "next_cursor": next, "has_more": more})
+	c.JSON(http.StatusOK, gin.H{"logs": s.auditLogViews(c, logs), "next_cursor": next, "has_more": more})
 }
 
 // adminListOffset 读取管理列表的 offset 参数：缺省为 0，必须是 0 到 100000 的整数，否则直接返回 400。

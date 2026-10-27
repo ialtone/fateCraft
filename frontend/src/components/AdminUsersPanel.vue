@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -14,8 +14,10 @@ import {
   useMessage,
 } from 'naive-ui'
 import AdminRewardUserPanel from './AdminRewardUserPanel.vue'
+import AdminUserDetailModal from './AdminUserDetailModal.vue'
 import { adminApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { formatTime, registrationLabel, roleLabel } from '@/lib/adminUsers'
 import type { AdminAuditLog, AdminUser } from '@/types'
 
 const auth = useAuthStore()
@@ -24,6 +26,7 @@ const dialog = useDialog()
 const users = ref<AdminUser[]>([])
 const rewardUser = ref<AdminUser>()
 const showRewards = ref(false)
+const detailUserId = ref<string | null>(null)
 const auditLogs = ref<AdminAuditLog[]>([])
 const loading = ref(false)
 const savingID = ref('')
@@ -35,9 +38,32 @@ const isOwner = computed(() => auth.isOwner)
 const USER_PAGE_LIMIT = 30
 const query = ref('')
 const submittedQuery = ref('')
+const filters = reactive({
+  status: null as string | null,
+  role: null as string | null,
+  registration: null as string | null,
+  sort: 'created_at' as 'created_at' | 'last_login_at',
+  order: 'desc' as 'asc' | 'desc',
+})
 const offset = ref(0)
 const hasMore = ref(false)
 let loadSequence = 0
+const statusOptions = [
+  { label: '正常', value: 'active' },
+  { label: '已停用', value: 'disabled' },
+]
+const registrationOptions = [
+  { label: '邮箱注册', value: 'email' },
+  { label: 'LinuxDo', value: 'linuxdo' },
+]
+const sortOptions = [
+  { label: '按注册时间', value: 'created_at' },
+  { label: '按最后登录', value: 'last_login_at' },
+]
+const orderOptions = [
+  { label: '新到旧', value: 'desc' },
+  { label: '旧到新', value: 'asc' },
+]
 const roleOptions = [
   { label: '普通用户', value: 'user' },
   { label: '管理员', value: 'admin' },
@@ -51,6 +77,11 @@ async function load() {
   try {
     const nextUsers = await adminApi.listUsers({
       q: submittedQuery.value,
+      status: filters.status || undefined,
+      role: filters.role || undefined,
+      registration: filters.registration || undefined,
+      sort: filters.sort,
+      order: filters.order,
       limit: USER_PAGE_LIMIT,
       offset: offset.value,
     })
@@ -139,14 +170,6 @@ async function changeStatus(user: AdminUser, enabled: boolean) {
   }
 }
 
-function roleLabel(role: string) {
-  return role === 'owner' ? '拥有者' : role === 'admin' ? '管理员' : '普通用户'
-}
-
-function formatTime(value?: string) {
-  return value ? new Date(value).toLocaleString() : '—'
-}
-
 onMounted(() => void load())
 function openRewards(user: AdminUser) {
   rewardUser.value = user
@@ -171,16 +194,62 @@ function openRewards(user: AdminUser) {
           />
           <NButton attr-type="submit" :loading="loading">查找用户</NButton>
         </form>
+        <div class="user-filters">
+          <NSelect
+            v-model:value="filters.status"
+            :options="statusOptions"
+            placeholder="全部状态"
+            clearable
+            size="small"
+            @update:value="searchUsers"
+          />
+          <NSelect
+            v-model:value="filters.role"
+            :options="roleOptions"
+            placeholder="全部角色"
+            clearable
+            size="small"
+            @update:value="searchUsers"
+          />
+          <NSelect
+            v-model:value="filters.registration"
+            :options="registrationOptions"
+            placeholder="全部注册方式"
+            clearable
+            size="small"
+            @update:value="searchUsers"
+          />
+          <NSelect
+            v-model:value="filters.sort"
+            :options="sortOptions"
+            size="small"
+            @update:value="searchUsers"
+          />
+          <NSelect
+            v-model:value="filters.order"
+            :options="orderOptions"
+            size="small"
+            @update:value="searchUsers"
+          />
+        </div>
         <NSpin :show="loading">
           <div class="user-list">
             <div v-for="user in users" :key="user.id" class="user-row">
               <div class="user-main">
                 <strong
                   >{{ user.display_name }}
-                  <span class="username">@{{ user.username }}</span></strong
+                  <a class="username" href="#" @click.prevent="detailUserId = user.id"
+                    >@{{ user.username }}</a
+                  ></strong
                 >
                 <span class="muted"
-                  >{{ user.email || '外部登录账号' }} · {{ roleLabel(user.role) }}</span
+                  >{{ user.email || '外部登录账号' }} · {{ roleLabel(user.role) }} ·
+                  {{ registrationLabel(user.registration_method) }}
+                  <template v-if="user.status !== 'active'"> · 已停用</template></span
+                >
+                <span class="muted"
+                  >注册时间 {{ formatTime(user.created_at) }} · 最后登录
+                  {{ formatTime(user.last_login_at, '从未登录') }}</span
                 >
               </div>
               <div class="user-actions">
@@ -229,6 +298,7 @@ function openRewards(user: AdminUser) {
         ></NTabPane
       ></NTabs
     >
+    <AdminUserDetailModal :user-id="detailUserId" @close="detailUserId = null" @changed="load" />
     <NModal
       v-model:show="showRewards"
       preset="card"
@@ -248,6 +318,12 @@ function openRewards(user: AdminUser) {
   display: flex;
   gap: 12px;
   margin: 16px 0;
+}
+
+.user-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
 }
 
 .user-list,

@@ -34,15 +34,15 @@ func TestBaselineMigrationAndFailedMigrationRollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration status: %v", err)
 	}
-	if len(statuses) != 1 || statuses[0].Version != 1 || statuses[0].State != "applied" {
-		t.Fatalf("migration status = %+v, want version 1 applied", statuses)
+	if len(statuses) != 2 || statuses[0].Version != 1 || statuses[1].Version != 2 || statuses[0].State != "applied" || statuses[1].State != "applied" {
+		t.Fatalf("migration status = %+v, want versions 1 and 2 applied", statuses)
 	}
 	version, err := dbmigration.Version(ctx, sqlDB)
 	if err != nil {
 		t.Fatalf("read migration version: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("migration version = %d, want 1", version)
+	if version != 2 {
+		t.Fatalf("migration version = %d, want 2", version)
 	}
 
 	assertBaselineObjects(t, sqlDB)
@@ -90,6 +90,10 @@ func assertBaselineDownRejected(t *testing.T, ctx context.Context, db *sql.DB) {
 	p, err := goose.NewProvider(goose.DialectPostgres, db, migrations.FS)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// 00002 可回滚；回滚到基线后，再往下必须被拒绝。
+	if _, err := p.Down(ctx); err != nil {
+		t.Fatalf("00002 Down: %v", err)
 	}
 	if _, err := p.Down(ctx); err == nil || !strings.Contains(err.Error(), "baseline 00001 is irreversible") {
 		t.Fatalf("baseline Down = %v, want explicit rejection", err)
@@ -147,7 +151,7 @@ func assertFailedMigrationRollsBack(t *testing.T, ctx context.Context, db *sql.D
 	}
 	brokenFS := fstest.MapFS{
 		"00001_init.sql": {Data: baseline},
-		"00002_broken.sql": {Data: []byte(`-- +goose Up
+		"00003_broken.sql": {Data: []byte(`-- +goose Up
 CREATE TABLE goose_failure_probe (id INTEGER PRIMARY KEY);
 INSERT INTO goose_failure_probe (id) VALUES (1);
 SELECT fatecraft_intentionally_missing_function();
@@ -172,7 +176,7 @@ SELECT fatecraft_intentionally_missing_function();
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 {
-		t.Fatalf("version after failed migration = %d, want 1", version)
+	if version != 2 {
+		t.Fatalf("version after failed migration = %d, want 2", version)
 	}
 }

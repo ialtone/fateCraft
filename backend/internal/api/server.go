@@ -58,6 +58,7 @@ type Server struct {
 	activity       *storage.ActivityRepo
 	rewards        *storage.RewardRepository
 	llmRequestLogs *storage.LLMRequestLogRepo
+	adminUsers     *storage.AdminUserRepo
 	hub            *realtime.Hub
 	llmClient      *llm.Client
 	outbound       *llmoutbound.Manager
@@ -93,6 +94,7 @@ type Deps struct {
 	Activity       *storage.ActivityRepo
 	Rewards        *storage.RewardRepository
 	LLMRequestLogs *storage.LLMRequestLogRepo
+	AdminUsers     *storage.AdminUserRepo
 	Hub            *realtime.Hub
 	LLMClient      *llm.Client
 	Outbound       *llmoutbound.Manager
@@ -143,7 +145,7 @@ func NewServer(d Deps) *Server {
 		conv: d.Conv, campaigns: d.Campaigns, chat: d.Chat, state: d.State, challenges: d.Challenges, builtins: d.Builtins,
 		memory: d.Memory, inquiries: d.Inquiries,
 		settings: d.Settings, llmSettings: d.LLMSettings, system: d.System, ctxLogs: d.CtxLogs, messages: d.Messages, agents: d.Agents, rewards: d.Rewards,
-		llmRequestLogs: d.LLMRequestLogs, hub: d.Hub, turns: d.Turns, activity: d.Activity,
+		llmRequestLogs: d.LLMRequestLogs, adminUsers: d.AdminUsers, hub: d.Hub, turns: d.Turns, activity: d.Activity,
 		llmClient: d.LLMClient, outbound: d.Outbound, llmProxy: d.LLMProxy,
 		capabilities: d.Capabilities, shares: d.Shares, relays: relaysOrNil(d.Relays), counter: d.Counter, identity: d.Identity,
 		auth: d.Auth, cookieSecure: d.CookieSecure, diagnostics: d.Diagnostics,
@@ -286,6 +288,10 @@ func (s *Server) Router(r *gin.Engine) {
 	protected.POST("/admin/invitation-codes", s.requireAdmin, s.createAdminInvitation)
 	protected.PATCH("/admin/invitation-codes/:id", s.requireAdmin, s.updateAdminInvitation)
 	protected.GET("/admin/users", s.requireAdmin, s.listAdminUsers)
+	protected.GET("/admin/users/:id", s.requireAdmin, s.getAdminUser)
+	protected.GET("/admin/users/:id/conversations", s.requireAdmin, s.listAdminUserConversations)
+	protected.GET("/admin/users/:id/conversations/:conversation_id/records", s.requireAdmin, s.listAdminUserConversationRecords)
+	protected.POST("/admin/users/:id/detailed-logging", s.requireAdmin, s.enableAdminUserDetailedLogging)
 	protected.GET("/admin/users/:id/rewards", s.requireAdmin, s.getAdminUserRewards)
 	protected.GET("/admin/users/:id/reward-ledger", s.requireAdmin, s.listAdminRewardLedger)
 	protected.POST("/admin/users/:id/reward-grants", s.requireAdmin, s.createAdminRewardGrant)
