@@ -1,0 +1,6718 @@
+[
+  {
+    "kind": "romance.story",
+    "key": "xingang-lover",
+    "name": "新港恋人规则",
+    "content": {
+      "key": "xingang-lover",
+      "name": "新港恋人",
+      "world": "近未来海滨都市新港：霓虹、轻轨、全息广告与老街并存。你刚搬来新港，在这里遇见她。",
+      "goal": "在行动区选择你想追的她",
+      "no_lead": "尚未选择",
+      "choice_fields": [
+        "appearance"
+      ],
+      "stats": [
+        {
+          "key": "affection",
+          "label": "好感",
+          "group": "her",
+          "min": 0,
+          "max": 100,
+          "initial": 0,
+          "visibility": "player"
+        },
+        {
+          "key": "spark",
+          "label": "心动",
+          "group": "her",
+          "min": 0,
+          "max": 100,
+          "initial": 0,
+          "visibility": "player",
+          "decay_percent": 80
+        },
+        {
+          "key": "trust",
+          "label": "信任",
+          "group": "her",
+          "min": 0,
+          "max": 100,
+          "initial": 0,
+          "visibility": "player"
+        },
+        {
+          "key": "mood",
+          "label": "心情",
+          "group": "her",
+          "min": -3,
+          "max": 3,
+          "initial": 0,
+          "visibility": "player",
+          "drift": 1
+        },
+        {
+          "key": "insight",
+          "label": "洞察",
+          "group": "her",
+          "min": 0,
+          "max": 99,
+          "initial": 0,
+          "visibility": "player",
+          "sum": [
+            {
+              "ref": "revealed"
+            },
+            {
+              "ref": "stat.clues"
+            }
+          ]
+        },
+        {
+          "key": "jealousy",
+          "label": "醋意",
+          "group": "her",
+          "min": 0,
+          "max": 100,
+          "initial": 0,
+          "visibility": "player",
+          "daily": -5
+        },
+        {
+          "key": "insecurity",
+          "label": "不安",
+          "group": "her",
+          "min": 0,
+          "max": 100,
+          "initial": 0,
+          "visibility": "player",
+          "daily": -3,
+          "cap_flag": "knot",
+          "cap_max": 40
+        },
+        {
+          "key": "growth",
+          "label": "成长线",
+          "group": "her",
+          "min": 0,
+          "max": 3,
+          "initial": 0,
+          "visibility": "player"
+        },
+        {
+          "key": "clues",
+          "label": "心结线索",
+          "group": "",
+          "min": 0,
+          "max": 2,
+          "initial": 0,
+          "visibility": "hidden",
+          "min_stage": 1
+        },
+        {
+          "key": "side",
+          "label": "支线好感",
+          "group": "",
+          "min": 0,
+          "max": 100,
+          "initial": 0,
+          "visibility": "model",
+          "min_stage": 1
+        },
+        {
+          "key": "landmines",
+          "label": "踩雷",
+          "group": "",
+          "min": 0,
+          "max": 99,
+          "initial": 0,
+          "visibility": "hidden"
+        },
+        {
+          "key": "trust_level",
+          "label": "信任等级",
+          "group": "",
+          "min": 0,
+          "max": 10,
+          "initial": 0,
+          "visibility": "hidden",
+          "sum": [
+            {
+              "ref": "stat.trust",
+              "div": 10
+            }
+          ]
+        },
+        {
+          "key": "charm",
+          "label": "魅力",
+          "group": "you",
+          "min": 0,
+          "max": 10,
+          "initial": 3,
+          "visibility": "player",
+          "practice": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "key": "cooking",
+          "label": "厨艺",
+          "group": "you",
+          "min": 0,
+          "max": 10,
+          "initial": 1,
+          "visibility": "player",
+          "practice": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "key": "humor",
+          "label": "幽默",
+          "group": "you",
+          "min": 0,
+          "max": 10,
+          "initial": 3,
+          "visibility": "player",
+          "practice": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "key": "wealth",
+          "label": "财力",
+          "group": "you",
+          "min": 0,
+          "max": 10,
+          "initial": 2,
+          "visibility": "player",
+          "practice": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "key": "talent",
+          "label": "才艺",
+          "group": "you",
+          "min": 0,
+          "max": 10,
+          "initial": 0,
+          "visibility": "player",
+          "practice": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3
+          ]
+        },
+        {
+          "key": "money",
+          "label": "钱",
+          "group": "",
+          "min": 0,
+          "max": 9999999,
+          "initial": 600,
+          "visibility": "player"
+        },
+        {
+          "key": "stamina",
+          "label": "体力",
+          "group": "",
+          "min": 0,
+          "max": 100,
+          "initial": 80,
+          "visibility": "player"
+        }
+      ],
+      "stages": [
+        {
+          "key": "stranger",
+          "name": "陌生",
+          "tier": "L0",
+          "min_days": 5,
+          "max_days": 8,
+          "rise": [
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 25
+            }
+          ],
+          "push": [
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 15
+            }
+          ],
+          "caps": {
+            "date": 4,
+            "outing": 2,
+            "craft": 3,
+            "side": 3
+          },
+          "percent": {
+            "date": 50
+          }
+        },
+        {
+          "key": "familiar",
+          "name": "熟悉",
+          "tier": "L1",
+          "min_days": 5,
+          "max_days": 8,
+          "rise": [
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 50
+            },
+            {
+              "ref": "stat.spark",
+              "op": "ge",
+              "value": 40
+            },
+            {
+              "ref": "stat.trust",
+              "op": "ge",
+              "value": 35
+            }
+          ],
+          "push": [
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 40
+            },
+            {
+              "ref": "stat.spark",
+              "op": "ge",
+              "value": 30
+            },
+            {
+              "ref": "stat.trust",
+              "op": "ge",
+              "value": 25
+            }
+          ],
+          "caps": {
+            "date": 6,
+            "outing": 2,
+            "craft": 3,
+            "side": 3
+          },
+          "on_enter": "rent"
+        },
+        {
+          "key": "ambiguous",
+          "name": "暧昧",
+          "tier": "L2",
+          "min_days": 5,
+          "max_days": 8,
+          "rise": [],
+          "push": [],
+          "caps": {
+            "date": 6,
+            "outing": 2,
+            "craft": 3,
+            "side": 3
+          },
+          "on_enter": "rent"
+        },
+        {
+          "key": "lover",
+          "name": "恋人",
+          "tier": "L3",
+          "min_days": 7,
+          "max_days": 8,
+          "rise": [],
+          "push": [],
+          "caps": {
+            "date": 7,
+            "outing": 2,
+            "craft": 3,
+            "side": 3
+          },
+          "on_enter": "rent"
+        }
+      ],
+      "slots": [
+        {
+          "key": "day",
+          "label": "白天",
+          "start": 0,
+          "half": 300,
+          "mark": ""
+        },
+        {
+          "key": "night",
+          "label": "夜晚",
+          "start": 600,
+          "half": 150
+        },
+        {
+          "key": "late",
+          "label": "深夜",
+          "start": 900,
+          "half": 120,
+          "weekend_only": true,
+          "mark": "late"
+        }
+      ],
+      "leads": [
+        {
+          "key": "lin_wan",
+          "name": "林晚",
+          "age": 27,
+          "title": "高冷程序员",
+          "profile": {
+            "appearance": "168cm，黑色及肩直发常扎低马尾，细框眼镜，冷白皮，眼尾微挑；不笑时显得疏离",
+            "outfit": "灰/黑衬衫或纯色卫衣、直筒裤、帆布鞋，工牌挂脖子上；加班后挽袖松一颗扣；约会偷偷换隐形眼镜和黑色修身连衣裙"
+          },
+          "hidden": {
+            "body": "清瘦高挑，肩颈线条漂亮，腰细腿长，穿衬衫特别好看的骨感型",
+            "persona": "外冷：话少嘴硬、逻辑派，回消息像写注释；内敏感：会把你随口一句话复盘到凌晨，用行动代替语言。反差：手机壳是胖橘猫，看老电影会哭但不承认",
+            "flirt": "克制的暧昧：肩膀碰到不挪开；熬夜后摘眼镜揉眼睛；第一次在你面前放下头发；偶尔一句直白却毫无自觉的话，说完自己先愣住",
+            "catchphrases": "“说重点。”“……嗯。”“这个逻辑不对。”“我没有在等你消息，只是刚好看到。”",
+            "knot": "曾替同事背锅被前公司开除，不信任说漂亮话的人",
+            "knot_event": "凌晨三点的告警",
+            "knot_right": "陪她通宵排查，全程不打扰，只递咖啡",
+            "knot_wrong": "一直安慰她“没事的，不是你的错”",
+            "side": "顾言",
+            "side_profile": "28 岁，林晚的同事，温和的前端工程师（男），主题：被忽视的人",
+            "leave_reason": "外地大厂的技术负责人 offer",
+            "bestie": "唐昕"
+          },
+          "lists": {
+            "growth": [
+              "开源大版本立项",
+              "通宵冲刺",
+              "大版本发布"
+            ],
+            "clues": [
+              "旧公司事故报告里被划掉的名字",
+              "她从不在简历里写的那一年"
+            ],
+            "events": [
+              "咖啡机前的第一句话",
+              "老电影夜",
+              "凌晨三点的告警",
+              "她第一次笑出声"
+            ]
+          },
+          "likes": [
+            {
+              "key": "black_coffee",
+              "label": "黑咖啡不加糖",
+              "tags": [
+                "coffee"
+              ]
+            },
+            {
+              "key": "old_film",
+              "label": "老电影（黑白片）",
+              "tags": [
+                "film"
+              ]
+            },
+            {
+              "key": "keyboard",
+              "label": "机械键盘",
+              "tags": [
+                "gift"
+              ]
+            },
+            {
+              "key": "code_together",
+              "label": "深夜安静地并肩写代码",
+              "tags": [
+                "late_chat",
+                "quiet"
+              ]
+            },
+            {
+              "key": "listened",
+              "label": "被认真倾听",
+              "tags": [
+                "listen"
+              ]
+            },
+            {
+              "key": "cat",
+              "label": "猫",
+              "tags": [
+                "plush",
+                "leisure"
+              ]
+            }
+          ],
+          "dislikes": [
+            {
+              "key": "perfunctory",
+              "label": "被敷衍",
+              "tags": [
+                "perfunctory"
+              ]
+            },
+            {
+              "key": "late",
+              "label": "迟到",
+              "tags": [
+                "late"
+              ]
+            },
+            {
+              "key": "public_tease",
+              "label": "公开场合起哄",
+              "tags": [
+                "crowd"
+              ]
+            },
+            {
+              "key": "touch_pc",
+              "label": "乱碰她的电脑",
+              "tags": [
+                "touch_pc"
+              ]
+            }
+          ],
+          "params": {
+            "birthday": 16,
+            "knot_trust": 75,
+            "teaser": 0
+          },
+          "gain": {
+            "affection": 100,
+            "trust": 100
+          },
+          "favored": "a_zhe"
+        },
+        {
+          "key": "su_tang",
+          "name": "苏糖",
+          "age": 23,
+          "title": "元气咖啡店员",
+          "profile": {
+            "appearance": "160cm，栗色微卷长发常扎丸子头或双马尾，圆眼、苹果肌，笑起来有梨涡",
+            "outfit": "奶咖色围裙配白 T 和背带裤；夜市穿露肩短上衣和百褶裙；拍照日碎花吊带裙配小白鞋；生气时故意不穿你送的那件"
+          },
+          "hidden": {
+            "body": "娇小匀称，肉感恰到好处，曲线柔软，腿型很直",
+            "persona": "外元气：爱撒娇、话痨、情绪写在脸上，吃醋快哄得也快；内自卑：偷偷练裱花到半夜，怕被说“只是可爱”，被认真夸手艺会眼眶发红",
+            "flirt": "甜而不自知：抱着胳膊撒娇贴得很近；把奶油抹在你嘴角再用指尖擦掉；踮脚帮你整理衣领；拍照时突然贴脸",
+            "catchphrases": "“哼！”“你夸我一句嘛～”“这个超好吃的，你尝尝！”“我才没有吃醋呢！”",
+            "knot": "从小被拿来和律师姐姐比较，觉得自己只是可爱",
+            "knot_event": "家长来新港",
+            "knot_right": "当着她父母认真夸她的手艺和梦想",
+            "knot_wrong": "附和“还是找份稳定工作好”",
+            "side": "季柠",
+            "side_profile": "24 岁，苏糖的闺蜜，摄影师（女），主题：嫉妒背后的孤独",
+            "leave_reason": "家里变故，要回江南小镇帮忙",
+            "bestie": "季柠"
+          },
+          "lists": {
+            "growth": [
+              "新品试吃三次",
+              "陪她跑一次市场",
+              "甜品摊开张"
+            ],
+            "clues": [
+              "她手机里没回的家庭群消息",
+              "藏在店里柜子底的裱花练习本"
+            ],
+            "events": [
+              "猜口味小游戏",
+              "新品试吃",
+              "夜市走散",
+              "她偷偷给你留的那杯"
+            ]
+          },
+          "likes": [
+            {
+              "key": "milk_tea",
+              "label": "奶茶（少糖去冰，芋泥波波）",
+              "tags": [
+                "milk_tea"
+              ]
+            },
+            {
+              "key": "night_market",
+              "label": "夜市",
+              "tags": [
+                "night_market",
+                "food"
+              ]
+            },
+            {
+              "key": "photo",
+              "label": "拍照",
+              "tags": [
+                "photo",
+                "sight"
+              ]
+            },
+            {
+              "key": "praise_skill",
+              "label": "被夸手艺",
+              "tags": [
+                "cooking"
+              ]
+            },
+            {
+              "key": "plush",
+              "label": "毛绒玩偶",
+              "tags": [
+                "plush"
+              ]
+            },
+            {
+              "key": "surprise",
+              "label": "突然的小惊喜",
+              "tags": [
+                "flower",
+                "gift"
+              ]
+            }
+          ],
+          "dislikes": [
+            {
+              "key": "stood_up",
+              "label": "被放鸽子",
+              "tags": [
+                "late"
+              ]
+            },
+            {
+              "key": "childish",
+              "label": "嫌她幼稚",
+              "tags": [
+                "lecture"
+              ]
+            },
+            {
+              "key": "other_girl",
+              "label": "当面看别的女生",
+              "tags": [
+                "crowd"
+              ]
+            },
+            {
+              "key": "forget",
+              "label": "忘记她说过的事",
+              "tags": [
+                "forget"
+              ]
+            }
+          ],
+          "params": {
+            "birthday": 12,
+            "knot_trust": 70,
+            "teaser": 0
+          },
+          "gain": {
+            "affection": 100,
+            "trust": 100
+          },
+          "favored": "ji_ning"
+        },
+        {
+          "key": "ye_fei",
+          "name": "夜绯",
+          "age": 25,
+          "title": "毒舌主播",
+          "profile": {
+            "appearance": "165cm，挑染酒红的黑色长直发，烟熏眼妆、深色唇；卸妆后是素净的小圆脸，眼下淡淡黑眼圈",
+            "outfit": "黑色系露脐短上衣、皮质短裙、过膝袜、厚底靴，银饰和 choker；下播后只套一件宽大卫衣；外出戴口罩和鸭舌帽"
+          },
+          "hidden": {
+            "body": "纤细但曲线明显，锁骨深，腰窝明显，常年熬夜显得苍白",
+            "persona": "外张扬毒舌、反应快，看起来什么都不在乎；内极度没安全感，怕真实的自己被看见，常年失眠。嘴上嫌弃你，其实很在意你有没有看她直播",
+            "flirt": "带点野和刺：双排时一边骂你菜一边靠在你肩上；素颜套着你的卫衣窝在沙发里；深夜语音压低声音；嘴上说别看我却故意在你面前换耳环",
+            "catchphrases": "“你行不行啊？”“菜就多练。”“……别走，再陪我一会儿。”“我才不是为了你播的。”",
+            "knot": "曾被黑粉开盒，害怕真实的自己被看见",
+            "knot_event": "换脸造谣",
+            "knot_right": "站出来替她澄清，但不曝光她的任何隐私",
+            "knot_wrong": "晒出你们的合照证明她“不是那种人”",
+            "side": "程野",
+            "side_profile": "26 岁，夜绯的场控兼剪辑师（女），主题：幕后的光",
+            "leave_reason": "外地战队的解说签约",
+            "bestie": "白露"
+          },
+          "lists": {
+            "growth": [
+              "转型试播",
+              "解说选拔",
+              "解说首秀"
+            ],
+            "clues": [
+              "她删掉又恢复的旧账号",
+              "直播间永远拉着的窗帘"
+            ],
+            "events": [
+              "双排连败",
+              "下播后的语音",
+              "她摘下耳机的那晚",
+              "第一次穿正装"
+            ]
+          },
+          "likes": [
+            {
+              "key": "game",
+              "label": "游戏（尤其双人合作）",
+              "tags": [
+                "game",
+                "thrill"
+              ]
+            },
+            {
+              "key": "late_chat",
+              "label": "深夜聊天",
+              "tags": [
+                "late_chat"
+              ]
+            },
+            {
+              "key": "watch_stream",
+              "label": "被认真看完直播",
+              "tags": [
+                "stream"
+              ]
+            },
+            {
+              "key": "spicy",
+              "label": "辣的夜宵",
+              "tags": [
+                "spicy",
+                "food"
+              ]
+            },
+            {
+              "key": "needed",
+              "label": "被需要",
+              "tags": [
+                "care"
+              ]
+            },
+            {
+              "key": "dark_style",
+              "label": "暗色系穿搭",
+              "tags": [
+                "gift",
+                "shopping"
+              ]
+            }
+          ],
+          "dislikes": [
+            {
+              "key": "praise_other",
+              "label": "当着她夸别的女生",
+              "tags": [
+                "crowd"
+              ]
+            },
+            {
+              "key": "traffic",
+              "label": "说“你就是靠流量”",
+              "tags": [
+                "lecture"
+              ]
+            },
+            {
+              "key": "expose",
+              "label": "公开她的私事",
+              "tags": [
+                "photo"
+              ]
+            },
+            {
+              "key": "ignore_night",
+              "label": "不回深夜消息",
+              "tags": [
+                "ignore_night"
+              ]
+            }
+          ],
+          "params": {
+            "birthday": 20,
+            "knot_trust": 75,
+            "teaser": 0
+          },
+          "gain": {
+            "affection": 100,
+            "trust": 100
+          },
+          "favored": "idol"
+        },
+        {
+          "key": "shen_qinghe",
+          "name": "沈清禾",
+          "age": 29,
+          "title": "温柔的邻居姐姐（花店）",
+          "profile": {
+            "appearance": "166cm，深棕长发松松挽起、插一支木簪，温柔杏眼，素颜，手指纤长，指尖偶尔沾着花泥",
+            "outfit": "亚麻衬衫或针织开衫、长裙、布围裙，袖口挽起；雨天米色风衣；做饭时头发全挽起露出后颈；夏夜阳台是细肩带棉质睡裙"
+          },
+          "hidden": {
+            "body": "丰盈柔和的成熟曲线，腰身纤细，走路很稳，给人被包裹的安心感",
+            "persona": "外温柔成熟、体贴，说话慢；内边界感强，越被靠近越退半步，心里装着没放下的旧事。反差：路痴，会讲冷笑话，一杯梅子酒就脸红",
+            "flirt": "温柔成熟：帮你系围裙时手绕过你的腰；共撑一把伞时淡淡花香；挽起头发回头让你尝一口汤；夏夜阳台带一点醉意的眼神",
+            "catchphrases": "“慢点吃，还有呢。”“又没带伞？”“没关系的。”“……你再说一遍？”",
+            "knot": "五年旧感情以对方不告而别收场，不再相信会留下来的人",
+            "knot_event": "前任回归",
+            "knot_right": "不逼问，也不退让，安静地站在她身边",
+            "knot_wrong": "追问他们当年到底发生了什么",
+            "side": "许砚",
+            "side_profile": "30 岁，花店常客，旧书店老板（男），主题：留下来的人",
+            "leave_reason": "外地花艺比赛与工作室邀请",
+            "bestie": "温婉"
+          },
+          "lists": {
+            "growth": [
+              "收到比赛邀请",
+              "决定是否参赛",
+              "花艺比赛"
+            ],
+            "clues": [
+              "花店后屋没拆封的旧行李箱",
+              "每年同一天她都会关店"
+            ],
+            "events": [
+              "雨天收摊",
+              "她做的第一顿饭",
+              "洋桔梗的花语",
+              "阳台上的梅子酒"
+            ]
+          },
+          "likes": [
+            {
+              "key": "rain",
+              "label": "下雨天",
+              "tags": [
+                "rain",
+                "leisure"
+              ]
+            },
+            {
+              "key": "cooking",
+              "label": "做饭和被吃光的饭盒",
+              "tags": [
+                "cooking",
+                "food"
+              ]
+            },
+            {
+              "key": "lisianthus",
+              "label": "花（白色洋桔梗）",
+              "tags": [
+                "flower"
+              ]
+            },
+            {
+              "key": "old_books",
+              "label": "旧书",
+              "tags": [
+                "books",
+                "sight"
+              ]
+            },
+            {
+              "key": "walk",
+              "label": "散步",
+              "tags": [
+                "walk"
+              ]
+            },
+            {
+              "key": "cared",
+              "label": "被照顾一次",
+              "tags": [
+                "care"
+              ]
+            }
+          ],
+          "dislikes": [
+            {
+              "key": "past",
+              "label": "追问她的过去",
+              "tags": [
+                "past"
+              ]
+            },
+            {
+              "key": "baby",
+              "label": "拿她当姐姐撒娇过头",
+              "tags": [
+                "childish"
+              ]
+            },
+            {
+              "key": "waste",
+              "label": "浪费食物",
+              "tags": [
+                "waste",
+                "shopping"
+              ]
+            },
+            {
+              "key": "empty_promise",
+              "label": "许下做不到的承诺",
+              "tags": [
+                "promise"
+              ]
+            }
+          ],
+          "params": {
+            "birthday": 14,
+            "knot_trust": 80,
+            "teaser": 0
+          },
+          "gain": {
+            "affection": 100,
+            "trust": 100
+          },
+          "favored": "ex"
+        },
+        {
+          "key": "yao_xiaotao",
+          "name": "姚小桃",
+          "age": 26,
+          "title": "爱擦边的小妖精（舞蹈老师）",
+          "profile": {
+            "appearance": "170cm，蜜桃色挑染长卷发，狐狸眼、唇下一颗小痣，笑起来眼睛弯成月牙；淡淡白桃味香水；卸了妆反而显得乖",
+            "outfit": "工作室露背练功服、阔腿瑜伽裤；出门吊带、短外套、开衩裙，细金链和脚链；赴约总有一处小心机；居家松垮的男款衬衫；认真那天穿最普通的白衬衫牛仔裤"
+          },
+          "hidden": {
+            "body": "高挑，舞者体态，肩背挺拔，腰线紧致，腿部线条修长有力，曲线张扬",
+            "persona": "外大胆爱撩、满嘴双关，以看你脸红为乐；内心软讲义气，记仇也记恩，跳舞时安静得像换了个人。被认真对待会慌，慌了就撩得更凶。小城姑娘的倔和节俭",
+            "flirt": "享受暧昧张力：耳边悄悄话、指尖划手心、只露锁骨的自拍、深夜一句“睡了吗”；话说得露骨却总在最后一步笑着退开。被反撩会耳朵通红、结巴",
+            "catchphrases": "“哎呀，你脸红什么～”“你在想什么呢？我说的是跳舞哦。”“要不要……算了，下次再告诉你。”",
+            "knot": "一直被当成好玩的那个，怕认真之后被说原来你也就这样",
+            "knot_event": "她的试探",
+            "knot_right": "接住她的挑逗但不越界，认真说出你看见的她",
+            "knot_wrong": "顺势越界，或者被吓退说“你别闹了”",
+            "side": "陆川",
+            "side_profile": "28 岁，工作室常客，摄影师（男），主题：把她拍成认真的样子",
+            "leave_reason": "家里催她回老家接手早餐铺",
+            "bestie": "安琪"
+          },
+          "lists": {
+            "growth": [
+              "报名原创舞比赛",
+              "老家来的电话",
+              "原创舞首演"
+            ],
+            "clues": [
+              "学舞时被说靠脸的旧视频",
+              "她记账本最后一页写着的那句话"
+            ],
+            "events": [
+              "镜子前的那支舞",
+              "她的试探",
+              "卸了妆的她",
+              "雷雨夜",
+              "老家来的电话"
+            ]
+          },
+          "likes": [
+            {
+              "key": "banter",
+              "label": "被接住玩笑（不怂也不油）",
+              "tags": [
+                "banter"
+              ]
+            },
+            {
+              "key": "night_out",
+              "label": "夜跑、夜店和天台",
+              "tags": [
+                "night_out",
+                "thrill"
+              ]
+            },
+            {
+              "key": "peach_wine",
+              "label": "冰白桃乌龙和红酒",
+              "tags": [
+                "drink"
+              ]
+            },
+            {
+              "key": "praise_fun",
+              "label": "被夸有趣厉害、认真看她跳舞",
+              "tags": [
+                "dance"
+              ]
+            },
+            {
+              "key": "remember",
+              "label": "你记得她随口说的认真话",
+              "tags": [
+                "remember",
+                "listen"
+              ]
+            },
+            {
+              "key": "breakfast",
+              "label": "小城口味的早餐",
+              "tags": [
+                "breakfast",
+                "food"
+              ]
+            }
+          ],
+          "dislikes": [
+            {
+              "key": "easy",
+              "label": "被当成随便的人、当众开黄腔",
+              "tags": [
+                "crude"
+              ]
+            },
+            {
+              "key": "overstep",
+              "label": "趁机越界、动手动脚",
+              "tags": [
+                "overstep"
+              ]
+            },
+            {
+              "key": "lecture_outfit",
+              "label": "说教她穿着",
+              "tags": [
+                "lecture"
+              ]
+            },
+            {
+              "key": "look_down",
+              "label": "看不起她的出身或职业",
+              "tags": [
+                "look_down"
+              ]
+            }
+          ],
+          "params": {
+            "birthday": 18,
+            "knot_trust": 80,
+            "teaser": 1
+          },
+          "gain": {
+            "affection": 130,
+            "trust": 70
+          },
+          "favored": ""
+        }
+      ],
+      "categories": [
+        {
+          "key": "date",
+          "contact": true,
+          "check": true,
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "cond.cold",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "reason": "冷战中，她不想见你"
+            }
+          ],
+          "free_flag": "free_date",
+          "bonus": {
+            "rivals": -4
+          }
+        },
+        {
+          "key": "gift",
+          "contact": true,
+          "check": true,
+          "per_slot": true,
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "cond.cold",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "reason": "冷战中，她不想见你"
+            }
+          ],
+          "repeat_days": 1,
+          "repeat_percent": 50,
+          "on_success": "gift_birthday"
+        },
+        {
+          "key": "chat",
+          "contact": true,
+          "check": true,
+          "per_slot": true
+        },
+        {
+          "key": "self",
+          "check": false
+        },
+        {
+          "key": "outing",
+          "contact": true,
+          "check": true,
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "cond.cold",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "reason": "冷战中，她不想见你"
+            }
+          ],
+          "bonus": {
+            "rivals": -4
+          }
+        },
+        {
+          "key": "craft",
+          "contact": true,
+          "check": true,
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "cond.cold",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "reason": "冷战中，她不想见你"
+            }
+          ],
+          "bonus": {
+            "collect": "keepsakes"
+          }
+        },
+        {
+          "key": "special",
+          "contact": true,
+          "check": true
+        },
+        {
+          "key": "side",
+          "contact": false,
+          "check": true
+        }
+      ],
+      "activities": [
+        {
+          "key": "coffee_meet",
+          "label": "偶遇喝咖啡",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day"
+          ],
+          "location": "cafe",
+          "rate": 75,
+          "tags": [
+            "coffee",
+            "encounter"
+          ],
+          "cost": {
+            "money": 40,
+            "stamina": 10
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.charm",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 5,
+              "spark": 8
+            }
+          }
+        },
+        {
+          "key": "park_walk",
+          "label": "公园偶遇散步",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "park",
+          "rate": 80,
+          "tags": [
+            "walk",
+            "leisure"
+          ],
+          "cost": {
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "affection": 4,
+              "spark": 4,
+              "trust": 2
+            }
+          }
+        },
+        {
+          "key": "dinner",
+          "label": "一起吃饭",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "bar",
+          "min_stage": 1,
+          "rate": 75,
+          "tags": [
+            "food",
+            "spicy",
+            "breakfast"
+          ],
+          "cost": {
+            "money": 150,
+            "stamina": 10
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.charm",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 5,
+              "spark": 8
+            }
+          }
+        },
+        {
+          "key": "movie",
+          "label": "看电影",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "location": "cinema",
+          "min_stage": 1,
+          "rate": 80,
+          "tags": [
+            "film"
+          ],
+          "cost": {
+            "money": 80,
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "affection": 4,
+              "spark": 10
+            }
+          }
+        },
+        {
+          "key": "night_market",
+          "label": "逛夜市",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "location": "night_market",
+          "min_stage": 1,
+          "rate": 75,
+          "tags": [
+            "night_market",
+            "food",
+            "spicy",
+            "photo"
+          ],
+          "cost": {
+            "money": 60,
+            "stamina": 15
+          },
+          "effects": {
+            "stats": {
+              "affection": 5,
+              "spark": 10
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "vr_park",
+          "label": "VR 游乐城",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "vr_park",
+          "min_stage": 1,
+          "rate": 70,
+          "tags": [
+            "game",
+            "thrill"
+          ],
+          "cost": {
+            "money": 150,
+            "stamina": 20
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.charm",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "spark": 15,
+              "affection": 4
+            }
+          }
+        },
+        {
+          "key": "ktv",
+          "label": "K 歌",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "location": "ktv",
+          "min_stage": 1,
+          "rate": 70,
+          "train": "humor",
+          "tags": [
+            "night_out",
+            "crowd",
+            "banter"
+          ],
+          "cost": {
+            "money": 100,
+            "stamina": 15
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.humor",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "spark": 10,
+              "affection": 3
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "livehouse",
+          "label": "Livehouse",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "location": "livehouse",
+          "min_stage": 1,
+          "rate": 65,
+          "tags": [
+            "night_out",
+            "crowd",
+            "dance"
+          ],
+          "cost": {
+            "money": 120,
+            "stamina": 20
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.talent",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "spark": 16,
+              "affection": 3
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "bar",
+          "label": "清吧微醺",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "location": "bar",
+          "min_stage": 1,
+          "rate": 70,
+          "tags": [
+            "drink",
+            "listen",
+            "quiet"
+          ],
+          "cost": {
+            "money": 150,
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "spark": 8,
+              "trust": 4
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "stargaze",
+          "label": "天台看星星",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "location": "lookout",
+          "min_stage": 2,
+          "rate": 70,
+          "tags": [
+            "sight",
+            "quiet",
+            "late_chat"
+          ],
+          "cost": {
+            "money": 40,
+            "stamina": 5
+          },
+          "effects": {
+            "stats": {
+              "spark": 12,
+              "trust": 3
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "seaside_rail",
+          "label": "海边轻轨兜风",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "location": "seaside_rail",
+          "min_stage": 2,
+          "rate": 70,
+          "tags": [
+            "sight",
+            "walk",
+            "rain"
+          ],
+          "cost": {
+            "money": 30,
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "spark": 14,
+              "trust": 3
+            }
+          }
+        },
+        {
+          "key": "sky_bar",
+          "label": "天台酒吧云阶",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "location": "sky_bar",
+          "min_stage": 2,
+          "rate": 65,
+          "tags": [
+            "night_out",
+            "drink",
+            "dance",
+            "sight"
+          ],
+          "cost": {
+            "money": 400,
+            "stamina": 15
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.wealth",
+              "mul": 3
+            }
+          ],
+          "effects": {
+            "stats": {
+              "spark": 18,
+              "affection": 4
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "cook_home",
+          "label": "在你家做饭",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "night"
+          ],
+          "location": "home_you",
+          "min_stage": 2,
+          "rate": 50,
+          "tags": [
+            "cooking",
+            "food",
+            "quiet"
+          ],
+          "cost": {
+            "money": 60,
+            "stamina": 10
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.cooking",
+              "mul": 5
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 6,
+              "trust": 5
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "milk_tea",
+          "label": "点奶茶/咖啡",
+          "category": "gift",
+          "halves": 1,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "tea_shop",
+          "cooldown": 1,
+          "rate": 90,
+          "tags": [
+            "milk_tea",
+            "coffee",
+            "drink"
+          ],
+          "cost": {
+            "money": 30
+          },
+          "effects": {
+            "stats": {
+              "affection": 3,
+              "mood": 1
+            }
+          }
+        },
+        {
+          "key": "flowers",
+          "label": "送花",
+          "category": "gift",
+          "halves": 1,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "shen_shop",
+          "min_stage": 1,
+          "cooldown": 3,
+          "rate": 80,
+          "tags": [
+            "flower"
+          ],
+          "cost": {
+            "money": 80
+          },
+          "effects": {
+            "stats": {
+              "affection": 4,
+              "spark": 5
+            }
+          }
+        },
+        {
+          "key": "gift",
+          "label": "送礼物",
+          "category": "gift",
+          "halves": 1,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "mall",
+          "min_stage": 1,
+          "cooldown": 5,
+          "rate": 70,
+          "tags": [
+            "gift",
+            "plush",
+            "shopping"
+          ],
+          "cost": {
+            "money": 300
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.insight",
+              "mul": 3
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 10
+            }
+          }
+        },
+        {
+          "key": "bento",
+          "label": "做便当",
+          "category": "gift",
+          "halves": 2,
+          "slots": [
+            "day"
+          ],
+          "location": "home_you",
+          "min_stage": 1,
+          "rate": 40,
+          "tags": [
+            "cooking",
+            "breakfast",
+            "remember"
+          ],
+          "cost": {
+            "money": 40,
+            "stamina": 5
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.cooking",
+              "mul": 6
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 5,
+              "trust": 3
+            }
+          }
+        },
+        {
+          "key": "message",
+          "label": "发消息（选话题）",
+          "category": "chat",
+          "halves": 1,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "rate": 70,
+          "tags": [
+            "banter",
+            "listen"
+          ],
+          "rate_terms": [
+            {
+              "ref": "stat.humor",
+              "mul": 3
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 2
+            }
+          }
+        },
+        {
+          "key": "late_voice",
+          "label": "深夜语音",
+          "category": "chat",
+          "halves": 2,
+          "slots": [
+            "late",
+            "night"
+          ],
+          "min_stage": 1,
+          "rate": 65,
+          "tags": [
+            "late_chat",
+            "listen",
+            "ignore_night"
+          ],
+          "cost": {
+            "stamina": 15
+          },
+          "effects": {
+            "stats": {
+              "spark": 8,
+              "trust": 4,
+              "insecurity": -10
+            }
+          }
+        },
+        {
+          "key": "video_call",
+          "label": "视频通话",
+          "category": "chat",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "min_stage": 2,
+          "rate": 70,
+          "tags": [
+            "late_chat",
+            "stream"
+          ],
+          "cost": {
+            "stamina": 5
+          },
+          "effects": {
+            "stats": {
+              "affection": 3,
+              "spark": 6
+            }
+          }
+        },
+        {
+          "key": "apologize",
+          "label": "道歉 / 哄她",
+          "category": "chat",
+          "halves": 1,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "rate": 50,
+          "cost": {
+            "stamina": 5
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.humor",
+              "mul": 3
+            }
+          ],
+          "effects": {
+            "stats": {
+              "jealousy": -20,
+              "insecurity": -10
+            }
+          },
+          "fail": {
+            "stats": {
+              "mood": -1
+            }
+          },
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "cond.conflict",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "reason": "只在吵架或冷战时可用"
+            }
+          ]
+        },
+        {
+          "key": "ask_around",
+          "label": "打听她的事",
+          "category": "chat",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "her_work",
+          "min_stage": 1,
+          "rate": 60,
+          "cost": {
+            "money": 50,
+            "stamina": 5
+          },
+          "effects": {
+            "reveal": 1
+          },
+          "fail": {
+            "stats": {
+              "insecurity": 3
+            }
+          }
+        },
+        {
+          "key": "work_day",
+          "label": "打工（白天）",
+          "category": "self",
+          "halves": 2,
+          "slots": [
+            "day"
+          ],
+          "location": "office",
+          "income": 300,
+          "cost": {
+            "stamina": 20
+          }
+        },
+        {
+          "key": "work_night",
+          "label": "打工（夜晚）",
+          "category": "self",
+          "halves": 2,
+          "slots": [
+            "night"
+          ],
+          "location": "office",
+          "income": 200,
+          "cost": {
+            "stamina": 20
+          }
+        },
+        {
+          "key": "overtime",
+          "label": "加班（白天+夜晚）",
+          "category": "self",
+          "halves": 4,
+          "slots": [
+            "day"
+          ],
+          "location": "office",
+          "income": 700,
+          "cost": {
+            "stamina": 40
+          },
+          "always": {
+            "expire": true
+          }
+        },
+        {
+          "key": "gym",
+          "label": "健身",
+          "category": "self",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "gym",
+          "train": "charm",
+          "cost": {
+            "money": 20,
+            "stamina": 15
+          }
+        },
+        {
+          "key": "cook_class",
+          "label": "学做饭",
+          "category": "self",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "train": "cooking",
+          "cost": {
+            "money": 60,
+            "stamina": 10
+          }
+        },
+        {
+          "key": "guitar",
+          "label": "学吉他",
+          "category": "self",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "train": "talent",
+          "cost": {
+            "money": 80,
+            "stamina": 10
+          }
+        },
+        {
+          "key": "rest",
+          "label": "休息",
+          "category": "self",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "always": {
+            "stats": {
+              "stamina": 30
+            }
+          }
+        },
+        {
+          "key": "picnic",
+          "label": "公园野餐",
+          "category": "outing",
+          "halves": 2,
+          "slots": [
+            "day"
+          ],
+          "location": "park",
+          "min_stage": 1,
+          "rate": 75,
+          "tags": [
+            "food",
+            "walk",
+            "leisure",
+            "breakfast"
+          ],
+          "cost": {
+            "money": 80,
+            "stamina": 10
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.cooking",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 6,
+              "spark": 8,
+              "trust": 3
+            }
+          }
+        },
+        {
+          "key": "hiking",
+          "label": "徒步登山",
+          "category": "outing",
+          "halves": 2,
+          "slots": [
+            "day"
+          ],
+          "location": "lookout",
+          "min_stage": 1,
+          "rate": 60,
+          "tags": [
+            "thrill",
+            "walk",
+            "sight"
+          ],
+          "cost": {
+            "money": 50,
+            "stamina": 30
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.charm",
+              "mul": 2
+            }
+          ],
+          "effects": {
+            "stats": {
+              "spark": 12,
+              "trust": 5
+            }
+          }
+        },
+        {
+          "key": "camping",
+          "label": "海边露营（周末全天）",
+          "category": "outing",
+          "halves": 6,
+          "slots": [
+            "day"
+          ],
+          "location": "beach",
+          "min_stage": 1,
+          "rate": 65,
+          "tags": [
+            "sight",
+            "late_chat",
+            "night_out"
+          ],
+          "cost": {
+            "money": 300,
+            "stamina": 35
+          },
+          "effects": {
+            "stats": {
+              "spark": 18,
+              "trust": 8
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "figure",
+          "label": "一起做手办",
+          "category": "craft",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "mall",
+          "min_stage": 1,
+          "rate": 50,
+          "tags": [
+            "plush",
+            "game"
+          ],
+          "cost": {
+            "money": 200
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.talent",
+              "mul": 5
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 5,
+              "spark": 8
+            }
+          }
+        },
+        {
+          "key": "diy",
+          "label": "DIY 香薰/首饰",
+          "category": "craft",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "mall",
+          "min_stage": 1,
+          "rate": 60,
+          "tags": [
+            "gift",
+            "flower"
+          ],
+          "cost": {
+            "money": 120
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.talent",
+              "mul": 4
+            }
+          ],
+          "effects": {
+            "reveal": 1,
+            "stats": {
+              "affection": 5
+            }
+          }
+        },
+        {
+          "key": "pottery",
+          "label": "陶艺",
+          "category": "craft",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "mall",
+          "min_stage": 1,
+          "rate": 45,
+          "tags": [
+            "quiet",
+            "dance"
+          ],
+          "cost": {
+            "money": 150
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.talent",
+              "mul": 5
+            }
+          ],
+          "effects": {
+            "stats": {
+              "spark": 10
+            }
+          },
+          "fail": {
+            "stats": {
+              "spark": 4
+            }
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "baking",
+          "label": "烘焙",
+          "category": "craft",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "su_stall",
+          "min_stage": 1,
+          "rate": 40,
+          "tags": [
+            "cooking",
+            "breakfast"
+          ],
+          "cost": {
+            "money": 100
+          },
+          "rate_terms": [
+            {
+              "ref": "stat.cooking",
+              "mul": 6
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 6,
+              "trust": 3
+            }
+          }
+        },
+        {
+          "key": "old_town",
+          "label": "去旧城区走走",
+          "category": "date",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "location": "old_town",
+          "min_stage": 1,
+          "rate": 70,
+          "tags": [
+            "past",
+            "walk",
+            "books"
+          ],
+          "cost": {
+            "money": 30,
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "clues": 1,
+              "trust": 2
+            }
+          }
+        },
+        {
+          "key": "exclusive",
+          "label": "她的专属事件",
+          "category": "special",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "min_stage": 1,
+          "cooldown": 2,
+          "rate": 85,
+          "tags": [
+            "remember"
+          ],
+          "rate_terms": [
+            {
+              "ref": "stat.charm",
+              "mul": 1
+            }
+          ],
+          "effects": {
+            "stats": {
+              "affection": 5,
+              "spark": 8,
+              "trust": 5
+            }
+          },
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "flag.exclusive.{stage}",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "reason": "本阶段专属事件已发生"
+            }
+          ],
+          "always": {
+            "flags": {
+              "exclusive.{stage}": 1
+            },
+            "table": "exclusive_growth"
+          },
+          "after": "explicit"
+        },
+        {
+          "key": "growth_help",
+          "label": "陪她推进成长线",
+          "category": "special",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "min_stage": 1,
+          "cooldown": 3,
+          "rate": 80,
+          "tags": [
+            "listen",
+            "care"
+          ],
+          "cost": {
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "growth": 1,
+              "trust": 3,
+              "affection": 2
+            }
+          }
+        },
+        {
+          "key": "hospital",
+          "label": "陪她去医院",
+          "category": "special",
+          "halves": 4,
+          "slots": [
+            "day"
+          ],
+          "location": "hospital",
+          "rate": 100,
+          "tags": [
+            "care"
+          ],
+          "effects": {
+            "stats": {
+              "trust": 12,
+              "spark": 6
+            }
+          },
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "flag.need_care",
+                  "op": "ne",
+                  "value": 0,
+                  "than": "day"
+                }
+              ],
+              "reason": "需要对应事件"
+            }
+          ]
+        },
+        {
+          "key": "vigil",
+          "label": "守一夜",
+          "category": "special",
+          "halves": 2,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "rate": 100,
+          "tags": [
+            "care"
+          ],
+          "cost": {
+            "stamina": 20
+          },
+          "effects": {
+            "stats": {
+              "trust": 15
+            }
+          },
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "flag.need_care",
+                  "op": "ne",
+                  "value": 0,
+                  "than": "day"
+                }
+              ],
+              "reason": "需要对应事件"
+            }
+          ],
+          "always": {
+            "until": {
+              "vigil": 0
+            }
+          }
+        },
+        {
+          "key": "defend",
+          "label": "替她出头",
+          "category": "special",
+          "halves": 1,
+          "slots": [
+            "day",
+            "night",
+            "late"
+          ],
+          "rate": 60,
+          "tags": [
+            "care"
+          ],
+          "rate_terms": [
+            {
+              "ref": "stat.charm",
+              "mul": 3
+            }
+          ],
+          "effects": {
+            "stats": {
+              "trust": 15,
+              "affection": 8
+            }
+          },
+          "fail": {
+            "stats": {
+              "stamina": -40,
+              "trust": 8
+            }
+          },
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "flag.need_defend",
+                  "op": "ne",
+                  "value": 0,
+                  "than": "day"
+                }
+              ],
+              "reason": "需要对应事件"
+            }
+          ]
+        },
+        {
+          "key": "diary",
+          "label": "偷看她的日记 / 翻朋友圈",
+          "category": "special",
+          "halves": 1,
+          "slots": [
+            "night",
+            "late"
+          ],
+          "min_stage": 2,
+          "rate": 100,
+          "table": "diary",
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "stat.trust",
+                  "op": "lt",
+                  "value": 50
+                }
+              ],
+              "reason": "信任 50 后才有机会"
+            }
+          ],
+          "always": {
+            "add": {
+              "diary": 1
+            }
+          }
+        },
+        {
+          "key": "side_time",
+          "label": "陪支线配角",
+          "category": "side",
+          "halves": 2,
+          "slots": [
+            "day",
+            "night"
+          ],
+          "min_stage": 1,
+          "rate": 80,
+          "cost": {
+            "stamina": 10
+          },
+          "effects": {
+            "stats": {
+              "side": 12
+            }
+          }
+        }
+      ],
+      "locations": [
+        {
+          "key": "cafe",
+          "name": "雾港咖啡馆"
+        },
+        {
+          "key": "tea_shop",
+          "name": "波波星奶茶店"
+        },
+        {
+          "key": "mall",
+          "name": "霓虹天穹商场"
+        },
+        {
+          "key": "cinema",
+          "name": "老胶片影院"
+        },
+        {
+          "key": "vr_park",
+          "name": "VR 游乐城"
+        },
+        {
+          "key": "night_market",
+          "name": "霓虹夜市"
+        },
+        {
+          "key": "livehouse",
+          "name": "地下 Livehouse 锈"
+        },
+        {
+          "key": "bar",
+          "name": "清吧低频"
+        },
+        {
+          "key": "ktv",
+          "name": "霓虹 KTV"
+        },
+        {
+          "key": "sky_bar",
+          "name": "天台酒吧云阶"
+        },
+        {
+          "key": "seaside_rail",
+          "name": "海边轻轨"
+        },
+        {
+          "key": "beach",
+          "name": "银沙海滩"
+        },
+        {
+          "key": "park",
+          "name": "城市公园"
+        },
+        {
+          "key": "lookout",
+          "name": "山顶观景台"
+        },
+        {
+          "key": "home_you",
+          "name": "你的公寓"
+        },
+        {
+          "key": "her_work",
+          "name": "她的公司/店铺"
+        },
+        {
+          "key": "hospital",
+          "name": "新港中心医院"
+        },
+        {
+          "key": "old_town",
+          "name": "旧城区"
+        },
+        {
+          "key": "su_stall",
+          "name": "苏糖 · 甜品摊"
+        },
+        {
+          "key": "shen_shop",
+          "name": "沈清禾 · 花店"
+        },
+        {
+          "key": "office",
+          "name": "中介接活点"
+        },
+        {
+          "key": "gym",
+          "name": "健身房"
+        }
+      ],
+      "tuning": {
+        "like_rate": 10,
+        "dislike_rate": 10,
+        "like_percent": 200,
+        "reverse": [
+          "affection",
+          "spark",
+          "trust"
+        ],
+        "dislike": {
+          "stats": {
+            "jealousy": 10,
+            "insecurity": 10
+          }
+        },
+        "landmine": {
+          "stats": {
+            "landmines": 1
+          }
+        },
+        "fail": {
+          "stats": {
+            "spark": -5,
+            "mood": -1
+          }
+        },
+        "rate_terms": [
+          {
+            "ref": "stat.mood",
+            "mul": 5
+          },
+          {
+            "ref": "cond.distant",
+            "mul": -15
+          }
+        ],
+        "min": 5,
+        "max": 95,
+        "gates": [
+          {
+            "if": [
+              {
+                "ref": "act.halves",
+                "op": "gt",
+                "value": 2
+              },
+              {
+                "ref": "half",
+                "op": "ne",
+                "value": 0
+              }
+            ],
+            "reason": "需要从时段开始时出发"
+          },
+          {
+            "if": [
+              {
+                "ref": "act.halves",
+                "op": "gt",
+                "value": 4
+              },
+              {
+                "ref": "weekend",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "reason": "只在周末可以"
+          }
+        ]
+      },
+      "income": {
+        "stat": "money",
+        "percent_flag": "income_mod",
+        "each": 800,
+        "bump": "wealth",
+        "tally": "earned"
+      },
+      "contact": {
+        "until": {
+          "contact": 0
+        }
+      },
+      "messages": {
+        "max": 8,
+        "kinds": [
+          {
+            "key": "share",
+            "label": "日常分享",
+            "slot": 1,
+            "expire": {
+              "stats": {
+                "insecurity": 5
+              }
+            },
+            "ok": {
+              "stats": {
+                "affection": 2
+              }
+            },
+            "hit": {
+              "stats": {
+                "affection": 4
+              }
+            },
+            "low": {
+              "stats": {
+                "insecurity": 2
+              }
+            }
+          },
+          {
+            "key": "invite",
+            "label": "约你出去",
+            "slot": 0,
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "day",
+                "op": "eq",
+                "value": 0,
+                "mod": 2
+              }
+            ],
+            "expire": {
+              "stats": {
+                "affection": -3,
+                "jealousy": 5
+              }
+            },
+            "ok": {
+              "stats": {
+                "spark": 5
+              },
+              "until": {
+                "free_date": 0
+              }
+            },
+            "hit": {
+              "stats": {
+                "spark": 8
+              },
+              "until": {
+                "free_date": 0
+              }
+            },
+            "low": {
+              "stats": {
+                "affection": -1
+              }
+            }
+          },
+          {
+            "key": "call",
+            "label": "深夜来电",
+            "slot": 2,
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 2
+              },
+              {
+                "ref": "weekend",
+                "op": "eq",
+                "value": 1
+              }
+            ],
+            "chance": 30,
+            "expire": {
+              "stats": {
+                "insecurity": 12
+              }
+            },
+            "ok": {
+              "stats": {
+                "trust": 6,
+                "spark": 8
+              }
+            },
+            "hit": {
+              "stats": {
+                "trust": 8,
+                "spark": 10
+              }
+            },
+            "low": {
+              "stats": {
+                "trust": 2
+              }
+            }
+          },
+          {
+            "key": "test",
+            "label": "试探题",
+            "slot": 0,
+            "chance": 20,
+            "expire": {
+              "stats": {
+                "insecurity": 8
+              }
+            },
+            "ok": {
+              "stats": {
+                "affection": 1
+              }
+            },
+            "hit": {
+              "stats": {
+                "spark": 10
+              }
+            },
+            "low": {
+              "stats": {
+                "insecurity": 8
+              }
+            }
+          },
+          {
+            "key": "recall",
+            "label": "她突然问起",
+            "slot": 1,
+            "when": [
+              {
+                "ref": "list.memory_hooks",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "day",
+                "op": "eq",
+                "value": 1,
+                "mod": 2
+              }
+            ],
+            "expire": {
+              "stats": {
+                "trust": -4
+              }
+            },
+            "ok": {
+              "stats": {
+                "trust": 6
+              }
+            },
+            "hit": {
+              "stats": {
+                "trust": 6
+              }
+            },
+            "low": {
+              "stats": {
+                "trust": -4
+              }
+            }
+          }
+        ],
+        "dislike": {
+          "stats": {
+            "insecurity": 8,
+            "landmines": 1
+          }
+        },
+        "expired": "{name}的{kind}过期未回"
+      },
+      "rivals": {
+        "chance": 15,
+        "max": 2,
+        "when": [
+          {
+            "ref": "stage",
+            "op": "ge",
+            "value": 1
+          },
+          {
+            "ref": "stage_day",
+            "op": "eq",
+            "value": 3
+          },
+          {
+            "ref": "deadline.warning",
+            "op": "eq",
+            "value": 0
+          }
+        ],
+        "note": "有人开始频繁出现在她身边",
+        "pool": [
+          {
+            "key": "lu_yan",
+            "name": "陆衍",
+            "start": 15,
+            "daily": 2,
+            "profile": {
+              "strength": "财力：送贵礼、约会截胡、订高空餐厅",
+              "gender": "男"
+            }
+          },
+          {
+            "key": "a_zhe",
+            "name": "阿哲",
+            "start": 30,
+            "daily": 2,
+            "profile": {
+              "strength": "信任：青梅竹马，低谷时比你先到",
+              "gender": "男"
+            }
+          },
+          {
+            "key": "ji_ning",
+            "name": "{text.bestie}",
+            "start": 25,
+            "daily": 2,
+            "profile": {
+              "strength": "亲近：挑拨、替她挡你；你犯错时第一个护她",
+              "gender": "女"
+            }
+          },
+          {
+            "key": "ex",
+            "name": "前任",
+            "start": 20,
+            "daily": 3,
+            "profile": {
+              "strength": "旧情：深夜联系、旧物、当面出现",
+              "gender": "不限"
+            },
+            "adjust": [
+              {
+                "when": [
+                  {
+                    "ref": "flag.knot",
+                    "op": "eq",
+                    "value": 0
+                  }
+                ],
+                "daily": 4
+              }
+            ]
+          },
+          {
+            "key": "idol",
+            "name": "网红偶像",
+            "start": 10,
+            "daily": 3,
+            "profile": {
+              "strength": "心动落差：私信撩她、Livehouse 邀她上台",
+              "gender": "不限"
+            },
+            "adjust": [
+              {
+                "when": [
+                  {
+                    "ref": "rival.days",
+                    "op": "gt",
+                    "value": 4
+                  }
+                ],
+                "daily": -2
+              }
+            ]
+          }
+        ],
+        "adjust": [
+          {
+            "when": [
+              {
+                "ref": "stage_day",
+                "op": "gt",
+                "value": 11
+              }
+            ],
+            "percent": 150
+          }
+        ],
+        "fall": "rival_fall",
+        "hints": [
+          {
+            "min": 0,
+            "label": "暂时没人能挤进她的日程"
+          },
+          {
+            "min": 30,
+            "label": "有人最近常约她"
+          },
+          {
+            "min": 60,
+            "label": "她提起某人时会笑"
+          },
+          {
+            "min": 80,
+            "label": "她看你的眼神有点犹豫"
+          }
+        ],
+        "tactics": [
+          {
+            "key": "scout",
+            "label": "打探",
+            "halves": 2,
+            "table": "scout"
+          },
+          {
+            "key": "expose",
+            "label": "揭穿",
+            "halves": 2,
+            "gate": {
+              "if": [
+                {
+                  "ref": "flag.intel.{rival}",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "reason": "揭穿需要先掌握真实情报"
+            },
+            "table": "expose"
+          },
+          {
+            "key": "showdown",
+            "label": "摊牌",
+            "halves": 2,
+            "table": "showdown"
+          },
+          {
+            "key": "yield",
+            "label": "退让",
+            "halves": 0,
+            "do": {
+              "choice": "bless",
+              "table": "ending"
+            }
+          }
+        ]
+      },
+      "events": {
+        "note": "天命审判",
+        "pools": [
+          {
+            "key": "small",
+            "chance": 40
+          },
+          {
+            "key": "big",
+            "when": [
+              {
+                "ref": "day",
+                "op": "eq",
+                "value": 0,
+                "mod": 2
+              }
+            ]
+          }
+        ],
+        "events": [
+          {
+            "key": "pajama",
+            "name": "她穿睡衣下楼取外卖撞见你",
+            "pool": "small",
+            "min_stage": 0,
+            "check": [
+              {
+                "ref": "stat.humor",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 12
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 12
+              }
+            },
+            "fail": {
+              "stats": {
+                "mood": -1
+              }
+            }
+          },
+          {
+            "key": "blackout",
+            "name": "停电夜一起点蜡烛",
+            "pool": "small",
+            "min_stage": 0,
+            "check": [
+              {
+                "ref": "stat.charm",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 13
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 15,
+                "trust": 4
+              }
+            },
+            "fail": {
+              "stats": {
+                "spark": 5
+              }
+            }
+          },
+          {
+            "key": "concert",
+            "name": "抽到演唱会门票",
+            "pool": "small",
+            "min_stage": 0,
+            "success": {
+              "stats": {
+                "spark": 15
+              }
+            },
+            "fail": {}
+          },
+          {
+            "key": "bonus",
+            "name": "加班拿到奖金",
+            "pool": "small",
+            "min_stage": 0,
+            "check": [
+              {
+                "ref": "stat.wealth",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 10
+              }
+            ],
+            "success": {
+              "stats": {
+                "money": 600
+              }
+            },
+            "fail": {
+              "stats": {
+                "money": 250
+              }
+            }
+          },
+          {
+            "key": "bestie_tip",
+            "name": "闺蜜透露她的喜好",
+            "pool": "small",
+            "min_stage": 1,
+            "success": {
+              "reveal": 2
+            },
+            "fail": {}
+          },
+          {
+            "key": "elevator",
+            "name": "两人被困电梯",
+            "pool": "small",
+            "min_stage": 0,
+            "check": [
+              {
+                "ref": "stat.humor",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 12
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 18
+              }
+            },
+            "fail": {
+              "stats": {
+                "spark": 6
+              }
+            }
+          },
+          {
+            "key": "blackout_net",
+            "name": "城市断网，失联一整天",
+            "pool": "small",
+            "min_stage": 1,
+            "success": {},
+            "fail": {}
+          },
+          {
+            "key": "parents",
+            "name": "她爸妈突然来新港",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.charm",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 16
+              }
+            ],
+            "success": {
+              "stats": {
+                "affection": 10,
+                "trust": 10
+              }
+            },
+            "fail": {
+              "stats": {
+                "affection": -5
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "ex_girlfriend",
+            "name": "你的前女友出现在约会餐厅",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.charm",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 15
+              }
+            ],
+            "success": {
+              "stats": {
+                "trust": 5
+              }
+            },
+            "fail": {
+              "stats": {
+                "jealousy": 25
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "landlord",
+            "name": "房东涨租",
+            "pool": "big",
+            "min_stage": 0,
+            "check": [
+              {
+                "ref": "stat.wealth",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 12
+              }
+            ],
+            "success": {
+              "stats": {
+                "money": -200
+              }
+            },
+            "fail": {
+              "stats": {
+                "money": -500
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "ai_assistant",
+            "name": "她的 AI 助手删你消息",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.talent",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 14
+              }
+            ],
+            "success": {
+              "reveal": 1
+            },
+            "fail": {
+              "stats": {
+                "insecurity": 5
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "rain_stay",
+            "name": "暴雨夜困在你家",
+            "pool": "big",
+            "min_stage": 2,
+            "check": [
+              {
+                "ref": "stat.charm",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 14
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 20
+              }
+            },
+            "fail": {
+              "stats": {
+                "spark": 5
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "wrong_room",
+            "name": "换衣误入",
+            "pool": "big",
+            "min_stage": 2,
+            "check": [
+              {
+                "ref": "stat.humor",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 13
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 15
+              }
+            },
+            "fail": {
+              "stats": {
+                "mood": -1,
+                "spark": 8
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "onsen_room",
+            "name": "温泉旅馆只剩一间房",
+            "pool": "big",
+            "min_stage": 3,
+            "check": [
+              {
+                "ref": "stat.charm",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 14
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 20,
+                "trust": 6
+              }
+            },
+            "fail": {
+              "stats": {
+                "spark": 8
+              }
+            },
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              }
+            }
+          },
+          {
+            "key": "drunk_confess",
+            "name": "她醉酒后的告白",
+            "pool": "big",
+            "min_stage": 2,
+            "check": [
+              {
+                "ref": "stat.trust_level",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 13
+              }
+            ],
+            "success": {
+              "stats": {
+                "spark": 20
+              },
+              "flags": {
+                "confess_bonus": 3
+              }
+            },
+            "fail": {},
+            "always": {
+              "flags": {
+                "last_crisis": 0
+              },
+              "until": {
+                "unwell": 0
+              }
+            }
+          },
+          {
+            "key": "drunk_call",
+            "name": "她喝醉打电话让你去接",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.trust_level",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 8
+              }
+            ],
+            "success": {
+              "stats": {
+                "trust": 12
+              },
+              "until": {
+                "need_care": 0
+              }
+            },
+            "fail": {
+              "stats": {
+                "insecurity": 5
+              }
+            },
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "deadline.warning",
+                "op": "eq",
+                "value": 0
+              },
+              {
+                "ref": "flag.last_crisis",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "always": {
+              "flags": {
+                "last_crisis": 1
+              },
+              "until": {
+                "unwell": 0
+              }
+            }
+          },
+          {
+            "key": "sick",
+            "name": "她生病发烧",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.cooking",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 12
+              }
+            ],
+            "success": {
+              "stats": {
+                "trust": 4
+              },
+              "until": {
+                "need_care": 0
+              }
+            },
+            "fail": {
+              "stats": {
+                "insecurity": 10
+              }
+            },
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "deadline.warning",
+                "op": "eq",
+                "value": 0
+              },
+              {
+                "ref": "flag.last_crisis",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "always": {
+              "flags": {
+                "last_crisis": 1
+              },
+              "until": {
+                "unwell": 0
+              }
+            }
+          },
+          {
+            "key": "saw_chat",
+            "name": "她看到你和别的女生聊天",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.humor",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 15
+              }
+            ],
+            "success": {
+              "stats": {
+                "jealousy": 5
+              }
+            },
+            "fail": {
+              "stats": {
+                "jealousy": 30
+              }
+            },
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "deadline.warning",
+                "op": "eq",
+                "value": 0
+              },
+              {
+                "ref": "flag.last_crisis",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "always": {
+              "flags": {
+                "last_crisis": 1
+              }
+            }
+          },
+          {
+            "key": "photo_rumor",
+            "name": "你和同事的合照被拍到",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.humor",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 15
+              }
+            ],
+            "success": {},
+            "fail": {
+              "stats": {
+                "jealousy": 25
+              }
+            },
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "deadline.warning",
+                "op": "eq",
+                "value": 0
+              },
+              {
+                "ref": "flag.last_crisis",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "always": {
+              "flags": {
+                "last_crisis": 1
+              }
+            }
+          },
+          {
+            "key": "deepfake",
+            "name": "换脸视频造谣她",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.trust_level",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 9
+              }
+            ],
+            "success": {
+              "stats": {
+                "trust": 5
+              },
+              "until": {
+                "need_defend": 0
+              }
+            },
+            "fail": {
+              "stats": {
+                "mood": -2
+              }
+            },
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "deadline.warning",
+                "op": "eq",
+                "value": 0
+              },
+              {
+                "ref": "flag.last_crisis",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "always": {
+              "flags": {
+                "last_crisis": 1
+              }
+            }
+          },
+          {
+            "key": "harassed",
+            "name": "她被骚扰",
+            "pool": "big",
+            "min_stage": 1,
+            "check": [
+              {
+                "ref": "stat.charm",
+                "plus": [
+                  {
+                    "ref": "stat.mood"
+                  }
+                ],
+                "dice": 20,
+                "crit": true,
+                "op": "ge",
+                "value": 13
+              }
+            ],
+            "success": {
+              "stats": {
+                "trust": 5
+              },
+              "until": {
+                "need_defend": 0
+              }
+            },
+            "fail": {
+              "stats": {
+                "insecurity": 10
+              }
+            },
+            "when": [
+              {
+                "ref": "stage",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "deadline.warning",
+                "op": "eq",
+                "value": 0
+              },
+              {
+                "ref": "flag.last_crisis",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "always": {
+              "flags": {
+                "last_crisis": 1
+              }
+            }
+          }
+        ]
+      },
+      "travel": {
+        "max": 2,
+        "count_flag": "trips",
+        "cost_stat": "money",
+        "segments": [
+          "food",
+          "sight",
+          "shopping",
+          "leisure",
+          "thrill",
+          "intimate"
+        ],
+        "fallback": "leisure",
+        "max_segments": 6,
+        "gates": [
+          {
+            "if": [
+              {
+                "ref": "stage",
+                "op": "lt",
+                "value": 2
+              }
+            ],
+            "reason": "暧昧阶段起才能一起旅行"
+          },
+          {
+            "if": [
+              {
+                "ref": "flag.trips",
+                "op": "ge",
+                "value": 2
+              }
+            ],
+            "reason": "本局旅行次数已满"
+          },
+          {
+            "if": [
+              {
+                "ref": "cond.cold",
+                "op": "eq",
+                "value": 1
+              }
+            ],
+            "reason": "冷战中，她不想见你"
+          },
+          {
+            "if": [
+              {
+                "ref": "slot",
+                "op": "ne",
+                "value": 0
+              }
+            ],
+            "reason": "旅行需要从早上出发"
+          },
+          {
+            "if": [
+              {
+                "ref": "half",
+                "op": "ne",
+                "value": 0
+              }
+            ],
+            "reason": "旅行需要从早上出发"
+          }
+        ],
+        "like": 15,
+        "dislike": -20,
+        "dislike_do": {
+          "stats": {
+            "insecurity": 5
+          }
+        },
+        "cap": 50,
+        "floor": -40,
+        "downgrade": "intimate",
+        "to": "leisure",
+        "unless": "willing_lover",
+        "busy_over": 3,
+        "busy": {
+          "stats": {
+            "stamina": -10
+          }
+        },
+        "day_check": [
+          {
+            "ref": "stat.charm",
+            "dice": 20,
+            "op": "ge",
+            "value": 12
+          }
+        ],
+        "day_fail": {
+          "stats": {
+            "mood": -1
+          }
+        },
+        "reply": {
+          "stats": {
+            "affection": 2
+          }
+        },
+        "trips": [
+          {
+            "key": "beigang",
+            "name": "雪国北岬",
+            "days": 2,
+            "cost": 1800,
+            "daily": {
+              "stats": {
+                "stamina": -20
+              }
+            },
+            "effects": {
+              "stats": {
+                "spark": 25,
+                "trust": 10
+              }
+            }
+          },
+          {
+            "key": "qingwu",
+            "name": "古城青梧",
+            "days": 2,
+            "cost": 1200,
+            "daily": {
+              "stats": {
+                "stamina": -15
+              }
+            },
+            "effects": {
+              "reveal": 2,
+              "stats": {
+                "affection": 12
+              },
+              "table": "qingwu_clue"
+            }
+          },
+          {
+            "key": "shanwan",
+            "name": "海岛珊湾",
+            "days": 3,
+            "cost": 2500,
+            "daily": {
+              "stats": {
+                "stamina": -20
+              }
+            },
+            "effects": {
+              "stats": {
+                "spark": 30,
+                "affection": 10
+              }
+            }
+          },
+          {
+            "key": "wudu",
+            "name": "山城雾都",
+            "days": 2,
+            "cost": 1000,
+            "daily": {
+              "stats": {
+                "stamina": -20
+              }
+            },
+            "effects": {
+              "stats": {
+                "affection": 8,
+                "spark": 15
+              }
+            }
+          }
+        ]
+      },
+      "deadline": {
+        "warning": 30,
+        "leave_after": 4,
+        "max": 40,
+        "flag": "warning",
+        "delay": "leave_delay",
+        "cancel": "leave_cancelled",
+        "active": "已触发：{text.leave_reason}，离开日第 {deadline.leave} 天",
+        "none": "无"
+      },
+      "confess": {
+        "gates": [
+          {
+            "if": [
+              {
+                "ref": "active.observe",
+                "op": "eq",
+                "value": 1
+              }
+            ],
+            "reason": "观察期内，她在等你用行动证明"
+          },
+          {
+            "if": [
+              {
+                "ref": "active.cooldown",
+                "op": "eq",
+                "value": 1
+              },
+              {
+                "ref": "active.hesitate",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "reason": "她还没准备好再听一次"
+          },
+          {
+            "if": [
+              {
+                "ref": "cond.lover_young",
+                "op": "eq",
+                "value": 1
+              }
+            ],
+            "reason": "恋人阶段第 7 天起才能终局告白"
+          }
+        ],
+        "bonus": [
+          {
+            "ref": "flag.confess_bonus"
+          },
+          {
+            "ref": "flag.observe_bonus"
+          },
+          {
+            "ref": "flag.confess_extra"
+          },
+          {
+            "ref": "flag.reconciled",
+            "mul": 2
+          },
+          {
+            "ref": "cond.teaser_exclusive",
+            "mul": 3
+          }
+        ],
+        "args": [
+          {
+            "key": "aid_1",
+            "label": "引用她说过的小事",
+            "when": [
+              {
+                "ref": "list.memory_hooks",
+                "op": "ge",
+                "value": 1
+              }
+            ],
+            "do": {
+              "add": {
+                "confess_extra": 3
+              }
+            }
+          },
+          {
+            "key": "aid_2",
+            "label": "用上专属梗",
+            "when": [
+              {
+                "ref": "list.inside_jokes",
+                "op": "ge",
+                "value": 1
+              }
+            ],
+            "do": {
+              "add": {
+                "confess_extra": 2
+              }
+            }
+          },
+          {
+            "key": "aid_3",
+            "label": "带上纪念物",
+            "when": [
+              {
+                "ref": "list.keepsakes",
+                "op": "ge",
+                "value": 1
+              },
+              {
+                "ref": "flag.keepsake_used",
+                "op": "eq",
+                "value": 0
+              }
+            ],
+            "do": {
+              "add": {
+                "confess_extra": 2
+              },
+              "flags": {
+                "keepsake_used": 1
+              }
+            }
+          }
+        ],
+        "clear": [
+          "confess_bonus",
+          "observe_bonus",
+          "confess_extra",
+          "was_hesitating"
+        ],
+        "final": "final_time",
+        "table": "confess",
+        "hook": "第{flag.confess.count}次告白（{stage_name}{slot_name}）",
+        "list": "memory_hooks",
+        "then": "confess_then"
+      },
+      "scenes": [
+        {
+          "key": "rise",
+          "title": "关系事件",
+          "options": [
+            {
+              "key": "lean_in",
+              "label": "接住这个瞬间",
+              "table": "lean"
+            },
+            {
+              "key": "hold_back",
+              "label": "装作没注意",
+              "do": {
+                "stats": {
+                  "affection": -2,
+                  "spark": -5
+                },
+                "until": {
+                  "rise_block": 2
+                },
+                "note": "这次没有推进，过两天再找机会"
+              }
+            }
+          ]
+        },
+        {
+          "key": "push",
+          "title": "推动事件",
+          "options": [
+            {
+              "key": "lean_in",
+              "label": "抓住最后的机会",
+              "table": "lean"
+            },
+            {
+              "key": "hold_back",
+              "label": "随它去",
+              "do": {
+                "stats": {
+                  "affection": -2,
+                  "spark": -5
+                },
+                "until": {
+                  "rise_block": 2
+                },
+                "note": "这次没有推进，过两天再找机会"
+              }
+            }
+          ]
+        },
+        {
+          "key": "knot",
+          "title": "{text.knot_event}",
+          "options": [
+            {
+              "key": "right",
+              "label": "{text.knot_right}",
+              "do": {
+                "flags": {
+                  "knot": 1
+                },
+                "stats": {
+                  "trust": 10,
+                  "affection": 5
+                },
+                "note": "心结 **{text.knot}** 解开了"
+              }
+            },
+            {
+              "key": "wrong",
+              "label": "{text.knot_wrong}",
+              "do": {
+                "stats": {
+                  "trust": -10,
+                  "insecurity": 10
+                },
+                "note": "心结被触碰，她退了半步"
+              }
+            }
+          ]
+        },
+        {
+          "key": "choice_1",
+          "title": "有代价的抉择",
+          "options": [
+            {
+              "key": "a",
+              "label": "陪她去医院（放弃面试，打工收入 -30%）",
+              "do": {
+                "stats": {
+                  "trust": 15
+                },
+                "flags": {
+                  "income_mod": -30
+                }
+              }
+            },
+            {
+              "key": "b",
+              "label": "去面试（打工收入 +50%，信任 -10）",
+              "do": {
+                "stats": {
+                  "trust": -10
+                },
+                "flags": {
+                  "income_mod": 50
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "choice_2",
+          "title": "有代价的抉择",
+          "options": [
+            {
+              "key": "a",
+              "label": "推掉加班去找她（钱 -600）",
+              "do": {
+                "stats": {
+                  "spark": 12,
+                  "money": -600
+                },
+                "rivals": -15
+              }
+            },
+            {
+              "key": "b",
+              "label": "留下加班（钱 +600，不安 +10）",
+              "do": {
+                "stats": {
+                  "money": 600,
+                  "insecurity": 10
+                },
+                "rivals": 15
+              }
+            }
+          ]
+        },
+        {
+          "key": "warning",
+          "title": "她可能要离开新港",
+          "options": [
+            {
+              "key": "a",
+              "label": "鼓励她去",
+              "do": {
+                "set": {
+                  "growth": 3
+                },
+                "note": "你鼓励她去，她的成长线完成"
+              }
+            },
+            {
+              "key": "b",
+              "label": "请她留下",
+              "do": {
+                "stats": {
+                  "trust": -10
+                },
+                "flags": {
+                  "leave_cancelled": 1,
+                  "growth_failed": 1
+                },
+                "note": "她留下了，离开日取消"
+              }
+            }
+          ]
+        },
+        {
+          "key": "apology",
+          "title": "告白失败之后",
+          "options": [
+            {
+              "key": "apologize",
+              "label": "先道歉，不逼她",
+              "table": "apology"
+            },
+            {
+              "key": "leave_it",
+              "label": "给她空间"
+            }
+          ]
+        },
+        {
+          "key": "win_back",
+          "title": "我好像喜欢上别人了",
+          "options": [
+            {
+              "key": "win_back",
+              "label": "挽回她",
+              "table": "win_back"
+            },
+            {
+              "key": "let_go",
+              "label": "放手",
+              "do": {
+                "choice": "bless",
+                "table": "ending"
+              }
+            }
+          ]
+        },
+        {
+          "key": "final",
+          "title": "抉择场景",
+          "options": [
+            {
+              "key": "confess",
+              "label": "告白",
+              "do": {
+                "flags": {
+                  "epilogue_confess": 1
+                },
+                "confess": "final",
+                "table": "ending"
+              }
+            },
+            {
+              "key": "stay",
+              "label": "请她留下",
+              "do": {
+                "flags": {
+                  "epilogue_stay": 1
+                },
+                "confess": "final",
+                "table": "ending"
+              }
+            },
+            {
+              "key": "go_with",
+              "label": "与她同去",
+              "do": {
+                "flags": {
+                  "epilogue_go_with": 1
+                },
+                "confess": "final",
+                "table": "ending"
+              },
+              "when": [
+                {
+                  "ref": "cond.lover_or_leave",
+                  "op": "eq",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "key": "bless",
+              "label": "放手祝福",
+              "do": {
+                "flags": {
+                  "epilogue_bless": 1
+                },
+                "table": "ending"
+              }
+            },
+            {
+              "key": "side",
+              "label": "选择另一段缘分",
+              "do": {
+                "flags": {
+                  "epilogue_side": 1
+                },
+                "table": "ending"
+              },
+              "when": [
+                {
+                  "ref": "stat.side",
+                  "op": "ge",
+                  "value": 70
+                }
+              ]
+            },
+            {
+              "key": "let_go",
+              "label": "什么也不说",
+              "do": {
+                "flags": {
+                  "epilogue_let_go": 1
+                },
+                "table": "ending"
+              }
+            }
+          ]
+        }
+      ],
+      "reactions": [
+        {
+          "key": "graceful",
+          "label": "体面接受",
+          "do": {
+            "stats": {
+              "trust": 5
+            }
+          }
+        },
+        {
+          "key": "pester",
+          "label": "纠缠",
+          "do": {
+            "stats": {
+              "trust": -10,
+              "insecurity": 15
+            }
+          }
+        },
+        {
+          "key": "overstep",
+          "label": "越界",
+          "do": {
+            "stats": {
+              "trust": -15,
+              "insecurity": 15
+            },
+            "table": "overstep"
+          }
+        },
+        {
+          "key": "counter_flirt",
+          "label": "反撩",
+          "do": {
+            "stats": {
+              "spark": 5,
+              "trust": 3
+            },
+            "note": "反撩成功，她耳朵红了"
+          },
+          "when": [
+            {
+              "ref": "lead.teaser",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "lists": [
+        {
+          "key": "memory_hooks",
+          "label": "可回收细节",
+          "max": 12,
+          "roll": true,
+          "writable": true,
+          "detail": true,
+          "chars": 40
+        },
+        {
+          "key": "nicknames",
+          "label": "专属称呼",
+          "max": 3,
+          "writable": true,
+          "chars": 40,
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "stage",
+                  "op": "lt",
+                  "value": 2
+                }
+              ],
+              "reason": "暧昧阶段起才有专属称呼与梗，各最多 3 条"
+            }
+          ]
+        },
+        {
+          "key": "inside_jokes",
+          "label": "内部梗",
+          "max": 3,
+          "writable": true,
+          "chars": 40,
+          "gates": [
+            {
+              "if": [
+                {
+                  "ref": "stage",
+                  "op": "lt",
+                  "value": 2
+                }
+              ],
+              "reason": "暧昧阶段起才有专属称呼与梗，各最多 3 条"
+            }
+          ]
+        },
+        {
+          "key": "keepsakes",
+          "label": "纪念物",
+          "max": 8
+        }
+      ],
+      "outcomes": [
+        {
+          "key": "perfect_lover",
+          "label": "完美恋人",
+          "success": true,
+          "requires": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "flag.knot",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 90
+            },
+            {
+              "ref": "stat.trust",
+              "op": "ge",
+              "value": 85
+            }
+          ]
+        },
+        {
+          "key": "won_back",
+          "label": "失而复得",
+          "success": true,
+          "requires": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "flag.won_back",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "together",
+          "label": "在一起",
+          "success": true,
+          "requires": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 70
+            }
+          ]
+        },
+        {
+          "key": "farewell_blessing",
+          "label": "放手祝福",
+          "success": true,
+          "requires": [
+            {
+              "ref": "flag.reached_ambiguous",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 50
+            },
+            {
+              "ref": "stat.trust",
+              "op": "ge",
+              "value": 60
+            }
+          ]
+        },
+        {
+          "key": "unexpected_love",
+          "label": "意外之缘",
+          "success": true,
+          "requires": [
+            {
+              "ref": "stat.side",
+              "op": "ge",
+              "value": 70
+            },
+            {
+              "ref": "stat.side",
+              "op": "gt",
+              "value": 0,
+              "than": "stat.affection"
+            }
+          ]
+        },
+        {
+          "key": "more_than_friends",
+          "label": "友达以上",
+          "success": false
+        },
+        {
+          "key": "rejected",
+          "label": "被拒绝",
+          "success": false
+        },
+        {
+          "key": "missed",
+          "label": "错过",
+          "success": false
+        },
+        {
+          "key": "abandoned",
+          "label": "放弃",
+          "success": false
+        }
+      ],
+      "abandon": "abandoned",
+      "facts": [
+        {
+          "key": "she_willing",
+          "ref": "cond.willing",
+          "bool": true
+        },
+        {
+          "key": "cold_war",
+          "ref": "cond.cold",
+          "bool": true
+        },
+        {
+          "key": "knot_resolved",
+          "ref": "flag.knot",
+          "bool": true
+        },
+        {
+          "key": "affection_band",
+          "ref": "stat.affection",
+          "bands": [
+            {
+              "min": 0,
+              "label": "很低"
+            },
+            {
+              "min": 15,
+              "label": "较低"
+            },
+            {
+              "min": 35,
+              "label": "中等"
+            },
+            {
+              "min": 60,
+              "label": "较高"
+            },
+            {
+              "min": 80,
+              "label": "很高"
+            }
+          ]
+        },
+        {
+          "key": "confessions",
+          "ref": "flag.confess.count"
+        },
+        {
+          "key": "earned",
+          "ref": "flag.earned"
+        }
+      ],
+      "texts": [
+        {
+          "key": "birthday",
+          "template": "第 {lead.birthday} 天",
+          "when": [
+            {
+              "ref": "revealed.likes",
+              "op": "ge",
+              "value": 2
+            }
+          ],
+          "else": "还不知道"
+        }
+      ],
+      "reveals": [
+        {
+          "key": "knot_clues",
+          "list": "clues",
+          "stat": "clues"
+        }
+      ],
+      "conds": {
+        "cold": {
+          "any": [
+            {
+              "ref": "stat.jealousy",
+              "op": "ge",
+              "value": 85
+            },
+            {
+              "ref": "flag.teaser_cold",
+              "op": "ge",
+              "value": 0,
+              "than": "day"
+            }
+          ]
+        },
+        "freezing": {
+          "all": [
+            {
+              "ref": "stat.jealousy",
+              "op": "ge",
+              "value": 85
+            }
+          ]
+        },
+        "fighting": {
+          "all": [
+            {
+              "ref": "flag.fight",
+              "op": "gt",
+              "value": 0
+            },
+            {
+              "ref": "flag.fight",
+              "op": "ge",
+              "value": -1,
+              "plus": [
+                {
+                  "ref": "day",
+                  "mul": -1
+                }
+              ]
+            }
+          ]
+        },
+        "conflict": {
+          "any": [
+            {
+              "ref": "stat.jealousy",
+              "op": "ge",
+              "value": 60
+            },
+            {
+              "ref": "cond.cold",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "cond.fighting",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "willing": {
+          "all": [
+            {
+              "ref": "stage",
+              "op": "ge",
+              "value": 1
+            },
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 40
+            },
+            {
+              "ref": "stat.spark",
+              "op": "ge",
+              "value": 30
+            },
+            {
+              "ref": "stat.mood",
+              "op": "ge",
+              "value": 0
+            },
+            {
+              "ref": "stat.insecurity",
+              "op": "lt",
+              "value": 60
+            },
+            {
+              "ref": "stat.jealousy",
+              "op": "lt",
+              "value": 60
+            },
+            {
+              "ref": "cond.cold",
+              "op": "eq",
+              "value": 0
+            },
+            {
+              "ref": "flag.unwell",
+              "op": "lt",
+              "value": 0,
+              "than": "day"
+            }
+          ]
+        },
+        "willing_lover": {
+          "all": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "cond.willing",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "distant": {
+          "all": [
+            {
+              "ref": "active.distance",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "chase_bonus": {
+          "any": [
+            {
+              "ref": "flag.chase",
+              "op": "gt",
+              "value": 0
+            },
+            {
+              "ref": "flag.reconciled",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "chasing": {
+          "any": [
+            {
+              "ref": "active.observe",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "active.serious",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "flag.chase",
+              "op": "gt",
+              "value": 0
+            }
+          ]
+        },
+        "bad_mood": {
+          "any": [
+            {
+              "ref": "stat.mood",
+              "op": "le",
+              "value": -2
+            },
+            {
+              "ref": "stat.jealousy",
+              "op": "ge",
+              "value": 60
+            },
+            {
+              "ref": "cond.fighting",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "too_early": {
+          "any": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 0
+            },
+            {
+              "ref": "stat.affection",
+              "op": "lt",
+              "value": 35
+            }
+          ]
+        },
+        "final_time": {
+          "any": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "deadline.warning",
+              "op": "gt",
+              "value": 0
+            }
+          ]
+        },
+        "lover_young": {
+          "all": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "stage_day",
+              "op": "lt",
+              "value": 0,
+              "than": "stage.min_days"
+            }
+          ]
+        },
+        "lover_done": {
+          "all": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "stage_day",
+              "op": "ge",
+              "value": 0,
+              "than": "stage.max_days"
+            }
+          ]
+        },
+        "final_due": {
+          "any": [
+            {
+              "ref": "deadline.due",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "cond.lover_done",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "lover_or_leave": {
+          "any": [
+            {
+              "ref": "stage",
+              "op": "eq",
+              "value": 3
+            },
+            {
+              "ref": "deadline.leave",
+              "op": "gt",
+              "value": 0
+            }
+          ]
+        },
+        "teaser_exclusive": {
+          "all": [
+            {
+              "ref": "lead.teaser",
+              "op": "eq",
+              "value": 1
+            },
+            {
+              "ref": "flag.exclusive.2",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "rise_roll": {
+          "all": [
+            {
+              "ref": "stat.charm",
+              "plus": [
+                {
+                  "ref": "stat.mood"
+                },
+                {
+                  "ref": "cond.chase_bonus",
+                  "mul": 2
+                }
+              ],
+              "dice": 20,
+              "op": "ge",
+              "value": 8
+            }
+          ]
+        },
+        "mood_roll_fail": {
+          "all": [
+            {
+              "ref": "stat.humor",
+              "dice": 20,
+              "op": "lt",
+              "value": 20
+            }
+          ]
+        },
+        "confess_roll": {
+          "all": [
+            {
+              "ref": "stat.insight",
+              "plus": [
+                {
+                  "ref": "stat.trust",
+                  "div": 5
+                },
+                {
+                  "ref": "confess.bonus"
+                }
+              ],
+              "dice": 20,
+              "op": "ge",
+              "value": 22
+            }
+          ]
+        },
+        "confess_ready": {
+          "all": [
+            {
+              "ref": "stage",
+              "op": "ge",
+              "value": 2
+            },
+            {
+              "ref": "stat.affection",
+              "op": "ge",
+              "value": 70
+            },
+            {
+              "ref": "stat.spark",
+              "op": "ge",
+              "value": 50
+            },
+            {
+              "ref": "stat.trust",
+              "op": "ge",
+              "value": 55
+            },
+            {
+              "ref": "stat.insight",
+              "op": "ge",
+              "value": 5
+            },
+            {
+              "ref": "cond.confess_roll",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "knot_short": {
+          "all": [
+            {
+              "ref": "flag.knot",
+              "op": "eq",
+              "value": 0
+            },
+            {
+              "ref": "stat.trust",
+              "op": "lt",
+              "value": 70
+            }
+          ]
+        },
+        "trust_short": {
+          "any": [
+            {
+              "ref": "stat.trust",
+              "op": "lt",
+              "value": 55
+            },
+            {
+              "ref": "cond.knot_short",
+              "op": "eq",
+              "value": 1
+            }
+          ]
+        },
+        "rival_ahead": {
+          "all": [
+            {
+              "ref": "rival.max",
+              "op": "ge",
+              "value": 0,
+              "than": "stat.affection"
+            },
+            {
+              "ref": "active.hesitate",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        },
+        "rival_won": {
+          "all": [
+            {
+              "ref": "rival.max",
+              "op": "ge",
+              "value": 15,
+              "plus": [
+                {
+                  "ref": "stat.affection",
+                  "mul": -1
+                }
+              ]
+            },
+            {
+              "ref": "flag.fallen",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        },
+        "apology_roll": {
+          "all": [
+            {
+              "ref": "stat.humor",
+              "plus": [
+                {
+                  "ref": "stat.trust_level"
+                }
+              ],
+              "dice": 20,
+              "op": "ge",
+              "value": 15
+            }
+          ]
+        },
+        "win_back_roll": {
+          "all": [
+            {
+              "ref": "stat.insight",
+              "plus": [
+                {
+                  "ref": "stat.trust",
+                  "div": 5
+                }
+              ],
+              "dice": 20,
+              "op": "ge",
+              "value": 20
+            }
+          ]
+        },
+        "expose_roll": {
+          "all": [
+            {
+              "ref": "stat.humor",
+              "dice": 20,
+              "op": "ge",
+              "value": 15
+            }
+          ]
+        },
+        "showdown_roll": {
+          "all": [
+            {
+              "ref": "stat.charm",
+              "plus": [
+                {
+                  "ref": "stat.trust_level"
+                }
+              ],
+              "dice": 20,
+              "op": "ge",
+              "value": 16
+            }
+          ]
+        },
+        "knot_ready": {
+          "all": [
+            {
+              "ref": "stage",
+              "op": "ge",
+              "value": 2
+            },
+            {
+              "ref": "flag.knot",
+              "op": "eq",
+              "value": 0
+            },
+            {
+              "ref": "stat.clues",
+              "op": "eq",
+              "value": 2
+            },
+            {
+              "ref": "stat.trust",
+              "op": "ge",
+              "value": 0,
+              "than": "lead.knot_trust"
+            },
+            {
+              "ref": "flag.knot_tries",
+              "op": "lt",
+              "value": 2
+            }
+          ]
+        },
+        "not_contacted": {
+          "all": [
+            {
+              "ref": "day",
+              "op": "ge",
+              "value": 2,
+              "plus": [
+                {
+                  "ref": "flag.contact",
+                  "mul": -1
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "tables": [
+        {
+          "key": "rent",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "stat.money",
+                  "op": "lt",
+                  "value": 400
+                }
+              ],
+              "do": {
+                "set": {
+                  "money": 0
+                },
+                "stats": {
+                  "stamina": -20
+                },
+                "flags": {
+                  "reached_ambiguous": 0
+                },
+                "table": "reached",
+                "note": "房租不够，房东找上门"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "money": -400
+                },
+                "table": "reached",
+                "note": "扣房租 400"
+              }
+            }
+          ]
+        },
+        {
+          "key": "reached",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "ge",
+                  "value": 2
+                }
+              ],
+              "do": {
+                "flags": {
+                  "reached_ambiguous": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "night",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.not_contacted",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "affection": -3
+                }
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "flag.vigil",
+                  "op": "eq",
+                  "value": 0,
+                  "than": "day"
+                }
+              ],
+              "do": {
+                "stats": {
+                  "stamina": 10
+                }
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "flag.late",
+                  "op": "eq",
+                  "value": 0,
+                  "than": "day"
+                }
+              ],
+              "do": {
+                "stats": {
+                  "stamina": 25
+                }
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "stamina": 50
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "morning",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.freezing",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "flags": {
+                  "cold_days": 0
+                }
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.freezing",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "cond.cold",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "add": {
+                  "cold_days": 1
+                }
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "flag.cold_days",
+                  "op": "ge",
+                  "value": 2
+                }
+              ],
+              "do": {
+                "outcome": "missed",
+                "note": "冷战两天没有和好"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "day",
+                  "op": "eq",
+                  "value": 7
+                },
+                {
+                  "ref": "flag.contact",
+                  "op": "ge",
+                  "value": 6
+                }
+              ],
+              "do": {
+                "stats": {
+                  "affection": 6
+                },
+                "note": "认识一周，她记得"
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "day",
+                  "op": "eq",
+                  "value": 1,
+                  "than": "lead.birthday"
+                },
+                {
+                  "ref": "flag.birthday_gift",
+                  "op": "eq",
+                  "value": 0
+                },
+                {
+                  "ref": "stage",
+                  "op": "ge",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "insecurity": 15,
+                  "mood": -1
+                },
+                "note": "你错过了她的生日"
+              },
+              "continue": true
+            }
+          ]
+        },
+        {
+          "key": "schedule",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "deadline.warning",
+                  "op": "eq",
+                  "value": 0
+                },
+                {
+                  "ref": "day",
+                  "op": "ge",
+                  "value": 30
+                },
+                {
+                  "ref": "scene",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "until": {
+                  "warning": 0
+                },
+                "scene": "warning",
+                "note": "预警：{text.leave_reason}，她可能要离开新港（离开日第 {deadline.leave} 天）"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "deadline.warning",
+                  "op": "eq",
+                  "value": 0
+                },
+                {
+                  "ref": "day",
+                  "op": "ge",
+                  "value": 30
+                }
+              ],
+              "do": {
+                "until": {
+                  "warning": 0
+                },
+                "note": "预警：{text.leave_reason}，她可能要离开新港（离开日第 {deadline.leave} 天）"
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.final_due",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "scene": "final",
+                "force": true,
+                "note": "抉择场景开启"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "scene",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {}
+            },
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "lt",
+                  "value": 2
+                },
+                {
+                  "ref": "stage_day",
+                  "op": "gt",
+                  "value": 0,
+                  "than": "stage.min_days"
+                },
+                {
+                  "ref": "flag.rise_block",
+                  "op": "lt",
+                  "value": 0,
+                  "than": "day"
+                },
+                {
+                  "ref": "stage.rise",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "scene": "rise"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "lt",
+                  "value": 2
+                },
+                {
+                  "ref": "stage_day",
+                  "op": "gt",
+                  "value": 0,
+                  "than": "stage.max_days"
+                },
+                {
+                  "ref": "flag.push.{stage}",
+                  "op": "eq",
+                  "value": 0
+                },
+                {
+                  "ref": "stage.push",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "flags": {
+                  "push.{stage}": 1
+                },
+                "scene": "push"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "lt",
+                  "value": 3
+                },
+                {
+                  "ref": "stage_day",
+                  "op": "gt",
+                  "value": 0,
+                  "than": "stage.max_days"
+                },
+                {
+                  "ref": "flag.push.{stage}",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "flags": {
+                  "push.{stage}": 1
+                },
+                "stats": {
+                  "insecurity": 10
+                },
+                "note": "停留太久：她被同事约走了一次"
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.knot_ready",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "add": {
+                  "knot_tries": 1
+                },
+                "scene": "knot",
+                "note": "心结事件 **{text.knot_event}**"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stage_day",
+                  "op": "eq",
+                  "value": 4
+                },
+                {
+                  "ref": "flag.choice.1",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "flags": {
+                  "choice.1": 1
+                },
+                "scene": "choice_1"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 2
+                },
+                {
+                  "ref": "stage_day",
+                  "op": "eq",
+                  "value": 4
+                },
+                {
+                  "ref": "flag.choice.2",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "flags": {
+                  "choice.2": 1
+                },
+                "scene": "choice_2"
+              }
+            }
+          ]
+        },
+        {
+          "key": "after_action",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "ge",
+                  "value": 2
+                },
+                {
+                  "ref": "stat.trust",
+                  "op": "lt",
+                  "value": 20
+                }
+              ],
+              "do": {
+                "outcome": "missed",
+                "note": "信任跌破 20"
+              }
+            }
+          ]
+        },
+        {
+          "key": "success",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.chasing",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "flag.chase",
+                  "op": "gt",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "add": {
+                  "chase": -1
+                },
+                "stats": {
+                  "trust": 3
+                }
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.chasing",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "trust": 3
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "gift_birthday",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "day",
+                  "op": "eq",
+                  "value": 0,
+                  "than": "lead.birthday"
+                }
+              ],
+              "do": {
+                "flags": {
+                  "birthday_gift": 1
+                },
+                "stats": {
+                  "affection": 10
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "exclusive_growth",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 3
+                },
+                {
+                  "ref": "stat.growth",
+                  "op": "lt",
+                  "value": 3
+                }
+              ],
+              "do": {
+                "stats": {
+                  "growth": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "diary",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "flag.diary",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "table": "diary_caught"
+              },
+              "chance": 25
+            },
+            {
+              "when": [
+                {
+                  "ref": "flag.diary",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "table": "diary_read"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "table": "diary_caught"
+              },
+              "chance": 40
+            },
+            {
+              "when": [],
+              "do": {
+                "table": "diary_read"
+              }
+            }
+          ]
+        },
+        {
+          "key": "diary_caught",
+          "rules": [
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "trust": -20,
+                  "insecurity": 20
+                },
+                "note": "偷看日记被她发现了"
+              }
+            }
+          ]
+        },
+        {
+          "key": "diary_read",
+          "rules": [
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "clues": 1
+                },
+                "reveal": 1,
+                "note": "从日记里读到了线索"
+              }
+            }
+          ]
+        },
+        {
+          "key": "explicit",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "lead.teaser",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "flag.explicit",
+                  "op": "ne",
+                  "value": 0,
+                  "than": "day"
+                },
+                {
+                  "ref": "flag.explicit.{stage}",
+                  "op": "lt",
+                  "value": 2
+                }
+              ],
+              "do": {
+                "until": {
+                  "explicit": 0
+                },
+                "add": {
+                  "explicit.{stage}": 1
+                },
+                "note": "露骨时刻：她说了句很直白的话，又自己笑着收回"
+              }
+            }
+          ]
+        },
+        {
+          "key": "qingwu_clue",
+          "rules": [
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "clues": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "rival_fall",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "rival.progress",
+                  "op": "ge",
+                  "value": 100
+                },
+                {
+                  "ref": "rival.progress",
+                  "op": "gt",
+                  "value": 0,
+                  "than": "stat.affection"
+                },
+                {
+                  "ref": "flag.fallen",
+                  "op": "eq",
+                  "value": 0
+                },
+                {
+                  "ref": "scene",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "until": {
+                  "fallen": 0
+                },
+                "scene": "win_back",
+                "note": "她说：我好像喜欢上别人了"
+              }
+            }
+          ]
+        },
+        {
+          "key": "scout",
+          "rules": [
+            {
+              "when": [],
+              "do": {
+                "flags": {
+                  "intel.{rival}": 1
+                },
+                "note": "打探到情敌进度约在 {rival.band}–{rival.band_top}"
+              },
+              "chance": 60
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "insecurity": 5
+                },
+                "note": "她知道你在打听"
+              }
+            }
+          ]
+        },
+        {
+          "key": "expose",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.expose_roll",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "rival": -25,
+                "note": "揭穿成功"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "trust": -20
+                },
+                "rival": 10,
+                "note": "揭穿被她发现"
+              }
+            }
+          ]
+        },
+        {
+          "key": "showdown",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.showdown_roll",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "table": "showdown_win"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "jealousy": 20
+                },
+                "until": {
+                  "fight": 0
+                },
+                "note": "摊牌演变成了吵架"
+              }
+            }
+          ]
+        },
+        {
+          "key": "showdown_win",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "rival.progress",
+                  "op": "lt",
+                  "value": 60
+                }
+              ],
+              "do": {
+                "rival_out": true,
+                "note": "摊牌成功"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "rival": -30,
+                "note": "摊牌成功"
+              }
+            }
+          ]
+        },
+        {
+          "key": "lean",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.rise_roll",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stage": "next"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "affection": -2,
+                  "spark": -5
+                },
+                "until": {
+                  "rise_block": 2
+                },
+                "note": "这次没有推进，过两天再找机会"
+              }
+            }
+          ]
+        },
+        {
+          "key": "apology",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.apology_roll",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "jealousy": -30,
+                  "trust": 10
+                },
+                "flags": {
+                  "reconciled": 1,
+                  "fight": 0
+                },
+                "table": "apology_spark",
+                "note": "你们和好了，这成了一个转折点"
+              }
+            }
+          ]
+        },
+        {
+          "key": "apology_spark",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "stage",
+                  "op": "ge",
+                  "value": 2
+                }
+              ],
+              "do": {
+                "stats": {
+                  "spark": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "win_back",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "cond.win_back_roll",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "rival_cap": 50,
+                "flags": {
+                  "won_back": 1
+                },
+                "note": "你挽回了她"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "outcome": "missed",
+                "note": "挽回失败"
+              }
+            }
+          ]
+        },
+        {
+          "key": "overstep",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "lead.teaser",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "until": {
+                  "teaser_cold": 2
+                },
+                "note": "她把你当成了那种人"
+              }
+            }
+          ]
+        },
+        {
+          "key": "confess",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "active.hesitate",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "flags": {
+                  "was_hesitating": 1
+                }
+              },
+              "continue": true
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.final",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 3
+                },
+                {
+                  "ref": "stat.affection",
+                  "op": "ge",
+                  "value": 90
+                },
+                {
+                  "ref": "stat.trust",
+                  "op": "ge",
+                  "value": 85
+                },
+                {
+                  "ref": "flag.knot",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "result": 1,
+                "note": "她答应了"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.too_early",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "lead.teaser",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "insecurity": 5
+                },
+                "until": {
+                  "serious": 3,
+                  "cooldown": 3
+                },
+                "result": -1,
+                "note": "她笑着反问：你认真的？"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.too_early",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "flag.confess.count",
+                  "op": "ge",
+                  "value": 3
+                }
+              ],
+              "do": {
+                "stats": {
+                  "affection": -5,
+                  "mood": -1,
+                  "insecurity": 20
+                },
+                "until": {
+                  "distance": 2,
+                  "cooldown": 3
+                },
+                "flags": {
+                  "chase": 3
+                },
+                "result": -1,
+                "note": "太早了，她礼貌地拒绝"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.too_early",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "affection": -5,
+                  "mood": -1,
+                  "insecurity": 10
+                },
+                "until": {
+                  "distance": 2,
+                  "cooldown": 3
+                },
+                "flags": {
+                  "chase": 3
+                },
+                "result": -1,
+                "note": "太早了，她礼貌地拒绝"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.bad_mood",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "cond.mood_roll_fail",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stats": {
+                  "trust": -8
+                },
+                "until": {
+                  "cooldown": 3
+                },
+                "result": -1,
+                "table": "confess_apology",
+                "note": "她心情不好，没有答应"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.bad_mood",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "result": 1,
+                "note": "她答应了"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.rival_ahead",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "cond.rival_won",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "until": {
+                  "fallen": 0
+                },
+                "result": -1,
+                "table": "confess_fallen",
+                "note": "她说她好像喜欢上别人了"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.rival_ahead",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "until": {
+                  "hesitate": 2
+                },
+                "result": -1,
+                "note": "她说：让我想想"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stat.affection",
+                  "op": "ge",
+                  "value": 60
+                },
+                {
+                  "ref": "cond.trust_short",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "until": {
+                  "observe": 3
+                },
+                "flags": {
+                  "observe_bonus": 2
+                },
+                "result": 2,
+                "note": "再给我点时间"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "cond.confess_ready",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "result": 1,
+                "note": "她答应了"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "stats": {
+                  "affection": -2,
+                  "spark": -10
+                },
+                "until": {
+                  "cooldown": 3
+                },
+                "result": -1,
+                "note": "她温柔地拒绝了"
+              }
+            }
+          ]
+        },
+        {
+          "key": "confess_apology",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "confess.final",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "scene": "apology"
+              }
+            }
+          ]
+        },
+        {
+          "key": "confess_fallen",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "confess.final",
+                  "op": "eq",
+                  "value": 0
+                }
+              ],
+              "do": {
+                "scene": "win_back",
+                "force": true
+              }
+            }
+          ]
+        },
+        {
+          "key": "confess_then",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "confess.final",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stage": "lover",
+                "table": "ending"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "stage": "lover",
+                "note": "告白成功"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "flag.was_hesitating",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": -1
+                }
+              ],
+              "do": {
+                "flags": {
+                  "hesitate": 0
+                }
+              }
+            }
+          ]
+        },
+        {
+          "key": "ending",
+          "rules": [
+            {
+              "when": [
+                {
+                  "ref": "chose.bless",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "flag.reached_ambiguous",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stat.affection",
+                  "op": "ge",
+                  "value": 50
+                },
+                {
+                  "ref": "stat.trust",
+                  "op": "ge",
+                  "value": 60
+                }
+              ],
+              "do": {
+                "outcome": "farewell_blessing",
+                "note": "放手祝福"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "chose.side",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stat.side",
+                  "op": "ge",
+                  "value": 70
+                },
+                {
+                  "ref": "stat.side",
+                  "op": "gt",
+                  "value": 0,
+                  "than": "stat.affection"
+                },
+                {
+                  "ref": "cond.final_time",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "outcome": "unexpected_love",
+                "note": "{text.side}"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 3
+                },
+                {
+                  "ref": "stat.affection",
+                  "op": "ge",
+                  "value": 90
+                },
+                {
+                  "ref": "stat.trust",
+                  "op": "ge",
+                  "value": 85
+                },
+                {
+                  "ref": "flag.knot",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "outcome": "perfect_lover",
+                "note": "终局告白成功"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 3
+                },
+                {
+                  "ref": "flag.won_back",
+                  "op": "eq",
+                  "value": 1
+                }
+              ],
+              "do": {
+                "outcome": "won_back",
+                "note": "挽回后终局告白成功"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": 1
+                },
+                {
+                  "ref": "stage",
+                  "op": "eq",
+                  "value": 3
+                },
+                {
+                  "ref": "stat.affection",
+                  "op": "ge",
+                  "value": 70
+                }
+              ],
+              "do": {
+                "outcome": "together",
+                "note": "终局告白成功"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": 2
+                }
+              ],
+              "do": {
+                "outcome": "more_than_friends",
+                "note": "还差一点"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "ge",
+                  "value": 0
+                },
+                {
+                  "ref": "stage",
+                  "op": "lt",
+                  "value": 3
+                },
+                {
+                  "ref": "stat.spark",
+                  "op": "ge",
+                  "value": 50
+                },
+                {
+                  "ref": "stat.affection",
+                  "op": "ge",
+                  "value": 50
+                },
+                {
+                  "ref": "stat.landmines",
+                  "op": "lt",
+                  "value": 6
+                }
+              ],
+              "do": {
+                "outcome": "more_than_friends",
+                "note": "还差一点"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "confess.result",
+                  "op": "eq",
+                  "value": -1
+                }
+              ],
+              "do": {
+                "outcome": "rejected",
+                "note": "被拒绝"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stat.affection",
+                  "op": "lt",
+                  "value": 50
+                }
+              ],
+              "do": {
+                "outcome": "rejected",
+                "note": "被拒绝"
+              }
+            },
+            {
+              "when": [
+                {
+                  "ref": "stat.landmines",
+                  "op": "ge",
+                  "value": 6
+                }
+              ],
+              "do": {
+                "outcome": "rejected",
+                "note": "被拒绝"
+              }
+            },
+            {
+              "when": [],
+              "do": {
+                "outcome": "missed",
+                "note": "错过"
+              }
+            }
+          ]
+        }
+      ],
+      "hooks": {
+        "night": "night",
+        "morning": "morning",
+        "schedule": "schedule",
+        "after_action": "after_action",
+        "success": "success"
+      }
+    }
+  }
+]

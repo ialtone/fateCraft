@@ -1,0 +1,329 @@
+{
+  "state_schema": {
+    "schema_version": 1,
+    "fields": [
+      {
+        "path": "module_state",
+        "type": "object",
+        "default": {},
+        "visibility": "internal",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "narrative",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "model",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.day",
+        "type": "integer",
+        "default": 1,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.slot",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.stage",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.stage_rank",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.facts.knot_resolved",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.outcome_key",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.log",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.lead",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.facts",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.caps",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.her",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.you",
+        "type": "object",
+        "default": {},
+        "visibility": "player",
+        "update_policy": "module",
+        "allow_children": true
+      },
+      {
+        "path": "gameplay.lead.name",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.stage_day",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.affection",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.spark",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.trust",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.mood",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.insight",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.jealousy",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.insecurity",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.her.growth",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.facts.cold_war",
+        "type": "boolean",
+        "default": false,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.money",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.stamina",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.you.charm",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.you.cooking",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.you.humor",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.you.wealth",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.you.talent",
+        "type": "integer",
+        "default": 0,
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.caps.date",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.messages",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.known_likes",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.known_dislikes",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.knot_clues",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.birthday",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.nicknames",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.inside_jokes",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.memory_hooks",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.keepsakes",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.rivals",
+        "type": "list",
+        "default": [],
+        "visibility": "player",
+        "update_policy": "module"
+      },
+      {
+        "path": "gameplay.warning",
+        "type": "string",
+        "default": "",
+        "visibility": "player",
+        "update_policy": "module"
+      }
+    ]
+  }
+}

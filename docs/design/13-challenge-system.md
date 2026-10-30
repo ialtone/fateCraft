@@ -119,13 +119,13 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 - `core.generic@1`：状态相等、状态集合、数值条件、成功判定、最少回合、all/any、可信结局验证；百年飞升劫由独立 `cultivation.trial@2` 以受保护模块状态和可信动作维护完整单局；
 - `cultivation.campaign@2`：修仙 Campaign 生命周期、投影、上下文和完整领域动作集合；Runtime 只能从模块声明的 `campaign_actions` 中启用白名单，不允许用自由状态 JSON 冒充领域事实；
 - `campaign.generic@1`：直接使用公共世界组件；
-- 生存、经营、潜入、关系、古墓、地牢、宗门七个纯运行模块，完整目录见[24 玩法架构](24-gameplay-module-architecture.md)。
+- 生存、经营、潜入、关系叙事、恋爱养成、古墓、地牢、宗门八个纯运行模块，完整目录见[24 玩法架构](24-gameplay-module-architecture.md)。
 
 模块 descriptor 列出允许的 action、Campaign action、verifier 和 settlement handler。管理员界面通过 `/api/admin/gameplay-modules` 读取目录并生成选项，不在前端硬编码修仙能力。Campaign 动作的 Definition、Capability 和事务 Handler 契约见 [17-generic-campaign-action-capabilities.md](17-generic-campaign-action-capabilities.md)。
 
 纯内容玩法若能使用 `core.generic`，只需新增数据，不需要修改 Go。只有无法由受限通用条件安全表达的规则，才新增后端模块。
 
-定义类型、Schema 和内容校验归当前主模块；不再使用全局修仙类型枚举。平台另拥有 `challenge.progress_rewards` 这一跨模块 kind（仅 Challenge 模式），由平台注册 Schema、标签与预算元数据；它不会进入模块定义列表，模块也不能重复注册。发布会检查所有可选 Persona 的初始化、双方行动预览、三类投影和展示路径/控件，拒绝缺失必要行动与未知渲染器。初始空列表、时间和随机可行性仍需流程测试。默认初始化使用 `backend/data/bootstrap.json`；当前清单包含全部八类九个内置包；启动只补齐缺失包，不覆盖已有包或启用状态。
+定义类型、Schema 和内容校验归当前主模块；不再使用全局修仙类型枚举。平台另拥有 `challenge.progress_rewards` 这一跨模块 kind（仅 Challenge 模式），由平台注册 Schema、标签与预算元数据；它不会进入模块定义列表，模块也不能重复注册。发布会检查所有可选 Persona 的初始化、双方行动预览、三类投影和展示路径/控件，拒绝缺失必要行动与未知渲染器。初始空列表、时间和随机可行性仍需流程测试。默认初始化使用 `backend/data/bootstrap.json`；当前清单包含全部八类十个内置包；启动只补齐缺失包，不覆盖已有包或启用状态。
 
 ## 结局规则
 
@@ -158,7 +158,7 @@ Runtime 的 `actions.rolls[*].requires` 同时是判定门禁和详情数据的�
 
 青河还通过版本定义 `cultivation.progress_rewards` 保存阶段规则和总预算，阶段随合法动作记录进当前分支的 Campaign 进度；后台明确区分终局积分与“阶段 + 终局”总额。进度跟随分支回档，结算回执与账本不回档，实际收益字段见 [21](21-campaign-outcome-rewards.md)。
 
-Challenge 与 Campaign 共用平台定义 `challenge.progress_rewards`，青河保留领域定义。它声明阶段 key、名称、顺序、积分、verifier 与配置，以及用于发布期预算核对的 `outcome_keys` 和 `stage_cap`。发布校验拒绝重复定义、重复 key/order、未知或模块不允许的 verifier、非法状态路径与金额、非 success 结局带正积分，以及阶段总额超过最低正积分成功结局的 50%（`stage_cap` 必须正好等于该上限）；Campaign 还要求条件只引用玩家可见的存档投影字段。阶段在模块动作事务内、状态提交之后核验并记录进度，局中不写回执或账本；终局统一结算，正积分通过统一账本来源入账，失败结局仍结算已达成阶段。九包阶段配置与本地证据见 [21](21-campaign-outcome-rewards.md)、[14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[25](25-core-gameplay-validation.md)。
+Challenge 与 Campaign 共用平台定义 `challenge.progress_rewards`，青河保留领域定义。它声明阶段 key、名称、顺序、积分、verifier 与配置，以及用于发布期预算核对的 `outcome_keys` 和 `stage_cap`。发布校验拒绝重复定义、重复 key/order、未知或模块不允许的 verifier、非法状态路径与金额、非 success 结局带正积分，以及阶段总额超过最低正积分成功结局的 50%（`stage_cap` 必须正好等于该上限）；Campaign 还要求条件只引用玩家可见的存档投影字段。阶段在模块动作事务内、状态提交之后核验并记录进度，局中不写回执或账本；终局统一结算，正积分通过统一账本来源入账，失败结局仍结算已达成阶段。十包阶段配置与本地证据见 [21](21-campaign-outcome-rewards.md)、[14](14-ascension-trial-gameplay.md)、[16](16-cultivation-campaign-agent-reference.md)、[25](25-core-gameplay-validation.md)。
 
 账号只保留积分与剧情改写次数。玩家用积分兑换改写套餐，后台运营规则见 [22 奖励管理](22-reward-management-and-exchange.md)。Campaign 正积分结局必须由当前版本真实终局任务引用，任务核验、积分和存档完成同事务；详见 [21 终局积分](21-campaign-outcome-rewards.md)。
 

@@ -1,0 +1,36 @@
+{
+  "id": "xingang-lover-setting",
+  "name": "新港设定",
+  "description": "世界观与内容尺度；具体数值由工具提供。",
+  "entries": [
+    {
+      "id": "xingang-lover-world",
+      "world_book_id": "xingang-lover-setting",
+      "title": "新港",
+      "content": "近未来海滨都市新港：霓虹、轻轨、全息广告与老街并存。你刚搬来新港，在这里遇见她。街区有商业区、夜生活、海边自然、私密场所与旧城区。所有人名、地名都是固定设定，不由叙述者生成。",
+      "keywords": [
+        "新港"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    },
+    {
+      "id": "xingang-lover-scale",
+      "world_book_id": "xingang-lover-setting",
+      "title": "内容尺度",
+      "content": "按 intimacy_tier 写：L0 陌生只写香水尾调与对视；L1 熟悉写指尖相碰与并肩体温；L2 暧昧写意外贴身、湿衣、换衣误入、慢舞、差一点的吻，最多一次短暂初吻，不褪衣不抚摸；L3 恋人可写深吻、拥抱抚摸、部分褪衣、暗示亲密一夜与余温。硬线：不描写性器官、乳头或露骨解剖细节，镜头移向表情、呼吸、手和光影；所有角色都是成年人，不做未成年化描写；facts.she_willing 为 false 时她温柔地叫停，不能写成被说服。",
+      "keywords": [
+        "亲密",
+        "尺度"
+      ],
+      "constant": true,
+      "enabled": true,
+      "priority": 10,
+      "budget_group": "default",
+      "metadata": {}
+    }
+  ]
+}

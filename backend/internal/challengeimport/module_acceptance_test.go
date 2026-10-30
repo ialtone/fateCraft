@@ -53,6 +53,7 @@ func TestEightCategoryContentAndRuntimeAcceptance(t *testing.T) {
 		{"mountain-inn", "经营建设", "management.close"},
 		{"night-blockade", "潜入逃脱", "stealth.abandon"},
 		{"old-town-promise", "关系叙事", "relationship.leave"},
+		{"xingang-lover", "关系叙事", "romance.abandon"},
 		{"lost-chambers", "古墓探险", "tomb.abandon"},
 		{"underground-watchtower", "地牢远征", "dungeon.abandon"},
 		{"mortal-path", "修仙飞升", ""},
@@ -214,7 +215,7 @@ func TestPublicationRejectsModuleDisplayMismatch(t *testing.T) {
 }
 
 func TestPublicationRequiresCompleteModuleActions(t *testing.T) {
-	for _, slug := range []string{"island-rescue", "mountain-inn", "night-blockade", "old-town-promise", "lost-chambers", "underground-watchtower", "qinglan-sect"} {
+	for _, slug := range []string{"island-rescue", "mountain-inn", "night-blockade", "old-town-promise", "xingang-lover", "lost-chambers", "underground-watchtower", "qinglan-sect"} {
 		t.Run(slug, func(t *testing.T) {
 			loaded, err := loadDirectory(filepath.Join("..", "..", "data", "preset_packs", slug), time.Unix(0, 0))
 			if err != nil {

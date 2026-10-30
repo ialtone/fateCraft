@@ -1,6 +1,6 @@
 # 24. 配置驱动与可信玩法模块
 
-实现基线：2026-10-09。本文记录第一阶段的实际架构；八种主类型、九个内容包的本地检查及未验事项见[验收记录](gameplay-modules/validation.md)。两套修仙核心玩法已完成本轮规则更新，正式规格见[单局](14-ascension-trial-gameplay.md)与[长期](16-cultivation-campaign-agent-reference.md)，平衡样本及真实环境交接见[25 验证记录](25-core-gameplay-validation.md)。
+实现基线：2026-10-09。本文记录第一阶段的实际架构；八种主类型、十个内容包的本地检查及未验事项见[验收记录](gameplay-modules/validation.md)。两套修仙核心玩法已完成本轮规则更新，正式规格见[单局](14-ascension-trial-gameplay.md)与[长期](16-cultivation-campaign-agent-reference.md)，平衡样本及真实环境交接见[25 验证记录](25-core-gameplay-validation.md)。
 
 ## 层次与装配
 
@@ -26,13 +26,13 @@
 | 1 | 生存探索 | `survival.exploration@1` | 荒岛求援 `island-rescue` | Challenge |
 | 2 | 经营建设 | `management.settlement@1` | 山间客栈 `mountain-inn` | Campaign |
 | 3 | 潜入逃脱 | `stealth.escape@1` | 夜入封锁区 `night-blockade` | Challenge |
-| 4 | 关系叙事 | `relationship.story@1` | 小镇旧约 `old-town-promise` | Campaign |
+| 4 | 关系叙事 | `relationship.story@1` / `romance.story@1` | 小镇旧约 `old-town-promise` / 新港恋人 `xingang-lover` | Campaign / Challenge |
 | 5 | 古墓探险 | `expedition.tomb@1` | 失落墓室 `lost-chambers` | Challenge |
 | 6 | 地牢远征 | `expedition.dungeon@1` | 地下哨塔 `underground-watchtower` | Challenge |
 | 7 | 修仙飞升 | `cultivation.trial@2` / `cultivation.campaign@2` | 百年飞升劫 / 青河修仙志 | Challenge / Campaign |
 | 8 | 宗门经营 | `sect.management@1` | 青岚宗重建 `qinglan-sect` | Campaign |
 
-七个新增模块和修仙单局采用下述纯运行接口；修仙和通用世界 Campaign 使用领域表及注册动作。它们共享平台的版本、事务、分支与结算保障，但不强迫使用同一种存储形态。
+八个新增模块和修仙单局采用下述纯运行接口；修仙和通用世界 Campaign 使用领域表及注册动作。它们共享平台的版本、事务、分支与结算保障，但不强迫使用同一种存储形态。
 
 ## 纯运行接口
 
@@ -49,7 +49,7 @@
 
 ## 叙事关键事实与动作反馈
 
-纯模块通过 `NarrativeFactProvider.NarrativeFactPaths()` 声明 model 投影中的关键路径；八种内置主类型均已提供。Campaign Provider 在 `ProjectionView.FactPaths` 声明关键路径，纯模块 Campaign 适配器自动增加 `gameplay.` 前缀，修仙 Campaign 的境界、阶段、修为、生命和寿元由修仙 Provider 声明。通用层仅做投影取值、比较、容量和受众处理，不认识题材字段。
+纯模块通过 `NarrativeFactProvider.NarrativeFactPaths()` 声明 model 投影中的关键路径；八种内置主类型（含恋爱养成模块）均已提供。Campaign Provider 在 `ProjectionView.FactPaths` 声明关键路径，纯模块 Campaign 适配器自动增加 `gameplay.` 前缀，修仙 Campaign 的境界、阶段、修为、生命和寿元由修仙 Provider 声明。通用层仅做投影取值、比较、容量和受众处理，不认识题材字段。
 
 模块核心最多 20 项、事实对象最多 4 KiB。纯模块在 model Project 阶段复核核心容量，因此发布、初始化验收与动作后 Project 检查会使用同一规则；无法支持后续投影的动作在提交前拒绝。平台在历史之后提供最新核心，完整背包、任务和领域详情仍按原有预算压缩。
 
@@ -93,13 +93,13 @@ Campaign 最后一项模型行动将对话结束时，只有同 attempt、同 tu
 
 平台另拥有少量跨模块 definition kind。当前只有 `challenge.progress_rewards`（仅 Challenge 模式）：由平台注册 Schema、标签与 `x-reward-budget`，在内容校验时先于模块分发并单独校验，再通过 `Content.PlatformDefinitions` 与模块定义分开保存。模块验证器只接收模块定义，因此 `ruledata.Singleton` 一类“有且只有一条”的契约不受影响；模块也不能重复注册平台 kind。目录和后台编辑器输出的 Definition Schema 会自动合并平台条目。
 
-七个新模块的主规则定义各为一个对象，具体字段见[模块制作指南](gameplay-modules/README.md)。严格解码拒绝未知字段；Singleton 解析限制嵌套 8 层、集合 64 项、key 128 字节、字符串 256 字符，模块还可施加更小限额。草稿解码本身不等于已通过完整发布校验。
+八个新模块的主规则定义各为一个对象，具体字段见[模块制作指南](gameplay-modules/README.md)。严格解码拒绝未知字段；Singleton 解析限制嵌套 8 层、集合 64 项、key 128 字节、字符串 256 字符，模块还可施加更小限额。草稿解码本身不等于已通过完整发布校验。
 
 结构可达性验证包括资源来源、设施/配方依赖、有限开锁工具、事实和机关依赖等。它不能证明任意复杂配置的完整时间、数量、风险可行性，也不能代替平衡模拟。初始空列表的条目展示路径无法靠初始投影完全验证；内容作者仍须走通后续状态。宗门额外用后期菜单探针估计展示预算，探针不是可执行存档或通关模拟。
 
 内容版本、精确模块版本和状态格式分别管理。已发布内容不可改，旧局继续原版；缺失模块或不兼容契约时只读并说明原因，不自动归档、升级或降级。部署前使用 gameplay-check 审核全部活跃/可恢复依赖。
 
-backend/data/bootstrap.json 列出八类九个默认包。启动补齐缺失包并发布启用，已有包不升级、覆盖或重新启用。手动内置/上传导入只产生草稿；停用只阻止新开局，运行暂停才阻止原版执行。
+backend/data/bootstrap.json 列出八类十个默认包。启动补齐缺失包并发布启用，已有包不升级、覆盖或重新启用。手动内置/上传导入只产生草稿；停用只阻止新开局，运行暂停才阻止原版执行。
 
 ## 玩家、管理员与上下文
 

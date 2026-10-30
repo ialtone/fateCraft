@@ -35,7 +35,7 @@
 - 需要新的后端动作或资源计算方法；
 - 结果必须由服务端专用算法产生。
 
-模块必须在 `gameplay/bootstrap` 显式注册，并通过 descriptor 声明动作、定义 Schema/校验、投影及结算能力。七个新模块和 `cultivation.trial@2` 通过 RuntimeModule 接口执行；内容必须保留其完整动作集合，可用条件由模块预览决定。后台切换模块会重建权限与动作骨架，仍须补齐规则/结局/展示后通过发布校验。管理员不能上传 Go、JavaScript、SQL 或任意表达式。
+模块必须在 `gameplay/bootstrap` 显式注册，并通过 descriptor 声明动作、定义 Schema/校验、投影及结算能力。八个新模块和 `cultivation.trial@2` 通过 RuntimeModule 接口执行；内容必须保留其完整动作集合，可用条件由模块预览决定。后台切换模块会重建权限与动作骨架，仍须补齐规则/结局/展示后通过发布校验。管理员不能上传 Go、JavaScript、SQL 或任意表达式。
 
 ## 标准目录
 
@@ -490,6 +490,8 @@ Prompt 资产必须包含三个启用、必需、system 角色核心分段：
 
 挑战 Prompt 可以解释业务语义，但不能发明平台工具、改变 Tool Schema、State Schema 权限或动作白名单。平台会在所有历史之后注入最终 Agent 契约，并通过 Provider 原生字段发送当前步骤工具定义；玩法包不应教授任何 JSON 回复信封，也不应要求模型用代码围栏模拟 Tool Call。
 
+平台还会为每个玩法包自动注入公用 Prompt（`backend/data/shared/prompts/common.json` 的 `shared_prompt` 分段）：禁止直角引号「」『』，强调与引用短句用 Markdown `**加粗**`。包内不必复制该段；改公用文件即可作用于全部玩法。
+
 ## WorldBook
 
 每本世界书包含稳定 `id/name/description/entries`。每个 entry 至少有：
@@ -543,7 +545,7 @@ Prompt 和世界书引用同一个 key。Verifier 的 `successful_roll` 也使�
 2. 编写包内规格或在 `docs/design` 更新对应正式专题。
 3. 完成 pack/runtime 和资产 JSON。
 4. 运行后端 importer 测试，确认内容哈希稳定。
-5. 启动按 data/bootstrap.json 补齐八类九个默认包，已有包和停用状态保持。管理员内置更新与上传都先预览并导入草稿，再发布、选择入口和启用。
+5. 启动按 data/bootstrap.json 补齐八类十个默认包，已有包和停用状态保持。管理员内置更新与上传都先预览并导入草稿，再发布、选择入口和启用。
 
 不需要手工创建奖励表或执行发奖 SQL。草稿导入和完整内容同事务；已发布同号不同内容一律不可覆盖，必须提升版本号。
 

@@ -35,7 +35,7 @@
 
 百年飞升劫使用 `cultivation.trial@2`，以固定版本的 `cultivation.trial_rules:life` 和受保护 `module_state` 为权威；`gameplay` 是公开投影。年龄、寿元、修为、资源、路线资格和死亡均由模块动作结算，模型仅维护叙事字段。三条路线使用本世真实事实，普通状态写入及历史同名 Roll 均不能替代。平台不内置修仙境界 key 或门槛。
 
-八种主类型中的修仙飞升同时包含上述两包，宗门经营使用独立 `sect.management` 和弟子管理规则。两者不共享存档，分类和依赖见[24 玩法模块](24-gameplay-module-architecture.md)。
+八种主类型中的修仙飞升同时包含上述两包；关系叙事另含恋爱养成 `romance.story`；宗门经营使用独立 `sect.management` 和弟子管理规则。两者不共享存档，分类和依赖见[24 玩法模块](24-gameplay-module-architecture.md)。
 
 两个玩法的世界书分别保存共同规则的版本快照。共享条目使用相同 `shared_rule_id`，导入测试会比较标题和正文；内容加载测试还会直接比较两个内置包的境界 key、顺序、逐级关系和寿元，防止共同设定意外漂移。测试只约束这两个内置包，不给运行时建立全局修仙标准。这样既保留 ChallengeVersion 的不可变快照，也不需要新增跨玩法数据库表。
 

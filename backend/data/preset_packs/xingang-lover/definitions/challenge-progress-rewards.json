@@ -1,0 +1,92 @@
+[
+  {
+    "kind": "challenge.progress_rewards",
+    "key": "progress-rewards",
+    "name": "阶段积分",
+    "visibility": "player",
+    "sort_order": 20,
+    "tags": [
+      "阶段积分"
+    ],
+    "search_text": "熟悉 暧昧 恋人 心结 阶段积分",
+    "content": {
+      "stages": [
+        {
+          "key": "familiar",
+          "name": "进入熟悉",
+          "order": 10,
+          "points": 20,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.stage_rank",
+                "value": 2,
+                "operator": "gte"
+              }
+            ]
+          }
+        },
+        {
+          "key": "ambiguous",
+          "name": "进入暧昧",
+          "order": 20,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.stage_rank",
+                "value": 3,
+                "operator": "gte"
+              }
+            ]
+          }
+        },
+        {
+          "key": "lover",
+          "name": "成为恋人",
+          "order": 30,
+          "points": 25,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_number",
+                "path": "gameplay.stage_rank",
+                "value": 4,
+                "operator": "gte"
+              }
+            ]
+          }
+        },
+        {
+          "key": "knot",
+          "name": "解开心结",
+          "order": 40,
+          "points": 20,
+          "verifier_key": "core.conditions",
+          "verifier_config": {
+            "conditions": [
+              {
+                "type": "state_equals",
+                "path": "gameplay.facts.knot_resolved",
+                "value": true
+              }
+            ]
+          }
+        }
+      ],
+      "outcome_keys": [
+        "perfect_lover",
+        "won_back",
+        "together",
+        "farewell_blessing",
+        "unexpected_love"
+      ],
+      "stage_cap": 90
+    }
+  }
+]

@@ -34,7 +34,7 @@
 
 通用 Campaign 终局使用 `pack.json.outcomes[].reward_points`，缺省或 0 不发积分。经营、关系和宗门模块只提交合法完成事实，平台在原事务读取当前固定版本金额。
 
-阶段使用平台定义 `challenge.progress_rewards`，Challenge 与 Campaign 共用；青河保留领域定义 `cultivation.progress_rewards`。九包阶段均为固定版本声明，金额与可信条件如下：
+阶段使用平台定义 `challenge.progress_rewards`，Challenge 与 Campaign 共用；青河保留领域定义 `cultivation.progress_rewards`。十包阶段均为固定版本声明，金额与可信条件如下：
 
 | 玩法 / 包 | 阶段（固定顺序） | 条件来源 |
 | --- | --- | --- |
@@ -43,6 +43,7 @@
 | 夜入封锁区 / `night-blockade` | 突破外围 30、取得关键情报 30、取得任务目标 40 | `discovered_count ≥ 2`、`has_intel`、`has_target` |
 | 地下哨塔 / `underground-watchtower` | 探索哨塔 30、击败塔内守卫 30、击败指挥官 40 | `visited_count ≥ 2`、`defeated_count ≥ 1`、`boss_defeated` |
 | 小镇旧约 / `old-town-promise` | 倾听坊间往事 15、回应核心关系事件 15、推进小镇旧约 20 | `fact_count ≥ 1`、`event_choice_count ≥ 1`、`event_choice_count ≥ 2` |
+| 新港恋人 / `xingang-lover` | 进入熟悉 20、进入暧昧 25、成为恋人 25、解开心结 20 | `stage_rank ≥ 2/3/4`、`facts.knot_resolved` |
 | 山间客栈 / `mountain-inn` | 恢复经营 50、完成实质经营目标 50、形成稳定经营成果 50 | `delivered ≥ 1`、`delivered ≥ 2`、`facility_level_sum ≥ 3` |
 | 青岚宗重建 / `qinglan-sect` | 恢复基础 75、完成关键建设或弟子目标 75、取得重建里程碑 100 | `facility_level_sum ≥ 1`、`disciple_count ≥ 4` 或 `facility_level_sum ≥ 3`、`successful_missions ≥ 1` |
 | 百年飞升劫 / `reincarnation-trials` | 首次结丹 25、首次元婴 25、首次化神 25 | `realm_key` 达到对应境界或更高 |
@@ -117,12 +118,12 @@
 
 ## 验证入口
 
-- `challengeimport/progress_rewards_test.go`：九包阶段定义、金额、预算与青河领域定义。
+- `challengeimport/progress_rewards_test.go`：十包阶段定义、金额、预算与青河领域定义。
 - `challenge/progress_rewards_publish_test.go`、`gameplay/contract/progress_rewards_test.go`：平台定义结构、50% 预算、非成功结局零积分与 verifier 校验。
 - `challenge/stage_rewards_test.go`：只按已记录进度生成回执金额，进度视图只报告新达成阶段。
 - `campaignactions/progress_test.go`、`playthrough_test.go`：局中记录、终局一次结算、直连 0 分、死亡不回退进度与真实路线。
 - `storage/challenge_stage_reward_postgres_test.go`、`storage/campaign_stage_reward_postgres_test.go`：并发唯一性、事务回滚、重放、直连 0 分与只追加保护。
-- `challengeimport/module_acceptance_test.go`：九包真实导入、发布与运行时接受。
+- `challengeimport/module_acceptance_test.go`：十包真实导入、发布与运行时接受。
 
 PostgreSQL 用例需要实际 `FATECRAFT_TEST_DATABASE_URL`；未配置时跳过，不能把跳过报告为事务验证通过。新项目表结构并入 `00001_init.sql`，没有 `00002` 或启动时补表。
 

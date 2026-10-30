@@ -18,6 +18,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/gameplay/dungeon"
 	"github.com/ialtone/fatecraft/internal/gameplay/management"
 	"github.com/ialtone/fatecraft/internal/gameplay/relationship"
+	"github.com/ialtone/fatecraft/internal/gameplay/romance"
 	"github.com/ialtone/fatecraft/internal/gameplay/sect"
 	"github.com/ialtone/fatecraft/internal/gameplay/stealth"
 	"github.com/ialtone/fatecraft/internal/gameplay/survival"
@@ -33,6 +34,7 @@ func NewRegistry() *contract.Registry {
 	registry.RegisterModule(management.Descriptor())
 	registry.RegisterModule(stealth.Descriptor())
 	registry.RegisterModule(relationship.Descriptor())
+	registry.RegisterModule(romance.Descriptor())
 	registry.RegisterModule(tomb.Descriptor())
 	registry.RegisterModule(dungeon.Descriptor())
 	registry.RegisterModule(sect.Descriptor())

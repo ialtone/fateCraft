@@ -32,7 +32,7 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 
 日志专题：[23-logging-and-diagnostics.md](23-logging-and-diagnostics.md)，覆盖诊断关联、正文预算、队列、配置审计、后台筛选及运行验收边界。
 
-玩法架构专题：[24-gameplay-module-architecture.md](24-gameplay-module-architecture.md)，覆盖中立契约、可信模块、Challenge/Campaign 适配、八种主类型与版本边界；配套[模块制作指南](gameplay-modules/README.md)和[验收记录](gameplay-modules/validation.md)。新增玩法优先从这里选择现有模块。两套修仙核心玩法的当前规则见 14、16，模拟数据、边界和真实环境待验项见[25 核心玩法验证](25-core-gameplay-validation.md)。
+玩法架构专题：[24-gameplay-module-architecture.md](24-gameplay-module-architecture.md)，覆盖中立契约、可信模块、Challenge/Campaign 适配、八种主类型（含恋爱养成模块）与版本边界；配套[模块制作指南](gameplay-modules/README.md)和[验收记录](gameplay-modules/validation.md)。新增玩法优先从这里选择现有模块。两套修仙核心玩法的当前规则见 14、16，模拟数据、边界和真实环境待验项见[25 核心玩法验证](25-core-gameplay-validation.md)。
 
 ## 权威来源
 
@@ -52,7 +52,7 @@ fateCraft 是“平台发布挑战、玩家参与挑战”的 AI 文字冒险系
 - PostgreSQL 是运行时挑战内容的唯一权威。
 - 用户角色只有 `owner`、`admin`、`user`；普通注册创建 `user`，OAuth 只允许登录已绑定的本地账号，不会自动创建或提权。
 - 空数据库必须通过网页首次安装向导明确设置唯一 `owner`；初始化完成后安装入口关闭，后端事务保护 owner 转交和失权操作。
-- 启动按默认清单在事务中补齐全部九个内置包；已有包不自动升级、覆盖或重新启用。管理员在内容管理切换开放状态；停用禁止新开局，已有存档保留。
+- 启动按默认清单在事务中补齐全部十个内置包；已有包不自动升级、覆盖或重新启用。管理员在内容管理切换开放状态；停用禁止新开局，已有存档保留。
 - 发布版本不可原地修改；对话固定版本、选中资产和内容哈希。
 - 已发布/退役版本的进程缓存只保存不可变内容；所有玩家状态、历史、Memory 和 Campaign 事实保持按用户/对话实时隔离。
 - 保存草稿与发布使用同一版本行锁，发布基于锁定后的内容计算哈希。

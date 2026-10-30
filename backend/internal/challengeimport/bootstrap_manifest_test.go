@@ -19,8 +19,8 @@ func TestBundledBootstrapIncludesEveryBuiltin(t *testing.T) {
 		t.Fatal(err)
 	}
 	sort.Strings(defaults)
-	if len(defaults) != 9 || !reflect.DeepEqual(defaults, builtins) {
-		t.Fatalf("startup manifest must contain all nine bundled packs: %v / %v", defaults, builtins)
+	if len(defaults) != 10 || !reflect.DeepEqual(defaults, builtins) {
+		t.Fatalf("startup manifest must contain all ten bundled packs: %v / %v", defaults, builtins)
 	}
 }
 

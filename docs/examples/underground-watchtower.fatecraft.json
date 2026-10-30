@@ -29,7 +29,7 @@
         "underground-watchtower-player"
       ]
     },
-    "quick_start_guide": "每次移动和交锋消耗一份补给。稳健进攻伤害较低但能减轻反击，强攻可更快结束战斗。安全后可用药或在有限营地休整；终点目标必须带回入口。提前撤离与交战脱身都会损失一半携带物，战败则全失。 示例结局积分为 0。",
+    "quick_start_guide": "每次移动和交锋消耗一份补给。稳健进攻伤害较低但能减轻反击，强攻可更快结束战斗。安全后可用药或在有限营地休整；终点目标必须带回入口。提前撤离与交战脱身都会损失一半携带物，战败则全失。 成功结局积分为 200 分；失败与主动终止为 0 分。",
     "features": [
       "两条路线",
       "持续遭遇",
@@ -172,6 +172,27 @@
           "path": "gameplay.enemies",
           "type": "list",
           "default": [],
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.visited_count",
+          "type": "integer",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.defeated_count",
+          "type": "integer",
+          "default": 0,
+          "visibility": "player",
+          "update_policy": "module"
+        },
+        {
+          "path": "gameplay.boss_defeated",
+          "type": "boolean",
+          "default": false,
           "visibility": "player",
           "update_policy": "module"
         }
@@ -324,7 +345,7 @@
         }
       ],
       "completion_view": {
-        "empty_reward_text": "本示例结局暂不发放积分"
+        "empty_reward_text": "此结局不发放积分"
       },
       "value_labels": {
         "state.gameplay.outcome_key": {
@@ -464,6 +485,75 @@
   ],
   "definitions": [
     {
+      "kind": "challenge.progress_rewards",
+      "key": "progress-rewards",
+      "name": "阶段积分",
+      "content": {
+        "outcome_keys": [
+          "cleared"
+        ],
+        "stage_cap": 100,
+        "stages": [
+          {
+            "key": "scout-tower",
+            "name": "探索哨塔",
+            "order": 10,
+            "points": 30,
+            "verifier_config": {
+              "conditions": [
+                {
+                  "operator": "gte",
+                  "path": "gameplay.visited_count",
+                  "type": "state_number",
+                  "value": 2
+                }
+              ]
+            },
+            "verifier_key": "core.conditions"
+          },
+          {
+            "key": "first-victory",
+            "name": "击败塔内守卫",
+            "order": 20,
+            "points": 30,
+            "verifier_config": {
+              "conditions": [
+                {
+                  "operator": "gte",
+                  "path": "gameplay.defeated_count",
+                  "type": "state_number",
+                  "value": 1
+                }
+              ]
+            },
+            "verifier_key": "core.conditions"
+          },
+          {
+            "key": "defeat-commander",
+            "name": "击败指挥官",
+            "order": 30,
+            "points": 40,
+            "verifier_config": {
+              "conditions": [
+                {
+                  "path": "gameplay.boss_defeated",
+                  "type": "state_equals",
+                  "value": true
+                }
+              ]
+            },
+            "verifier_key": "core.conditions"
+          }
+        ]
+      },
+      "tags": [
+        "阶段积分"
+      ],
+      "search_text": "探索哨塔 击败守卫 击败指挥官 阶段积分",
+      "visibility": "player",
+      "sort_order": 20
+    },
+    {
       "kind": "dungeon.expedition",
       "key": "underground-watchtower",
       "name": "地下哨塔规则",
@@ -589,7 +679,7 @@
   ],
   "outcomes": [
     {
-      "reward_points": 0,
+      "reward_points": 200,
       "outcome_key": "cleared",
       "category": "success",
       "title": "哨塔肃清",
@@ -679,5 +769,5 @@
       "enabled": true
     }
   ],
-  "content_hash": "b27d7d00d9fa3638cc522977df9195b59edf4407d0da67dfbce068f4fe8d74ac"
+  "content_hash": "612692bb2a19b5638b985ae92e7a70c393706830149375be8a6267fba2e3547f"
 }

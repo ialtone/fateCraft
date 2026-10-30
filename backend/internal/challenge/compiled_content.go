@@ -11,6 +11,7 @@ import (
 
 	gameplay "github.com/ialtone/fatecraft/internal/gameplay/contract"
 	"github.com/ialtone/fatecraft/internal/platformcapability"
+	"github.com/ialtone/fatecraft/internal/sharedprompt"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/tokenizer"
 )
@@ -106,6 +107,11 @@ func compileVersionContent(doc *VersionDocument) (*compiledVersionContent, int64
 	if err := json.Unmarshal(promptAsset.Content, &compiled.prompt); err != nil {
 		return nil, 0, fmt.Errorf("解析 Prompt %s: %w", promptAsset.Slug, err)
 	}
+	segments, err := sharedprompt.Ensure(compiled.prompt.Segments)
+	if err != nil {
+		return nil, 0, err
+	}
+	compiled.prompt.Segments = segments
 	sort.SliceStable(compiled.prompt.Segments, func(i, j int) bool {
 		return compiled.prompt.Segments[i].Position < compiled.prompt.Segments[j].Position
 	})

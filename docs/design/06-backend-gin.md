@@ -12,7 +12,7 @@ Challenge 的模块信封和 Campaign 的模块状态表分别接入现有事务
 
 后端使用 Go、Gin、GORM、PostgreSQL、WebSocket 和 zap。应用入口是 `cmd/server`，负责首次内容初始化、HTTP、WebSocket、LLM 和游戏运行时。
 
-`cmd/server` 不运行 AutoMigrate，也不隐式修改数据库结构。部署阶段先运行 `cmd/migrate up`；连接数据库后，server 在事务级 advisory lock 内按 `data/bootstrap.json` 补齐缺少的内置包（当前八类九包），通过正常发布流程初始化并默认启用；已存在的包直接跳过，不升级、覆盖或重新启用。管理员在内容管理控制是否开放新开局。
+`cmd/server` 不运行 AutoMigrate，也不隐式修改数据库结构。部署阶段先运行 `cmd/migrate up`；连接数据库后，server 在事务级 advisory lock 内按 `data/bootstrap.json` 补齐缺少的内置包（当前八类十包），通过正常发布流程初始化并默认启用；已存在的包直接跳过，不升级、覆盖或重新启用。管理员在内容管理控制是否开放新开局。
 
 ## 模块划分
 

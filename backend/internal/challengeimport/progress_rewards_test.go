@@ -52,6 +52,7 @@ func TestEveryBundledPackHasFinalSettlementStages(t *testing.T) {
 		{"night-blockade", []int64{30, 30, 40}, []string{"escaped"}},
 		{"underground-watchtower", []int64{30, 30, 40}, []string{"cleared"}},
 		{"old-town-promise", []int64{15, 15, 20}, []string{"reunited", "honest_distance"}},
+		{"xingang-lover", []int64{20, 25, 25, 20}, []string{"perfect_lover", "won_back", "together", "farewell_blessing", "unexpected_love"}},
 		{"mountain-inn", []int64{50, 50, 50}, []string{"prosperous"}},
 		{"qinglan-sect", []int64{75, 75, 100}, []string{"rebuilt"}},
 		{"reincarnation-trials", []int64{25, 25, 25}, nil},

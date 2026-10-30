@@ -12,7 +12,7 @@ import (
 
 func TestPlatformDoesNotImportConcreteGameplay(t *testing.T) {
 	root := filepath.Join("..", "..")
-	concrete := []string{"cultivation", "survival", "management", "stealth", "relationship", "tomb", "dungeon", "sect"}
+	concrete := []string{"cultivation", "survival", "management", "stealth", "relationship", "romance", "tomb", "dungeon", "sect"}
 	for _, directory := range []string{"api", "campaign", "challenge", "storage", "orchestration", "state", "contextbuilder", "gameplay/contract", "gameplay/kernel", "gameplay/campaigngeneric", "gameplay/components"} {
 		err := filepath.WalkDir(filepath.Join(root, filepath.FromSlash(directory)), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {

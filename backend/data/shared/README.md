@@ -1,5 +1,7 @@
 # Shared 目录
 
-该目录不再参与运行时内容读取或管理端写入，仅保留为空目录占位。
+平台公用内容。角色、Persona、场景目录仍为空占位，不参与运行时读取。
 
-角色、Persona、场景、Prompt、世界书和奖励规则统一存入 PostgreSQL 的挑战版本。官方内容放在 `data/preset_packs/*`，由 `internal/challengeimport` 统一负责解析、校验与导入；后端仅在 `challenge_packs` 为空的首次启动时自动发布，管理员内容通过管理端保存为数据库草稿并发布。
+平台还会为每个玩法包自动注入公用 Prompt（`prompts/common.json` 的 `shared_prompt` 分段）：禁止直角引号「」『』，强调与引用短句用 Markdown `**加粗**`。包内不必复制该段；改公用文件即可作用于全部玩法。
+
+官方挑战包本体仍在 `data/preset_packs/*`，由 `internal/challengeimport` 导入。

@@ -13,7 +13,7 @@ import (
 
 func TestInstalledNarrativeCoreCoversEightGameplayTypes(t *testing.T) {
 	registry := bootstrap.NewRegistry()
-	for _, slug := range []string{"island-rescue", "mountain-inn", "night-blockade", "old-town-promise", "lost-chambers", "underground-watchtower", "reincarnation-trials", "qinglan-sect"} {
+	for _, slug := range []string{"island-rescue", "mountain-inn", "night-blockade", "old-town-promise", "xingang-lover", "lost-chambers", "underground-watchtower", "reincarnation-trials", "qinglan-sect"} {
 		t.Run(slug, func(t *testing.T) {
 			root := filepath.Join("..", "..", "..", "data", "preset_packs", slug)
 			raw, err := os.ReadFile(filepath.Join(root, "runtime", "runtime.json"))

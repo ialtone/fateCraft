@@ -18,6 +18,7 @@ import (
 	"github.com/ialtone/fatecraft/internal/guidance"
 	"github.com/ialtone/fatecraft/internal/logging"
 	"github.com/ialtone/fatecraft/internal/security"
+	"github.com/ialtone/fatecraft/internal/sharedprompt"
 	"github.com/ialtone/fatecraft/internal/storage"
 	"github.com/ialtone/fatecraft/internal/worldbook"
 )
@@ -118,7 +119,11 @@ func (g *Generator) assembleInputWithCache(
 
 	// Prompt and worldbook entries are sorted/compiled once in the immutable
 	// version cache. Bundle returns private slice copies for this attempt.
-	in.PresetSegments = bundle.Prompt.Segments
+	segments, ensureErr := sharedprompt.Ensure(bundle.Prompt.Segments)
+	if ensureErr != nil {
+		return in, nil, nil, ensureErr
+	}
+	in.PresetSegments = segments
 	in.Character = bundle.Character
 	in.Persona = bundle.Persona
 	in.Scenario = bundle.Scenario

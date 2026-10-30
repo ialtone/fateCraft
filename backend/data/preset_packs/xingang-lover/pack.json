@@ -1,0 +1,191 @@
+{
+  "id": "xingang-lover",
+  "name": "新港恋人",
+  "version": "1.0.0",
+  "runtime_entry": "runtime/runtime.json",
+  "description": "在近未来都市新港把她从陌生人追成恋人：约会、限时消息、告白判定、偶发情敌与多结局，数值全部由平台裁定。",
+  "author": "fateCraft",
+  "icon": "heart",
+  "tags": [
+    "恋爱养成",
+    "关系叙事",
+    "多结局"
+  ],
+  "default_config": {
+    "recommended_character": "xingang-lover-narrator",
+    "recommended_persona": "newcomer",
+    "recommended_scenario": "xingang-lover-opening",
+    "recommended_prompt": "xingang-lover-guide",
+    "required_worldbooks": [
+      "xingang-lover-setting"
+    ],
+    "allowed_personas": [
+      "newcomer"
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_key": "perfect_lover",
+      "category": "success",
+      "title": "完美恋人",
+      "tone": "success",
+      "reward_points": 210,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "perfect_lover"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "won_back",
+      "category": "success",
+      "title": "失而复得",
+      "tone": "success",
+      "reward_points": 200,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "won_back"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "together",
+      "category": "success",
+      "title": "在一起",
+      "tone": "success",
+      "reward_points": 180,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "together"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "farewell_blessing",
+      "category": "success",
+      "title": "祝福退场",
+      "tone": "info",
+      "reward_points": 180,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "farewell_blessing"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "unexpected_love",
+      "category": "success",
+      "title": "意外之恋",
+      "tone": "success",
+      "reward_points": 180,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "unexpected_love"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "more_than_friends",
+      "category": "neutral",
+      "title": "友达以上",
+      "tone": "warning",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "more_than_friends"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "rejected",
+      "category": "failure",
+      "title": "被拒绝",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "rejected"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "missed",
+      "category": "failure",
+      "title": "错过",
+      "tone": "error",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "missed"
+          }
+        ]
+      }
+    },
+    {
+      "outcome_key": "abandoned",
+      "category": "neutral",
+      "title": "主动放弃",
+      "tone": "info",
+      "reward_points": 0,
+      "verifier_key": "core.conditions",
+      "verifier_config": {
+        "conditions": [
+          {
+            "type": "state_equals",
+            "path": "gameplay.outcome_key",
+            "value": "abandoned"
+          }
+        ]
+      }
+    }
+  ],
+  "quick_start_guide": "开局在行动区五选一。每天分白天、夜晚（周末多一个深夜）时段，约会、送礼、聊天和打工都会推进时间；及时回复她的限时消息。告白随时可用，但时机不对会被拒并冷却。第 30 天会出现她可能离开新港的预警，4 天后进入抉择。完美恋人 210 分，失而复得 200 分，在一起、祝福退场、意外之恋 180 分；阶段积分最多 90 分，其余结局只结算已达成阶段。",
+  "features": [
+    "五位女主",
+    "告白判定表",
+    "限时消息",
+    "偶发情敌",
+    "旅行与手作",
+    "多结局"
+  ],
+  "dependencies": []
+}

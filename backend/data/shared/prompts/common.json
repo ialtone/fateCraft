@@ -1,0 +1,18 @@
+{
+  "id": "fatecraft-shared-prompt",
+  "name": "公用 Prompt",
+  "description": "平台注入每个玩法包的公用 Prompt 分段。",
+  "segments": [
+    {
+      "id": "fatecraft-shared-prompt",
+      "preset_id": "fatecraft-shared-prompt",
+      "key": "shared_prompt",
+      "role": "system",
+      "content": "禁止直角引号「」『』；强调用 Markdown **加粗**。可用普通引号。",
+      "enabled": true,
+      "required": true,
+      "priority": 80,
+      "position": 50
+    }
+  ]
+}

@@ -1,0 +1,283 @@
+{
+  "presentation": {
+    "state_panel_title": "新港恋人",
+    "state_sections": [
+      {
+        "key": "her",
+        "title": "状态 · 她",
+        "order": 10,
+        "fields": [
+          {
+            "path": "gameplay.lead.name",
+            "label": "她",
+            "widget": "text",
+            "order": 0
+          },
+          {
+            "path": "gameplay.stage",
+            "label": "阶段",
+            "widget": "badge",
+            "order": 10
+          },
+          {
+            "path": "gameplay.stage_day",
+            "label": "阶段第几天",
+            "widget": "number",
+            "order": 20,
+            "unit": "天"
+          },
+          {
+            "path": "gameplay.her.affection",
+            "label": "好感",
+            "widget": "progress",
+            "order": 30
+          },
+          {
+            "path": "gameplay.her.spark",
+            "label": "心动",
+            "widget": "progress",
+            "order": 40
+          },
+          {
+            "path": "gameplay.her.trust",
+            "label": "信任",
+            "widget": "progress",
+            "order": 50
+          },
+          {
+            "path": "gameplay.her.mood",
+            "label": "心情",
+            "widget": "number",
+            "order": 60
+          },
+          {
+            "path": "gameplay.her.insight",
+            "label": "了解度",
+            "widget": "number",
+            "order": 70
+          },
+          {
+            "path": "gameplay.her.jealousy",
+            "label": "醋意",
+            "widget": "progress",
+            "order": 80
+          },
+          {
+            "path": "gameplay.her.insecurity",
+            "label": "不安",
+            "widget": "progress",
+            "order": 90
+          },
+          {
+            "path": "gameplay.her.growth",
+            "label": "成长线",
+            "widget": "text",
+            "order": 100
+          },
+          {
+            "path": "gameplay.facts.cold_war",
+            "label": "冷战中",
+            "widget": "badge",
+            "order": 110
+          }
+        ]
+      },
+      {
+        "key": "you",
+        "title": "状态 · 你",
+        "order": 20,
+        "fields": [
+          {
+            "path": "gameplay.day",
+            "label": "第几天",
+            "widget": "number",
+            "order": 0,
+            "unit": "天"
+          },
+          {
+            "path": "gameplay.slot",
+            "label": "时段",
+            "widget": "badge",
+            "order": 10
+          },
+          {
+            "path": "gameplay.money",
+            "label": "钱",
+            "widget": "number",
+            "order": 20
+          },
+          {
+            "path": "gameplay.stamina",
+            "label": "体力",
+            "widget": "progress",
+            "order": 30
+          },
+          {
+            "path": "gameplay.you.charm",
+            "label": "魅力",
+            "widget": "number",
+            "order": 40
+          },
+          {
+            "path": "gameplay.you.cooking",
+            "label": "厨艺",
+            "widget": "number",
+            "order": 50
+          },
+          {
+            "path": "gameplay.you.humor",
+            "label": "幽默",
+            "widget": "number",
+            "order": 60
+          },
+          {
+            "path": "gameplay.you.wealth",
+            "label": "财力",
+            "widget": "number",
+            "order": 70
+          },
+          {
+            "path": "gameplay.you.talent",
+            "label": "才艺",
+            "widget": "number",
+            "order": 80
+          },
+          {
+            "path": "gameplay.caps.date",
+            "label": "本阶段约会",
+            "widget": "text",
+            "order": 90
+          }
+        ]
+      },
+      {
+        "key": "messages",
+        "title": "她的消息",
+        "order": 30,
+        "fields": [
+          {
+            "path": "gameplay.messages",
+            "label": "限时消息",
+            "widget": "item_list",
+            "order": 0
+          }
+        ]
+      },
+      {
+        "key": "intel",
+        "title": "情报",
+        "order": 40,
+        "fields": [
+          {
+            "path": "gameplay.known_likes",
+            "label": "已知喜好",
+            "widget": "item_list",
+            "order": 0
+          },
+          {
+            "path": "gameplay.known_dislikes",
+            "label": "已知雷区",
+            "widget": "item_list",
+            "order": 10
+          },
+          {
+            "path": "gameplay.knot_clues",
+            "label": "心结线索",
+            "widget": "item_list",
+            "order": 20
+          },
+          {
+            "path": "gameplay.facts.knot_resolved",
+            "label": "心结已解",
+            "widget": "badge",
+            "order": 30
+          },
+          {
+            "path": "gameplay.birthday",
+            "label": "生日",
+            "widget": "text",
+            "order": 40
+          },
+          {
+            "path": "gameplay.nicknames",
+            "label": "专属称呼",
+            "widget": "list",
+            "order": 50
+          },
+          {
+            "path": "gameplay.inside_jokes",
+            "label": "内部梗",
+            "widget": "list",
+            "order": 60
+          },
+          {
+            "path": "gameplay.memory_hooks",
+            "label": "她记得的事",
+            "widget": "item_list",
+            "order": 70
+          },
+          {
+            "path": "gameplay.keepsakes",
+            "label": "纪念物",
+            "widget": "list",
+            "order": 80
+          },
+          {
+            "path": "gameplay.rivals",
+            "label": "竞争态势",
+            "widget": "item_list",
+            "order": 90
+          },
+          {
+            "path": "gameplay.warning",
+            "label": "预警",
+            "widget": "text",
+            "order": 100
+          }
+        ]
+      },
+      {
+        "key": "log",
+        "title": "最近发生",
+        "order": 50,
+        "fields": [
+          {
+            "path": "gameplay.log",
+            "label": "记录",
+            "widget": "list",
+            "order": 0
+          },
+          {
+            "path": "gameplay.outcome_key",
+            "label": "结局",
+            "widget": "text",
+            "order": 10
+          }
+        ]
+      }
+    ],
+    "completion_view": {
+      "replay_label": "再追一次",
+      "back_label": "返回玩法",
+      "empty_reward_text": "此结局只结算已达成阶段"
+    },
+    "terminology": {
+      "challenge": "恋爱挑战",
+      "outcome": "恋爱结局",
+      "reward": "积分"
+    },
+    "value_labels": {
+      "state.gameplay.outcome_key": {
+        "perfect_lover": "完美恋人",
+        "won_back": "失而复得",
+        "together": "在一起",
+        "farewell_blessing": "祝福退场",
+        "unexpected_love": "意外之恋",
+        "more_than_friends": "友达以上",
+        "rejected": "被拒绝",
+        "missed": "错过",
+        "abandoned": "主动放弃"
+      }
+    }
+  }
+}

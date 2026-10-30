@@ -1,0 +1,23 @@
+{
+  "actions": {
+    "model": [
+      "update_state",
+      "domain_action",
+      "complete_challenge"
+    ],
+    "player": [],
+    "domain": [
+      "romance.start",
+      "romance.act",
+      "romance.reply",
+      "romance.confess",
+      "romance.choose",
+      "romance.trip",
+      "romance.rival",
+      "romance.remember",
+      "romance.boundary",
+      "romance.abandon"
+    ],
+    "capabilities": {}
+  }
+}
