@@ -18,6 +18,14 @@ func TestPostgresBootstrapAndAvailabilityPreserveAdminChoices(t *testing.T) {
 	ctx := context.Background()
 	repo := storage.NewChallengeRepository(db)
 	importer := New(repo, filepath.Join("..", "..", "data"))
+	builtins, err := importer.ListBuiltins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(builtins) == 0 {
+		t.Fatal("expected bundled packs")
+	}
+	otherBuiltins := len(builtins) - 1 // mortal-path pre-imported below
 	if _, err := importer.ImportBuiltin(ctx, "mortal-path"); err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +42,8 @@ func TestPostgresBootstrapAndAvailabilityPreserveAdminChoices(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := importer.BootstrapBuiltins(ctx)
-	if err != nil || !result.Initialized || len(result.Imports) != 8 {
-		t.Fatalf("missing packs not imported: %+v %v", result, err)
+	if err != nil || !result.Initialized || len(result.Imports) != otherBuiltins {
+		t.Fatalf("missing packs not imported: want %d imports, got %+v %v", otherBuiltins, result, err)
 	}
 	pack, err = repo.GetPack(ctx, pack.ID)
 	if err != nil {
@@ -49,8 +57,8 @@ func TestPostgresBootstrapAndAvailabilityPreserveAdminChoices(t *testing.T) {
 		t.Fatalf("restart must be idempotent: %+v %v", result, err)
 	}
 	public, err := service.ListPublished(ctx)
-	if err != nil || len(public) != 8 {
-		t.Fatalf("disabled pack visible: %d %v", len(public), err)
+	if err != nil || len(public) != otherBuiltins {
+		t.Fatalf("disabled pack visible: want %d public, got %d %v", otherBuiltins, len(public), err)
 	}
 	if _, err := service.GetPublished(ctx, pack.Slug); !errors.Is(err, challenge.ErrNotPublished) {
 		t.Fatalf("disabled detail accessible: %v", err)
