@@ -1,3 +1,5 @@
+//go:build slow
+
 package orchestration
 
 import (
@@ -108,9 +110,6 @@ func TestPostgresAgentBatchPersistenceAndReplay(t *testing.T) {
 	}
 }
 
-type batchCounter struct{}
-
-func (batchCounter) Count(s string) int { return len([]rune(s)) }
 
 func TestPostgresAgentBatchFailureBoundaries(t *testing.T) {
 	for _, scenario := range []string{"two_writes", "rejected", "transaction_failure", "interrupted", "mismatched_arguments"} {

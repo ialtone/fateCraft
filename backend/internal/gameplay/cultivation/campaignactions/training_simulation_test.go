@@ -1,11 +1,10 @@
+//go:build slow
+
 package campaignactions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,32 +13,6 @@ import (
 	"github.com/ialtone/fatecraft/internal/gameplay/cultivation/trainingrules"
 	"github.com/ialtone/fatecraft/internal/storage"
 )
-
-func readCultivationDefinitions(t *testing.T) []storage.GameplayDefinition {
-	t.Helper()
-	root := filepath.Join("..", "..", "..", "..", "data", "preset_packs", "mortal-path")
-	files, err := filepath.Glob(filepath.Join(root, "definitions", "*.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	files = append([]string{filepath.Join(root, "definitions.json")}, files...)
-	all := []storage.GameplayDefinition{}
-	for _, path := range files {
-		raw, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		var rows []storage.GameplayDefinition
-		if err := json.Unmarshal(raw, &rows); err != nil {
-			t.Fatal(err)
-		}
-		all = append(all, rows...)
-	}
-	return all
-}
 
 // This is a phase simulation with the relevant manual and preparation budget
 // supplied at entry. It exercises actual learning/equipment, retreat/recovery,
