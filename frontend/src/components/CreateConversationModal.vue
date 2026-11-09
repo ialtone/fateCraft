@@ -214,7 +214,7 @@ async function submit() {
         </NFormItem>
         <p class="faint sm route-hint">
           本对话将使用：{{ pendingRouteName }}
-          <RouterLink to="/settings">去设置修改</RouterLink>
+          <RouterLink to="/settings" @click="emit('update:show', false)">去设置修改</RouterLink>
         </p>
       </NForm>
     </NSpin>
