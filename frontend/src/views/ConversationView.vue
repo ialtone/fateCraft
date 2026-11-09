@@ -60,6 +60,7 @@ const showShare = ref(false)
 
 const showInspector = ref(true)
 const mobilePane = ref<'state' | 'chat' | 'context'>('chat')
+const timeline = ref<InstanceType<typeof MessageTimeline> | null>(null)
 const convId = computed(() => route.params.id as string)
 const gameplayAllowed = ref(false)
 const editable = computed(
@@ -605,8 +606,12 @@ async function forkConversation() {
         :campaign="Boolean(convStore.current?.campaign_id)"
       />
       <div class="center pane-chat">
-        <MessageTimeline :editable="editable && !routeMismatch" />
-        <ConversationGuidanceBar :conv-id="convId" :disabled="!editable || routeMismatch" />
+        <MessageTimeline ref="timeline" :editable="editable && !routeMismatch" />
+        <ConversationGuidanceBar
+          :conv-id="convId"
+          :disabled="!editable || routeMismatch"
+          @select="timeline?.followToBottom()"
+        />
         <ActionInput :conv-id="convId" :disabled="inputDisabled" />
       </div>
       <ContextInspector class="pane-context" />

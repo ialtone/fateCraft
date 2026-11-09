@@ -55,8 +55,16 @@ let resizeObserver: ResizeObserver | null = null
 
 function scrollToBottom() {
   const el = scroller.value
-  if (el) el.scrollTop = el.scrollHeight
+  if (el) el.scrollTop = el.scrollHeight - el.clientHeight
 }
+
+async function followToBottom() {
+  pinned.value = false
+  await nextTick()
+  scrollToBottom()
+}
+
+defineExpose({ followToBottom })
 
 // 只在确实还能往上滚时解除，避免内容未溢出时的上滚手势让后续流式内容失去跟随。
 function unpin() {

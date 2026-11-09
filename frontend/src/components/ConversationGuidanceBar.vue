@@ -18,6 +18,7 @@ const campaign = useCampaignStore()
 const message = useMessage()
 const pending = ref(false)
 let retry: { selection: string; requestId: string } | null = null
+const emit = defineEmits<{ select: [] }>()
 
 // 服务端 proposal 是可选的模型产物。模型未调用指引工具时，用当前 Campaign
 // 快照派生普通消息意图；这些意图不绑定 capability，提交后仍由服务端重新校验。
@@ -81,7 +82,9 @@ async function send(content: string) {
 
 async function select(item: GuidanceItem) {
   const active = guidance.active
-  if (!active || props.disabled || socket.writeBlocked || chat.isGenerating || pending.value) return
+  if (props.disabled || socket.writeBlocked || chat.isGenerating || pending.value) return
+  emit('select')
+  if (!active) return
   const convId = props.convId
   const selection = `${convId}:${active.id}:${item.key}`
   if (retry?.selection !== selection) retry = { selection, requestId: crypto.randomUUID() }
