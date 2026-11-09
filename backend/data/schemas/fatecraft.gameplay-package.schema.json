@@ -420,6 +420,25 @@
       ],
       "type": "object"
     },
+    "ChoiceOption": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label"
+      ],
+      "type": "object"
+    },
     "CompletionPresentation": {
       "additionalProperties": false,
       "properties": {
@@ -448,7 +467,25 @@
             "null"
           ]
         },
+        "heroine_label": {
+          "type": "string"
+        },
+        "heroine_options": {
+          "items": {
+            "$ref": "#/$defs/ChoiceOption"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "persona_label": {
+          "type": "string"
+        },
         "recommended_character": {
+          "type": "string"
+        },
+        "recommended_heroine": {
           "type": "string"
         },
         "recommended_persona": {

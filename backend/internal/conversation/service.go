@@ -113,6 +113,7 @@ type CreateInput struct {
 	Title         string `json:"title"`
 	ChallengeSlug string `json:"challenge_slug"`
 	PersonaSlug   string `json:"persona_slug"`
+	HeroineSlug   string `json:"heroine_slug"`
 }
 
 // Create 新建对话并固定已发布挑战版本及其内容哈希。
@@ -129,7 +130,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*storage.Conversa
 	if err != nil {
 		return nil, err
 	}
-	selection, err := s.challenge.ResolveSelection(ctx, in.ChallengeSlug, in.PersonaSlug, playerID)
+	selection, err := s.challenge.ResolveSelectionWithHeroine(ctx, in.ChallengeSlug, in.PersonaSlug, in.HeroineSlug, playerID)
 	if err != nil {
 		return nil, err
 	}

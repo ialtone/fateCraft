@@ -195,13 +195,23 @@ func (s *Service) publicChallenge(ctx context.Context, pack *storage.ChallengePa
 		ID: pack.ID, Slug: pack.Slug, Name: pack.Name, Description: pack.Description,
 		Version: compiled.document.Version.Version, Icon: projection.icon, Tags: append([]string(nil), projection.tags...),
 		Features: append([]string(nil), projection.features...), QuickStartGuide: projection.quickStartGuide,
-		Personas: append([]AssetOption(nil), projection.personas...), Outcomes: append([]OutcomeView(nil), projection.outcomes...),
+		Personas:     append([]AssetOption(nil), projection.personas...),
+		PersonaLabel: manifest.DefaultConfig.PersonaLabel, HeroineLabel: manifest.DefaultConfig.HeroineLabel,
+		HeroineOptions: append([]ChoiceOption(nil), manifest.DefaultConfig.HeroineOptions...), Outcomes: append([]OutcomeView(nil), projection.outcomes...),
 		RewardOverview: append([]RewardView(nil), projection.rewards...), Runtime: clonePublicRuntime(projection.runtime),
 		Available: available, UnavailableReason: unavailableReason,
 	}, nil
 }
 
 func (s *Service) ResolveSelection(ctx context.Context, challengeSlug, personaSlug string, playerIDs ...uuid.UUID) (*Selection, error) {
+	return s.resolveSelection(ctx, challengeSlug, personaSlug, "", playerIDs...)
+}
+
+func (s *Service) ResolveSelectionWithHeroine(ctx context.Context, challengeSlug, personaSlug, heroineSlug string, playerIDs ...uuid.UUID) (*Selection, error) {
+	return s.resolveSelection(ctx, challengeSlug, personaSlug, heroineSlug, playerIDs...)
+}
+
+func (s *Service) resolveSelection(ctx context.Context, challengeSlug, personaSlug, heroineSlug string, playerIDs ...uuid.UUID) (*Selection, error) {
 	pack, err := s.repo.GetPackBySlug(ctx, challengeSlug)
 	if err != nil {
 		return nil, err
@@ -236,11 +246,28 @@ func (s *Service) ResolveSelection(ctx context.Context, challengeSlug, personaSl
 	if allowed := stringSet(manifest.DefaultConfig.AllowedPersonas); len(allowed) > 0 && !allowed[selectedPersona] {
 		return nil, ErrInvalidSelection
 	}
+	selectedHeroine := strings.TrimSpace(heroineSlug)
+	if len(manifest.DefaultConfig.HeroineOptions) > 0 {
+		if strings.TrimSpace(manifest.DefaultConfig.HeroineLabel) == "" {
+			return nil, fmt.Errorf("%w: 配置角色选项时必须提供 heroine_label", ErrInvalidChallenge)
+		}
+		if selectedHeroine == "" {
+			selectedHeroine = manifest.DefaultConfig.RecommendedHeroine
+		}
+		if !slices.ContainsFunc(manifest.DefaultConfig.HeroineOptions, func(option ChoiceOption) bool {
+			return option.Key == selectedHeroine
+		}) {
+			return nil, ErrInvalidSelection
+		}
+	} else if selectedHeroine != "" {
+		return nil, ErrInvalidSelection
+	}
 	selection := &Selection{
 		ChallengeName: pack.Name,
 		Version:       doc.Version,
 		Runtime:       doc.Runtime,
 		Contract:      compiled.contract,
+		HeroineSlug:   selectedHeroine,
 	}
 	for kind, slug := range map[string]string{
 		storage.ChallengeAssetCharacter: manifest.DefaultConfig.RecommendedCharacter,
@@ -1009,6 +1036,25 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 		!allowed[manifest.DefaultConfig.RecommendedPersona] {
 		return fmt.Errorf("%w: recommended_persona 必须包含在 allowed_personas 中", ErrInvalidChallenge)
 	}
+	if len(manifest.DefaultConfig.HeroineOptions) > 0 {
+		heroines := make(map[string]struct{}, len(manifest.DefaultConfig.HeroineOptions))
+		for _, option := range manifest.DefaultConfig.HeroineOptions {
+			if !gameplay.ValidStableKey(option.Key) || strings.TrimSpace(option.Label) == "" {
+				return fmt.Errorf("%w: 女主人设选项无效", ErrInvalidChallenge)
+			}
+			if _, exists := heroines[option.Key]; exists {
+				return fmt.Errorf("%w: 女主人设重复 %s", ErrInvalidChallenge, option.Key)
+			}
+			heroines[option.Key] = struct{}{}
+		}
+		if _, exists := heroines[manifest.DefaultConfig.RecommendedHeroine]; !exists {
+			return fmt.Errorf("%w: recommended_heroine 必须包含在 heroine_options 中", ErrInvalidChallenge)
+		}
+	} else if manifest.DefaultConfig.RecommendedHeroine != "" {
+		return fmt.Errorf("%w: 推荐女主缺少 heroine_options", ErrInvalidChallenge)
+	} else if manifest.DefaultConfig.HeroineLabel != "" {
+		return fmt.Errorf("%w: heroine_label 需要 heroine_options", ErrInvalidChallenge)
+	}
 	promptAsset := assets[storage.ChallengeAssetPrompt+":"+manifest.DefaultConfig.RecommendedPrompt]
 	var prompt storage.PromptPreset
 	if err := json.Unmarshal(promptAsset.Content, &prompt); err != nil {
@@ -1089,6 +1135,9 @@ func ValidateDocument(doc *VersionDocument, registries ...*gameplay.Registry) er
 	}
 	if err := validateInitialModule(registry, moduleContent(contract, doc), personas...); err != nil {
 		return fmt.Errorf("%w: 模块开局验证: %v", ErrInvalidChallenge, err)
+	}
+	if err := validateInitialChoices(registry, moduleContent(contract, doc), manifest.DefaultConfig.HeroineOptions); err != nil {
+		return fmt.Errorf("%w: 角色选项开局验证: %v", ErrInvalidChallenge, err)
 	}
 	return nil
 }

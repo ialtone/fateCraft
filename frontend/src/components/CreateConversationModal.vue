@@ -33,7 +33,7 @@ const creating = ref(false)
 const checkingConfiguration = ref(false)
 const configurationChecked = ref(false)
 const configurationIssue = ref('')
-const form = ref({ title: '', challenge_slug: '', persona_slug: '' })
+const form = ref({ title: '', challenge_slug: '', persona_slug: '', heroine_slug: '' })
 
 // 本次创建将固化的路由（只读展示），有效路由由后端计算；server 名称随接入模式变化。
 const pendingRoute = computed<'server' | 'client'>(() =>
@@ -59,9 +59,19 @@ const personaOptions = computed(() =>
     value: persona.slug,
   })),
 )
+const heroineOptions = computed(() =>
+  (selected.value?.heroine_options ?? []).map((option) => ({
+    label: option.label,
+    value: option.key,
+  })),
+)
 const canCreate = computed(
   () =>
-    Boolean(selected.value?.available && form.value.persona_slug) &&
+    Boolean(
+      selected.value?.available &&
+        form.value.persona_slug &&
+        (!heroineOptions.value.length || form.value.heroine_slug),
+    ) &&
     configurationChecked.value &&
     !checkingConfiguration.value &&
     !configurationIssue.value &&
@@ -96,6 +106,7 @@ async function reset() {
     title: '',
     challenge_slug: target?.slug ?? '',
     persona_slug: target?.personas[0]?.slug ?? '',
+    heroine_slug: target?.heroine_options?.[0]?.key ?? '',
   }
 }
 
@@ -113,6 +124,9 @@ watch(
     if (!selected.value?.personas.some((persona) => persona.slug === form.value.persona_slug)) {
       form.value.persona_slug = selected.value?.personas[0]?.slug ?? ''
     }
+    if (!selected.value?.heroine_options?.some((option) => option.key === form.value.heroine_slug)) {
+      form.value.heroine_slug = selected.value?.heroine_options?.[0]?.key ?? ''
+    }
   },
 )
 
@@ -125,6 +139,7 @@ async function submit() {
       challenge_slug: form.value.challenge_slug,
       persona_slug: form.value.persona_slug,
     }
+    if (form.value.heroine_slug) body.heroine_slug = form.value.heroine_slug
     if (form.value.title.trim()) body.title = form.value.title.trim()
     const conv =
       selected.value?.runtime.mode === 'campaign'
@@ -192,7 +207,7 @@ async function submit() {
           </div>
         </div>
 
-        <NFormItem label="玩家人设">
+        <NFormItem :label="selected?.persona_label || '人设'">
           <NSelect
             v-model:value="form.persona_slug"
             :options="personaOptions"
@@ -202,6 +217,18 @@ async function submit() {
         <p v-if="selected" class="persona-description">
           {{ selected.personas.find((item) => item.slug === form.persona_slug)?.description }}
         </p>
+
+        <template v-if="heroineOptions.length">
+          <NFormItem :label="selected?.heroine_label">
+            <NSelect v-model:value="form.heroine_slug" :options="heroineOptions" />
+          </NFormItem>
+          <p class="persona-description">
+            {{
+              selected?.heroine_options?.find((option) => option.key === form.heroine_slug)
+                ?.description
+            }}
+          </p>
+        </template>
 
         <NFormItem :label="selected?.runtime.mode === 'campaign' ? '存档名称' : '对话标题'">
           <NInput

@@ -21,13 +21,17 @@ type Envelope struct {
 	State  contract.RunState  `json:"state"`
 }
 
-func NewEnvelope(module contract.RuntimeModule, content contract.Content, persona string) (Envelope, error) {
+func NewEnvelope(module contract.RuntimeModule, content contract.Content, persona string, heroine ...string) (Envelope, error) {
 	var bytes [8]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
 		return Envelope{}, err
 	}
 	seed := int64(binary.BigEndian.Uint64(bytes[:]) & 0x7fffffffffffffff)
-	state, err := Initialize(module, content, contract.InitialInput{PersonaKey: persona, Random: NewRandom(seed, "initial")})
+	input := contract.InitialInput{PersonaKey: persona, Random: NewRandom(seed, "initial")}
+	if len(heroine) > 0 {
+		input.HeroineKey = heroine[0]
+	}
+	state, err := Initialize(module, content, input)
 	if err != nil {
 		return Envelope{}, err
 	}

@@ -34,7 +34,31 @@ func validateInitialModule(registry *gameplay.Registry, content gameplay.Content
 }
 
 func validateInitialPersona(module gameplay.RuntimeModule, content gameplay.Content, persona string, exits ...string) error {
-	run, err := kernel.Initialize(module, content, gameplay.InitialInput{PersonaKey: persona, Random: kernel.NewRandom(0, "content-validation")})
+	return validateInitialInput(module, content, gameplay.InitialInput{PersonaKey: persona}, exits...)
+}
+
+func validateInitialChoices(registry *gameplay.Registry, content gameplay.Content, options []ChoiceOption) error {
+	if len(options) == 0 {
+		return nil
+	}
+	descriptor, err := registry.Module(content.Runtime.Engine)
+	if err != nil {
+		return err
+	}
+	if descriptor.Runtime == nil {
+		return fmt.Errorf("角色选项需要可信运行时")
+	}
+	for _, option := range options {
+		if err := validateInitialInput(descriptor.Runtime, content, gameplay.InitialInput{HeroineKey: option.Key}); err != nil {
+			return fmt.Errorf("%s: %w", option.Key, err)
+		}
+	}
+	return nil
+}
+
+func validateInitialInput(module gameplay.RuntimeModule, content gameplay.Content, input gameplay.InitialInput, exits ...string) error {
+	input.Random = kernel.NewRandom(0, "content-validation")
+	run, err := kernel.Initialize(module, content, input)
 	if err != nil {
 		return err
 	}
@@ -281,7 +305,7 @@ func (s *Service) InitialConversationState(ctx context.Context, selection *Selec
 	if selection.Persona != nil {
 		persona = selection.Persona.Slug
 	}
-	envelope, err := kernel.NewEnvelope(module.Runtime, content, persona)
+	envelope, err := kernel.NewEnvelope(module.Runtime, content, persona, selection.HeroineSlug)
 	if err != nil {
 		return nil, err
 	}

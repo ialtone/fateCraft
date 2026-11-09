@@ -33,6 +33,7 @@ type RandomDraw struct {
 
 type InitialInput struct {
 	PersonaKey string
+	HeroineKey string
 	Random     RandomSource
 }
 

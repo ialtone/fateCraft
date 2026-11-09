@@ -61,7 +61,7 @@ func loadConfig(content contract.Content) (Config, error) {
 	return config, validateConfig(config)
 }
 
-func (Module) Initialize(content contract.Content, _ contract.InitialInput) (contract.RunState, error) {
+func (Module) Initialize(content contract.Content, input contract.InitialInput) (contract.RunState, error) {
 	config, err := loadConfig(content)
 	if err != nil {
 		return contract.RunState{}, err
@@ -76,7 +76,29 @@ func (Module) Initialize(content contract.Content, _ contract.InitialInput) (con
 		state.Lists[list.Key] = []Entry{}
 	}
 	data, err := ruledata.Object(state)
-	return contract.RunState{SchemaVersion: 1, Status: contract.RunActive, Data: data}, err
+	if err != nil {
+		return contract.RunState{}, err
+	}
+	run := contract.RunState{SchemaVersion: 1, Status: contract.RunActive, Data: data}
+	heroineKey := input.HeroineKey
+	if heroineKey == "" {
+		return run, nil
+	}
+	lead, ok := config.lead(heroineKey)
+	if !ok {
+		return contract.RunState{}, fmt.Errorf("角色无效: %s", heroineKey)
+	}
+	g := &game{c: &config, l: lead, s: &state, run: &run, random: input.Random}
+	state.Lead = lead.Key
+	g.apply(config.Contact, 100)
+	g.table(config.Hooks.Start)
+	g.morningMessages()
+	g.note(fmt.Sprintf("你遇见了%s", lead.Name))
+	if g.err != nil {
+		return contract.RunState{}, g.err
+	}
+	run.Data, err = ruledata.Object(state)
+	return run, err
 }
 
 func load(content contract.Content, run *contract.RunState) (*game, error) {

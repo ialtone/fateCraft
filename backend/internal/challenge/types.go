@@ -31,12 +31,16 @@ type Manifest struct {
 }
 
 type DefaultConfig struct {
-	RecommendedCharacter string   `json:"recommended_character"`
-	RecommendedPersona   string   `json:"recommended_persona"`
-	RecommendedScenario  string   `json:"recommended_scenario"`
-	RecommendedPrompt    string   `json:"recommended_prompt"`
-	RequiredWorldBooks   []string `json:"required_worldbooks"`
-	AllowedPersonas      []string `json:"allowed_personas,omitempty"`
+	RecommendedCharacter string         `json:"recommended_character"`
+	RecommendedPersona   string         `json:"recommended_persona"`
+	RecommendedHeroine   string         `json:"recommended_heroine,omitempty"`
+	PersonaLabel         string         `json:"persona_label,omitempty"`
+	HeroineLabel         string         `json:"heroine_label,omitempty"`
+	RecommendedScenario  string         `json:"recommended_scenario"`
+	RecommendedPrompt    string         `json:"recommended_prompt"`
+	RequiredWorldBooks   []string       `json:"required_worldbooks"`
+	AllowedPersonas      []string       `json:"allowed_personas,omitempty"`
+	HeroineOptions       []ChoiceOption `json:"heroine_options,omitempty"`
 }
 
 type OutcomeSpec struct {
@@ -55,6 +59,12 @@ type AssetOption struct {
 	Slug        string    `json:"slug"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
+}
+
+type ChoiceOption struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
 }
 
 type OutcomeView struct {
@@ -84,21 +94,24 @@ type PublicRuntime struct {
 }
 
 type PublicChallenge struct {
-	ID                uuid.UUID     `json:"id"`
-	Slug              string        `json:"slug"`
-	Name              string        `json:"name"`
-	Description       string        `json:"description"`
-	Version           string        `json:"version"`
-	Icon              string        `json:"icon,omitempty"`
-	Tags              []string      `json:"tags"`
-	Features          []string      `json:"features"`
-	QuickStartGuide   string        `json:"quick_start_guide"`
-	Personas          []AssetOption `json:"personas"`
-	Outcomes          []OutcomeView `json:"outcomes"`
-	RewardOverview    []RewardView  `json:"reward_overview"`
-	Runtime           PublicRuntime `json:"runtime"`
-	Available         bool          `json:"available"`
-	UnavailableReason string        `json:"unavailable_reason,omitempty"`
+	ID                uuid.UUID      `json:"id"`
+	Slug              string         `json:"slug"`
+	Name              string         `json:"name"`
+	Description       string         `json:"description"`
+	Version           string         `json:"version"`
+	Icon              string         `json:"icon,omitempty"`
+	Tags              []string       `json:"tags"`
+	Features          []string       `json:"features"`
+	QuickStartGuide   string         `json:"quick_start_guide"`
+	Personas          []AssetOption  `json:"personas"`
+	PersonaLabel      string         `json:"persona_label,omitempty"`
+	HeroineLabel      string         `json:"heroine_label,omitempty"`
+	HeroineOptions    []ChoiceOption `json:"heroine_options,omitempty"`
+	Outcomes          []OutcomeView  `json:"outcomes"`
+	RewardOverview    []RewardView   `json:"reward_overview"`
+	Runtime           PublicRuntime  `json:"runtime"`
+	Available         bool           `json:"available"`
+	UnavailableReason string         `json:"unavailable_reason,omitempty"`
 }
 
 type Selection struct {
@@ -108,6 +121,7 @@ type Selection struct {
 	Contract      gameplay.RuntimeContract
 	Character     *storage.ChallengeAsset
 	Persona       *storage.ChallengeAsset
+	HeroineSlug   string
 	Scenario      *storage.ChallengeAsset
 }
 

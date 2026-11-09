@@ -1208,6 +1208,12 @@ export interface ChallengePersonaOption {
   description?: string
 }
 
+export interface ChallengeChoiceOption {
+  key: string
+  label: string
+  description?: string
+}
+
 export interface ChallengeRewardOverview {
   points: number
   outcome_key: string
@@ -1404,6 +1410,9 @@ export interface PublicChallenge {
   features: string[]
   quick_start_guide: string
   personas: ChallengePersonaOption[]
+  persona_label?: string
+  heroine_label?: string
+  heroine_options?: ChallengeChoiceOption[]
   outcomes: ChallengeOutcome[]
   reward_overview: ChallengeRewardOverview[]
   runtime: PublicRuntime
@@ -1618,6 +1627,8 @@ export interface CreateConversationInput {
   challenge_slug: string
   /** 该挑战允许的玩家人设 slug */
   persona_slug?: string
+  /** 玩法单独提供的女主或目标角色 key */
+  heroine_slug?: string
 }
 
 export interface CreateCampaignInput {

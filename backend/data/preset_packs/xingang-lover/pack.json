@@ -1,7 +1,7 @@
 {
   "id": "xingang-lover",
   "name": "新港恋人",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "runtime_entry": "runtime/runtime.json",
   "description": "在近未来都市新港把她从陌生人追成恋人：约会、限时消息、告白判定、偶发情敌与多结局，数值全部由平台裁定。",
   "author": "fateCraft",
@@ -13,14 +13,27 @@
   ],
   "default_config": {
     "recommended_character": "xingang-lover-narrator",
-    "recommended_persona": "newcomer",
+    "recommended_persona": "night-clerk",
+    "recommended_heroine": "lin_wan",
+    "persona_label": "玩家人设",
+    "heroine_label": "女主人设",
     "recommended_scenario": "xingang-lover-opening",
     "recommended_prompt": "xingang-lover-guide",
     "required_worldbooks": [
       "xingang-lover-setting"
     ],
     "allowed_personas": [
-      "newcomer"
+      "night-clerk",
+      "courier",
+      "studio-assistant",
+      "ex-whitecollar"
+    ],
+    "heroine_options": [
+      { "key": "lin_wan", "label": "林晚 · 高冷程序员", "description": "27 岁，外冷内敏感的程序员，话少嘴硬，习惯用行动代替表达。" },
+      { "key": "su_tang", "label": "苏糖 · 元气咖啡店员", "description": "23 岁，外向爱笑的咖啡店员，熟悉后会把依赖藏在玩笑和撒娇里。" },
+      { "key": "ye_fei", "label": "夜绯 · 毒舌主播", "description": "25 岁，镜头前锋利张扬，关掉直播后比谁都在意别人怎么看自己。" },
+      { "key": "shen_qinghe", "label": "沈清禾 · 花店邻居", "description": "29 岁，温柔稳重的花店邻居，照顾别人很自然，却不习惯说出自己的需要。" },
+      { "key": "yao_xiaotao", "label": "姚小桃 · 舞蹈老师", "description": "26 岁，擅长用玩笑和暧昧试探距离，真正认真时反而会收起锋芒。" }
     ]
   },
   "outcomes": [
@@ -178,7 +191,7 @@
       }
     }
   ],
-  "quick_start_guide": "开局在行动区五选一。每天分白天、夜晚（周末多一个深夜）时段，约会、送礼、聊天和打工都会推进时间；及时回复她的限时消息。告白随时可用，但时机不对会被拒并冷却。第 30 天会出现她可能离开新港的预警，4 天后进入抉择。完美恋人 210 分，失而复得 200 分，在一起、祝福退场、意外之恋 180 分；阶段积分最多 90 分，其余结局只结算已达成阶段。",
+  "quick_start_guide": "开始前选择你的玩家人设和想认识的女主。每天分白天、夜晚（周末多一个深夜）时段，约会、送礼、聊天和打工都会推进时间；及时回复她的限时消息。告白随时可用，但时机不对会被拒并冷却。第 30 天会出现她可能离开新港的预警，4 天后进入抉择。完美恋人 210 分，失而复得 200 分，在一起、祝福退场、意外之恋 180 分；阶段积分最多 90 分，其余结局只结算已达成阶段。",
   "features": [
     "五位女主",
     "告白判定表",

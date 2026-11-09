@@ -220,6 +220,7 @@ func cloneManifest(source Manifest) Manifest {
 	clone.Dependencies = append([]string(nil), source.Dependencies...)
 	clone.DefaultConfig.RequiredWorldBooks = append([]string(nil), source.DefaultConfig.RequiredWorldBooks...)
 	clone.DefaultConfig.AllowedPersonas = append([]string(nil), source.DefaultConfig.AllowedPersonas...)
+	clone.DefaultConfig.HeroineOptions = append([]ChoiceOption(nil), source.DefaultConfig.HeroineOptions...)
 	clone.Outcomes = append([]OutcomeSpec(nil), source.Outcomes...)
 	return clone
 }

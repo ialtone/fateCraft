@@ -122,6 +122,33 @@ func TestProjectionAlwaysCoversDeclaredFields(t *testing.T) {
 	}
 }
 
+func TestInitializeUsesHeroineKeyIndependentlyFromPlayerPersona(t *testing.T) {
+	content := packContent(t)
+	state, err := kernel.Initialize(Module{}, content, contract.InitialInput{
+		PersonaKey: "night-clerk",
+		HeroineKey: "lin_wan",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts := decodeState(t, state)
+	if facts.Lead != "lin_wan" {
+		t.Fatalf("selected lead = %q, want lin_wan", facts.Lead)
+	}
+	previews, err := Module{}.Preview(content, state, "player")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, preview := range previews {
+		if preview.Action.Key == "romance.start" && preview.Available {
+			t.Fatal("heroine selection remains available after initialization")
+		}
+	}
+	if _, err := kernel.Initialize(Module{}, content, contract.InitialInput{HeroineKey: "unknown"}); err == nil {
+		t.Fatal("unknown heroine accepted")
+	}
+}
+
 func TestStartActAndEarlyConfession(t *testing.T) {
 	content, state := started(t, "lin_wan")
 	before := decodeState(t, state)
